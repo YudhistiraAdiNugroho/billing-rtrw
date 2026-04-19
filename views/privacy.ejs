@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syarat & Ketentuan | <%= company %></title>
+  <title>Kebijakan Privasi | <%= company %></title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
@@ -55,41 +55,46 @@
       color: white;
       transform: translateY(-2px);
     }
-    @media (max-width: 768px) {
-      .content-card { padding: 30px; margin: 0 15px 30px; }
-    }
   </style>
 </head>
 <body>
   <div class="hero-section text-center">
     <div class="container">
-      <h1 class="display-5">Syarat & Ketentuan</h1>
-      <p class="lead opacity-75">Harap baca dengan teliti sebelum menggunakan layanan kami.</p>
+      <h1 class="display-5">Kebijakan Privasi</h1>
+      <p class="lead opacity-75">Bagaimana kami menjaga dan melindungi data pribadi Anda.</p>
     </div>
   </div>
 
   <div class="container">
     <div class="content-card">
-      <p>Selamat datang di layanan internet <strong><%= company %></strong>. Dengan menggunakan layanan kami dan melakukan pembayaran melalui sistem ini, Anda setuju untuk terikat oleh syarat dan ketentuan berikut:</p>
+      <p>Di <strong><%= company %></strong>, privasi pelanggan kami adalah prioritas utama. Dokumen Kebijakan Privasi ini menjelaskan jenis informasi pribadi yang kami kumpulkan dan bagaimana kami menggunakannya.</p>
 
-      <h4><i class="bi bi-broadcast"></i> 1. Layanan</h4>
-      <p><%= company %> menyediakan layanan akses internet (RTRWNet/ISP) kepada pelanggan sesuai dengan paket yang dipilih. Kualitas layanan dapat dipengaruhi oleh faktor teknis, lokasi geografis, dan kondisi cuaca yang ekstrem.</p>
-
-      <h4><i class="bi bi-wallet2"></i> 2. Pembayaran & Tagihan</h4>
+      <h4><i class="bi bi-database-check"></i> 1. Informasi yang Kami Kumpulkan</h4>
+      <p>Kami mengumpulkan informasi terbatas yang diperlukan untuk penyediaan layanan, termasuk:</p>
       <ul>
-        <li>Tagihan internet akan diterbitkan secara otomatis oleh sistem setiap bulan sesuai dengan siklus langganan Anda.</li>
-        <li>Pembayaran dapat dilakukan secara mandiri melalui Portal Pelanggan menggunakan metode QRIS, Virtual Account, atau Retail Outlet yang tersedia.</li>
-        <li>Setiap pembayaran yang sudah berhasil diverifikasi oleh sistem bersifat final dan tidak dapat dibatalkan atau dikembalikan (Non-Refundable).</li>
+        <li>Nama lengkap dan alamat pemasangan.</li>
+        <li>Nomor telepon/WhatsApp untuk keperluan notifikasi tagihan dan teknis.</li>
+        <li>Data penggunaan layanan untuk pemantauan kualitas jaringan.</li>
+        <li>Data transaksi pembayaran melalui payment gateway pihak ketiga.</li>
       </ul>
 
-      <h4><i class="bi bi-shield-lock"></i> 3. Kebijakan Isolir (Suspend)</h4>
-      <p>Sistem kami akan melakukan pemutusan layanan sementara (Isolir) secara otomatis apabila tagihan belum dilunasi hingga melewati batas waktu (Jatuh Tempo) yang telah ditentukan. Layanan akan aktif kembali secara otomatis segera setelah pembayaran terverifikasi.</p>
+      <h4><i class="bi bi-gear-wide-connected"></i> 2. Penggunaan Informasi</h4>
+      <p>Informasi yang kami kumpulkan digunakan untuk:</p>
+      <ul>
+        <li>Memproses pendaftaran dan aktivasi layanan internet Anda.</li>
+        <li>Mengirimkan informasi tagihan dan pengingat pembayaran otomatis.</li>
+        <li>Memberikan dukungan teknis dan menanggapi keluhan Anda.</li>
+        <li>Meningkatkan kualitas jaringan dan pengalaman pengguna.</li>
+      </ul>
 
-      <h4><i class="bi bi-arrow-repeat"></i> 4. Pengembalian Dana (Refund)</h4>
-      <p>Pengembalian dana hanya dapat dipertimbangkan jika terjadi kesalahan sistem pada payment gateway kami yang menyebabkan transaksi ganda untuk satu tagihan yang sama.</p>
+      <h4><i class="bi bi-shield-check"></i> 3. Keamanan Data</h4>
+      <p>Kami menerapkan standar keamanan teknis untuk melindungi data Anda dari akses yang tidak sah. Data sensitif seperti kata sandi WiFi dan detail login disimpan dengan enkripsi di server kami.</p>
 
-      <h4><i class="bi bi-exclamation-octagon"></i> 5. Batasan Tanggung Jawab</h4>
-      <p><%= company %> tidak bertanggung jawab atas kerugian yang disebabkan oleh gangguan teknis dari penyedia hulu (Upstream), kerusakan perangkat akibat kelalaian pelanggan, atau kejadian luar biasa (Force Majeure).</p>
+      <h4><i class="bi bi-people"></i> 4. Pihak Ketiga</h4>
+      <p>Kami tidak menjual atau menyewakan data pribadi Anda kepada pihak ketiga. Kami hanya berbagi data dengan mitra payment gateway (seperti Tripay/Xendit/Midtrans) untuk memproses transaksi pembayaran Anda secara aman.</p>
+
+      <h4><i class="bi bi-patch-check"></i> 5. Persetujuan</h4>
+      <p>Dengan menggunakan layanan kami, Anda dengan ini menyetujui Kebijakan Privasi kami dan menyetujui ketentuan-ketentuannya.</p>
 
       <div class="mt-5 text-center">
         <a href="/customer/login" class="btn btn-back">
@@ -100,7 +105,7 @@
   </div>
 
   <div class="footer">
-    &copy; <%= new Date().getFullYear() %> <%= company %> • Semua Hak Dilindungi
+    &copy; <%= new Date().getFullYear() %> <%= company %> • Keamanan Data Anda adalah Komitmen Kami
   </div>
 </body>
 </html>

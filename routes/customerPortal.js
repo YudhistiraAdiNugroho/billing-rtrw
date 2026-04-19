@@ -16,7 +16,25 @@ function dashboardNotif(message, type = 'success') {
 // Route: Syarat & Ketentuan (TOS)
 router.get('/tos', (req, res) => {
   const settings = getSettingsWithCache();
-  res.render('tos', { company: settings.company_header || 'ISP Kami' });
+  res.render('tos', { settings, company: settings.company_header || 'ISP Kami' });
+});
+
+// Route: Kebijakan Privasi
+router.get('/privacy', (req, res) => {
+  const settings = getSettingsWithCache();
+  res.render('privacy', { settings, company: settings.company_header || 'ISP Kami' });
+});
+
+// Route: Tentang Kami
+router.get('/about', (req, res) => {
+  const settings = getSettingsWithCache();
+  res.render('about', { settings, company: settings.company_header || 'ISP Kami' });
+});
+
+// Route: Kontak Support
+router.get('/contact', (req, res) => {
+  const settings = getSettingsWithCache();
+  res.render('contact', { settings, company: settings.company_header || 'ISP Kami' });
 });
 
 const {
