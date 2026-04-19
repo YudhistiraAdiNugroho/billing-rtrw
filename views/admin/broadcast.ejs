@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Broadcast WhatsApp | <%= company %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+<%- include('partials/sidebar', { activePage: 'broadcast', company }) %>
+<div class="mw">
+  <div class="topbar">
+    <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-megaphone"></i> Broadcast WhatsApp</div>
+    <div class="tb-right">
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
+    </div>
+  </div>
+  <div class="page">
+
+    <% if (msg) { %>
+    <div class="alert alert-<%= msg.type==='success'?'s':'d' %>">
+      <i class="bi bi-<%= msg.type==='success'?'check-circle':'exclamation-circle' %>"></i> <%= msg.text %>
+    </div>
+    <% } %>
+
+    <div class="card">
+      <div class="card-hd" style="display: flex; justify-content: space-between; align-items: center;">
+        <h6><i class="bi bi-send-fill"></i> Kirim Pesan Massal</h6>
+        <div id="broadcastCounter" class="badge bp" style="display: none;">
+          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+          Mengirim: <span id="sentCount">0</span>/<span id="totalCount">0</span>
+          (<span id="failedCount" class="text-danger ms-1">0</span> Gagal)
+        </div>
+      </div>
+      <form method="POST" action="/admin/whatsapp/broadcast" onsubmit="return confirm('Kirim pesan broadcast sekarang? Pastikan target dan pesan sudah benar.');">
+        <div class="card-bd">
+          <div class="alert alert-i" style="margin-bottom: 20px;">
+            <i class="bi bi-info-circle"></i> Pesan akan dikirim menggunakan nomor WhatsApp Bot Anda secara otomatis dengan jeda aman 2 detik per pesan agar tidak terdeteksi sebagai spam.
+          </div>
+
+          <div class="form-row" style="margin-bottom: 15px;">
+            <div class="fg">
+              <label class="fl">Target Penerima</label>
+              <select class="fs" name="target" id="targetSelect" required style="width: 100%;">
+                <option value="all">Semua Pelanggan (Aktif & Isolir)</option>
+                <option value="active">Hanya Pelanggan Aktif</option>
+                <option value="suspended">Hanya Pelanggan Terisolir</option>
+                <option value="unpaid">Pelanggan yang Punya Tunggakan Tagihan</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Jeda Antar Pesan (Detik)</label>
+              <input class="fc" type="number" name="delay" value="<%= getSetting('whatsapp_broadcast_delay', 2) %>" min="1" max="60">
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="fg" style="width: 100%;">
+              <label class="fl">Isi Pesan WhatsApp</label>
+              <textarea class="fc" name="message" id="messageBox" rows="8" required style="width: 100%;"></textarea>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
+                <i class="bi bi-chat-text"></i> Gunakan *Tebal*, _Miring_, atau ~Coret~ sesuai standar WhatsApp. Anda bisa mengedit template di atas.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-bd" style="border-top: 1px solid var(--border); background: var(--bg2); display: flex; justify-content: flex-end;">
+          <button type="submit" class="btn btn-p"><i class="bi bi-send"></i> Mulai Broadcast</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const templates = {
+  all: `Yth. Pelanggan <%= company %>,\n\nBersama ini kami informasikan bahwa akan ada pemeliharaan jaringan rutin pada:\nHari/Tanggal: ...\nPukul: ...\n\nSelama proses tersebut, layanan internet akan terganggu sementara waktu. Kami memohon maaf atas ketidaknyamanan ini.\n\nTerima kasih atas pengertian Anda.\nSalam,\nAdmin <%= company %>`,
+  
+  active: `Yth. Pelanggan Setia <%= company %>,\n\nTerima kasih telah mempercayakan kebutuhan internet Anda kepada kami. Nikmati terus layanan terbaik tanpa hambatan.\n\nJika ada kendala, jangan ragu untuk menghubungi layanan pelanggan kami.\n\nSalam,\nAdmin <%= company %>`,
+  
+  suspended: `Yth. Pelanggan <%= company %>,\n\nMohon maaf, layanan internet Anda saat ini sedang dinonaktifkan (Terisolir). \n\nSilakan abaikan pesan ini jika Anda sudah melakukan pembayaran. Jika belum, mohon segera melakukan pelunasan agar layanan dapat diaktifkan kembali.\n\nTerima kasih.\nSalam,\nAdmin <%= company %>`,
+  
+  unpaid: `Yth. Pelanggan <%= company %>,\n\nBerdasarkan data sistem kami, Anda memiliki tagihan internet yang *BELUM LUNAS*.\n\nUntuk menghindari pemutusan layanan (Isolir Otomatis), mohon untuk segera melakukan pembayaran bulan ini. Anda dapat membayar melalui portal pelanggan atau menghubungi admin.\n\nTerima kasih atas kerja samanya.\nSalam,\nAdmin <%= company %>`
+};
+
+const targetSelect = document.getElementById('targetSelect');
+const messageBox = document.getElementById('messageBox');
+
+// Set template awal
+messageBox.value = templates[targetSelect.value];
+
+// Ganti template saat dropdown berubah
+targetSelect.addEventListener('change', function() {
+  if (confirm('Ganti target penerima? Pesan yang sudah Anda ketik akan ditimpa dengan template baru.')) {
+    messageBox.value = templates[this.value];
+  } else {
+    // Revert dropdown if canceled
+    for(let i=0; i<this.options.length; i++) {
+      if(templates[this.options[i].value] === messageBox.value) {
+        this.selectedIndex = i;
+        break;
+      }
+    }
+  }
+});
+
+setTimeout(()=>document.querySelectorAll('.alert').forEach(a=>a.style.display='none'),5000);
+
+// Polling Broadcast Status
+const broadcastCounter = document.getElementById('broadcastCounter');
+const sentCountEl = document.getElementById('sentCount');
+const totalCountEl = document.getElementById('totalCount');
+const failedCountEl = document.getElementById('failedCount');
+const submitBtn = document.querySelector('button[type="submit"]');
+
+async function checkBroadcastStatus() {
+  try {
+    const res = await fetch('/admin/api/whatsapp/broadcast-status');
+    const status = await res.json();
+    
+    if (status.active) {
+      broadcastCounter.style.display = 'inline-flex';
+      sentCountEl.textContent = status.sent;
+      totalCountEl.textContent = status.total;
+      failedCountEl.textContent = status.failed;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Sedang Mengirim...';
+    } else {
+      if (status.total > 0 && status.sent + status.failed === status.total) {
+        // Just finished
+        broadcastCounter.className = 'badge bs';
+        broadcastCounter.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Selesai: ${status.sent}/${status.total} dikirim`;
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-send"></i> Mulai Broadcast';
+      } else {
+        broadcastCounter.style.display = 'none';
+      }
+    }
+  } catch (e) { console.error('Status check failed', e); }
+}
+
+// Start polling
+setInterval(checkBroadcastStatus, 2000);
+checkBroadcastStatus();
+</script>
+</body>
+</html>

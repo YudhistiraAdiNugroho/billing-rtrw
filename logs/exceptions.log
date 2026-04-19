@@ -1,0 +1,321 @@
+2025-05-27 22:36:21 error: uncaughtException: Cannot find module '@whiskeysockets/baileys'
+Require stack:
+- E:\Whatsapp-Only\config\whatsapp.js
+- E:\Whatsapp-Only\app-whatsapp-only.js
+Error: Cannot find module '@whiskeysockets/baileys'
+Require stack:
+- E:\Whatsapp-Only\config\whatsapp.js
+- E:\Whatsapp-Only\app-whatsapp-only.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\Whatsapp-Only\config\whatsapp.js:2:76)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2025-05-27 22:39:59 error: uncaughtException: Cannot find module './sendMessage'
+Require stack:
+- E:\Whatsapp-Only\config\whatsapp.js
+- E:\Whatsapp-Only\app-whatsapp-only.js
+Error: Cannot find module './sendMessage'
+Require stack:
+- E:\Whatsapp-Only\config\whatsapp.js
+- E:\Whatsapp-Only\app-whatsapp-only.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\Whatsapp-Only\config\whatsapp.js:3057:21)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2025-05-31 14:29:38 error: uncaughtException: Timed out after 10 seconds
+RosException: Timed out after 10 seconds
+    at Connector.onTimeout (/home/alijaya/whatsapp/node_modules/node-routeros/dist/connector/Connector.js:188:30)
+    at Object.onceWrapper (node:events:638:28)
+    at Socket.emit (node:events:524:28)
+    at Socket._onTimeout (node:net:609:8)
+    at listOnTimeout (node:internal/timers:594:17)
+    at process.processTimers (node:internal/timers:529:7)
+2025-06-04 02:27:07 error: uncaughtException: Timed out after 10 seconds
+RosException: Timed out after 10 seconds
+    at Connector.onTimeout (/home/alijaya/whatsapp/node_modules/node-routeros/dist/connector/Connector.js:188:30)
+    at Object.onceWrapper (node:events:638:28)
+    at Socket.emit (node:events:524:28)
+    at Socket._onTimeout (node:net:609:8)
+    at listOnTimeout (node:internal/timers:594:17)
+    at process.processTimers (node:internal/timers:529:7)
+2025-07-04 20:26:47 error: uncaughtException: findDeviceByTag is not a function
+TypeError: findDeviceByTag is not a function
+    at isValidCustomer (E:\whatsapp\routes\customerPortal.js:17:24)
+    at E:\whatsapp\routes\customerPortal.js:214:14
+    at Layer.handle [as handle_request] (E:\whatsapp\node_modules\express\lib\router\layer.js:95:5)
+    at next (E:\whatsapp\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (E:\whatsapp\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (E:\whatsapp\node_modules\express\lib\router\layer.js:95:5)
+    at E:\whatsapp\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (E:\whatsapp\node_modules\express\lib\router\index.js:346:12)
+    at next (E:\whatsapp\node_modules\express\lib\router\index.js:280:10)
+    at Function.handle (E:\whatsapp\node_modules\express\lib\router\index.js:175:3)
+2025-07-04 20:28:52 error: uncaughtException: findDeviceByTag is not a function
+TypeError: findDeviceByTag is not a function
+    at isValidCustomer (E:\whatsapp\routes\customerPortal.js:17:24)
+    at E:\whatsapp\routes\customerPortal.js:214:14
+    at Layer.handle [as handle_request] (E:\whatsapp\node_modules\express\lib\router\layer.js:95:5)
+    at next (E:\whatsapp\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (E:\whatsapp\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (E:\whatsapp\node_modules\express\lib\router\layer.js:95:5)
+    at E:\whatsapp\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (E:\whatsapp\node_modules\express\lib\router\index.js:346:12)
+    at next (E:\whatsapp\node_modules\express\lib\router\index.js:280:10)
+    at Function.handle (E:\whatsapp\node_modules\express\lib\router\index.js:175:3)
+2025-07-04 20:40:01 error: uncaughtException: Cannot set properties of undefined (setting 'phone')
+TypeError: Cannot set properties of undefined (setting 'phone')
+    at E:\whatsapp\routes\customerPortal.js:225:23
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-07-04 20:42:09 error: uncaughtException: Cannot set properties of undefined (setting 'phone')
+TypeError: Cannot set properties of undefined (setting 'phone')
+    at E:\whatsapp\routes\customerPortal.js:225:23
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-07-07 18:51:04 error: uncaughtException: Cannot find module 'node-routeros'
+Require stack:
+- E:\portal-webclien aja\config\mikrotik.js
+- E:\portal-webclien aja\config\genieacs.js
+- E:\portal-webclien aja\config\genieacs-commands.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+Error: Cannot find module 'node-routeros'
+Require stack:
+- E:\portal-webclien aja\config\mikrotik.js
+- E:\portal-webclien aja\config\genieacs.js
+- E:\portal-webclien aja\config\genieacs-commands.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\portal-webclien aja\config\mikrotik.js:2:25)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2025-07-07 19:24:37 error: uncaughtException: Cannot find module './sendMessage'
+Require stack:
+- E:\portal-webclien aja\config\genieacs.js
+- E:\portal-webclien aja\config\genieacs-commands.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+Error: Cannot find module './sendMessage'
+Require stack:
+- E:\portal-webclien aja\config\genieacs.js
+- E:\portal-webclien aja\config\genieacs-commands.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\portal-webclien aja\config\genieacs.js:3:35)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2025-07-07 19:26:29 error: uncaughtException: Cannot find module './genieacs'
+Require stack:
+- E:\portal-webclien aja\config\genieacs-commands.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+Error: Cannot find module './genieacs'
+Require stack:
+- E:\portal-webclien aja\config\genieacs-commands.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\portal-webclien aja\config\genieacs-commands.js:3:21)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2025-07-07 19:31:08 error: uncaughtException: Cannot find module './responses'
+Require stack:
+- E:\portal-webclien aja\config\genieacs-commands.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+Error: Cannot find module './responses'
+Require stack:
+- E:\portal-webclien aja\config\genieacs-commands.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\portal-webclien aja\config\genieacs-commands.js:4:19)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2025-07-07 19:32:15 error: uncaughtException: Cannot find module '../config/addWAN'
+Require stack:
+- E:\portal-webclien aja\routes\customerPortal.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+Error: Cannot find module '../config/addWAN'
+Require stack:
+- E:\portal-webclien aja\routes\customerPortal.js
+- E:\portal-webclien aja\app-whatsapp-only.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\portal-webclien aja\routes\customerPortal.js:5:29)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2026-04-05 08:51:37 error: uncaughtException: EPIPE: broken pipe, write
+Error: EPIPE: broken pipe, write
+    at Socket._write (node:internal/net:63:18)
+    at writeOrBuffer (node:internal/streams/writable:572:12)
+    at _write (node:internal/streams/writable:501:10)
+    at Writable.write (node:internal/streams/writable:510:10)
+    at console.value (node:internal/console/constructor:291:16)
+    at console.log (node:internal/console/constructor:374:26)
+    at FSWatcher.<anonymous> (E:\app-customer\config\settingsManager.js:72:17)
+    at FSWatcher.emit (node:events:524:28)
+    at FSWatcher._handle.onchange (node:internal/fs/watchers:215:12)
+2026-04-05 20:12:01 error: uncaughtException: Cannot find module '../utils/logger'
+Require stack:
+- E:\app-customer\services\customerDeviceService.js
+- E:\app-customer\routes\customerPortal.js
+- E:\app-customer\app-customer.js
+Error: Cannot find module '../utils/logger'
+Require stack:
+- E:\app-customer\services\customerDeviceService.js
+- E:\app-customer\routes\customerPortal.js
+- E:\app-customer\app-customer.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\app-customer\services\customerDeviceService.js:6:16)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2026-04-05 20:13:05 error: uncaughtException: Cannot find module '../utils/logger'
+Require stack:
+- E:\app-customer\routes\adminPortal.js
+- E:\app-customer\app-customer.js
+Error: Cannot find module '../utils/logger'
+Require stack:
+- E:\app-customer\routes\adminPortal.js
+- E:\app-customer\app-customer.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
+    at Function._load (node:internal/modules/cjs/loader:1070:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (E:\app-customer\routes\adminPortal.js:7:16)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+2026-04-05 20:22:17 error: uncaughtException: logger.error is not a function
+TypeError: logger.error is not a function
+    at E:\app-customer\routes\adminPortal.js:175:12
+    at Layer.handle [as handle_request] (E:\app-customer\node_modules\express\lib\router\layer.js:95:5)
+    at next (E:\app-customer\node_modules\express\lib\router\route.js:149:13)
+    at requireAdmin (E:\app-customer\routes\adminPortal.js:14:12)
+    at Layer.handle [as handle_request] (E:\app-customer\node_modules\express\lib\router\layer.js:95:5)
+    at next (E:\app-customer\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (E:\app-customer\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (E:\app-customer\node_modules\express\lib\router\layer.js:95:5)
+    at E:\app-customer\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (E:\app-customer\node_modules\express\lib\router\index.js:346:12)
+2026-04-05 20:22:17 error: uncaughtException: logger.error is not a function
+TypeError: logger.error is not a function
+    at E:\app-customer\routes\adminPortal.js:230:12
+    at Layer.handle [as handle_request] (E:\app-customer\node_modules\express\lib\router\layer.js:95:5)
+    at next (E:\app-customer\node_modules\express\lib\router\route.js:149:13)
+    at requireAdmin (E:\app-customer\routes\adminPortal.js:14:12)
+    at Layer.handle [as handle_request] (E:\app-customer\node_modules\express\lib\router\layer.js:95:5)
+    at next (E:\app-customer\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (E:\app-customer\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (E:\app-customer\node_modules\express\lib\router\layer.js:95:5)
+    at E:\app-customer\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (E:\app-customer\node_modules\express\lib\router\index.js:346:12)
+2026-04-18 14:02:37 error: uncaughtException: logger.error is not a function
+TypeError: logger.error is not a function
+    at Object.getPppoeUsers (D:\app-customer\services\mikrotikService.js:62:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\app-customer\routes\adminPortal.js:392:17
+2026-04-18 14:04:17 error: uncaughtException: logger.error is not a function
+TypeError: logger.error is not a function
+    at Object.getPppoeProfiles (D:\app-customer\services\mikrotikService.js:43:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\app-customer\routes\adminPortal.js:387:20
+2026-04-18 14:18:14 error: uncaughtException: api.close is not a function
+TypeError: api.close is not a function
+    at Object.getPppoeProfiles (D:\app-customer\services\mikrotikService.js:48:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\app-customer\routes\adminPortal.js:388:20
+2026-04-18 15:02:48 error: uncaughtException: getHotspotUsers is not defined
+ReferenceError: getHotspotUsers is not defined
+    at Object.<anonymous> (D:\app-customer\services\mikrotikService.js:320:3)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+    at Function._load (node:internal/modules/cjs/loader:1123:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (D:\app-customer\routes\adminPortal.js:11:25)
+2026-04-18 15:26:08 error: uncaughtException: findDeviceByPppoe is not defined
+ReferenceError: findDeviceByPppoe is not defined
+    at D:\app-customer\routes\customerPortal.js:62:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-18 15:26:51 error: uncaughtException: findDeviceByPppoe is not defined
+ReferenceError: findDeviceByPppoe is not defined
+    at D:\app-customer\routes\customerPortal.js:62:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-18 15:33:26 error: uncaughtException: logger.info is not a function
+TypeError: logger.info is not a function
+    at startCronJobs (D:\app-customer\services\cronService.js:25:10)
+    at Object.<anonymous> (D:\app-customer\app-customer.js:139:1)
+    at Module._compile (node:internal/modules/cjs/loader:1562:14)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+    at Function._load (node:internal/modules/cjs/loader:1123:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:170:5)
+    at node:internal/main/run_main_module:36:49
+2026-04-18 15:53:27 error: uncaughtException: Identifier 'customerSvc' has already been declared
+D:\app-customer\routes\customerPortal.js:38
+const customerSvc = require('../services/customerService');
+      ^
+
+SyntaxError: Identifier 'customerSvc' has already been declared
+    at wrapSafe (node:internal/modules/cjs/loader:1512:18)
+    at Module._compile (node:internal/modules/cjs/loader:1534:20)
+    at Object..js (node:internal/modules/cjs/loader:1699:10)
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+    at Function._load (node:internal/modules/cjs/loader:1123:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
+    at Module.require (node:internal/modules/cjs/loader:1335:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (D:\app-customer\app-customer.js:78:24)
+2026-04-18 20:21:50 error: uncaughtException: logger.error is not a function
+TypeError: logger.error is not a function
+    at Object.updatePassword (D:\app-customer\services\customerDeviceService.js:364:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\app-customer\routes\adminPortal.js:546:14

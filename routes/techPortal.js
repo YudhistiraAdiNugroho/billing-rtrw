@@ -1,0 +1,193 @@
+const express = require('express');
+const router = express.Router();
+const techSvc = require('../services/techService');
+const { getSetting } = require('../config/settingsManager');
+
+function requireTechSession(req, res, next) {
+  if (req.session && req.session.isTechnician && req.session.techId) {
+    return next();
+  }
+  res.redirect('/tech/login');
+}
+
+function flashMsg(req) {
+  const m = req.session._msg;
+  delete req.session._msg;
+  return m || null;
+}
+
+function company() { return getSetting('company_header', 'ISP App'); }
+
+// --- AUTH ---
+router.get('/login', (req, res) => {
+  if (req.session && req.session.isTechnician) return res.redirect('/tech');
+  res.render('tech/login', { title: 'Teknisi Login', company: company(), error: null });
+});
+
+router.post('/login', express.urlencoded({ extended: true }), (req, res) => {
+  const { username, password } = req.body;
+  const tech = techSvc.authenticate(username, password);
+  if (tech) {
+    req.session.isTechnician = true;
+    req.session.techId = tech.id;
+    req.session.techName = tech.name;
+    return res.redirect('/tech');
+  }
+  res.render('tech/login', { title: 'Teknisi Login', company: company(), error: 'Username atau password salah!' });
+});
+
+router.get('/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/tech/login');
+});
+
+// --- DASHBOARD (My Tickets) ---
+router.get('/', requireTechSession, (req, res) => {
+  const techId = req.session.techId;
+  const stats = techSvc.getTechStats(techId);
+  const myTickets = techSvc.getAssignedTickets(techId);
+  
+  res.render('tech/dashboard', {
+    title: 'Dashboard Teknisi', 
+    company: company(), 
+    techName: req.session.techName,
+    activePage: 'dashboard',
+    stats,
+    tickets: myTickets,
+    msg: flashMsg(req)
+  });
+});
+
+// --- OPEN TICKETS (Pool) ---
+router.get('/pool', requireTechSession, (req, res) => {
+  const openTickets = techSvc.getOpenTickets();
+  res.render('tech/pool', {
+    title: 'Tiket Baru', 
+    company: company(), 
+    activePage: 'pool',
+    tickets: openTickets,
+    msg: flashMsg(req)
+  });
+});
+
+// --- HISTORY TICKETS ---
+router.get('/history', requireTechSession, (req, res) => {
+  const techId = req.session.techId;
+  const historyTickets = techSvc.getResolvedTickets(techId);
+  res.render('tech/history', {
+    title: 'Riwayat Tiket', 
+    company: company(), 
+    activePage: 'history',
+    tickets: historyTickets,
+    msg: flashMsg(req)
+  });
+});
+
+// --- ACTIONS ---
+router.post('/tickets/:id/take', requireTechSession, (req, res) => {
+  try {
+    techSvc.takeTicket(req.params.id, req.session.techId);
+    req.session._msg = { type: 'success', text: 'Tiket berhasil diambil. Silakan mulai kerjakan.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal mengambil tiket: ' + e.message };
+  }
+  res.redirect('/tech');
+});
+
+router.post('/tickets/:id/update', requireTechSession, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    const { status } = req.body;
+    techSvc.updateTicketStatus(req.params.id, req.session.techId, status);
+    req.session._msg = { type: 'success', text: 'Status tiket berhasil diupdate.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal update tiket: ' + e.message };
+  }
+  res.redirect('/tech');
+});
+
+// --- MONITORING ONU ---
+router.get('/monitoring', requireTechSession, (req, res) => {
+  res.render('tech/monitoring', {
+    title: 'Monitoring ONU',
+    company: company(),
+    activePage: 'monitoring',
+    msg: flashMsg(req)
+  });
+});
+
+// API Endpoints for Technician
+const customerDevice = require('../services/customerDeviceService');
+
+router.get('/api/devices', requireTechSession, async (req, res) => {
+  try {
+    const { search, status, limit = 100, offset = 0 } = req.query;
+    const result = await customerDevice.listAllDevices(1000);
+    if (!result.ok) return res.json({ error: result.message });
+    
+    let devices = result.devices.map(d => {
+      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id);
+      return {
+        id: d._id, 
+        tags: d._tags || [],
+        serialNumber: mapped.serialNumber,
+        lastInform: d._lastInform,
+        status: mapped.status.toLowerCase(),
+        pppoeIP: mapped.pppoeIP,
+        pppoeUsername: mapped.pppoeUsername,
+        rxPower: mapped.rxPower,
+        uptime: mapped.uptime,
+        model: mapped.model,
+        softwareVersion: mapped.softwareVersion,
+        userConnected: mapped.totalAssociations,
+        ssid: mapped.ssid
+      };
+    });
+
+    if (search) {
+      const s = search.toLowerCase();
+      devices = devices.filter(d => 
+        d.id.toLowerCase().includes(s) ||
+        d.tags.some(t => t.toLowerCase().includes(s)) || 
+        d.serialNumber.toLowerCase().includes(s) || 
+        (d.pppoeUsername && d.pppoeUsername !== 'N/A' && d.pppoeUsername.toLowerCase().includes(s))
+      );
+    }
+
+    if (status && status !== 'all') devices = devices.filter(d => d.status === status);
+    
+    res.json({ devices: devices.slice(0, 100), total: devices.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/api/device/:tag', requireTechSession, async (req, res) => {
+  try {
+    const data = await customerDevice.getCustomerDeviceData(req.params.tag);
+    if (!data || data.status === 'Tidak ditemukan') return res.status(404).json({ error: 'Device not found' });
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to get device details' });
+  }
+});
+
+router.post('/api/device/:tag/ssid', requireTechSession, express.json(), async (req, res) => {
+  const { ssid } = req.body;
+  if (!ssid) return res.status(400).json({ error: 'SSID required' });
+  const ok = await customerDevice.updateSSID(req.params.tag, ssid);
+  res.json({ success: ok });
+});
+
+router.post('/api/device/:tag/password', requireTechSession, express.json(), async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
+  const ok = await customerDevice.updatePassword(req.params.tag, password);
+  res.json({ success: ok });
+});
+
+router.post('/api/device/:tag/reboot', requireTechSession, async (req, res) => {
+  const result = await customerDevice.requestReboot(req.params.tag);
+  res.json(result);
+});
+
+module.exports = router;

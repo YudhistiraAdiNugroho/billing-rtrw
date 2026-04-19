@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pelanggan | <%= company %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+<%- include('partials/sidebar', { activePage: 'customers', company }) %>
+<div class="mw">
+  <div class="topbar">
+    <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-people"></i> Manajemen Pelanggan</div>
+    <div class="tb-right">
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
+    </div>
+  </div>
+  <div class="page">
+
+    <% if (msg) { %>
+    <div class="alert alert-<%= msg.type === 'success' ? 's' : 'd' %>">
+      <i class="bi bi-<%= msg.type === 'success' ? 'check-circle' : 'exclamation-circle' %>"></i> <%= msg.text %>
+    </div>
+    <% } %>
+
+    <!-- Stats -->
+    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="sc p"><i class="bi bi-people sc-icon"></i><div class="sc-label">Total</div><div class="sc-val"><%= stats.total %></div></div>
+      <div class="sc s"><i class="bi bi-check-circle sc-icon"></i><div class="sc-label">Aktif</div><div class="sc-val"><%= stats.active %></div></div>
+      <div class="sc w"><i class="bi bi-pause-circle sc-icon"></i><div class="sc-label">Disuspend</div><div class="sc-val"><%= stats.suspended %></div></div>
+      <div class="sc d"><i class="bi bi-x-circle sc-icon"></i><div class="sc-label">Nonaktif</div><div class="sc-val"><%= stats.inactive %></div></div>
+    </div>
+
+    <!-- Search & Add -->
+    <div class="card">
+      <div class="card-hd">
+        <h6><i class="bi bi-people"></i> Daftar Pelanggan (<%= customers.length %>)</h6>
+        <div style="display:flex;gap:8px">
+          <a href="/admin/customers/export" class="btn btn-g btn-sm"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
+          <button class="btn btn-g btn-sm" onclick="openModal('importModal')"><i class="bi bi-file-earmark-arrow-up"></i> Import Excel</button>
+          <button class="btn btn-p btn-sm" onclick="openModal('addModal')"><i class="bi bi-plus-lg"></i> Tambah Pelanggan</button>
+        </div>
+      </div>
+      <div class="card-bd" style="padding-bottom:0">
+        <form method="GET" action="/admin/customers" class="srow">
+          <div class="sinput" style="max-width:340px">
+            <i class="bi bi-search"></i>
+            <input class="fc" name="search" placeholder="Cari nama, telepon, tag..." value="<%= search %>">
+          </div>
+          <select class="fs" name="status" style="width:140px" onchange="this.form.submit()">
+            <option value="">Semua Status</option>
+            <option value="active" <%= filterStatus==='active' ? 'selected':'' %>>Aktif</option>
+            <option value="suspended" <%= filterStatus==='suspended' ? 'selected':'' %>>Suspend</option>
+            <option value="inactive" <%= filterStatus==='inactive' ? 'selected':'' %>>Nonaktif</option>
+          </select>
+          <button class="btn btn-g btn-sm" type="submit"><i class="bi bi-search"></i> Cari</button>
+          <% if (search || filterStatus) { %><a href="/admin/customers" class="btn btn-g btn-sm"><i class="bi bi-x"></i> Reset</a><% } %>
+        </form>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th>#</th><th>Nama</th><th>Telepon / Tag ONU</th>
+              <th>Paket</th><th>Alamat</th><th>Status</th><th>Tagihan Belum Bayar</th><th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+          <% if (customers.length === 0) { %>
+            <tr><td colspan="8" class="text-center text-muted" style="padding:32px">Belum ada pelanggan</td></tr>
+          <% } %>
+          <% customers.forEach((c, i) => { %>
+            <tr>
+              <td class="text-muted"><%= i+1 %></td>
+              <td class="fw6"><%= c.name %></td>
+              <td>
+                <div><%= c.phone || '-' %></div>
+                <% if (c.genieacs_tag) { %><div style="font-size:11px;color:var(--primary)"><i class="bi bi-wifi"></i> <%= c.genieacs_tag %></div><% } %>
+              </td>
+              <td>
+                <% if (c.package_name) { %>
+                  <div><%= c.package_name %></div>
+                  <div style="font-size:11px;color:var(--muted)"><%= (c.speed_down/1000).toFixed(0) %>/<%= (c.speed_up/1000).toFixed(0) %> Mbps &bull; Rp <%= c.package_price ? c.package_price.toLocaleString('id-ID') : '-' %></div>
+                <% } else { %><span class="text-muted">-</span><% } %>
+              </td>
+              <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= c.address || '-' %></td>
+              <td>
+                <% if (c.status==='active') { %><span class="badge bs"><i class="bi bi-circle-fill" style="font-size:7px"></i>Aktif</span>
+                <% } else if (c.status==='suspended') { %><span class="badge bw">Suspend</span>
+                <% } else { %><span class="badge bm">Nonaktif</span><% } %>
+                <div style="font-size:10px;margin-top:4px">
+                  <i class="bi bi-clock-history"></i> Auto Isolir: 
+                  <span class="<%= c.auto_isolate === 0 ? 'text-danger' : 'text-success' %>">
+                    <%= c.auto_isolate === 0 ? 'OFF' : 'Tgl ' + (c.isolate_day || 10) %>
+                  </span>
+                </div>
+              </td>
+              <td class="text-center">
+                <% if (c.unpaid_count > 0) { %>
+                  <span class="badge bd"><%= c.unpaid_count %> tagihan</span>
+                <% } else { %><span class="text-muted" style="font-size:12px">Lunas</span><% } %>
+              </td>
+              <td>
+                <button class="btn btn-g btn-icon btn-sm" title="Edit" data-idx="<%= i %>" onclick="editCust(+this.dataset.idx)"><i class="bi bi-pencil"></i></button>
+                <form method="POST" action="/admin/customers/<%= c.id %>/delete" style="display:inline" onsubmit="return confirm('Hapus pelanggan ini?')">
+                  <button class="btn btn-d btn-icon btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tambah -->
+<div class="mo" id="addModal">
+  <div class="mb">
+    <div class="mh"><span class="mt"><i class="bi bi-person-plus"></i> Tambah Pelanggan</span><button class="mc" onclick="closeModal('addModal')">&times;</button></div>
+    <form method="POST" action="/admin/customers">
+      <div class="mbody">
+        <div class="form-row">
+          <div class="fg"><label class="fl">Nama Lengkap *</label><input class="fc" name="name" required placeholder="John Doe"></div>
+          <div class="fg"><label class="fl">No. Telepon / WA</label><input class="fc" name="phone" placeholder="08xxx"></div>
+        </div>
+        <div class="fg"><label class="fl">Alamat</label><textarea class="fc" name="address" placeholder="Jl. Example..."></textarea></div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">Paket Internet</label>
+            <select class="fs" name="package_id">
+              <option value="">-- Pilih Paket --</option>
+              <% packages.forEach(p => { %>
+              <option value="<%= p.id %>"><%= p.name %> — Rp <%= p.price.toLocaleString('id-ID') %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">Tag ONU (GenieACS)</label><input class="fc" name="genieacs_tag" placeholder="Sama dengan ID pelanggan"></div>
+        </div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">PPPoE Username (MikroTik)</label>
+            <div style="display:flex;gap:8px">
+              <select class="fs" id="add_pppoe_select" style="max-width:200px" onchange="document.getElementById('add_pppoe').value=this.value">
+                <option value="">-- Pilih dari MikroTik --</option>
+              </select>
+              <input class="fc" name="pppoe_username" id="add_pppoe" placeholder="Username PPPoE pelanggan atau ketik manual...">
+            </div>
+          </div>
+          <div class="fg" style="max-width:200px">
+            <label class="fl">Profile Isolir</label>
+            <select class="fs" name="isolir_profile" id="add_isolir_select">
+              <option value="isolir">isolir</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">Status</label>
+            <select class="fs" name="status">
+              <option value="active">Aktif</option>
+              <option value="suspended">Suspend</option>
+              <option value="inactive">Nonaktif</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">Tanggal Pasang</label><input class="fc" type="date" name="install_date"></div>
+        </div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">Isolir Otomatis</label>
+            <select class="fs" name="auto_isolate">
+              <option value="1">Aktif</option>
+              <option value="0">Tidak Aktif</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label class="fl">Tanggal Isolir (1-31)</label>
+            <input class="fc" type="number" name="isolate_day" value="10" min="1" max="31">
+          </div>
+        </div>
+        <div class="fg"><label class="fl">Catatan</label><textarea class="fc" name="notes" placeholder="Opsional..."></textarea></div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Import -->
+<div class="mo" id="importModal">
+  <div class="mb" style="max-width:400px">
+    <div class="mh"><span class="mt"><i class="bi bi-file-earmark-arrow-up"></i> Import Pelanggan</span><button class="mc" onclick="closeModal('importModal')">&times;</button></div>
+    <form method="POST" action="/admin/customers/import" enctype="multipart/form-data">
+      <div class="mbody">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          Unggah file Excel (.xlsx). Pastikan format kolom sesuai dengan hasil Export.
+          <br><br>
+          <a href="/admin/customers/export" style="color:var(--primary);text-decoration:none"><i class="bi bi-download"></i> Unduh format excel</a>
+        </p>
+        <div class="fg">
+          <label class="fl">Pilih File Excel</label>
+          <input type="file" name="file" class="fc" accept=".xlsx" required>
+        </div>
+      </div>
+      <div class="mf">
+        <button type="button" class="btn btn-g" onclick="closeModal('importModal')">Batal</button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-upload"></i> Mulai Impor</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Edit -->
+<div class="mo" id="editModal">
+  <div class="mb">
+    <div class="mh"><span class="mt"><i class="bi bi-pencil"></i> Edit Pelanggan</span><button class="mc" onclick="closeModal('editModal')">&times;</button></div>
+    <form method="POST" id="editForm">
+      <div class="mbody">
+        <div class="form-row">
+          <div class="fg"><label class="fl">Nama Lengkap *</label><input class="fc" name="name" id="e_name" required></div>
+          <div class="fg"><label class="fl">No. Telepon / WA</label><input class="fc" name="phone" id="e_phone"></div>
+        </div>
+        <div class="fg"><label class="fl">Alamat</label><textarea class="fc" name="address" id="e_address"></textarea></div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">Paket Internet</label>
+            <select class="fs" name="package_id" id="e_package">
+              <option value="">-- Pilih Paket --</option>
+              <% packages.forEach(p => { %>
+              <option value="<%= p.id %>"><%= p.name %> — Rp <%= p.price.toLocaleString('id-ID') %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">Tag ONU (GenieACS)</label><input class="fc" name="genieacs_tag" id="e_tag"></div>
+        </div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">PPPoE Username (MikroTik)</label>
+            <div style="display:flex;gap:8px">
+              <select class="fs" id="e_pppoe_select" style="max-width:200px" onchange="document.getElementById('e_pppoe').value=this.value">
+                <option value="">-- Pilih dari MikroTik --</option>
+              </select>
+              <input class="fc" name="pppoe_username" id="e_pppoe">
+            </div>
+          </div>
+          <div class="fg" style="max-width:200px">
+            <label class="fl">Profile Isolir</label>
+            <select class="fs" name="isolir_profile" id="e_isolir_profile">
+              <option value="isolir">isolir</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">Status</label>
+            <select class="fs" name="status" id="e_status">
+              <option value="active">Aktif</option>
+              <option value="suspended">Suspend</option>
+              <option value="inactive">Nonaktif</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">Tanggal Pasang</label><input class="fc" type="date" name="install_date" id="e_install"></div>
+        </div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">Isolir Otomatis</label>
+            <select class="fs" name="auto_isolate" id="e_auto_isolate">
+              <option value="1">Aktif</option>
+              <option value="0">Tidak Aktif</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label class="fl">Tanggal Isolir (1-31)</label>
+            <input class="fc" type="number" name="isolate_day" id="e_isolate_day" min="1" max="31">
+          </div>
+        </div>
+        <div class="fg"><label class="fl">Catatan</label><textarea class="fc" name="notes" id="e_notes"></textarea></div>
+      </div>
+      <div class="mf">
+        <button type="button" class="btn btn-g" onclick="closeModal('editModal')">Batal</button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Update</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script id="customers-data" type="application/json"><%- JSON.stringify(customers) %></script>
+<script>
+const customersData = JSON.parse(document.getElementById('customers-data').textContent);
+function openModal(id){document.getElementById(id).classList.add('show')}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show')}));
+function editCust(idx) {
+  const c = customersData[idx];
+  if (!c) return;
+  document.getElementById('editForm').action='/admin/customers/'+c.id+'/update';
+  document.getElementById('e_name').value=c.name||'';
+  document.getElementById('e_phone').value=c.phone||'';
+  document.getElementById('e_address').value=c.address||'';
+  document.getElementById('e_package').value=c.package_id||'';
+  document.getElementById('e_tag').value=c.genieacs_tag||'';
+  document.getElementById('e_pppoe').value=c.pppoe_username||'';
+  document.getElementById('e_isolir_profile').value=c.isolir_profile||'isolir';
+  document.getElementById('e_status').value=c.status||'active';
+  document.getElementById('e_install').value=c.install_date||'';
+  document.getElementById('e_notes').value=c.notes||'';
+  document.getElementById('e_auto_isolate').value=(c.auto_isolate !== undefined ? c.auto_isolate : 1);
+  document.getElementById('e_isolate_day').value=(c.isolate_day || 10);
+  openModal('editModal');
+}
+
+async function loadMikrotikUsers() {
+  try {
+    const res = await fetch('/admin/api/mikrotik/users');
+    if (!res.ok) return;
+    const users = await res.json();
+    const selAdd = document.getElementById('add_pppoe_select');
+    const selEdit = document.getElementById('e_pppoe_select');
+    users.forEach(u => {
+      const opt = `<option value="${u.name}">${u.name}</option>`;
+      selAdd.innerHTML += opt;
+      selEdit.innerHTML += opt;
+    });
+  } catch (e) {
+    console.error('Failed to load MikroTik users', e);
+  }
+}
+
+async function loadMikrotikProfiles() {
+  try {
+    const res = await fetch('/admin/api/mikrotik/profiles');
+    if (!res.ok) return;
+    const profiles = await res.json();
+    const selAdd = document.getElementById('add_isolir_select');
+    const selEdit = document.getElementById('e_isolir_profile');
+    profiles.forEach(p => {
+      const opt = `<option value="${p.name}">${p.name}</option>`;
+      selAdd.innerHTML += opt;
+      selEdit.innerHTML += opt;
+    });
+  } catch (e) {
+    console.error('Failed to load MikroTik profiles', e);
+  }
+}
+loadMikrotikUsers();
+loadMikrotikProfiles();
+
+setTimeout(()=>document.querySelectorAll('.alert').forEach(a=>a.style.display='none'),4000);
+</script>
+</body>
+</html>

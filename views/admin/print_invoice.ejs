@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cetak Struk Tagihan #<%= invoice.id %></title>
+  <style>
+    @page { margin: 0; }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12px;
+      line-height: 1.3;
+      color: #000;
+      margin: 0 auto;
+      padding: 5px 10px;
+      max-width: 58mm;
+    }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .text-left { text-align: left; }
+    .bold { font-weight: bold; }
+    .title { font-size: 14px; margin-bottom: 5px; text-transform: uppercase; }
+    .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
+    .row { display: flex; justify-content: space-between; }
+    .mb-1 { margin-bottom: 5px; }
+    .mt-2 { margin-top: 10px; }
+    .footer { font-size: 10px; text-align: center; margin-top: 15px; }
+    .signature { margin-top: 25px; text-align: right; }
+    .signature-name { text-decoration: underline; font-weight: bold; }
+    
+    @media print {
+      body { 
+        width: 100%; 
+        max-width: 100%;
+        padding: 5mm 5mm 0 5mm; /* Tambahan jarak aman atas 5mm, kiri-kanan 5mm */
+        margin: 0; 
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="text-center">
+    <div class="title bold"><%= company %></div>
+    <div><%= settings.company_address || 'Pusat Layanan Internet' %></div>
+    <div>Telp/WA: <%= (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) ? '+' + settings.whatsapp_admin_numbers[0] : (settings.company_phone || '081234567890') %></div>
+  </div>
+  
+  <div class="divider"></div>
+  
+  <% const mns=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
+  
+  <div class="mb-1">
+    <div>No. Struk: <span class="bold">INV-<%= invoice.id %>-<%= new Date().getFullYear() %></span></div>
+    <div>Tanggal: <%= invoice.paid_at ? new Date(invoice.paid_at).toLocaleString('id-ID') : new Date().toLocaleString('id-ID') %></div>
+    <div>Kasir: <%= invoice.paid_by_name || 'Sistem' %></div>
+  </div>
+  
+  <div class="divider"></div>
+  
+  <div class="mb-1">
+    <div class="bold">Yth. <%= customer.name %></div>
+    <div>ID/Tag: <%= customer.phone || customer.genieacs_tag || '-' %></div>
+  </div>
+  
+  <div class="divider"></div>
+  
+  <div class="mb-1">
+    <div>Pembayaran Tagihan Internet</div>
+    <div>Periode: <%= mns[invoice.period_month-1] %> <%= invoice.period_year %></div>
+    <div>Paket: <%= customer.package_name || 'Internet Service' %></div>
+  </div>
+  
+  <div class="divider"></div>
+  
+  <div class="row bold">
+    <div>TOTAL BAYAR:</div>
+    <div>Rp <%= invoice.amount.toLocaleString('id-ID') %></div>
+  </div>
+  
+  <div class="divider"></div>
+  
+  <div class="text-center bold" style="margin-top: 5px;">
+    *** LUNAS ***
+  </div>
+
+  <div class="signature">
+    <div>Manajer,</div>
+    <br><br>
+    <div class="signature-name"><%= settings.company_manager || 'Admin Pusat' %></div>
+  </div>
+  
+  <div class="footer">
+    Terima kasih atas pembayaran Anda.<br>
+    Simpan struk ini sebagai bukti pembayaran yang sah.<br>
+    --- Dicetak dari Sistem Billing ---
+  </div>
+  
+  <script>
+    // Otomatis print saat halaman dibuka
+    window.onload = function() {
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    }
+  </script>
+</body>
+</html>

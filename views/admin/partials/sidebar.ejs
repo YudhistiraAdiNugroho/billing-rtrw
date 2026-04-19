@@ -1,0 +1,103 @@
+<!-- views/admin/partials/sidebar.ejs -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand">
+    <div class="sb-icon"><i class="bi bi-wifi"></i></div>
+    <div style="flex:1">
+      <div class="sb-name"><%= company %></div>
+      <div class="sb-sub">Admin Panel</div>
+    </div>
+    <button class="sb-close btn-g btn-sm" onclick="toggleSidebar()"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-section">UTAMA</div>
+    <a href="/admin" class="sb-item <%= (!activePage || activePage==='dashboard') ? 'active' : '' %>">
+      <i class="bi bi-speedometer2"></i><span>Dashboard</span>
+    </a>
+    <a href="/admin#monitoring" class="sb-item <%= activePage==='devices' ? 'active' : '' %>">
+      <i class="bi bi-display"></i><span>Monitoring ONU</span>
+    </a>
+    <a href="/admin/mikrotik" class="sb-item <%= activePage==='mikrotik' ? 'active' : '' %>">
+      <i class="bi bi-router"></i><span>Monitoring MikroTik</span>
+    </a>
+    <a href="/admin/whatsapp" class="sb-item <%= activePage==='whatsapp' ? 'active' : '' %>">
+      <i class="bi bi-whatsapp"></i><span>Status WhatsApp</span>
+    </a>
+    <a href="/admin/whatsapp/broadcast" class="sb-item <%= activePage==='broadcast' ? 'active' : '' %>">
+      <i class="bi bi-megaphone"></i><span>Broadcast WA</span>
+    </a>
+    <div class="sb-section">BILLING</div>
+    <a href="/admin/customers" class="sb-item <%= activePage==='customers' ? 'active' : '' %>">
+      <i class="bi bi-people"></i><span>Pelanggan</span>
+    </a>
+    <a href="/admin/packages" class="sb-item <%= activePage==='packages' ? 'active' : '' %>">
+      <i class="bi bi-box-seam"></i><span>Paket Internet</span>
+    </a>
+    <a href="/admin/billing" class="sb-item <%= activePage==='billing' ? 'active' : '' %>">
+      <i class="bi bi-receipt"></i><span>Tagihan</span>
+    </a>
+    <a href="/admin/reports" class="sb-item <%= activePage==='reports' ? 'active' : '' %>">
+      <i class="bi bi-bar-chart-line"></i><span>Laporan Keuangan</span>
+    </a>
+    <div class="sb-section">LAYANAN</div>
+    <a href="/admin/tickets" class="sb-item <%= activePage==='tickets' ? 'active' : '' %>">
+      <i class="bi bi-headset"></i><span>Keluhan Pelanggan</span>
+    </a>
+    
+    <% if (typeof session !== 'undefined' && session.isAdmin) { %>
+    <div class="sb-section">MANAJEMEN USER</div>
+    <a href="/admin/technicians" class="sb-item <%= activePage==='technicians' ? 'active' : '' %>">
+      <i class="bi bi-person-gear"></i><span>Teknisi</span>
+    </a>
+    <a href="/admin/cashiers" class="sb-item <%= activePage==='cashiers' ? 'active' : '' %>">
+      <i class="bi bi-person-vcard"></i><span>Kasir</span>
+    </a>
+    <% } %>
+
+    <div class="sb-section">SISTEM</div>
+    <% if (typeof session !== 'undefined' && session.isAdmin) { %>
+    <a href="/admin/settings" class="sb-item <%= activePage==='settings' ? 'active' : '' %>">
+      <i class="bi bi-gear"></i><span>Pengaturan</span>
+    </a>
+    <a href="/admin/bulk" class="sb-item <%= activePage==='bulk' ? 'active' : '' %>">
+      <i class="bi bi-layers"></i><span>Konfigurasi Massal</span>
+    </a>
+    <% } %>
+    <a href="/admin/logout" class="sb-item logout">
+      <i class="bi bi-box-arrow-left"></i><span>Logout</span>
+    </a>
+  </nav>
+</aside>
+
+<script>
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebarOverlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('show');
+}
+</script>
+
+<!-- Bottom Navigation (Mobile Only) -->
+<nav class="bottom-nav" id="bottomNav">
+  <a href="/admin" class="bn-item <%= (!activePage || activePage==='dashboard') ? 'active' : '' %>">
+    <i class="bi bi-speedometer2"></i>
+    <span>Beranda</span>
+  </a>
+  <a href="/admin/customers" class="bn-item <%= activePage==='customers' ? 'active' : '' %>">
+    <i class="bi bi-people"></i>
+    <span>Pelanggan</span>
+  </a>
+  <a href="/admin/billing" class="bn-item <%= activePage==='billing' ? 'active' : '' %>">
+    <i class="bi bi-receipt"></i>
+    <span>Tagihan</span>
+  </a>
+  <a href="/admin/mikrotik" class="bn-item <%= activePage==='mikrotik' ? 'active' : '' %>">
+    <i class="bi bi-router"></i>
+    <span>MikroTik</span>
+  </a>
+  <button class="bn-item" onclick="toggleSidebar()">
+    <i class="bi bi-grid-3x3-gap"></i>
+    <span>Menu</span>
+  </button>
+</nav>
