@@ -149,7 +149,7 @@ async function suspendCustomer(id) {
     const mikrotikSvc = require('./mikrotikService');
     const isolirProfile = customer.isolir_profile || 'isolir';
     await mikrotikSvc.setPppoeProfile(customer.pppoe_username, isolirProfile, customer.router_id);
-    await mikrotikSvc.kickPppoeUser(customer.pppoe_username, customer.router_id);
+    // kickPppoeUser sudah dipanggil secara internal di dalam setPppoeProfile jika profil berubah
   }
   return true;
 }
@@ -165,7 +165,7 @@ async function activateCustomer(id) {
     const pkg = getPackageById(customer.package_id);
     const targetProfile = pkg ? pkg.name : 'default';
     await mikrotikSvc.setPppoeProfile(customer.pppoe_username, targetProfile, customer.router_id);
-    await mikrotikSvc.kickPppoeUser(customer.pppoe_username, customer.router_id);
+    // kickPppoeUser sudah dipanggil secara internal di dalam setPppoeProfile jika profil berubah
   }
   return true;
 }

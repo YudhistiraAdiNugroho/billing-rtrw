@@ -86,16 +86,25 @@ async function setPppoeProfile(username, profileName, routerId = null) {
   try {
     conn = await getConnection(routerId);
     const secretMenu = conn.client.menu('/ppp/secret');
-    const secret = await secretMenu.where('name', username).get();
+    const secrets = await secretMenu.where('name', username).get();
     
-    if (!secret || secret.length === 0) {
+    if (!secrets || secrets.length === 0) {
       throw new Error(`PPPoE User ${username} not found in MikroTik`);
     }
 
-    await secretMenu.where('name', username).set({ profile: profileName });
-    
-    // Disconnect active connection so they reconnect with new profile
-    await kickPppoeUser(username, routerId);
+    const secret = secrets[0];
+    const currentProfile = secret.profile;
+
+    // Hanya update dan kick jika profil berubah
+    if (currentProfile !== profileName) {
+      logger.info(`[MikroTik] Changing profile for ${username}: ${currentProfile} -> ${profileName}`);
+      await secretMenu.set(secret['.id'], { profile: profileName });
+      
+      // Disconnect active connection so they reconnect with new profile
+      await kickPppoeUser(username, routerId);
+    } else {
+      logger.info(`[MikroTik] Profile for ${username} is already ${profileName}. Skipping update and kick.`);
+    }
 
     return true;
   } catch (e) {
@@ -107,6 +116,7 @@ async function setPppoeProfile(username, profileName, routerId = null) {
 }
 
 async function kickPppoeUser(username, routerId = null) {
+  if (!username) return false;
   let conn = null;
   try {
     conn = await getConnection(routerId);
@@ -128,6 +138,7 @@ async function kickPppoeUser(username, routerId = null) {
 }
 
 async function kickHotspotUser(username, routerId = null) {
+  if (!username) return false;
   let conn = null;
   try {
     conn = await getConnection(routerId);
