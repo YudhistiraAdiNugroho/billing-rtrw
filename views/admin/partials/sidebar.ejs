@@ -16,9 +16,6 @@
     <a href="/admin" class="sb-item <%= (!activePage || activePage==='dashboard') ? 'active' : '' %>">
       <i class="bi bi-speedometer2"></i><span>Dashboard</span>
     </a>
-    <a href="/admin#monitoring" class="sb-item <%= activePage==='devices' ? 'active' : '' %>">
-      <i class="bi bi-display"></i><span>Monitoring ONU</span>
-    </a>
     <a href="/admin/mikrotik" class="sb-item <%= activePage==='mikrotik' ? 'active' : '' %>">
       <i class="bi bi-router"></i><span>Monitoring MikroTik</span>
     </a>
@@ -64,15 +61,14 @@
           <a href="/admin/settings" class="sb-item <%= activePage==='settings' ? 'active' : '' %>">
             <i class="bi bi-gear"></i><span>Pengaturan</span>
           </a>
-          <a href="/admin/bulk" class="sb-item <%= activePage==='bulk' ? 'active' : '' %>">
-            <i class="bi bi-layers"></i><span>Konfigurasi Massal</span>
-          </a>
+
           <% } %>
             <a href="/admin/logout" class="sb-item logout">
               <i class="bi bi-box-arrow-left"></i><span>Logout</span>
             </a>
             <div class="mt-4 px-3 py-2 text-center" style="border-top: 1px solid rgba(255,255,255,0.1);">
-              <a href="https://github.com/alijayanet/billing-rtrw" target="_blank" style="color: #94a3b8; font-size: 11px; text-decoration: none; font-weight: 600;">
+              <a href="https://github.com/alijayanet/billing-rtrw" target="_blank"
+                style="color: #94a3b8; font-size: 11px; text-decoration: none; font-weight: 600;">
                 ALIJAYA BILLING SYSTEM
               </a>
             </div>

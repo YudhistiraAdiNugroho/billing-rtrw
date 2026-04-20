@@ -312,6 +312,7 @@ router.get('/dashboard', async (req, res) => {
     settings,
     paymentChannels,
     connectedUsers: deviceData ? deviceData.connectedUsers : [],
+    isLoggedIn: true,
     notif: msgNotif || (deviceData ? null : dashboardNotif('Data perangkat tidak ditemukan di sistem ONU.', 'warning'))
   });
 });
@@ -436,7 +437,7 @@ router.post('/logout', (req, res) => {
 });
 
 // ─── TICKETS / KELUHAN ─────────────────────────────────────────────────────
-router.post('/tickets/create', (req, res) => {
+router.post('/tickets/create', async (req, res) => {
   const loginId = req.session && req.session.phone;
   if (!loginId) return res.redirect('/customer/login');
   
@@ -447,8 +448,47 @@ router.post('/tickets/create', (req, res) => {
   }
 
   try {
-    ticketSvc.createTicket(customerId, subject, message);
+    const result = ticketSvc.createTicket(customerId, subject, message);
+    const ticketId = result.lastInsertRowid;
+    
     req.session._msg = { type: 'success', text: 'Keluhan berhasil dikirim. Tim teknisi akan segera mengeceknya.' };
+
+    // --- WHATSAPP NOTIFICATION FOR NEW TICKET ---
+    try {
+      const settings = getSettingsWithCache();
+      if (settings.whatsapp_enabled) {
+        const { sendWA } = await import('../services/whatsappBot.mjs');
+        const customer = customerSvc.getCustomerById(customerId);
+        
+        const waMsg = `🎫 *TIKET KELUHAN BARU*\n\n` +
+                     `👤 *Pelanggan:* ${customer ? customer.name : 'Unknown'}\n` +
+                     `📞 *WhatsApp:* ${customer ? customer.phone : '-'}\n` +
+                     `📍 *Alamat:* ${customer ? customer.address : '-'}\n` +
+                     `📝 *Subjek:* ${subject}\n` +
+                     `💬 *Pesan:* ${message}\n\n` +
+                     `Silakan cek di panel Admin/Teknisi untuk menindaklanjuti.`;
+
+        // Kirim ke Admin
+        if (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) {
+          for (const adminPhone of settings.whatsapp_admin_numbers) {
+            await sendWA(adminPhone, waMsg);
+          }
+        }
+
+        // Kirim ke semua Teknisi Aktif
+        const techSvc = require('../services/techService');
+        const technicians = techSvc.getAllTechnicians().filter(t => t.is_active === 1);
+        for (const tech of technicians) {
+          if (tech.phone) {
+            await sendWA(tech.phone, waMsg);
+          }
+        }
+      }
+    } catch (waErr) {
+      logger.error(`[Ticket] WA Notification Error: ${waErr.message}`);
+    }
+    // --------------------------------------------
+
   } catch (error) {
     req.session._msg = { type: 'danger', text: 'Gagal mengirim keluhan: ' + error.message };
   }

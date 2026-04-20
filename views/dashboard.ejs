@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,40 +14,49 @@
       background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       min-height: 100vh;
+      padding-bottom: 80px; /* Space for bottom nav */
     }
+
     .navbar {
       background: rgba(255, 255, 255, 0.95) !important;
       backdrop-filter: blur(10px);
       border-bottom: 1px solid rgba(0, 0, 0, 0.1);
     }
+
     .navbar-brand {
       font-weight: 600;
       color: #2c3e50 !important;
     }
+
     .navbar-brand img {
       height: 40px;
       max-width: 80px;
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
+
     .status-badge {
       padding: 6px 12px;
       border-radius: 20px;
       font-size: 12px;
       font-weight: 600;
     }
+
     .btn-nav {
       border-radius: 8px;
       font-size: 14px;
       font-weight: 500;
       transition: all 0.3s ease;
     }
+
     .btn-nav:hover {
       transform: translateY(-1px);
     }
+
     .main-container {
       padding: 20px 0;
     }
+
     .card {
       border: none;
       border-radius: 16px;
@@ -54,22 +64,26 @@
       transition: all 0.3s ease;
       overflow: hidden;
     }
+
     .card:hover {
       transform: translateY(-2px);
       box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
     }
+
     .card-header {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
       padding: 20px;
     }
+
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 15px;
       margin-bottom: 25px;
     }
+
     .stat-card {
       background: white;
       border-radius: 12px;
@@ -78,10 +92,12 @@
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
       transition: all 0.3s ease;
     }
+
     .stat-card:hover {
       transform: translateY(-2px);
       box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
     }
+
     .stat-icon {
       width: 40px;
       height: 40px;
@@ -93,33 +109,64 @@
       font-size: 18px;
       color: white;
     }
-    .stat-icon.online { background: linear-gradient(135deg, #28a745, #20c997); }
-    .stat-icon.offline { background: linear-gradient(135deg, #6c757d, #495057); }
-    .stat-icon.wifi { background: linear-gradient(135deg, #007bff, #0056b3); }
-    .stat-icon.cpu { background: linear-gradient(135deg, #fd7e14, #e55a00); }
-    .stat-icon.clock { background: linear-gradient(135deg, #6f42c1, #5a2d91); }
-    .stat-icon.activity { background: linear-gradient(135deg, #20c997, #17a2b8); }
-    .stat-icon.globe { background: linear-gradient(135deg, #17a2b8, #138496); }
-    .stat-icon.person { background: linear-gradient(135deg, #ffc107, #e0a800); }
-    .stat-icon.people { background: linear-gradient(135deg, #dc3545, #c82333); }
+
+    .stat-icon.online {
+      background: linear-gradient(135deg, #28a745, #20c997);
+    }
+
+    .stat-icon.offline {
+      background: linear-gradient(135deg, #6c757d, #495057);
+    }
+
+    .stat-icon.wifi {
+      background: linear-gradient(135deg, #007bff, #0056b3);
+    }
+
+    .stat-icon.cpu {
+      background: linear-gradient(135deg, #fd7e14, #e55a00);
+    }
+
+    .stat-icon.clock {
+      background: linear-gradient(135deg, #6f42c1, #5a2d91);
+    }
+
+    .stat-icon.activity {
+      background: linear-gradient(135deg, #20c997, #17a2b8);
+    }
+
+    .stat-icon.globe {
+      background: linear-gradient(135deg, #17a2b8, #138496);
+    }
+
+    .stat-icon.person {
+      background: linear-gradient(135deg, #ffc107, #e0a800);
+    }
+
+    .stat-icon.people {
+      background: linear-gradient(135deg, #dc3545, #c82333);
+    }
+
     .stat-label {
       font-size: 12px;
       color: #6c757d;
       margin-bottom: 5px;
       font-weight: 500;
     }
+
     .stat-value {
       font-size: 14px;
       font-weight: 600;
       color: #2c3e50;
       margin: 0;
     }
+
     .form-section {
       background: white;
       border-radius: 16px;
       padding: 25px;
       margin-bottom: 20px;
     }
+
     .form-section h6 {
       color: #2c3e50;
       font-weight: 600;
@@ -127,10 +174,12 @@
       display: flex;
       align-items: center;
     }
+
     .form-section h6 i {
       margin-right: 8px;
       color: #667eea;
     }
+
     .form-control {
       border: 2px solid #e9ecef;
       border-radius: 10px;
@@ -138,10 +187,12 @@
       font-size: 14px;
       transition: all 0.3s ease;
     }
+
     .form-control:focus {
       border-color: #667eea;
       box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
     }
+
     .btn-action {
       border-radius: 10px;
       padding: 12px 20px;
@@ -149,26 +200,32 @@
       transition: all 0.3s ease;
       border: none;
     }
+
     .btn-action:hover {
       transform: translateY(-1px);
     }
+
     .btn-ssid {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
     }
+
     .btn-password {
       background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
       color: white;
     }
+
     .table-container {
       background: white;
       border-radius: 16px;
       padding: 25px;
       margin-bottom: 20px;
     }
+
     .table {
       margin-bottom: 0;
     }
+
     .table th {
       border: none;
       background: #f8f9fa;
@@ -177,43 +234,52 @@
       font-size: 13px;
       padding: 12px 8px;
     }
+
     .table td {
       border: none;
       padding: 12px 8px;
       font-size: 13px;
       vertical-align: middle;
     }
+
     .table tbody tr {
       border-bottom: 1px solid #f1f3f4;
     }
+
     .table tbody tr:hover {
       background: #f8f9fa;
     }
+
     .alert {
       border-radius: 12px;
       border: none;
       padding: 15px 20px;
     }
+
     .alert-success {
       background: rgba(40, 167, 69, 0.1);
       color: #155724;
       border-left: 4px solid #28a745;
     }
+
     .alert-danger {
       background: rgba(220, 53, 69, 0.1);
       color: #721c24;
       border-left: 4px solid #dc3545;
     }
+
     .alert-warning {
       background: rgba(255, 193, 7, 0.1);
       color: #856404;
       border-left: 4px solid #ffc107;
     }
+
     .alert-info {
       background: rgba(102, 126, 234, 0.1);
       color: #2c3e50;
       border-left: 4px solid #667eea;
     }
+
     .footer {
       text-align: center;
       color: #6c757d;
@@ -221,46 +287,60 @@
       margin-top: 30px;
       padding: 20px 0;
     }
+
     @media (max-width: 768px) {
       .main-container {
         padding: 15px 0;
       }
+
       .stats-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
       }
+
       .stat-card {
         padding: 15px 10px;
       }
-      .form-section, .table-container {
+
+      .form-section,
+      .table-container {
         padding: 20px;
         margin-bottom: 15px;
       }
+
       .navbar-brand {
         font-size: 16px;
       }
+
       .navbar-brand img {
         height: 35px;
       }
+
       .btn-nav {
         font-size: 12px;
         padding: 6px 12px;
       }
     }
+
     @media (max-width: 576px) {
-    .stats-grid {
-      grid-template-columns: repeat(2, 1fr); /* 2 kolom */
-      gap: 10px;
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        /* 2 kolom */
+        gap: 10px;
+      }
+
+      .table-responsive {
+        font-size: 12px;
+      }
+
+      .table th,
+      .table td {
+        padding: 8px 4px;
+      }
     }
-    .table-responsive {
-      font-size: 12px;
-    }
-    .table th, .table td {
-      padding: 8px 4px;
-    }
-  }
   </style>
 </head>
+
 <body>
   <nav class="navbar navbar-light shadow-sm">
     <div class="container d-flex justify-content-between align-items-center">
@@ -268,307 +348,368 @@
         <img src="/img/logo.png" alt="Logo"> Portal Pelanggan
       </span>
       <div class="d-flex align-items-center gap-2">
-        <% if (customer.status === 'Online') { %>
+        <% if (customer.status==='Online' ) { %>
           <span class="status-badge bg-success">Online</span>
-        <% } else { %>
-          <span class="status-badge bg-secondary"><%= customer.status %></span>
-        <% } %>
-        <button class="btn btn-outline-secondary btn-nav" onclick="location.reload()">
-          <i class="bi bi-arrow-clockwise"></i>
-        </button>
-        <form method="POST" action="/customer/logout" class="d-inline">
-          <button type="submit" class="btn btn-outline-danger btn-nav">
-            <i class="bi bi-box-arrow-right"></i>
-          </button>
-        </form>
+          <% } else { %>
+            <span class="status-badge bg-secondary">
+              <%= customer.status %>
+            </span>
+            <% } %>
+              <button class="btn btn-outline-secondary btn-nav" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+              <form method="POST" action="/customer/logout" class="d-inline">
+                <button type="submit" class="btn btn-outline-danger btn-nav">
+                  <i class="bi bi-box-arrow-right"></i>
+                </button>
+              </form>
       </div>
     </div>
   </nav>
 
   <div class="main-container">
     <div class="container">
-      <% if (typeof notif !== 'undefined' && notif && notif.text) { %>
-        <% var nClass = 'alert-' + (notif.type === 'danger' ? 'danger' : notif.type === 'warning' ? 'warning' : notif.type === 'info' ? 'info' : 'success'); %>
-        <% var nIcon = notif.type === 'danger' || notif.type === 'warning' ? 'bi-exclamation-triangle' : notif.type === 'info' ? 'bi-info-circle' : 'bi-check-circle'; %>
-        <div class="alert <%= nClass %> alert-dismissible fade show" role="alert" id="notif-alert">
-          <i class="bi <%= nIcon %> me-2"></i><%= notif.text %>
-          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-      <% } %>
-      
-      <script>
-        setTimeout(function() {
-          var notif = document.getElementById('notif-alert');
-          if (notif) notif.classList.remove('show');
-        }, 3000);
-      </script>
-
-      <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <h5 class="mb-0">
-            <i class="bi bi-person-circle me-2"></i>
-            Halo, <span class="fw-bold"><%= profile ? profile.name : customer.phone %></span>
-          </h5>
-          <% if (profile) { %>
-            <span class="badge <%= profile.status === 'active' ? 'bg-success' : 'bg-danger' %>">
-              Layanan: <%= profile.status === 'active' ? 'AKTIF' : 'ISOLIR' %>
-            </span>
-          <% } %>
-        </div>
-        <div class="card-body p-4">
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-icon <%= customer.status === 'Online' ? 'online' : 'offline' %>">
-                <i class="bi bi-circle-fill"></i>
-              </div>
-              <div class="stat-label">Status Perangkat</div>
-              <div class="stat-value">
-                <% if (customer.status === 'Online') { %>
-                  <span class="badge bg-success">Online</span>
-                <% } else { %>
-                  <span class="badge bg-secondary"><%= customer.status %></span>
-                <% } %>
-              </div>
+      <% if (typeof notif !=='undefined' && notif && notif.text) { %>
+        <% var nClass='alert-' + (notif.type==='danger' ? 'danger' : notif.type==='warning' ? 'warning' :
+          notif.type==='info' ? 'info' : 'success' ); %>
+          <% var nIcon=notif.type==='danger' || notif.type==='warning' ? 'bi-exclamation-triangle' : notif.type==='info'
+            ? 'bi-info-circle' : 'bi-check-circle' ; %>
+            <div class="alert <%= nClass %> alert-dismissible fade show" role="alert" id="notif-alert">
+              <i class="bi <%= nIcon %> me-2"></i>
+              <%= notif.text %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
-            
-            <div class="stat-card">
-              <div class="stat-icon wifi">
-                <i class="bi bi-wifi"></i>
-              </div>
-              <div class="stat-label">SSID Saat Ini</div>
-              <div class="stat-value"><%= customer.ssid %></div>
-            </div>
-            
-            <div class="stat-card">
-              <div class="stat-icon cpu">
-                <i class="bi bi-cpu"></i>
-              </div>
-              <div class="stat-label">Software Version</div>
-              <div class="stat-value"><%= customer.softwareVersion %></div>
-            </div>
-            
-            <div class="stat-card">
-              <div class="stat-icon clock">
-                <i class="bi bi-clock-history"></i>
-              </div>
-              <div class="stat-label">Last Inform</div>
-              <div class="stat-value"><%= customer.lastInform %></div>
-            </div>
-            
-            <div class="stat-card">
-              <div class="stat-icon activity">
-                <i class="bi bi-activity"></i>
-              </div>
-              <div class="stat-label">RX Power</div>
-              <div class="stat-value"><%= customer.rxPower %></div>
-            </div>
-            
-            <div class="stat-card">
-              <div class="stat-icon globe">
-                <i class="bi bi-globe"></i>
-              </div>
-              <div class="stat-label">PPPoE IP</div>
-              <div class="stat-value"><%= customer.pppoeIP %></div>
-            </div>
-            
-            <div class="stat-card">
-              <div class="stat-icon person">
-                <i class="bi bi-person"></i>
-              </div>
-              <div class="stat-label">PPPoE Username</div>
-              <div class="stat-value"><%= customer.pppoeUsername %></div>
-            </div>
-            
-            <div class="stat-card">
-              <div class="stat-icon people">
-                <i class="bi bi-people"></i>
-              </div>
-              <div class="stat-label">User Terhubung</div>
-              <div class="stat-value"><%= customer.totalAssociations %></div>
-            </div>
-          </div>
-        </div>
-      </div>
+            <% } %>
 
-      <!-- Tagihan Section -->
-      <div class="form-section">
-        <h6><i class="bi bi-receipt"></i> Status Tagihan & Riwayat</h6>
-        <% if (invoices && invoices.length > 0) { %>
-          <div class="table-responsive">
-            <table class="table table-hover">
-              <thead>
-                <tr>
-                  <th>Periode</th>
-                  <th>Layanan / Paket</th>
-                  <th>Jumlah</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% invoices.forEach(function(inv) { %>
-                  <tr>
-                    <td><strong><%= ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][inv.period_month] %> <%= inv.period_year %></strong></td>
-                    <td><%= inv.package_name || 'Internet Service' %></td>
-                    <td>Rp <%= inv.amount.toLocaleString('id-ID') %></td>
-                    <td>
-                      <% if (inv.status === 'paid') { %>
-                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>LUNAS</span>
-                        <div class="text-muted small" style="font-size:10px">Dibayar: <%= new Date(inv.paid_at).toLocaleDateString('id-ID') %></div>
-                      <% } else { %>
-                        <div class="d-flex align-items-center gap-2">
-                          <span class="badge bg-danger"><i class="bi bi-exclamation-circle me-1"></i>BELUM BAYAR</span>
-                          <button class="btn btn-sm btn-primary py-1" style="font-size:10px; white-space: nowrap;" 
-                                  onclick="openPaymentModal('<%= inv.id %>', '<%= inv.amount %>')">
-                            <i class="bi bi-wallet2"></i> Bayar Online
-                          </button>
-                        </div>
-                      <% } %>
-                    </td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
-          </div>
-        <% } else { %>
-          <p class="text-muted mb-0">Tidak ada data tagihan.</p>
-        <% } %>
-      </div>
+              <script>
+                setTimeout(function () {
+                  var notif = document.getElementById('notif-alert');
+                  if (notif) notif.classList.remove('show');
+                }, 3000);
+              </script>
 
-      <!-- Keluhan Section -->
-      <div class="form-section">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="mb-0"><i class="bi bi-headset"></i> Tiket Bantuan & Keluhan</h6>
-          <button class="btn btn-sm btn-action btn-ssid py-1 px-3" onclick="new bootstrap.Modal(document.getElementById('ticketModal')).show()">
-            <i class="bi bi-plus-lg me-1"></i> Buat Tiket
-          </button>
-        </div>
-        <% if (tickets && tickets.length > 0) { %>
-          <div class="table-responsive">
-            <table class="table table-hover">
-              <thead>
-                <tr>
-                  <th>Waktu</th>
-                  <th>Kendala</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% tickets.forEach(function(t) { %>
-                  <tr>
-                    <td class="small"><%= new Date(t.created_at).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'short'}) %></td>
-                    <td>
-                      <strong><%= t.subject %></strong>
-                      <div class="text-muted small text-truncate" style="max-width: 200px;"><%= t.message %></div>
-                    </td>
-                    <td>
-                      <% if (t.status === 'open') { %>
-                        <span class="badge bg-danger"><i class="bi bi-exclamation-circle me-1"></i>Menunggu</span>
-                      <% } else if (t.status === 'in_progress') { %>
-                        <span class="badge bg-warning text-dark"><i class="bi bi-tools me-1"></i>Dikerjakan</span>
-                      <% } else { %>
-                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Selesai</span>
-                      <% } %>
-                    </td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
-          </div>
-        <% } else { %>
-          <p class="text-muted mb-0 small">Belum ada riwayat keluhan.</p>
-        <% } %>
-      </div>
+              <div class="card mb-4" id="home-section">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <h5 class="mb-0">
+                    <i class="bi bi-person-circle me-2"></i>
+                    Halo, <span class="fw-bold">
+                      <%= profile ? profile.name : customer.phone %>
+                    </span>
+                  </h5>
+                  <% if (profile) { %>
+                    <span class="badge <%= profile.status === 'active' ? 'bg-success' : 'bg-danger' %>">
+                      Layanan: <%= profile.status==='active' ? 'AKTIF' : 'ISOLIR' %>
+                    </span>
+                    <% } %>
+                </div>
+                <div class="card-body p-4">
+                  <div class="stats-grid">
+                    <div class="stat-card">
+                      <div class="stat-icon <%= customer.status === 'Online' ? 'online' : 'offline' %>">
+                        <i class="bi bi-circle-fill"></i>
+                      </div>
+                      <div class="stat-label">Status Perangkat</div>
+                      <div class="stat-value">
+                        <% if (customer.status==='Online' ) { %>
+                          <span class="badge bg-success">Online</span>
+                          <% } else { %>
+                            <span class="badge bg-secondary">
+                              <%= customer.status %>
+                            </span>
+                            <% } %>
+                      </div>
+                    </div>
 
-      <div class="form-section">
-        <h6><i class="bi bi-wifi"></i>Ganti Nama WiFi (SSID)</h6>
-        <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>SSID saat ini: <strong><%= customer.ssid %></strong> &nbsp;(5GHz: <strong><%= customer.ssid %>-5G</strong>)</p>
-        <form method="POST" action="/customer/change-ssid" class="row g-2 align-items-center">
-          <div class="col-12 col-md-8 mb-2 mb-md-0">
-            <input type="text" class="form-control" name="ssid" value="<%= customer.ssid !== '-' ? customer.ssid : '' %>" placeholder="Nama WiFi baru" required maxlength="32">
-          </div>
-          <div class="col-12 col-md-4">
-            <button class="btn btn-action btn-ssid w-100" type="submit">
-              <i class="bi bi-check-lg me-1"></i>Ganti SSID
-            </button>
-          </div>
-        </form>
-      </div>
+                    <div class="stat-card">
+                      <div class="stat-icon wifi">
+                        <i class="bi bi-wifi"></i>
+                      </div>
+                      <div class="stat-label">SSID Saat Ini</div>
+                      <div class="stat-value">
+                        <%= customer.ssid %>
+                      </div>
+                    </div>
 
-      <div class="form-section">
-        <h6><i class="bi bi-shield-lock"></i>Ganti Password WiFi</h6>
-        <form method="POST" action="/customer/change-password" class="row g-2 align-items-center">
-          <div class="col-12 col-md-8 mb-2 mb-md-0">
-            <input type="password" class="form-control" name="password" placeholder="Password baru" required maxlength="32" minlength="8" autocomplete="new-password">
-          </div>
-          <div class="col-12 col-md-4">
-            <button class="btn btn-action btn-password w-100" type="submit">
-              <i class="bi bi-check-lg me-1"></i>Ganti Password
-            </button>
-          </div>
-        </form>
-      </div>
+                    <div class="stat-card">
+                      <div class="stat-icon cpu">
+                        <i class="bi bi-cpu"></i>
+                      </div>
+                      <div class="stat-label">Software Version</div>
+                      <div class="stat-value">
+                        <%= customer.softwareVersion %>
+                      </div>
+                    </div>
 
-      <!-- Tombol Reboot dengan konfirmasi popup -->
-      <div class="form-section text-center">
-        <button id="rebootBtn" class="btn btn-danger btn-action" style="min-width:180px;">
-          <i class="bi bi-arrow-repeat me-1"></i>Reboot Perangkat
-        </button>
-      </div>
-      <form id="rebootForm" method="POST" action="/customer/reboot" style="display:none;"></form>
-      <script>
-        document.getElementById('rebootBtn').addEventListener('click', function(e) {
-          e.preventDefault();
-          if (confirm('Yakin ingin reboot perangkat Anda?')) {
-            document.getElementById('rebootForm').submit();
-          }
-        });
-      </script>
+                    <div class="stat-card">
+                      <div class="stat-icon clock">
+                        <i class="bi bi-clock-history"></i>
+                      </div>
+                      <div class="stat-label">Last Inform</div>
+                      <div class="stat-value">
+                        <%= customer.lastInform %>
+                      </div>
+                    </div>
 
-      <div class="table-container">
-        <h6><i class="bi bi-devices"></i>Perangkat Terhubung</h6>
-        <% if (connectedUsers && connectedUsers.length > 0) { %>
-          <div class="table-responsive">
-            <table class="table table-hover">
-              <thead>
-                <tr>
-                  <th>Hostname</th>
-                  <th>IP</th>
-                  <th>MAC</th>
-                  <th>Interface</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% connectedUsers.forEach(function(user) { %>
-                  <tr>
-                    <td><%= user.hostname %></td>
-                    <td><%= user.ip %></td>
-                    <td><%= user.mac %></td>
-                    <td><%= user.iface %></td>
-                    <td>
-                      <% if (user.status === 'Online') { %>
-                        <span class="badge bg-success">Online</span>
-                      <% } else { %>
-                        <span class="badge bg-secondary">Offline</span>
-                      <% } %>
-                    </td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
-          </div>
-        <% } else { %>
-          <div class="alert alert-warning mb-0">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            Tidak ada perangkat yang sedang terhubung.
-          </div>
-        <% } %>
-      </div>
+                    <div class="stat-card">
+                      <div class="stat-icon activity">
+                        <i class="bi bi-activity"></i>
+                      </div>
+                      <div class="stat-label">RX Power</div>
+                      <div class="stat-value">
+                        <%= customer.rxPower %>
+                      </div>
+                    </div>
 
-      <div class="alert alert-info">
-        <i class="bi bi-info-circle me-2"></i>
-        Jika mengalami kendala, silakan hubungi admin melalui WhatsApp.
-      </div>
+                    <div class="stat-card">
+                      <div class="stat-icon globe">
+                        <i class="bi bi-globe"></i>
+                      </div>
+                      <div class="stat-label">PPPoE IP</div>
+                      <div class="stat-value">
+                        <%= customer.pppoeIP %>
+                      </div>
+                    </div>
+
+                    <div class="stat-card">
+                      <div class="stat-icon person">
+                        <i class="bi bi-person"></i>
+                      </div>
+                      <div class="stat-label">PPPoE Username</div>
+                      <div class="stat-value">
+                        <%= customer.pppoeUsername %>
+                      </div>
+                    </div>
+
+                    <div class="stat-card">
+                      <div class="stat-icon people">
+                        <i class="bi bi-people"></i>
+                      </div>
+                      <div class="stat-label">User Terhubung</div>
+                      <div class="stat-value">
+                        <%= customer.totalAssociations %>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tagihan Section -->
+              <div class="form-section" id="billing-section">
+                <h6><i class="bi bi-receipt"></i> Status Tagihan & Riwayat</h6>
+                <% if (invoices && invoices.length> 0) { %>
+                  <div class="table-responsive">
+                    <table class="table table-hover">
+                      <thead>
+                        <tr>
+                          <th>Periode</th>
+                          <th>Layanan / Paket</th>
+                          <th>Jumlah</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% invoices.forEach(function(inv) { %>
+                          <tr>
+                            <td><strong>
+                                <%=
+                                  ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][inv.period_month]
+                                  %>
+                                  <%= inv.period_year %>
+                              </strong></td>
+                            <td>
+                              <%= inv.package_name || 'Internet Service' %>
+                            </td>
+                            <td>Rp <%= inv.amount.toLocaleString('id-ID') %>
+                            </td>
+                            <td>
+                              <% if (inv.status==='paid' ) { %>
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>LUNAS</span>
+                                <div class="text-muted small" style="font-size:10px">Dibayar: <%= new
+                                    Date(inv.paid_at).toLocaleDateString('id-ID') %>
+                                </div>
+                                <% } else { %>
+                                  <div class="d-flex align-items-center gap-2">
+                                    <button class="btn btn-primary fw-bold p-2"
+                                      style="font-size:11px; line-height: 1.2; border-radius: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; min-width: 85px; box-shadow: 0 4px 10px rgba(102, 126, 234, 0.3);"
+                                      onclick="openPaymentModal('<%= inv.id %>', '<%= inv.amount %>')">
+                                      <i class="bi bi-wallet2 d-block mb-1" style="font-size: 16px;"></i>
+                                      BAYAR<br>ONLINE
+                                    </button>
+                                    <span class="badge bg-danger"><i class="bi bi-exclamation-circle me-1"></i>BELUM
+                                      BAYAR</span>
+                                  </div>
+                                  <% } %>
+                            </td>
+                          </tr>
+                          <% }) %>
+                      </tbody>
+                    </table>
+                  </div>
+                  <% } else { %>
+                    <p class="text-muted mb-0">Tidak ada data tagihan.</p>
+                    <% } %>
+              </div>
+
+              <!-- Keluhan Section -->
+              <div class="form-section" id="ticket-section">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h6 class="mb-0"><i class="bi bi-headset"></i> Tiket Bantuan & Keluhan</h6>
+                  <button class="btn btn-sm btn-action btn-ssid py-1 px-3"
+                    onclick="new bootstrap.Modal(document.getElementById('ticketModal')).show()">
+                    <i class="bi bi-plus-lg me-1"></i> Buat Tiket
+                  </button>
+                </div>
+                <% if (tickets && tickets.length> 0) { %>
+                  <div class="table-responsive">
+                    <table class="table table-hover">
+                      <thead>
+                        <tr>
+                          <th>Waktu</th>
+                          <th>Kendala</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% tickets.forEach(function(t) { %>
+                          <tr>
+                            <td class="small">
+                              <%= new Date(t.created_at).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'short'})
+                                %>
+                            </td>
+                            <td>
+                              <strong>
+                                <%= t.subject %>
+                              </strong>
+                              <div class="text-muted small text-truncate" style="max-width: 200px;">
+                                <%= t.message %>
+                              </div>
+                            </td>
+                            <td>
+                              <% if (t.status==='open' ) { %>
+                                <span class="badge bg-danger"><i
+                                    class="bi bi-exclamation-circle me-1"></i>Menunggu</span>
+                                <% } else if (t.status==='in_progress' ) { %>
+                                  <span class="badge bg-warning text-dark"><i
+                                      class="bi bi-tools me-1"></i>Dikerjakan</span>
+                                  <% } else { %>
+                                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Selesai</span>
+                                    <% } %>
+                            </td>
+                          </tr>
+                          <% }) %>
+                      </tbody>
+                    </table>
+                  </div>
+                  <% } else { %>
+                    <p class="text-muted mb-0 small">Belum ada riwayat keluhan.</p>
+                    <% } %>
+              </div>
+
+              <div class="form-section" id="settings-section">
+                <h6><i class="bi bi-wifi"></i>Ganti Nama WiFi (SSID)</h6>
+                <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>SSID saat ini: <strong>
+                    <%= customer.ssid %>
+                  </strong> &nbsp;(5GHz: <strong>
+                    <%= customer.ssid %>-5G
+                  </strong>)</p>
+                <form method="POST" action="/customer/change-ssid" class="row g-2 align-items-center">
+                  <div class="col-12 col-md-8 mb-2 mb-md-0">
+                    <input type="text" class="form-control" name="ssid"
+                      value="<%= customer.ssid !== '-' ? customer.ssid : '' %>" placeholder="Nama WiFi baru" required
+                      maxlength="32">
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <button class="btn btn-action btn-ssid w-100" type="submit">
+                      <i class="bi bi-check-lg me-1"></i>Ganti SSID
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="form-section">
+                <h6><i class="bi bi-shield-lock"></i>Ganti Password WiFi</h6>
+                <form method="POST" action="/customer/change-password" class="row g-2 align-items-center">
+                  <div class="col-12 col-md-8 mb-2 mb-md-0">
+                    <input type="password" class="form-control" name="password" placeholder="Password baru" required
+                      maxlength="32" minlength="8" autocomplete="new-password">
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <button class="btn btn-action btn-password w-100" type="submit">
+                      <i class="bi bi-check-lg me-1"></i>Ganti Password
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- Tombol Reboot dengan konfirmasi popup -->
+              <div class="form-section text-center">
+                <button id="rebootBtn" class="btn btn-danger btn-action" style="min-width:180px;">
+                  <i class="bi bi-arrow-repeat me-1"></i>Reboot Perangkat
+                </button>
+              </div>
+              <form id="rebootForm" method="POST" action="/customer/reboot" style="display:none;"></form>
+              <script>
+                document.getElementById('rebootBtn').addEventListener('click', function (e) {
+                  e.preventDefault();
+                  if (confirm('Yakin ingin reboot perangkat Anda?')) {
+                    document.getElementById('rebootForm').submit();
+                  }
+                });
+              </script>
+
+              <div class="table-container">
+                <h6><i class="bi bi-devices"></i>Perangkat Terhubung</h6>
+                <% if (connectedUsers && connectedUsers.length> 0) { %>
+                  <div class="table-responsive">
+                    <table class="table table-hover">
+                      <thead>
+                        <tr>
+                          <th>Hostname</th>
+                          <th>IP</th>
+                          <th>MAC</th>
+                          <th>Interface</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% connectedUsers.forEach(function(user) { %>
+                          <tr>
+                            <td>
+                              <%= user.hostname %>
+                            </td>
+                            <td>
+                              <%= user.ip %>
+                            </td>
+                            <td>
+                              <%= user.mac %>
+                            </td>
+                            <td>
+                              <%= user.iface %>
+                            </td>
+                            <td>
+                              <% if (user.status==='Online' ) { %>
+                                <span class="badge bg-success">Online</span>
+                                <% } else { %>
+                                  <span class="badge bg-secondary">Offline</span>
+                                  <% } %>
+                            </td>
+                          </tr>
+                          <% }) %>
+                      </tbody>
+                    </table>
+                  </div>
+                  <% } else { %>
+                    <div class="alert alert-warning mb-0">
+                      <i class="bi bi-exclamation-triangle me-2"></i>
+                      Tidak ada perangkat yang sedang terhubung.
+                    </div>
+                    <% } %>
+              </div>
+
+              <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>
+                Jika mengalami kendala, silakan hubungi admin melalui WhatsApp.
+              </div>
     </div>
   </div>
 
@@ -580,197 +721,248 @@
       <a href="/customer/contact" class="text-decoration-none text-muted small">Kontak</a>
     </div>
     <div class="small opacity-75">
-      &copy; <%= new Date().getFullYear() %> <%= settings.company_header || 'ALIJAYA DIGITAL NETWORK' %>
+      &copy; <%= new Date().getFullYear() %>
+        <%= settings.company_header || 'ALIJAYA DIGITAL NETWORK' %>
     </div>
   </footer>
 
-<!-- Modal Pilih Pembayaran -->
-<div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content" style="background: #ffffff; border: none; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
-      <div class="modal-header border-0 pb-0" style="padding: 25px 25px 10px;">
-        <h5 class="modal-title fw-bold" style="color: #2c3e50;"><i class="bi bi-wallet2 me-2 text-primary"></i>Pilih Pembayaran</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body" style="padding: 10px 25px 30px;">
-        <p class="text-muted small mb-4">Silakan pilih metode pembayaran untuk tagihan sebesar <strong id="pay_amount_text" class="text-primary"></strong></p>
-        
-        <div class="payment-methods-grid">
-          <% if (paymentChannels && paymentChannels.length > 0) { %>
-            <!-- Dynamic Tripay Channels - Sorted by E-Wallet first -->
-            <% 
-              // Urutkan: E-Wallet -> QRIS -> Virtual Account -> Lainnya
-              const sortedChannels = [...paymentChannels].sort((a, b) => {
+  <!-- Modal Pilih Pembayaran -->
+  <div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content"
+        style="background: #ffffff; border: none; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+        <div class="modal-header border-0 pb-0" style="padding: 25px 25px 10px;">
+          <h5 class="modal-title fw-bold" style="color: #2c3e50;"><i class="bi bi-wallet2 me-2 text-primary"></i>Pilih
+            Pembayaran</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" style="padding: 10px 25px 30px;">
+          <p class="text-muted small mb-4">Silakan pilih metode pembayaran untuk tagihan sebesar <strong
+              id="pay_amount_text" class="text-primary"></strong></p>
+
+          <div class="payment-methods-grid">
+            <% if (paymentChannels && paymentChannels.length> 0) { %>
+              <!-- Dynamic Tripay Channels - Sorted by E-Wallet first -->
+              <% // Urutkan: E-Wallet -> QRIS -> Virtual Account -> Lainnya
+                const sortedChannels = [...paymentChannels].sort((a, b) => {
                 const priority = { 'E-Wallet': 1, 'QRIS': 2, 'Virtual Account': 3, 'Convenience Store': 4 };
                 const prioA = priority[a.group] || 99;
                 const prioB = priority[b.group] || 99;
                 return prioA - prioB;
-              });
-              
-              sortedChannels.filter(c => c.active).forEach(channel => { 
-            %>
-              <div class="pay-method-item" onclick="submitPayment('<%= channel.code %>')">
-                <div class="p-icon">
-                  <% if (channel.group === 'Virtual Account') { %>
-                    <i class="bi bi-bank"></i>
-                  <% } else if (channel.group === 'E-Wallet') { %>
-                    <i class="bi bi-wallet2"></i>
-                  <% } else if (channel.group === 'Convenience Store') { %>
-                    <i class="bi bi-shop"></i>
+                });
+
+                sortedChannels.filter(c => c.active).forEach(channel => {
+                %>
+                <div class="pay-method-item" onclick="submitPayment('<%= channel.code %>')">
+                  <div class="p-icon">
+                    <% if (channel.group==='Virtual Account' ) { %>
+                      <i class="bi bi-bank"></i>
+                      <% } else if (channel.group==='E-Wallet' ) { %>
+                        <i class="bi bi-wallet2"></i>
+                        <% } else if (channel.group==='Convenience Store' ) { %>
+                          <i class="bi bi-shop"></i>
+                          <% } else { %>
+                            <i class="bi bi-qr-code-scan"></i>
+                            <% } %>
+                  </div>
+                  <div class="p-info">
+                    <span class="p-name">
+                      <%= channel.name %>
+                    </span>
+                    <span class="p-sub">
+                      <%= channel.group %>
+                    </span>
+                  </div>
+                </div>
+                <% }) %>
                   <% } else { %>
-                    <i class="bi bi-qr-code-scan"></i>
-                  <% } %>
-                </div>
-                <div class="p-info">
-                  <span class="p-name"><%= channel.name %></span>
-                  <span class="p-sub"><%= channel.group %></span>
-                </div>
-              </div>
-            <% }) %>
-          <% } else { %>
-            <!-- Default Curated Methods (For Midtrans, Xendit, Duitku, or Tripay Fallback) -->
-            
-            <!-- E-Wallet / QRIS (Top Priority) -->
-            <div class="pay-method-item" onclick="submitPayment('QRIS')">
-              <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
-              <div class="p-info">
-                <span class="p-name">QRIS / E-Wallet</span>
-                <span class="p-sub">DANA, OVO, ShopeePay, LinkAja</span>
-              </div>
-            </div>
+                    <!-- Default Curated Methods (For Midtrans, Xendit, Duitku, or Tripay Fallback) -->
 
-            <!-- Virtual Accounts -->
-            <div class="pay-method-item" onclick="submitPayment('MANDIRIVA')">
-              <div class="p-icon"><i class="bi bi-bank"></i></div>
-              <div class="p-info">
-                <span class="p-name">Mandiri Virtual Account</span>
-                <span class="p-sub">Transfer via Bank Mandiri</span>
-              </div>
-            </div>
+                    <!-- E-Wallet / QRIS (Top Priority) -->
+                    <div class="pay-method-item" onclick="submitPayment('QRIS')">
+                      <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
+                      <div class="p-info">
+                        <span class="p-name">QRIS / E-Wallet</span>
+                        <span class="p-sub">DANA, OVO, ShopeePay, LinkAja</span>
+                      </div>
+                    </div>
 
-            <div class="pay-method-item" onclick="submitPayment('BRIVA')">
-              <div class="p-icon"><i class="bi bi-bank"></i></div>
-              <div class="p-info">
-                <span class="p-name">BRI Virtual Account</span>
-                <span class="p-sub">Transfer via Bank BRI (BRIVA)</span>
-              </div>
-            </div>
+                    <!-- Virtual Accounts -->
+                    <div class="pay-method-item" onclick="submitPayment('MANDIRIVA')">
+                      <div class="p-icon"><i class="bi bi-bank"></i></div>
+                      <div class="p-info">
+                        <span class="p-name">Mandiri Virtual Account</span>
+                        <span class="p-sub">Transfer via Bank Mandiri</span>
+                      </div>
+                    </div>
 
-            <div class="pay-method-item" onclick="submitPayment('BNIVA')">
-              <div class="p-icon"><i class="bi bi-bank"></i></div>
-              <div class="p-info">
-                <span class="p-name">BNI Virtual Account</span>
-                <span class="p-sub">Transfer via Bank BNI</span>
-              </div>
-            </div>
+                    <div class="pay-method-item" onclick="submitPayment('BRIVA')">
+                      <div class="p-icon"><i class="bi bi-bank"></i></div>
+                      <div class="p-info">
+                        <span class="p-name">BRI Virtual Account</span>
+                        <span class="p-sub">Transfer via Bank BRI (BRIVA)</span>
+                      </div>
+                    </div>
 
-            <div class="pay-method-item" onclick="submitPayment('BCAVA')">
-              <div class="p-icon"><i class="bi bi-bank"></i></div>
-              <div class="p-info">
-                <span class="p-name">BCA Virtual Account</span>
-                <span class="p-sub">Transfer via Bank BCA</span>
-              </div>
-            </div>
+                    <div class="pay-method-item" onclick="submitPayment('BNIVA')">
+                      <div class="p-icon"><i class="bi bi-bank"></i></div>
+                      <div class="p-info">
+                        <span class="p-name">BNI Virtual Account</span>
+                        <span class="p-sub">Transfer via Bank BNI</span>
+                      </div>
+                    </div>
 
-            <!-- All-in-one Fallback -->
-            <div class="pay-method-item mt-2" onclick="submitPayment('<%= settings.default_gateway === 'midtrans' ? 'snap' : (settings.default_gateway === 'xendit' ? 'xendit' : 'duitku') %>')" style="background: #f0f7ff; border-color: #667eea;">
-              <div class="p-icon" style="background: #667eea; color: white;"><i class="bi bi-credit-card-2-back"></i></div>
-              <div class="p-info">
-                <span class="p-name">Metode Lainnya</span>
-                <span class="p-sub">Pilih metode lain di halaman pembayaran</span>
-              </div>
-            </div>
-          <% } %>
+                    <div class="pay-method-item" onclick="submitPayment('BCAVA')">
+                      <div class="p-icon"><i class="bi bi-bank"></i></div>
+                      <div class="p-info">
+                        <span class="p-name">BCA Virtual Account</span>
+                        <span class="p-sub">Transfer via Bank BCA</span>
+                      </div>
+                    </div>
+
+                    <!-- All-in-one Fallback -->
+                    <div class="pay-method-item mt-2"
+                      onclick="submitPayment('<%= settings.default_gateway === 'midtrans' ? 'snap' : (settings.default_gateway === 'xendit' ? 'xendit' : 'duitku') %>')"
+                      style="background: #f0f7ff; border-color: #667eea;">
+                      <div class="p-icon" style="background: #667eea; color: white;"><i
+                          class="bi bi-credit-card-2-back"></i></div>
+                      <div class="p-info">
+                        <span class="p-name">Metode Lainnya</span>
+                        <span class="p-sub">Pilih metode lain di halaman pembayaran</span>
+                      </div>
+                    </div>
+                    <% } %>
+          </div>
         </div>
       </div>
     </div>
   </div>
-</div>
 
-<style>
-.payment-methods-grid { display: flex; flex-direction: column; gap: 12px; }
-.pay-method-item {
-  display: flex; align-items: center; gap: 15px; padding: 15px;
-  background: #f8f9fa; border: 2px solid #e9ecef;
-  border-radius: 14px; cursor: pointer; transition: all 0.3s ease;
-}
-.pay-method-item:hover { 
-  background: #ffffff; 
-  border-color: #667eea; 
-  transform: translateY(-2px); 
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
-}
-.p-icon { 
-  width: 45px; height: 45px; background: white; border-radius: 12px; 
-  display: flex; align-items: center; justify-content: center; 
-  font-size: 22px; color: #667eea; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-}
-.p-info { display: flex; flex-direction: column; }
-.p-name { font-size: 15px; font-weight: 600; color: #2c3e50; }
-.p-sub { font-size: 12px; color: #6c757d; }
-</style>
+  <style>
+    .payment-methods-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
 
-<script>
-let currentInvId = null;
-let pModal = null;
+    .pay-method-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 15px;
+      background: #f8f9fa;
+      border: 2px solid #e9ecef;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const modalEl = document.getElementById('paymentModal');
-  if (modalEl) pModal = new bootstrap.Modal(modalEl);
-});
+    .pay-method-item:hover {
+      background: #ffffff;
+      border-color: #667eea;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
+    }
 
-function openPaymentModal(invId, amount) {
-  currentInvId = invId;
-  document.getElementById('pay_amount_text').innerText = 'Rp ' + parseInt(amount).toLocaleString('id-ID');
-  if (pModal) pModal.show();
-}
+    .p-icon {
+      width: 45px;
+      height: 45px;
+      background: white;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: #667eea;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
 
-function submitPayment(method) {
-  if (!currentInvId) return;
-  window.location.href = `/customer/payment/create/${currentInvId}?method=${method}`;
-}
+    .p-info {
+      display: flex;
+      flex-direction: column;
+    }
 
-const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('pay_success')) {
-  // logic to show success if needed
-}
-</script>
-<!-- Modal Buat Tiket Keluhan -->
-<div class="modal fade" id="ticketModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content" style="background: #ffffff; border: none; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
-      <div class="modal-header border-0 pb-0" style="padding: 25px 25px 10px;">
-        <h5 class="modal-title fw-bold" style="color: #2c3e50;"><i class="bi bi-headset me-2 text-primary"></i>Buat Tiket Keluhan</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    .p-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+
+    .p-sub {
+      font-size: 12px;
+      color: #6c757d;
+    }
+  </style>
+
+  <script>
+    let currentInvId = null;
+    let pModal = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const modalEl = document.getElementById('paymentModal');
+      if (modalEl) pModal = new bootstrap.Modal(modalEl);
+    });
+
+    function openPaymentModal(invId, amount) {
+      currentInvId = invId;
+      document.getElementById('pay_amount_text').innerText = 'Rp ' + parseInt(amount).toLocaleString('id-ID');
+      if (pModal) pModal.show();
+    }
+
+    function submitPayment(method) {
+      if (!currentInvId) return;
+      window.location.href = `/customer/payment/create/${currentInvId}?method=${method}`;
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('pay_success')) {
+      // logic to show success if needed
+    }
+  </script>
+  <!-- Modal Buat Tiket Keluhan -->
+  <div class="modal fade" id="ticketModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content"
+        style="background: #ffffff; border: none; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+        <div class="modal-header border-0 pb-0" style="padding: 25px 25px 10px;">
+          <h5 class="modal-title fw-bold" style="color: #2c3e50;"><i class="bi bi-headset me-2 text-primary"></i>Buat
+            Tiket Keluhan</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form method="POST" action="/customer/tickets/create">
+          <div class="modal-body" style="padding: 10px 25px 20px;">
+            <input type="hidden" name="customerId" value="<%= profile ? profile.id : '' %>">
+
+            <div class="mb-3">
+              <label class="form-label text-muted small fw-bold">Jenis Kendala</label>
+              <select class="form-select" name="subject" required style="border-radius:10px;">
+                <option value="">Pilih jenis kendala...</option>
+                <option value="Internet Mati Total (LOS Merah)">Internet Mati Total (LOS Merah)</option>
+                <option value="Internet Lambat / Sering Putus">Internet Lambat / Sering Putus</option>
+                <option value="Lupa Password WiFi">Lupa Password WiFi</option>
+                <option value="Lainnya">Lainnya</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label text-muted small fw-bold">Pesan / Detail</label>
+              <textarea class="form-control" name="message" rows="3" required style="border-radius:10px;"
+                placeholder="Jelaskan detail kendala Anda di sini..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer border-0" style="padding: 10px 25px 25px;">
+            <button type="button" class="btn btn-light" data-bs-dismiss="modal"
+              style="border-radius:10px;">Batal</button>
+            <button type="submit" class="btn btn-primary"
+              style="border-radius:10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border:none;">Kirim
+              Keluhan</button>
+          </div>
+        </form>
       </div>
-      <form method="POST" action="/customer/tickets/create">
-        <div class="modal-body" style="padding: 10px 25px 20px;">
-          <input type="hidden" name="customerId" value="<%= profile ? profile.id : '' %>">
-          
-          <div class="mb-3">
-            <label class="form-label text-muted small fw-bold">Jenis Kendala</label>
-            <select class="form-select" name="subject" required style="border-radius:10px;">
-              <option value="">Pilih jenis kendala...</option>
-              <option value="Internet Mati Total (LOS Merah)">Internet Mati Total (LOS Merah)</option>
-              <option value="Internet Lambat / Sering Putus">Internet Lambat / Sering Putus</option>
-              <option value="Lupa Password WiFi">Lupa Password WiFi</option>
-              <option value="Lainnya">Lainnya</option>
-            </select>
-          </div>
-          
-          <div class="mb-3">
-            <label class="form-label text-muted small fw-bold">Pesan / Detail</label>
-            <textarea class="form-control" name="message" rows="3" required style="border-radius:10px;" placeholder="Jelaskan detail kendala Anda di sini..."></textarea>
-          </div>
-        </div>
-        <div class="modal-footer border-0" style="padding: 10px 25px 25px;">
-          <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="border-radius:10px;">Batal</button>
-          <button type="submit" class="btn btn-primary" style="border-radius:10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border:none;">Kirim Keluhan</button>
-        </div>
-      </form>
     </div>
   </div>
-</div>
 
+  <%- include('partials/customer_bottom_nav', { activeNav: 'home' }) %>
 </body>
+
 </html>

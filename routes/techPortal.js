@@ -94,13 +94,61 @@ router.post('/tickets/:id/take', requireTechSession, (req, res) => {
   res.redirect('/tech');
 });
 
-router.post('/tickets/:id/update', requireTechSession, express.urlencoded({ extended: true }), (req, res) => {
+router.post('/tickets/:id/update', requireTechSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const { status } = req.body;
-    techSvc.updateTicketStatus(req.params.id, req.session.techId, status);
-    req.session._msg = { type: 'success', text: 'Status tiket berhasil diupdate.' };
+    const ticketId = req.params.id;
+    const techId = req.session.techId;
+    
+    techSvc.updateTicketStatus(ticketId, techId, status);
+    req.session._msg = { type: 'success', text: 'Status keluhan berhasil diperbarui.' };
+
+    // --- WHATSAPP NOTIFICATION FOR RESOLVED TICKET ---
+    if (status === 'resolved') {
+      try {
+        const { getSettingsWithCache } = require('../config/settingsManager');
+        const settings = getSettingsWithCache();
+        
+        if (settings.whatsapp_enabled) {
+          const { sendWA } = await import('../services/whatsappBot.mjs');
+          const ticketSvc = require('../services/ticketService');
+          const ticket = ticketSvc.getTicketById(ticketId);
+          
+          if (ticket) {
+            const waMsg = `✅ *TIKET KELUHAN SELESAI*\n\n` +
+                         `🎫 *ID Tiket:* #${ticket.id}\n` +
+                         `👤 *Pelanggan:* ${ticket.customer_name}\n` +
+                         `📝 *Subjek:* ${ticket.subject}\n` +
+                         `🛠️ *Teknisi:* ${req.session.techName}\n\n` +
+                         `Keluhan Anda telah selesai dikerjakan. Terima kasih atas kesabarannya.`;
+
+            // Kirim ke Pelanggan
+            if (ticket.customer_phone) {
+              await sendWA(ticket.customer_phone, waMsg);
+            }
+
+            // Kirim ke Admin
+            if (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) {
+              const adminMsg = `✅ *LAPORAN TIKET SELESAI*\n\n` +
+                               `🎫 *ID Tiket:* #${ticket.id}\n` +
+                               `👤 *Pelanggan:* ${ticket.customer_name}\n` +
+                               `🛠️ *Teknisi:* ${req.session.techName}\n` +
+                               `📝 *Subjek:* ${ticket.subject}\n` +
+                               `💬 *Pesan:* ${ticket.message}`;
+              for (const adminPhone of settings.whatsapp_admin_numbers) {
+                await sendWA(adminPhone, adminMsg);
+              }
+            }
+          }
+        }
+      } catch (waErr) {
+        console.error(`[TechPortal] WA Notification Error: ${waErr.message}`);
+      }
+    }
+    // -------------------------------------------------
+
   } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal update tiket: ' + e.message };
+    req.session._msg = { type: 'error', text: 'Gagal update keluhan: ' + e.message };
   }
   res.redirect('/tech');
 });

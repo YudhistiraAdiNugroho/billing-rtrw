@@ -590,11 +590,54 @@ router.get('/tickets', requireAdminSession, (req, res) => {
   });
 });
 
-router.post('/tickets/:id/update', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+router.post('/tickets/:id/update', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const { status } = req.body;
-    ticketSvc.updateTicketStatus(req.params.id, status);
+    const ticketId = req.params.id;
+    
+    ticketSvc.updateTicketStatus(ticketId, status);
     req.session._msg = { type: 'success', text: 'Status keluhan berhasil diperbarui.' };
+
+    // --- WHATSAPP NOTIFICATION FOR RESOLVED TICKET (BY ADMIN) ---
+    if (status === 'resolved') {
+      try {
+        const settings = getSettings();
+        if (settings.whatsapp_enabled) {
+          const { sendWA } = await import('../services/whatsappBot.mjs');
+          const ticket = ticketSvc.getTicketById(ticketId);
+          
+          if (ticket) {
+            const waMsg = `✅ *TIKET KELUHAN SELESAI*\n\n` +
+                         `🎫 *ID Tiket:* #${ticket.id}\n` +
+                         `👤 *Pelanggan:* ${ticket.customer_name}\n` +
+                         `📝 *Subjek:* ${ticket.subject}\n` +
+                         `🛠️ *Petugas:* Admin\n\n` +
+                         `Keluhan Anda telah selesai dikerjakan. Terima kasih atas kesabarannya.`;
+
+            // Kirim ke Pelanggan
+            if (ticket.customer_phone) {
+              await sendWA(ticket.customer_phone, waMsg);
+            }
+
+            // Kirim ke Admin Numbers
+            if (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) {
+              const adminMsg = `✅ *LAPORAN TIKET SELESAI (OLEH ADMIN)*\n\n` +
+                               `🎫 *ID Tiket:* #${ticket.id}\n` +
+                               `👤 *Pelanggan:* ${ticket.customer_name}\n` +
+                               `📝 *Subjek:* ${ticket.subject}\n` +
+                               `💬 *Pesan:* ${ticket.message}`;
+              for (const adminPhone of settings.whatsapp_admin_numbers) {
+                await sendWA(adminPhone, adminMsg);
+              }
+            }
+          }
+        }
+      } catch (waErr) {
+        console.error(`[AdminPortal] WA Notification Error: ${waErr.message}`);
+      }
+    }
+    // -------------------------------------------------------------
+
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal update keluhan: ' + e.message };
   }

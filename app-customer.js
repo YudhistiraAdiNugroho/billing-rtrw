@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const dns = require('dns');
 require('dotenv').config();
+const { logger } = require('./config/logger');
 
 // Prefer IPv4 to avoid AggregateError (IPv6 timeouts) on some servers
 if (dns.setDefaultResultOrder) {
@@ -12,7 +13,6 @@ if (dns.setDefaultResultOrder) {
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
-const { logger } = require('./config/logger');
 const session = require('express-session');
 const { getSetting } = require('./config/settingsManager');
 

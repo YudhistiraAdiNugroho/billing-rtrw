@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syarat & Ketentuan | <%= company %></title>
+  <title>Syarat & Ketentuan | <%= company %>
+  </title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
@@ -13,34 +15,65 @@
       --text-main: #2d3748;
       --text-muted: #718096;
     }
-    body { 
-      background: linear-gradient(135deg, #f6f8ff 0%, #f1f4ff 100%); 
-      color: var(--text-main); 
+
+    body {
+      background: linear-gradient(135deg, #f6f8ff 0%, #f1f4ff 100%);
+      color: var(--text-main);
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      line-height: 1.7; 
+      line-height: 1.7;
       min-height: 100vh;
+      padding-bottom: 80px;
     }
+
     .hero-section {
       background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
       padding: 60px 0;
       color: white;
       margin-bottom: -40px;
     }
-    .content-card { 
-      max-width: 900px; 
-      margin: 0 auto 50px; 
-      background: rgba(255, 255, 255, 0.9); 
+
+    .content-card {
+      max-width: 900px;
+      margin: 0 auto 50px;
+      background: rgba(255, 255, 255, 0.9);
       backdrop-filter: blur(10px);
-      padding: 50px; 
-      border-radius: 24px; 
-      box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+      padding: 50px;
+      border-radius: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.6);
     }
-    h1 { font-weight: 800; letter-spacing: -0.02em; }
-    h4 { margin-top: 30px; color: var(--primary); font-weight: 700; display: flex; align-items: center; gap: 10px; }
-    h4 i { font-size: 1.2rem; }
-    p, li { font-size: 16px; color: var(--text-main); }
-    .footer { text-align: center; padding: 30px; color: var(--text-muted); font-size: 14px; }
+
+    h1 {
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    h4 {
+      margin-top: 30px;
+      color: var(--primary);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h4 i {
+      font-size: 1.2rem;
+    }
+
+    p,
+    li {
+      font-size: 16px;
+      color: var(--text-main);
+    }
+
+    .footer {
+      text-align: center;
+      padding: 30px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
     .btn-back {
       background: white;
       color: var(--primary);
@@ -50,16 +83,22 @@
       font-weight: 600;
       transition: all 0.3s ease;
     }
+
     .btn-back:hover {
       background: var(--primary);
       color: white;
       transform: translateY(-2px);
     }
+
     @media (max-width: 768px) {
-      .content-card { padding: 30px; margin: 0 15px 30px; }
+      .content-card {
+        padding: 30px;
+        margin: 0 15px 30px;
+      }
     }
   </style>
 </head>
+
 <body>
   <div class="hero-section text-center">
     <div class="container">
@@ -70,26 +109,42 @@
 
   <div class="container">
     <div class="content-card">
-      <p>Selamat datang di layanan internet <strong><%= company %></strong>. Dengan menggunakan layanan kami dan melakukan pembayaran melalui sistem ini, Anda setuju untuk terikat oleh syarat dan ketentuan berikut:</p>
+      <p>Selamat datang di layanan internet <strong>
+          <%= company %>
+        </strong>. Dengan menggunakan layanan kami dan melakukan pembayaran melalui sistem ini, Anda setuju untuk
+        terikat oleh syarat dan ketentuan berikut:</p>
 
       <h4><i class="bi bi-broadcast"></i> 1. Layanan</h4>
-      <p><%= company %> menyediakan layanan akses internet (RTRWNet/ISP) kepada pelanggan sesuai dengan paket yang dipilih. Kualitas layanan dapat dipengaruhi oleh faktor teknis, lokasi geografis, dan kondisi cuaca yang ekstrem.</p>
+      <p>
+        <%= company %> menyediakan layanan akses internet (RTRWNet/ISP) kepada pelanggan sesuai dengan paket yang
+          dipilih. Kualitas layanan dapat dipengaruhi oleh faktor teknis, lokasi geografis, dan kondisi cuaca yang
+          ekstrem.
+      </p>
 
       <h4><i class="bi bi-wallet2"></i> 2. Pembayaran & Tagihan</h4>
       <ul>
-        <li>Tagihan internet akan diterbitkan secara otomatis oleh sistem setiap bulan sesuai dengan siklus langganan Anda.</li>
-        <li>Pembayaran dapat dilakukan secara mandiri melalui Portal Pelanggan menggunakan metode QRIS, Virtual Account, atau Retail Outlet yang tersedia.</li>
-        <li>Setiap pembayaran yang sudah berhasil diverifikasi oleh sistem bersifat final dan tidak dapat dibatalkan atau dikembalikan (Non-Refundable).</li>
+        <li>Tagihan internet akan diterbitkan secara otomatis oleh sistem setiap bulan sesuai dengan siklus langganan
+          Anda.</li>
+        <li>Pembayaran dapat dilakukan secara mandiri melalui Portal Pelanggan menggunakan metode QRIS, Virtual Account,
+          atau Retail Outlet yang tersedia.</li>
+        <li>Setiap pembayaran yang sudah berhasil diverifikasi oleh sistem bersifat final dan tidak dapat dibatalkan
+          atau dikembalikan (Non-Refundable).</li>
       </ul>
 
       <h4><i class="bi bi-shield-lock"></i> 3. Kebijakan Isolir (Suspend)</h4>
-      <p>Sistem kami akan melakukan pemutusan layanan sementara (Isolir) secara otomatis apabila tagihan belum dilunasi hingga melewati batas waktu (Jatuh Tempo) yang telah ditentukan. Layanan akan aktif kembali secara otomatis segera setelah pembayaran terverifikasi.</p>
+      <p>Sistem kami akan melakukan pemutusan layanan sementara (Isolir) secara otomatis apabila tagihan belum dilunasi
+        hingga melewati batas waktu (Jatuh Tempo) yang telah ditentukan. Layanan akan aktif kembali secara otomatis
+        segera setelah pembayaran terverifikasi.</p>
 
       <h4><i class="bi bi-arrow-repeat"></i> 4. Pengembalian Dana (Refund)</h4>
-      <p>Pengembalian dana hanya dapat dipertimbangkan jika terjadi kesalahan sistem pada payment gateway kami yang menyebabkan transaksi ganda untuk satu tagihan yang sama.</p>
+      <p>Pengembalian dana hanya dapat dipertimbangkan jika terjadi kesalahan sistem pada payment gateway kami yang
+        menyebabkan transaksi ganda untuk satu tagihan yang sama.</p>
 
       <h4><i class="bi bi-exclamation-octagon"></i> 5. Batasan Tanggung Jawab</h4>
-      <p><%= company %> tidak bertanggung jawab atas kerugian yang disebabkan oleh gangguan teknis dari penyedia hulu (Upstream), kerusakan perangkat akibat kelalaian pelanggan, atau kejadian luar biasa (Force Majeure).</p>
+      <p>
+        <%= company %> tidak bertanggung jawab atas kerugian yang disebabkan oleh gangguan teknis dari penyedia hulu
+          (Upstream), kerusakan perangkat akibat kelalaian pelanggan, atau kejadian luar biasa (Force Majeure).
+      </p>
 
       <div class="mt-5 text-center">
         <a href="<%= isLoggedIn ? '/customer/dashboard' : '/customer/login' %>" class="btn btn-back">
@@ -100,7 +155,9 @@
   </div>
 
   <div class="footer">
-    &copy; <%= new Date().getFullYear() %> <%= company %> • Semua Hak Dilindungi
+    &copy; <%= new Date().getFullYear() %>
+      <%= company %> • Semua Hak Dilindungi
   </div>
+  <%- include('partials/customer_bottom_nav', { activeNav: 'none' }) %>
 </body>
 </html>

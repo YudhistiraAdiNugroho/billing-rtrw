@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +13,7 @@
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
+
     .login-container {
       min-height: 100vh;
       display: flex;
@@ -19,6 +21,7 @@
       justify-content: center;
       padding: 20px;
     }
+
     .login-card {
       background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(10px);
@@ -29,12 +32,14 @@
       max-width: 400px;
       width: 100%;
     }
+
     .login-header {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 30px 20px;
       text-align: center;
     }
+
     .logo-container {
       width: 80px;
       height: 80px;
@@ -45,17 +50,21 @@
       justify-content: center;
       margin: 0 auto 15px;
     }
+
     .logo-container img {
       width: 50px;
       height: 50px;
       object-fit: contain;
     }
+
     .form-container {
       padding: 30px 25px;
     }
+
     .form-floating {
       margin-bottom: 20px;
     }
+
     .form-control {
       border: 2px solid #e9ecef;
       border-radius: 12px;
@@ -63,10 +72,12 @@
       font-size: 16px;
       transition: all 0.3s ease;
     }
+
     .form-control:focus {
       border-color: #667eea;
       box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
     }
+
     .btn-login {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       border: none;
@@ -76,28 +87,34 @@
       font-weight: 600;
       transition: all 0.3s ease;
     }
+
     .btn-login:hover {
       transform: translateY(-2px);
       box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
     }
+
     .footer-text {
       color: #6c757d;
       font-size: 12px;
       margin-top: 20px;
     }
+
     @media (max-width: 576px) {
       .login-container {
         padding: 10px;
       }
+
       .login-card {
         border-radius: 15px;
       }
+
       .form-container {
         padding: 25px 20px;
       }
     }
   </style>
 </head>
+
 <body>
   <div class="login-container">
     <div class="login-card">
@@ -106,12 +123,15 @@
           <img src="/img/logo.png" alt="Logo">
         </div>
         <h4 class="mb-1 fw-bold">Portal Pelanggan</h4>
-        <p class="mb-0 opacity-75"><%= settings.company_header %></p>
+        <p class="mb-0 opacity-75">
+          <%= settings.company_header %>
+        </p>
       </div>
       <div class="form-container">
         <form method="POST" action="/customer/login">
           <div class="form-floating">
-            <input type="text" class="form-control" id="phone" name="phone" placeholder="Masukkan ID/Tag Pelanggan" required autofocus>
+            <input type="text" class="form-control" id="phone" name="phone" placeholder="Masukkan ID/Tag Pelanggan"
+              required autofocus>
             <label for="phone">
               <i class="bi bi-person-badge me-2"></i>ID/Tag Pelanggan
             </label>
@@ -120,22 +140,27 @@
             <div class="text-center mb-3 text-muted small">
               <i class="bi bi-whatsapp text-success me-1"></i> Kode OTP akan dikirim via WhatsApp
             </div>
-          <% } %>
-          <button type="submit" class="btn btn-primary btn-login w-100">
-            <i class="bi bi-box-arrow-in-right me-2"></i>Masuk
-          </button>
+            <% } %>
+              <button type="submit" class="btn btn-primary btn-login w-100">
+                <i class="bi bi-box-arrow-in-right me-2"></i>Masuk
+              </button>
         </form>
-		<% if (error) { %>
-		<div class="alert alert-danger mt-3 text-center">
-			<i class="bi bi-exclamation-triangle me-2"></i><%= error === 'Nomor HP tidak valid atau belum terdaftar.' ? 'ID/Tag tidak valid atau belum terdaftar.' : error %>
-		</div>
-		<% } %>
-        <div class="text-center footer-text mt-4">
-          <p class="mb-2">Belum berlangganan? <a href="/customer/register" style="color: #667eea; text-decoration: none; font-weight: 600;">Daftar Pemasangan Baru</a></p>
-          &copy; <%= new Date().getFullYear() %> <%= settings.company_header %>
-        </div>
+        <% if (error) { %>
+          <div class="alert alert-danger mt-3 text-center">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <%= error==='Nomor HP tidak valid atau belum terdaftar.' ? 'ID/Tag tidak valid atau belum terdaftar.' :
+              error %>
+          </div>
+          <% } %>
+            <div class="text-center footer-text mt-4">
+              <p class="mb-2">Belum berlangganan? <a href="/customer/register"
+                  style="color: #667eea; text-decoration: none; font-weight: 600;">Daftar Pemasangan Baru</a></p>
+              &copy; <%= new Date().getFullYear() %>
+                <%= settings.company_header %>
+            </div>
       </div>
     </div>
   </div>
 </body>
-</html> 
+
+</html>
