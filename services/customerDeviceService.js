@@ -85,12 +85,17 @@ const parameterPaths = {
   rxPower: [
     'VirtualParameters.RXPower',
     'VirtualParameters.redaman',
-    'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower'
+    'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANOAM.RXPower',
+    'Device.Optical.Interface.1.OpticalSignalLevel'
   ],
   pppoeIP: [
     'VirtualParameters.pppoeIP',
     'VirtualParameters.pppIP',
-    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress'
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress',
+    'Device.PPP.Interface.1.ExternalIPAddress',
+    'Device.IP.Interface.1.IPv4Address.1.IPAddress'
   ],
   pppUsername: [
     'VirtualParameters.pppoeUsername',
@@ -99,18 +104,26 @@ const parameterPaths = {
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.3.Username',
     'Device.PPP.Interface.1.Username',
-    'Device.PPP.Interface.2.Username'
+    'Device.PPP.Interface.2.Username',
+    'Device.PPP.Interface.3.Username'
   ],
   uptime: [
     'VirtualParameters.getdeviceuptime',
-    'InternetGatewayDevice.DeviceInfo.UpTime'
+    'InternetGatewayDevice.DeviceInfo.UpTime',
+    'Device.DeviceInfo.UpTime'
   ],
   userConnected: [
-    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations'
+    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations',
+    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations',
+    'InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries',
+    'Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries',
+    'Device.WiFi.AccessPoint.2.AssociatedDeviceNumberOfEntries',
+    'Device.Hosts.HostNumberOfEntries'
   ]
 };
 
 function getParameterWithPaths(device, paths) {
+  let values = [];
   for (const p of paths) {
     const parts = p.split('.');
     let value = device;
@@ -123,8 +136,31 @@ function getParameterWithPaths(device, paths) {
         break;
       }
     }
-    if (value !== undefined && value !== null && value !== '') return value;
+    if (value !== undefined && value !== null && value !== '' && value !== 'N/A') {
+      const isCountParam = p.includes('TotalAssociations') || 
+                           p.includes('AssociatedDeviceNumberOfEntries') || 
+                           p.includes('HostNumberOfEntries');
+                           
+      if (isCountParam) {
+        // Ensure we push a number
+        const val = (typeof value === 'object' && value._value !== undefined) ? value._value : value;
+        values.push(parseInt(val) || 0);
+      } else {
+        // If it's still an object, try to get _value or stringify it
+        if (typeof value === 'object') {
+          if (value._value !== undefined) return String(value._value);
+          return 'N/A'; // Don't return raw object
+        }
+        return String(value);
+      }
+    }
   }
+  
+  if (values.length > 0) {
+    // If it's a count parameter, sum them up (for dual band)
+    return values.reduce((a, b) => a + b, 0);
+  }
+  
   return 'N/A';
 }
 
@@ -183,7 +219,7 @@ function mapDeviceData(device, tag) {
 
   let connectedUsers = [];
   try {
-    const hosts = device?.InternetGatewayDevice?.LANDevice?.['1']?.Hosts?.Host;
+    const hosts = device?.InternetGatewayDevice?.LANDevice?.['1']?.Hosts?.Host || device?.Device?.Hosts?.Host;
     if (hosts && typeof hosts === 'object') {
       for (const key in hosts) {
         if (!isNaN(key)) {
@@ -193,7 +229,15 @@ function mapDeviceData(device, tag) {
             ip: typeof entry?.IPAddress === 'object' ? entry?.IPAddress?._value || '-' : entry?.IPAddress || '-',
             mac: typeof entry?.MACAddress === 'object' ? entry?.MACAddress?._value || '-' : entry?.MACAddress || '-',
             iface: typeof entry?.InterfaceType === 'object' ? entry?.InterfaceType?._value || '-' : entry?.InterfaceType || entry?.Interface || '-',
-            status: entry?.Active?._value === 'true' ? 'Online' : 'Offline'
+            status: (
+              entry?.Active?._value === 'true' || 
+              entry?.Active?._value === '1' || 
+              entry?.Active?._value === 1 || 
+              entry?.Active === true || 
+              entry?.Active === '1' || 
+              entry?.Active === 1 || 
+              String(entry?.Active || '').toLowerCase() === 'online'
+            ) ? 'Online' : 'Offline'
           });
         }
       }
@@ -204,7 +248,12 @@ function mapDeviceData(device, tag) {
   const pppoeIP = getParameterWithPaths(device, parameterPaths.pppoeIP);
   const pppoeUsername = getParameterWithPaths(device, parameterPaths.pppUsername);
   const uptimeRaw = getParameterWithPaths(device, parameterPaths.uptime);
-  const totalAssociations = getParameterWithPaths(device, parameterPaths.userConnected);
+  let totalAssociations = getParameterWithPaths(device, parameterPaths.userConnected);
+
+  // Fallback: If N/A or 0, count from connectedUsers list (LAN + WLAN)
+  if ((totalAssociations === 'N/A' || totalAssociations === 0 || totalAssociations === '0') && connectedUsers.length > 0) {
+    totalAssociations = connectedUsers.filter(u => u.status === 'Online').length;
+  }
 
   function formatUptime(seconds) {
     if (!seconds || isNaN(seconds) || seconds === 'N/A') return seconds || 'N/A';
@@ -218,10 +267,23 @@ function mapDeviceData(device, tag) {
   }
   const uptime = formatUptime(uptimeRaw);
 
-  const serialNumber = device?.DeviceID?.SerialNumber || device?.InternetGatewayDevice?.DeviceInfo?.SerialNumber?._value || '-';
-  const productClass = device?.DeviceID?.ProductClass || device?.InternetGatewayDevice?.DeviceInfo?.ProductClass?._value || '-';
-  const softwareVersion = device?.InternetGatewayDevice?.DeviceInfo?.SoftwareVersion?._value || '-';
-  const model = device?.InternetGatewayDevice?.DeviceInfo?.ModelName?._value || device?.ModelName || '-';
+  const serialNumber = device?.DeviceID?.SerialNumber || 
+                       device?.InternetGatewayDevice?.DeviceInfo?.SerialNumber?._value || 
+                       device?.Device?.DeviceInfo?.SerialNumber?._value || 
+                       device?.Device?.DeviceInfo?.SerialNumber || '-';
+                       
+  const productClass = device?.DeviceID?.ProductClass || 
+                       device?.InternetGatewayDevice?.DeviceInfo?.ProductClass?._value || 
+                       device?.Device?.DeviceInfo?.ProductClass || '-';
+                       
+  const softwareVersion = device?.InternetGatewayDevice?.DeviceInfo?.SoftwareVersion?._value || 
+                          device?.Device?.DeviceInfo?.SoftwareVersion?._value || 
+                          device?.Device?.DeviceInfo?.SoftwareVersion || '-';
+                          
+  const model = device?.InternetGatewayDevice?.DeviceInfo?.ModelName?._value || 
+                device?.Device?.DeviceInfo?.ModelName?._value || 
+                device?.Device?.DeviceInfo?.ModelName || 
+                device?.ModelName || '-';
 
   let lokasi = device?._tags || '-';
   if (Array.isArray(lokasi)) lokasi = lokasi.join(', ');
@@ -399,7 +461,7 @@ async function listDevicesWithTags(limit = 250) {
       const response = await axios.get(`${genieacsUrl}/devices`, {
         params: {
           query: JSON.stringify(query),
-          projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username'
+          projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
         },
         auth,
         timeout: 45000
@@ -424,7 +486,7 @@ async function listAllDevices(limit = 500) {
     const response = await axios.get(`${genieacsUrl}/devices`, {
       params: {
         limit,
-        projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID'
+        projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
       },
       auth,
       timeout: 45000
