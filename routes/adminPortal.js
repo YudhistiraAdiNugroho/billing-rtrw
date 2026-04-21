@@ -387,6 +387,9 @@ router.get('/customers/export', requireAdminSession, (req, res) => {
       'Tanggal Pasang': c.install_date,
       'Auto Isolir': c.auto_isolate === 1 ? 'YA' : 'TIDAK',
       'Tgl Isolir': c.isolate_day,
+      'ODP': c.odp_name || '-',
+      'Latitude': c.lat || '',
+      'Longitude': c.lng || '',
       'Catatan': c.notes
     }));
 
@@ -413,6 +416,7 @@ router.post('/customers/import', requireAdminSession, upload.single('file'), asy
     console.log(`[Import] Found ${rows.length} rows in Excel file.`);
     
     const packages = customerSvc.getAllPackages();
+    const odps = odpSvc.getAllOdps();
     let count = 0;
 
     for (let row of rows) {
@@ -430,6 +434,9 @@ router.post('/customers/import', requireAdminSession, upload.single('file'), asy
 
       const pkgName = cleanRow['Paket'] || cleanRow['package'] || cleanRow['Package'];
       const pkg = packages.find(p => p.name === pkgName);
+
+      const odpName = cleanRow['ODP'] || cleanRow['odp'] || cleanRow['ODP Name'];
+      const odp = odps.find(o => o.name === odpName);
       
       const data = {
         name: name,
@@ -437,6 +444,9 @@ router.post('/customers/import', requireAdminSession, upload.single('file'), asy
         email: cleanRow['Email'] || cleanRow['email'] || cleanRow['email_address'],
         address: cleanRow['Alamat'] || cleanRow['address'] || cleanRow['Address'],
         package_id: pkg ? pkg.id : null,
+        odp_id: odp ? odp.id : null,
+        lat: cleanRow['Latitude'] || cleanRow['latitude'] || cleanRow['Lat'] || '',
+        lng: cleanRow['Longitude'] || cleanRow['longitude'] || cleanRow['Lng'] || '',
         genieacs_tag: cleanRow['Tag ONU'] || cleanRow['genieacs_tag'],
         pppoe_username: cleanRow['PPPoE Username'] || cleanRow['pppoe_username'],
         isolir_profile: cleanRow['Isolir Profile'] || cleanRow['isolir_profile'] || 'isolir',
