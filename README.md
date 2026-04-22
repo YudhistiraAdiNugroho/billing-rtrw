@@ -82,7 +82,7 @@ Setelah instalasi berhasil, portal dapat diakses melalui browser:
 - **teknisi Portal**: `http://[IP-SERVER]:3001/tech/login`
 - **Customer Portal**: `http://[IP-SERVER]:3001/login`
 
----
+
 
 ## ⚙️ Konfigurasi Tambahan
 
@@ -90,9 +90,11 @@ Setelah instalasi berhasil, portal dapat diakses melalui browser:
 install pm2 -g
 ```
 *Gunakan perintah `pm2 .*
+
 ```bash
 pm2 start app-customer.php --name billing-rtrw
 ---
+
 
 ## 📋 Struktur Folder
 
