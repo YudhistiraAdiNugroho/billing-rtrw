@@ -71,6 +71,10 @@ cd billing-rtrw
 ```bash
 npm install
 ```
+### 3. Jalankan Aplikasi
+```bash
+npm start
+```
 
 ### 3. Akses Portal
 Setelah instalasi berhasil, portal dapat diakses melalui browser:
