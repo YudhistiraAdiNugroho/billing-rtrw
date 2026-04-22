@@ -95,6 +95,7 @@ pm2 start app-customer.php --name billing-rtrw
 ---
 
 ## 📋 Struktur Folder
+
 billing-rtrw/
 ├── config/             # Manajemen DB, Settings & Logger
 ├── public/             # Asset statis (CSS, Images, JS)
@@ -103,9 +104,7 @@ billing-rtrw/
 ├── views/              # Template EJS (Tampilan UI)
 ├── app-customer.js     # Entry point aplikasi utama
 └── settings.json       # File konfigurasi utama
-```
 
----
 
 ## 🤝 Kontribusi
 
