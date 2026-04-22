@@ -95,8 +95,6 @@ pm2 start app-customer.php --name billing-rtrw
 ---
 
 ## 📋 Struktur Folder
-
-```text
 billing-rtrw/
 ├── config/             # Manajemen DB, Settings & Logger
 ├── public/             # Asset statis (CSS, Images, JS)
