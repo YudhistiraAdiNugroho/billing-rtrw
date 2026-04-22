@@ -110,12 +110,11 @@ billing-rtrw/
 
 Kontribusi selalu terbuka! Silakan fork repository ini, buat branch baru, dan kirimkan Pull Request.
 
----
 
 ## 📄 Lisensi
 
 Didistribusikan di bawah Lisensi **ISC**. Lihat `LICENSE` untuk detailnya.
 
----
+
 🚀 **Dibuat untuk memudahkan operasional ISP Lokal & RTRW-Net.**
 Managed by [Ali Jaya Net](https://github.com/alijayanet)
