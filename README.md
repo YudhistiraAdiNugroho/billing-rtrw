@@ -55,6 +55,22 @@ Sistem manajemen ISP modern yang mengintegrasikan **Penagihan (Billing)**, **Man
 
 ---
 Noted : gunakan nodejs v20
+### 0. install nodejs v20
+```bash
+sudo apt update
+sudo apt install -y curl ca-certificates
+
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+. "$NVM_DIR/nvm.sh"
+
+nvm install 20
+nvm use 20
+nvm alias default 20
+
+node -v
+npm -v
+```
 
 ## 🚀 Cara Instalasi (Ubuntu / Armbian)
 
