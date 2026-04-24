@@ -39,6 +39,7 @@ Sistem manajemen ISP modern yang mengintegrasikan **Penagihan (Billing)**, **Man
 - **Super Admin**: Akses penuh ke pengaturan sistem dan manajemen user internal.
 - **Kasir**: Kelola pembayaran dan data pelanggan tanpa akses ke pengaturan sensitif.
 - **Teknisi**: Kelola tiket gangguan dan monitoring perangkat.
+- **Agent**: Kelola Pembayaran dan penjualan voucher system deposit.
 
 ---
 
