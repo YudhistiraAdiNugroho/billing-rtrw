@@ -128,5 +128,5 @@ Didistribusikan di bawah Lisensi **ISC**. Lihat `LICENSE` untuk detailnya.
 🚀 **Dibuat untuk memudahkan operasional ISP Lokal & RTRW-Net.**
 Managed by [Ali Jaya Net](https://github.com/alijayanet)
 
-## info & donasi 081947215703
+## info & donasi
 https://wa.me/6281947215703
