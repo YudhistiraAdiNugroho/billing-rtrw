@@ -12,7 +12,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-headset"></i> <%= t('admin.nav.customer_tickets', 'Keluhan Pelanggan') %></div>
     <div class="tb-right">
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -26,35 +26,43 @@
 
     <!-- Summary Cards -->
     <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="sc p"><i class="bi bi-ticket-detailed sc-icon"></i><div class="sc-label">Total Tiket</div><div class="sc-val"><%= stats.total %></div></div>
-      <div class="sc d"><i class="bi bi-exclamation-circle sc-icon"></i><div class="sc-label">Belum Ditangani</div><div class="sc-val"><%= stats.open %></div></div>
-      <div class="sc w"><i class="bi bi-tools sc-icon"></i><div class="sc-label">Sedang Dikerjakan</div><div class="sc-val"><%= stats.inProgress %></div></div>
-      <div class="sc s"><i class="bi bi-check-circle sc-icon"></i><div class="sc-label">Selesai</div><div class="sc-val"><%= stats.resolved %></div></div>
+      <div class="sc p"><i class="bi bi-ticket-detailed sc-icon"></i><div class="sc-label"><%= t('admin.tickets.stats.total', 'Total Tiket') %></div><div class="sc-val"><%= stats.total %></div></div>
+      <div class="sc d"><i class="bi bi-exclamation-circle sc-icon"></i><div class="sc-label"><%= t('admin.tickets.status.open', 'Belum Ditangani') %></div><div class="sc-val"><%= stats.open %></div></div>
+      <div class="sc w"><i class="bi bi-tools sc-icon"></i><div class="sc-label"><%= t('admin.tickets.status.in_progress', 'Sedang Dikerjakan') %></div><div class="sc-val"><%= stats.inProgress %></div></div>
+      <div class="sc s"><i class="bi bi-check-circle sc-icon"></i><div class="sc-label"><%= t('admin.tickets.status.resolved', 'Selesai') %></div><div class="sc-val"><%= stats.resolved %></div></div>
     </div>
 
     <!-- Filter -->
     <div class="card">
       <div class="card-hd">
-        <h6><i class="bi bi-list-ul"></i> Daftar Keluhan (<%= tickets.length %>)</h6>
+        <h6><i class="bi bi-list-ul"></i> <%= t('admin.tickets.list_title', 'Daftar Keluhan') %> (<%= tickets.length %>)</h6>
       </div>
       <div class="card-bd" style="padding-bottom:0">
         <form method="GET" action="/admin/tickets" style="display:flex;gap:10px;margin-bottom:18px">
           <select class="fs" name="status" style="width:160px" onchange="this.form.submit()">
-            <option value="all" <%= filterStatus==='all'?'selected':'' %>>Semua Status</option>
-            <option value="open" <%= filterStatus==='open'?'selected':'' %>>Belum Ditangani</option>
-            <option value="in_progress" <%= filterStatus==='in_progress'?'selected':'' %>>Sedang Dikerjakan</option>
-            <option value="resolved" <%= filterStatus==='resolved'?'selected':'' %>>Selesai</option>
+            <option value="all" <%= filterStatus==='all'?'selected':'' %>><%= t('common.all_status', 'Semua Status') %></option>
+            <option value="open" <%= filterStatus==='open'?'selected':'' %>><%= t('admin.tickets.status.open', 'Belum Ditangani') %></option>
+            <option value="in_progress" <%= filterStatus==='in_progress'?'selected':'' %>><%= t('admin.tickets.status.in_progress', 'Sedang Dikerjakan') %></option>
+            <option value="resolved" <%= filterStatus==='resolved'?'selected':'' %>><%= t('admin.tickets.status.resolved', 'Selesai') %></option>
           </select>
         </form>
       </div>
       <div class="tbl-wrap">
         <table class="dtbl">
           <thead>
-            <tr><th>#ID</th><th>Waktu</th><th>Pelanggan</th><th>Kendala</th><th>Teknisi</th><th>Status</th><th>Aksi</th></tr>
+            <tr>
+              <th>#ID</th>
+              <th><%= t('admin.tickets.table.time', 'Waktu') %></th>
+              <th><%= t('admin.tickets.table.customer', 'Pelanggan') %></th>
+              <th><%= t('admin.tickets.table.issue', 'Kendala') %></th>
+              <th><%= t('admin.tickets.table.technician', 'Teknisi') %></th>
+              <th><%= t('admin.tickets.table.status', 'Status') %></th>
+              <th><%= t('common.actions', 'Aksi') %></th>
+            </tr>
           </thead>
           <tbody>
           <% if (tickets.length===0) { %>
-            <tr><td colspan="7" class="text-center text-muted" style="padding:32px">Tidak ada tiket keluhan</td></tr>
+            <tr><td colspan="7" class="text-center text-muted" style="padding:32px"><%= t('admin.tickets.empty', 'Tidak ada tiket keluhan') %></td></tr>
           <% } %>
           <% tickets.forEach((t) => { %>
             <tr>
@@ -71,26 +79,26 @@
                 <% if (t.technician_name) { %>
                   <div class="fw6" style="font-size:12px"><i class="bi bi-person-badge me-1"></i><%= t.technician_name %></div>
                 <% } else { %>
-                  <span class="text-muted small">Belum ada</span>
+                  <span class="text-muted small"><%= t('admin.tickets.no_technician', 'Belum ada') %></span>
                 <% } %>
               </td>
               <td>
-                <% if(t.status==='open'){%><span class="badge bd">Belum Ditangani</span>
-                <%}else if(t.status==='in_progress'){%><span class="badge bw">Dikerjakan</span>
-                <%}else{%><span class="badge bs">Selesai</span><%}%>
+                <% if(t.status==='open'){%><span class="badge bd"><%= t('admin.tickets.status.open', 'Belum Ditangani') %></span>
+                <%}else if(t.status==='in_progress'){%><span class="badge bw"><%= t('admin.tickets.status.working_short', 'Dikerjakan') %></span>
+                <%}else{%><span class="badge bs"><%= t('admin.tickets.status.resolved', 'Selesai') %></span><%}%>
               </td>
               <td>
-                <button class="btn btn-g btn-icon btn-sm update-btn" title="Update Status"
+                <button class="btn btn-g btn-icon btn-sm update-btn" title="<%= t('admin.tickets.actions.update_status', 'Update Status') %>"
                   data-id="<%= t.id %>"
                   data-status="<%= t.status %>"
                   data-message="<%= t.message %>"
                   data-subject="<%= t.subject %>"
                   data-customer="<%= t.customer_name %>"
-                  data-tech="<%= t.technician_name || 'Belum ada' %>">
+                  data-tech="<%= t.technician_name || t('admin.tickets.no_technician', 'Belum ada') %>">
                   <i class="bi bi-pencil"></i>
                 </button>
-                <form method="POST" action="/admin/tickets/<%= t.id %>/delete" style="display:inline" onsubmit="return confirm('Hapus keluhan ini?')">
-                  <button class="btn btn-d btn-icon btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
+                <form method="POST" action="/admin/tickets/<%= t.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.tickets.confirm.delete', 'Hapus keluhan ini?') %>')">
+                  <button class="btn btn-d btn-icon btn-sm" title="<%= t('common.delete', 'Hapus') %>"><i class="bi bi-trash"></i></button>
                 </form>
               </td>
             </tr>
@@ -105,25 +113,25 @@
 <!-- Modal Update -->
 <div class="mo" id="updateModal">
   <div class="mb">
-    <div class="mh"><span class="mt"><i class="bi bi-pencil"></i> Update Status Keluhan</span><button class="mc" onclick="closeModal('updateModal')">&times;</button></div>
+    <div class="mh"><span class="mt"><i class="bi bi-pencil"></i> <%= t('admin.tickets.modal.title', 'Update Status Keluhan') %></span><button class="mc" onclick="closeModal('updateModal')">&times;</button></div>
     <form method="POST" id="updateForm">
       <div class="mbody">
-        <div class="fg"><label class="fl">Pelanggan</label><input class="fc" id="upCustomer" readonly></div>
-        <div class="fg"><label class="fl">Kendala</label><input class="fc" id="upSubject" readonly></div>
-        <div class="fg"><label class="fl">Teknisi</label><input class="fc" id="upTechnician" readonly></div>
-        <div class="fg"><label class="fl">Detail Pesan</label><textarea class="fc" id="upMessage" rows="3" readonly></textarea></div>
+        <div class="fg"><label class="fl"><%= t('admin.tickets.table.customer', 'Pelanggan') %></label><input class="fc" id="upCustomer" readonly></div>
+        <div class="fg"><label class="fl"><%= t('admin.tickets.table.issue', 'Kendala') %></label><input class="fc" id="upSubject" readonly></div>
+        <div class="fg"><label class="fl"><%= t('admin.tickets.table.technician', 'Teknisi') %></label><input class="fc" id="upTechnician" readonly></div>
+        <div class="fg"><label class="fl"><%= t('admin.tickets.modal.message', 'Detail Pesan') %></label><textarea class="fc" id="upMessage" rows="3" readonly></textarea></div>
         <div class="fg">
-          <label class="fl">Update Status</label>
+          <label class="fl"><%= t('admin.tickets.actions.update_status', 'Update Status') %></label>
           <select class="fs" name="status" id="upStatus">
-            <option value="open">Belum Ditangani</option>
-            <option value="in_progress">Sedang Dikerjakan</option>
-            <option value="resolved">Selesai</option>
+            <option value="open"><%= t('admin.tickets.status.open', 'Belum Ditangani') %></option>
+            <option value="in_progress"><%= t('admin.tickets.status.in_progress', 'Sedang Dikerjakan') %></option>
+            <option value="resolved"><%= t('admin.tickets.status.resolved', 'Selesai') %></option>
           </select>
         </div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('updateModal')">Batal</button>
-        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Simpan Perubahan</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('updateModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> <%= t('admin.tickets.actions.save_changes', 'Simpan Perubahan') %></button>
       </div>
     </form>
   </div>

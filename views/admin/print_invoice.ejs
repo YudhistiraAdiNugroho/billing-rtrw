@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cetak Struk Tagihan #<%= invoice.id %></title>
+  <title><%= t('admin.print_invoice.title', 'Cetak Struk Tagihan') %> #<%= invoice.id %></title>
   <style>
     @page { margin: 0; }
     * {
@@ -44,61 +44,61 @@
 <body>
   <div class="text-center">
     <div class="title bold"><%= company %></div>
-    <div><%= settings.company_address || 'Pusat Layanan Internet' %></div>
-    <div>Telp/WA: <%= (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) ? '+' + settings.whatsapp_admin_numbers[0] : (settings.company_phone || '081234567890') %></div>
+    <div><%= settings.company_address || t('admin.print_invoice.address_fallback', 'Pusat Layanan Internet') %></div>
+    <div><%= t('admin.print_invoice.contact_label', 'Telp/WA') %>: <%= (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) ? '+' + settings.whatsapp_admin_numbers[0] : (settings.company_phone || '081234567890') %></div>
   </div>
   
   <div class="divider"></div>
   
-  <% const mns=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
+  <% const mns = (lang || 'id') === 'en' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
   
   <div class="mb-1">
-    <div>No. Struk: <span class="bold">INV-<%= invoice.id %>-<%= new Date().getFullYear() %></span></div>
-    <div>Tanggal: <%= invoice.paid_at ? new Date(invoice.paid_at).toLocaleString('id-ID') : new Date().toLocaleString('id-ID') %></div>
-    <div>Kasir: <%= invoice.paid_by_name || 'Sistem' %></div>
+    <div><%= t('admin.print_invoice.receipt_no', 'No. Struk') %>: <span class="bold">INV-<%= invoice.id %>-<%= new Date().getFullYear() %></span></div>
+    <div><%= t('admin.print_invoice.date', 'Tanggal') %>: <%= invoice.paid_at ? new Date(invoice.paid_at).toLocaleString((lang || 'id') === 'en' ? 'en-US' : 'id-ID') : new Date().toLocaleString((lang || 'id') === 'en' ? 'en-US' : 'id-ID') %></div>
+    <div><%= t('admin.print_invoice.cashier', 'Kasir') %>: <%= invoice.paid_by_name || t('admin.print_invoice.system', 'Sistem') %></div>
     <% if (invoice.notes) { %>
-      <div>Catatan: <%= invoice.notes %></div>
+      <div><%= t('admin.print_invoice.notes', 'Catatan') %>: <%= invoice.notes %></div>
     <% } %>
   </div>
   
   <div class="divider"></div>
   
   <div class="mb-1">
-    <div class="bold">Yth. <%= customer.name %></div>
-    <div>ID/Tag: <%= customer.phone || customer.genieacs_tag || '-' %></div>
+    <div class="bold"><%= t('admin.print_invoice.dear', 'Yth.') %> <%= customer.name %></div>
+    <div><%= t('admin.print_invoice.id_tag', 'ID/Tag') %>: <%= customer.phone || customer.genieacs_tag || '-' %></div>
   </div>
   
   <div class="divider"></div>
   
   <div class="mb-1">
-    <div>Pembayaran Tagihan Internet</div>
-    <div>Periode: <%= mns[invoice.period_month-1] %> <%= invoice.period_year %></div>
-    <div>Paket: <%= customer.package_name || 'Internet Service' %></div>
+    <div><%= t('admin.print_invoice.payment_title', 'Pembayaran Tagihan Internet') %></div>
+    <div><%= t('admin.print_invoice.period', 'Periode') %>: <%= mns[invoice.period_month-1] %> <%= invoice.period_year %></div>
+    <div><%= t('admin.print_invoice.package', 'Paket') %>: <%= customer.package_name || t('admin.print_invoice.package_fallback', 'Internet Service') %></div>
   </div>
   
   <div class="divider"></div>
   
   <div class="row bold">
-    <div>TOTAL BAYAR:</div>
+    <div><%= t('admin.print_invoice.total_paid', 'TOTAL BAYAR') %>:</div>
     <div>Rp <%= invoice.amount.toLocaleString('id-ID') %></div>
   </div>
   
   <div class="divider"></div>
   
   <div class="text-center bold" style="margin-top: 5px;">
-    *** LUNAS ***
+    *** <%= t('admin.print_invoice.paid', 'LUNAS') %> ***
   </div>
 
   <div class="signature">
-    <div>Manajer,</div>
+    <div><%= t('admin.print_invoice.manager', 'Manajer') %>,</div>
     <br><br>
-    <div class="signature-name"><%= settings.company_manager || 'Admin Pusat' %></div>
+    <div class="signature-name"><%= settings.company_manager || t('admin.print_invoice.manager_fallback', 'Admin Pusat') %></div>
   </div>
   
   <div class="footer">
-    Terima kasih atas pembayaran Anda.<br>
-    Simpan struk ini sebagai bukti pembayaran yang sah.<br>
-    --- Dicetak dari Sistem Billing ---
+    <%= t('admin.print_invoice.footer.thanks', 'Terima kasih atas pembayaran Anda.') %><br>
+    <%= t('admin.print_invoice.footer.keep_receipt', 'Simpan struk ini sebagai bukti pembayaran yang sah.') %><br>
+    --- <%= t('admin.print_invoice.footer.printed_from', 'Dicetak dari Sistem Billing') %> ---
   </div>
   
   <script>

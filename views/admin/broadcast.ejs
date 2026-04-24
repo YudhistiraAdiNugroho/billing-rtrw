@@ -12,7 +12,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-megaphone"></i> <%= t('admin.broadcast.title', 'Broadcast WhatsApp') %></div>
     <div class="tb-right">
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -26,17 +26,17 @@
 
     <div class="card">
       <div class="card-hd" style="display: flex; justify-content: space-between; align-items: center;">
-        <h6><i class="bi bi-send-fill"></i> Kirim Pesan Massal</h6>
+        <h6><i class="bi bi-send-fill"></i> <%= t('admin.broadcast.send_mass', 'Kirim Pesan Massal') %></h6>
         <div id="broadcastCounter" class="badge bp" style="display: none;">
           <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-          Mengirim: <span id="sentCount">0</span>/<span id="totalCount">0</span>
-          (<span id="failedCount" class="text-danger ms-1">0</span> Gagal)
+          <%= t('admin.broadcast.sending', 'Mengirim:') %> <span id="sentCount">0</span>/<span id="totalCount">0</span>
+          (<span id="failedCount" class="text-danger ms-1">0</span> <%= t('admin.broadcast.failed', 'Gagal') %>)
         </div>
       </div>
-      <form method="POST" action="/admin/whatsapp/broadcast" onsubmit="return confirm('Kirim pesan broadcast sekarang? Pastikan target dan pesan sudah benar.');">
+      <form method="POST" action="/admin/whatsapp/broadcast" onsubmit="return confirm('<%= t('admin.broadcast.confirm_send', 'Kirim pesan broadcast sekarang? Pastikan target dan pesan sudah benar.') %>');">
         <div class="card-bd">
           <div class="alert alert-i" style="margin-bottom: 10px;">
-            <i class="bi bi-info-circle"></i> Pesan akan dikirim menggunakan nomor WhatsApp Bot Anda secara otomatis dengan jeda aman per pesan agar tidak terdeteksi sebagai spam.
+            <i class="bi bi-info-circle"></i> <%= t('admin.broadcast.info', 'Pesan akan dikirim menggunakan nomor WhatsApp Bot Anda secara otomatis dengan jeda aman per pesan agar tidak terdeteksi sebagai spam.') %>
           </div>
 
 
@@ -45,10 +45,10 @@
             <div class="fg">
               <label class="fl"><%= t('admin.broadcast.target', 'Target Penerima') %></label>
               <select class="fs" name="target" id="targetSelect" required style="width: 100%;">
-                <option value="all">Semua Pelanggan (Aktif & Isolir)</option>
-                <option value="active">Hanya Pelanggan Aktif</option>
-                <option value="suspended">Hanya Pelanggan Terisolir</option>
-                <option value="unpaid">Pelanggan yang Punya Tunggakan Tagihan</option>
+                <option value="all"><%= t('admin.broadcast.target_all', 'Semua Pelanggan (Aktif & Isolir)') %></option>
+                <option value="active"><%= t('admin.broadcast.target_active', 'Hanya Pelanggan Aktif') %></option>
+                <option value="suspended"><%= t('admin.broadcast.target_suspended', 'Hanya Pelanggan Terisolir') %></option>
+                <option value="unpaid"><%= t('admin.broadcast.target_unpaid', 'Pelanggan yang Punya Tunggakan Tagihan') %></option>
               </select>
             </div>
             <div class="fg">
@@ -58,7 +58,7 @@
           </div>
 
           <div class="alert alert-d alert-permanent" style="margin-bottom: 20px; border: 1px solid rgba(248,81,73,0.4);">
-            <i class="bi bi-exclamation-triangle-fill"></i> <strong>PERINGATAN PENTING:</strong> Penggunaan fitur broadcast massal berisiko menyebabkan akun WhatsApp Anda <b>DIBLOKIR (BANNED)</b> oleh pihak Meta jika dianggap melanggar ketentuan spam. Pastikan pesan relevan bagi pelanggan. <b>Developer aplikasi tidak bertanggung jawab atas segala risiko pemblokiran akun.</b>
+            <i class="bi bi-exclamation-triangle-fill"></i> <strong><%= t('admin.broadcast.warning_title', 'PERINGATAN PENTING:') %></strong> <%= t('admin.broadcast.warning_body', 'Penggunaan fitur broadcast massal berisiko menyebabkan akun WhatsApp Anda DIBLOKIR (BANNED) oleh pihak Meta jika dianggap melanggar ketentuan spam. Pastikan pesan relevan bagi pelanggan. Developer aplikasi tidak bertanggung jawab atas segala risiko pemblokiran akun.') %>
           </div>
           
           <div class="form-row">
@@ -66,9 +66,9 @@
               <label class="fl"><%= t('admin.broadcast.message', 'Isi Pesan WhatsApp') %></label>
               <textarea class="fc" name="message" id="messageBox" rows="8" required style="width: 100%;"></textarea>
               <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
-                <i class="bi bi-info-circle"></i> Variabel: <b>{{nama}}</b>, <b>{{tagihan}}</b>, <b>{{rincian}}</b>, <b>{{paket}}</b>, <b>{{link}}</b> (Link Portal).
+                <i class="bi bi-info-circle"></i> <%= t('admin.broadcast.variables', 'Variabel:') %> <b>{{nama}}</b>, <b>{{tagihan}}</b>, <b>{{rincian}}</b>, <b>{{paket}}</b>, <b>{{link}}</b> (<%= t('admin.broadcast.portal_link', 'Link Portal') %>).
                 <br>
-                <i class="bi bi-chat-text"></i> Gunakan *Tebal*, _Miring_, atau ~Coret~ sesuai standar WhatsApp.
+                <i class="bi bi-chat-text"></i> <%= t('admin.broadcast.formatting', 'Gunakan *Tebal*, _Miring_, atau ~Coret~ sesuai standar WhatsApp.') %>
               </div>
             </div>
           </div>
@@ -83,6 +83,13 @@
 </div>
 
 <script>
+const I18N = {
+  confirmChangeTarget: "<%= t('admin.broadcast.confirm_change_target', 'Ganti target penerima? Pesan yang sudah Anda ketik akan ditimpa dengan template baru.') %>",
+  sendingText: "<%= t('admin.broadcast.sending_btn', 'Sedang Mengirim...') %>",
+  donePrefix: "<%= t('admin.broadcast.done_prefix', 'Selesai:') %>",
+  sentSuffix: "<%= t('admin.broadcast.sent_suffix', 'dikirim') %>",
+  startBtn: "<%= t('admin.broadcast.start', 'Mulai Broadcast') %>"
+};
 const templates = {
   all: `Yth. Pelanggan {{nama}},\n\nBersama ini kami informasikan bahwa akan ada pemeliharaan jaringan rutin pada:\nHari/Tanggal: ...\nPukul: ...\n\nSelama proses tersebut, layanan internet (Paket {{paket}}) akan terganggu sementara waktu. Kami memohon maaf atas ketidaknyamanan ini.\n\nCek status layanan di: {{link}}\n\nTerima kasih.\nSalam,\nAdmin <%= company %>`,
   
@@ -101,7 +108,7 @@ messageBox.value = templates[targetSelect.value];
 
 // Ganti template saat dropdown berubah
 targetSelect.addEventListener('change', function() {
-  if (confirm('Ganti target penerima? Pesan yang sudah Anda ketik akan ditimpa dengan template baru.')) {
+  if (confirm(I18N.confirmChangeTarget)) {
     messageBox.value = templates[this.value];
   } else {
     // Revert dropdown if canceled
@@ -134,14 +141,14 @@ async function checkBroadcastStatus() {
       totalCountEl.textContent = status.total;
       failedCountEl.textContent = status.failed;
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Sedang Mengirim...';
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> ' + I18N.sendingText;
     } else {
       if (status.total > 0 && status.sent + status.failed === status.total) {
         // Just finished
         broadcastCounter.className = 'badge bs';
-        broadcastCounter.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Selesai: ${status.sent}/${status.total} dikirim`;
+        broadcastCounter.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> ${I18N.donePrefix} ${status.sent}/${status.total} ${I18N.sentSuffix}`;
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="bi bi-send"></i> Mulai Broadcast';
+        submitBtn.innerHTML = '<i class="bi bi-send"></i> ' + I18N.startBtn;
       } else {
         broadcastCounter.style.display = 'none';
       }

@@ -21,7 +21,7 @@
         <i class="bi bi-person-fill"></i> 
         <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %>
       </span>
-      <button class="btn btn-p btn-sm" onclick="openModal('addCashierModal')"><i class="bi bi-plus-lg"></i> Tambah Kasir</button>
+      <button class="btn btn-p btn-sm" onclick="openModal('addCashierModal')"><i class="bi bi-plus-lg"></i> <%= t('admin.cashiers.add', 'Tambah Kasir') %></button>
     </div>
   </div>
 
@@ -32,23 +32,23 @@
 
     <div class="card">
       <div class="card-hd">
-        <h6><i class="bi bi-list-ul"></i> Daftar Petugas Kasir</h6>
+        <h6><i class="bi bi-list-ul"></i> <%= t('admin.cashiers.list', 'Daftar Petugas Kasir') %></h6>
       </div>
       <div class="tbl-wrap">
         <table class="dtbl">
           <thead>
             <tr>
-              <th>Nama</th>
-              <th>Username</th>
-              <th>Password</th>
-              <th>No. HP</th>
-              <th>Status</th>
-              <th>Aksi</th>
+              <th><%= t('admin.cashiers.table.name', 'Nama') %></th>
+              <th><%= t('admin.cashiers.table.username', 'Username') %></th>
+              <th><%= t('admin.cashiers.table.password', 'Password') %></th>
+              <th><%= t('admin.cashiers.table.phone', 'No. HP') %></th>
+              <th><%= t('admin.cashiers.table.status', 'Status') %></th>
+              <th><%= t('admin.cashiers.table.actions', 'Aksi') %></th>
             </tr>
           </thead>
           <tbody>
             <% if (cashiers.length === 0) { %>
-              <tr><td colspan="6" class="text-center text-muted" style="padding:20px">Belum ada data kasir.</td></tr>
+              <tr><td colspan="6" class="text-center text-muted" style="padding:20px"><%= t('admin.cashiers.empty', 'Belum ada data kasir.') %></td></tr>
             <% } else { %>
               <% cashiers.forEach(c => { %>
                 <tr>
@@ -58,13 +58,13 @@
                   <td><%= c.phone || '-' %></td>
                   <td>
                     <span class="badge <%= c.is_active ? 'bs' : 'bd' %>">
-                      <%= c.is_active ? 'Aktif' : 'Nonaktif' %>
+                      <%= c.is_active ? t('common.active', 'Aktif') : t('common.inactive', 'Nonaktif') %>
                     </span>
                   </td>
                   <td>
                     <div class="d-flex gap-2">
                       <button class="btn btn-g btn-icon btn-sm" onclick='editCashier(<%- JSON.stringify(c) %>)'><i class="bi bi-pencil"></i></button>
-                      <form action="/admin/cashiers/<%= c.id %>/delete" method="POST" onsubmit="return confirm('Hapus kasir ini?')">
+                      <form action="/admin/cashiers/<%= c.id %>/delete" method="POST" onsubmit="return confirm(I18N.confirmDeleteCashier)">
                         <button type="submit" class="btn btn-d btn-icon btn-sm"><i class="bi bi-trash"></i></button>
                       </form>
                     </div>
@@ -83,16 +83,16 @@
 <div class="mo" id="addCashierModal">
   <div class="mb">
     <form action="/admin/cashiers" method="POST">
-      <div class="mh"><span class="mt">Tambah Kasir Baru</span><button type="button" class="mc" onclick="closeModal('addCashierModal')">&times;</button></div>
+      <div class="mh"><span class="mt"><%= t('admin.cashiers.modal.add_title', 'Tambah Kasir Baru') %></span><button type="button" class="mc" onclick="closeModal('addCashierModal')">&times;</button></div>
       <div class="mbody">
-        <div class="fg"><label class="fl">Nama Lengkap</label><input type="text" name="name" class="fc" required></div>
-        <div class="fg"><label class="fl">Username Login</label><input type="text" name="username" class="fc" required></div>
-        <div class="fg"><label class="fl">Password</label><input type="text" name="password" class="fc" required></div>
-        <div class="fg"><label class="fl">No. HP</label><input type="text" name="phone" class="fc" placeholder="Contoh: 08123456789"></div>
+        <div class="fg"><label class="fl"><%= t('admin.cashiers.form.full_name', 'Nama Lengkap') %></label><input type="text" name="name" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.cashiers.form.login_username', 'Username Login') %></label><input type="text" name="username" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.cashiers.form.password', 'Password') %></label><input type="text" name="password" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.cashiers.form.phone', 'No. HP') %></label><input type="text" name="phone" class="fc" placeholder="<%= t('admin.cashiers.form.phone_placeholder', 'Contoh: 08123456789') %>"></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('addCashierModal')">Batal</button>
-        <button type="submit" class="btn btn-p">Simpan</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('addCashierModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('common.save', 'Simpan') %></button>
       </div>
     </form>
   </div>
@@ -102,29 +102,33 @@
 <div class="mo" id="editCashierModal">
   <div class="mb">
     <form id="editForm" method="POST">
-      <div class="mh"><span class="mt">Edit Data Kasir</span><button type="button" class="mc" onclick="closeModal('editCashierModal')">&times;</button></div>
+      <div class="mh"><span class="mt"><%= t('admin.cashiers.modal.edit_title', 'Edit Data Kasir') %></span><button type="button" class="mc" onclick="closeModal('editCashierModal')">&times;</button></div>
       <div class="mbody">
-        <div class="fg"><label class="fl">Nama Lengkap</label><input type="text" name="name" id="e-name" class="fc" required></div>
-        <div class="fg"><label class="fl">Username Login</label><input type="text" name="username" id="e-username" class="fc" required></div>
-        <div class="fg"><label class="fl">Password</label><input type="text" name="password" id="e-password" class="fc" required></div>
-        <div class="fg"><label class="fl">No. HP</label><input type="text" name="phone" id="e-phone" class="fc"></div>
+        <div class="fg"><label class="fl"><%= t('admin.cashiers.form.full_name', 'Nama Lengkap') %></label><input type="text" name="name" id="e-name" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.cashiers.form.login_username', 'Username Login') %></label><input type="text" name="username" id="e-username" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.cashiers.form.password', 'Password') %></label><input type="text" name="password" id="e-password" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.cashiers.form.phone', 'No. HP') %></label><input type="text" name="phone" id="e-phone" class="fc"></div>
         <div class="fg">
-          <label class="fl">Status Akun</label>
+          <label class="fl"><%= t('admin.cashiers.form.account_status', 'Status Akun') %></label>
           <select name="is_active" id="e-status" class="fs">
-            <option value="1">Aktif</option>
-            <option value="0">Nonaktif</option>
+            <option value="1"><%= t('common.active', 'Aktif') %></option>
+            <option value="0"><%= t('common.inactive', 'Nonaktif') %></option>
           </select>
         </div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('editCashierModal')">Batal</button>
-        <button type="submit" class="btn btn-p">Simpan Perubahan</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('editCashierModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('admin.cashiers.save_changes', 'Simpan Perubahan') %></button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
+const I18N = {
+  confirmDeleteCashier: "<%= t('admin.cashiers.confirm_delete', 'Hapus kasir ini?') %>"
+};
+
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function editCashier(c) {

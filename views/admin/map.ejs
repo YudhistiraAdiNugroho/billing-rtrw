@@ -62,7 +62,7 @@
       <span><%= title %></span>
     </div>
     <div class="tb-right">
-      <button class="btn btn-p btn-sm" onclick="openModal('addOdpModal')"><i class="bi bi-plus-circle"></i> Tambah ODP</button>
+      <button class="btn btn-p btn-sm" onclick="openModal('addOdpModal')"><i class="bi bi-plus-circle"></i> <%= t('admin.map.add_odp', 'Tambah ODP') %></button>
     </div>
   </div>
 
@@ -76,21 +76,21 @@
             <div class="msc-icon msc-w"><i class="bi bi-box-seam-fill"></i></div>
             <div class="msc-info">
                 <div class="val"><%= odps.length %></div>
-                <div class="lbl">Total ODP</div>
+                <div class="lbl"><%= t('admin.map.stats.total_odp', 'Total ODP') %></div>
             </div>
         </div>
         <div class="msc">
             <div class="msc-icon msc-s"><i class="bi bi-person-check-fill"></i></div>
             <div class="msc-info">
                 <div class="val"><%= customers.filter(c => c.status === 'active').length %></div>
-                <div class="lbl">Pelanggan Aktif</div>
+                <div class="lbl"><%= t('admin.map.stats.active_customers', 'Pelanggan Aktif') %></div>
             </div>
         </div>
         <div class="msc">
             <div class="msc-icon msc-d"><i class="bi bi-person-x-fill"></i></div>
             <div class="msc-info">
                 <div class="val"><%= customers.filter(c => c.status !== 'active').length %></div>
-                <div class="lbl">Isolir / Nonaktif</div>
+                <div class="lbl"><%= t('admin.map.stats.suspended_customers', 'Isolir / Nonaktif') %></div>
             </div>
         </div>
     </div>
@@ -98,15 +98,15 @@
     <div class="legend-grid">
         <div class="lc">
             <i style="background: #f59e0b;"></i>
-            <span>ODP (Box)</span>
+            <span><%= t('admin.map.legend.odp', 'ODP (Box)') %></span>
         </div>
         <div class="lc">
             <i style="background: #3b82f6;"></i>
-            <span>Aktif</span>
+            <span><%= t('admin.map.legend.active', 'Aktif') %></span>
         </div>
         <div class="lc">
             <i style="background: #ef4444;"></i>
-            <span>Isolir</span>
+            <span><%= t('admin.map.legend.suspended', 'Isolir') %></span>
         </div>
     </div>
 
@@ -118,23 +118,23 @@
 <div class="mo" id="addOdpModal">
   <div class="mb">
     <form action="/admin/odps" method="POST">
-      <div class="mh"><span class="mt">Tambah ODP Baru</span><button type="button" class="mc" onclick="closeModal('addOdpModal')">&times;</button></div>
+      <div class="mh"><span class="mt"><%= t('admin.map.add_modal.title', 'Tambah ODP Baru') %></span><button type="button" class="mc" onclick="closeModal('addOdpModal')">&times;</button></div>
       <div class="mbody">
-        <div class="fg"><label class="fl">Nama ODP</label><input type="text" name="name" class="fc" placeholder="Contoh: ODP-A-01" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.map.form.name', 'Nama ODP') %></label><input type="text" name="name" class="fc" placeholder="<%= t('admin.map.form.name_placeholder', 'Contoh: ODP-A-01') %>" required></div>
         
-        <label class="fl">Pilih Lokasi di Peta</label>
+        <label class="fl"><%= t('admin.map.form.pick_location', 'Pilih Lokasi di Peta') %></label>
         <div id="picker-map"></div>
 
         <div class="form-row">
-            <div class="fg"><label class="fl">Latitude</label><input type="text" name="lat" id="new_lat" class="fc" placeholder="-6.xxx" required></div>
-            <div class="fg"><label class="fl">Longitude</label><input type="text" name="lng" id="new_lng" class="fc" placeholder="106.xxx" required></div>
+            <div class="fg"><label class="fl"><%= t('admin.map.form.lat', 'Latitude') %></label><input type="text" name="lat" id="new_lat" class="fc" placeholder="-6.xxx" required></div>
+            <div class="fg"><label class="fl"><%= t('admin.map.form.lng', 'Longitude') %></label><input type="text" name="lng" id="new_lng" class="fc" placeholder="106.xxx" required></div>
         </div>
-        <p class="text-muted" style="font-size: 11px;">*Tips: Geser marker atau klik pada peta untuk menentukan posisi presisi</p>
-        <div class="fg"><label class="fl">Deskripsi</label><textarea name="description" class="fc" rows="2"></textarea></div>
+        <p class="text-muted" style="font-size: 11px;"><%= t('admin.map.form.tips', '*Tips: Geser marker atau klik pada peta untuk menentukan posisi presisi') %></p>
+        <div class="fg"><label class="fl"><%= t('admin.map.form.description', 'Deskripsi') %></label><textarea name="description" class="fc" rows="2"></textarea></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('addOdpModal')">Batal</button>
-        <button type="submit" class="btn btn-p">Simpan ODP</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('addOdpModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('admin.map.add_modal.save', 'Simpan ODP') %></button>
       </div>
     </form>
   </div>
@@ -144,22 +144,22 @@
 <div class="mo" id="editOdpModal">
   <div class="mb">
     <form id="editOdpForm" method="POST">
-      <div class="mh"><span class="mt">Edit Data ODP</span><button type="button" class="mc" onclick="closeModal('editOdpModal')">&times;</button></div>
+      <div class="mh"><span class="mt"><%= t('admin.map.edit_modal.title', 'Edit Data ODP') %></span><button type="button" class="mc" onclick="closeModal('editOdpModal')">&times;</button></div>
       <div class="mbody">
-        <div class="fg"><label class="fl">Nama ODP</label><input type="text" name="name" id="e_odp_name" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.map.form.name', 'Nama ODP') %></label><input type="text" name="name" id="e_odp_name" class="fc" required></div>
         
-        <label class="fl">Sesuaikan Lokasi di Peta</label>
+        <label class="fl"><%= t('admin.map.form.adjust_location', 'Sesuaikan Lokasi di Peta') %></label>
         <div id="edit-picker-map"></div>
 
         <div class="form-row">
-            <div class="fg"><label class="fl">Latitude</label><input type="text" name="lat" id="e_odp_lat" class="fc" required></div>
-            <div class="fg"><label class="fl">Longitude</label><input type="text" name="lng" id="e_odp_lng" class="fc" required></div>
+            <div class="fg"><label class="fl"><%= t('admin.map.form.lat', 'Latitude') %></label><input type="text" name="lat" id="e_odp_lat" class="fc" required></div>
+            <div class="fg"><label class="fl"><%= t('admin.map.form.lng', 'Longitude') %></label><input type="text" name="lng" id="e_odp_lng" class="fc" required></div>
         </div>
-        <div class="fg"><label class="fl">Deskripsi</label><textarea name="description" id="e_odp_description" class="fc" rows="2"></textarea></div>
+        <div class="fg"><label class="fl"><%= t('admin.map.form.description', 'Deskripsi') %></label><textarea name="description" id="e_odp_description" class="fc" rows="2"></textarea></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('editOdpModal')">Batal</button>
-        <button type="submit" class="btn btn-p">Update ODP</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('editOdpModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('admin.map.edit_modal.update', 'Update ODP') %></button>
       </div>
     </form>
   </div>
@@ -168,6 +168,20 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script id="settings-data" type="application/json"><%- JSON.stringify(settings) %></script>
 <script>
+  const I18N = {
+    layerOsm: "<%= t('admin.map.layers.osm', 'OpenStreetMap') %>",
+    layerHybrid: "<%= t('admin.map.layers.hybrid', 'Satelit (Hybrid)') %>",
+    popupDescription: "<%= t('admin.map.popup.description', 'Deskripsi') %>",
+    popupLocation: "<%= t('admin.map.popup.location', 'Lokasi') %>",
+    popupEdit: "<%= t('common.edit', 'Edit') %>",
+    popupStatus: "<%= t('admin.map.popup.status', 'Status') %>",
+    popupPackage: "<%= t('admin.map.popup.package', 'Paket') %>",
+    popupAddress: "<%= t('admin.map.popup.address', 'Alamat') %>",
+    viewDetails: "<%= t('admin.map.popup.view_details', 'Lihat Detail') %>",
+    statusActive: "<%= t('admin.map.status.active', 'Aktif') %>",
+    statusSuspended: "<%= t('admin.map.status.suspended', 'Isolir') %>"
+  };
+
   const appSettings = JSON.parse(document.getElementById('settings-data').textContent);
   const officeCoords = {
     lat: parseFloat(appSettings.office_lat) || -6.200000,
@@ -193,8 +207,8 @@
   googleHybrid.addTo(map); // Then overlay satellite
 
   const baseMaps = {
-    "OpenStreetMap": osm,
-    "Satelit (Hybrid)": googleHybrid
+    [I18N.layerOsm]: osm,
+    [I18N.layerHybrid]: googleHybrid
   };
 
   L.control.layers(baseMaps).addTo(map);
@@ -226,10 +240,10 @@
       marker.bindPopup(`
         <div class="popup-content">
           <h6>${odp.name}</h6>
-          <div><strong>Deskripsi:</strong> ${odp.description || '-'}</div>
-          <div><strong>Lokasi:</strong> ${odp.lat}, ${odp.lng}</div>
+          <div><strong>${I18N.popupDescription}:</strong> ${odp.description || '-'}</div>
+          <div><strong>${I18N.popupLocation}:</strong> ${odp.lat}, ${odp.lng}</div>
           <div class="popup-actions">
-            <button class="btn btn-sm btn-p" onclick='editOdp(${JSON.stringify(odp)})'>Edit</button>
+            <button class="btn btn-sm btn-p" onclick='editOdp(${JSON.stringify(odp)})'>${I18N.popupEdit}</button>
           </div>
         </div>
       `);
@@ -269,11 +283,11 @@
       marker.bindPopup(`
         <div class="popup-content">
           <h6>${cust.name}</h6>
-          <div><strong>Status:</strong> <span class="badge ${is_active ? 'bs' : 'bd'}">${cust.status}</span></div>
-          <div><strong>Paket:</strong> ${cust.package_name || '-'}</div>
-          <div><strong>Alamat:</strong> ${cust.address}</div>
+          <div><strong>${I18N.popupStatus}:</strong> <span class="badge ${is_active ? 'bs' : 'bd'}">${is_active ? I18N.statusActive : I18N.statusSuspended}</span></div>
+          <div><strong>${I18N.popupPackage}:</strong> ${cust.package_name || '-'}</div>
+          <div><strong>${I18N.popupAddress}:</strong> ${cust.address}</div>
           <div class="popup-actions">
-             <a href="/admin/customers?search=${cust.name}" class="btn btn-sm btn-g">Lihat Detail</a>
+             <a href="/admin/customers?search=${cust.name}" class="btn btn-sm btn-g">${I18N.viewDetails}</a>
           </div>
         </div>
       `);

@@ -25,13 +25,13 @@
       <div class="router-selector" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.1);padding:4px 12px;border-radius:20px">
         <i class="bi bi-hdd-network small"></i>
         <select id="global-router-id" class="fs" style="background:transparent;border:none;color:white;padding:0;font-size:13px;width:auto;cursor:pointer" onchange="reloadAll()">
-          <option value="" style="color:black">-- Default Router --</option>
+          <option value="" style="color:black"><%= t('admin.vouchers.default_router', '-- Default Router --') %></option>
           <% routers.forEach(r => { %>
             <option value="<%= r.id %>" style="color:black"><%= r.name %></option>
           <% }) %>
         </select>
       </div>
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -41,72 +41,72 @@
     <% } %>
 
     <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-      <div class="sc p"><i class="bi bi-collection sc-icon"></i><div class="sc-label">Batch</div><div class="sc-val" id="stat-batches">0</div></div>
-      <div class="sc s"><i class="bi bi-ticket sc-icon"></i><div class="sc-label">Voucher</div><div class="sc-val" id="stat-vouchers">0</div></div>
-      <div class="sc w"><i class="bi bi-check2-circle sc-icon"></i><div class="sc-label">Terpakai</div><div class="sc-val" id="stat-used">0</div></div>
-      <div class="sc d"><i class="bi bi-circle sc-icon"></i><div class="sc-label">Belum</div><div class="sc-val" id="stat-unused">0</div></div>
+      <div class="sc p"><i class="bi bi-collection sc-icon"></i><div class="sc-label"><%= t('admin.vouchers.stats.batches', 'Batch') %></div><div class="sc-val" id="stat-batches">0</div></div>
+      <div class="sc s"><i class="bi bi-ticket sc-icon"></i><div class="sc-label"><%= t('admin.vouchers.stats.vouchers', 'Voucher') %></div><div class="sc-val" id="stat-vouchers">0</div></div>
+      <div class="sc w"><i class="bi bi-check2-circle sc-icon"></i><div class="sc-label"><%= t('admin.vouchers.stats.used', 'Terpakai') %></div><div class="sc-val" id="stat-used">0</div></div>
+      <div class="sc d"><i class="bi bi-circle sc-icon"></i><div class="sc-label"><%= t('admin.vouchers.stats.unused', 'Belum') %></div><div class="sc-val" id="stat-unused">0</div></div>
     </div>
 
     <div class="card" style="margin-bottom:20px">
       <div class="card-hd">
-        <h6><i class="bi bi-plus-circle"></i> Buat Voucher Batch</h6>
+        <h6><i class="bi bi-plus-circle"></i> <%= t('admin.vouchers.create.title', 'Buat Voucher Batch') %></h6>
         <div class="pill"><i class="bi bi-building"></i> <b><%= settings.company_header || company %></b></div>
       </div>
       <div class="card-bd">
         <div class="kv">
           <div class="fg">
-            <label class="fl">Hotspot User Profile</label>
+            <label class="fl"><%= t('admin.vouchers.create.profile', 'Hotspot User Profile') %></label>
             <select class="fc" id="profileName" onchange="onProfileChanged()">
-              <option value="">Memuat...</option>
+              <option value=""><%= t('common.loading_short', 'Memuat...') %></option>
             </select>
             <div class="hint" id="profileHint"></div>
           </div>
           <div class="fg w160">
-            <label class="fl">Jumlah</label>
+            <label class="fl"><%= t('admin.vouchers.create.qty', 'Jumlah') %></label>
             <input class="fc" id="qty" type="number" min="1" max="5000" value="50">
           </div>
           <div class="fg w160">
-            <label class="fl">Harga (Rp)</label>
+            <label class="fl"><%= t('admin.vouchers.create.price', 'Harga (Rp)') %></label>
             <input class="fc" id="price" type="number" min="0" step="1000" placeholder="Opsional">
           </div>
           <div class="fg w160">
-            <label class="fl">Mode</label>
+            <label class="fl"><%= t('admin.vouchers.create.mode', 'Mode') %></label>
             <select class="fc" id="mode" onchange="onModeChanged()">
-              <option value="voucher">Voucher (User=Pass)</option>
-              <option value="member">Member (User & Pass Beda)</option>
+              <option value="voucher"><%= t('admin.vouchers.create.mode_voucher', 'Voucher (User=Pass)') %></option>
+              <option value="member"><%= t('admin.vouchers.create.mode_member', 'Member (User & Pass Beda)') %></option>
             </select>
           </div>
           <div class="fg w160">
-            <label class="fl">Karakter</label>
+            <label class="fl"><%= t('admin.vouchers.create.charset', 'Karakter') %></label>
             <select class="fc" id="charset">
-              <option value="numbers">Hanya Angka</option>
-              <option value="letters">Hanya Huruf (Kecil)</option>
-              <option value="mixed">Huruf & Angka</option>
+              <option value="numbers"><%= t('admin.vouchers.create.charset_numbers', 'Hanya Angka') %></option>
+              <option value="letters"><%= t('admin.vouchers.create.charset_letters', 'Hanya Huruf (Kecil)') %></option>
+              <option value="mixed"><%= t('admin.vouchers.create.charset_mixed', 'Huruf & Angka') %></option>
             </select>
           </div>
           <div class="fg w120">
-            <label class="fl">Panjang</label>
+            <label class="fl"><%= t('admin.vouchers.create.length', 'Panjang') %></label>
             <input class="fc" id="codeLength" type="number" min="4" max="16" value="6">
           </div>
           <div class="fg w120">
-            <label class="fl">Prefix</label>
+            <label class="fl"><%= t('admin.vouchers.create.prefix', 'Prefix') %></label>
             <input class="fc" id="prefix" placeholder="Opsional">
           </div>
           <div class="fg w120" style="flex:0 0 auto;min-width:0">
-            <button class="btn btn-p" onclick="createBatch()" id="btnCreate"><i class="bi bi-magic"></i> Buat</button>
+            <button class="btn btn-p" onclick="createBatch()" id="btnCreate"><i class="bi bi-magic"></i> <%= t('admin.vouchers.create.create_btn', 'Buat') %></button>
           </div>
         </div>
         <div class="hint" style="margin-top:10px" id="modeHint">
-          Durasi diambil dari metadata profile. Harga bisa diisi manual (kalau kosong akan pakai dari profile).
+          <%= t('admin.vouchers.create.hint_default', 'Durasi diambil dari metadata profile. Harga bisa diisi manual (kalau kosong akan pakai dari profile).') %>
         </div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-hd">
-        <h6><i class="bi bi-list-check"></i> Batch Voucher</h6>
+        <h6><i class="bi bi-list-check"></i> <%= t('admin.vouchers.batches.title', 'Batch Voucher') %></h6>
         <div style="display:flex;gap:10px;align-items:center">
-          <button class="btn btn-g btn-sm" onclick="reloadBatches()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          <button class="btn btn-g btn-sm" onclick="reloadBatches()"><i class="bi bi-arrow-clockwise"></i> <%= t('common.refresh', 'Refresh') %></button>
         </div>
       </div>
       <div class="tbl-wrap">
@@ -114,17 +114,17 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Router</th>
+              <th><%= t('admin.vouchers.table.router', 'Router') %></th>
               <th>Profile</th>
               <th>Qty</th>
-              <th>Terpakai</th>
+              <th><%= t('admin.vouchers.table.used', 'Terpakai') %></th>
               <th>Status</th>
-              <th>Dibuat</th>
-              <th>Aksi</th>
+              <th><%= t('admin.vouchers.table.created', 'Dibuat') %></th>
+              <th><%= t('common.actions', 'Aksi') %></th>
             </tr>
           </thead>
           <tbody id="batches-list">
-            <tr><td colspan="8" class="text-center text-muted">Memuat data...</td></tr>
+            <tr><td colspan="8" class="text-center text-muted"><%= t('common.loading', 'Memuat data...') %></td></tr>
           </tbody>
         </table>
       </div>
@@ -135,7 +135,7 @@
 <div class="mo" id="batchDetailModal">
   <div class="mb" style="max-width:1100px">
     <div class="mh">
-      <span class="mt" id="batchDetailTitle">Detail Batch</span>
+      <span class="mt" id="batchDetailTitle"><%= t('admin.vouchers.detail.title', 'Detail Batch') %></span>
       <button class="mc" onclick="closeModal('batchDetailModal')">&times;</button>
     </div>
     <div class="mbody">
@@ -143,21 +143,58 @@
       <div class="tbl-wrap">
         <table class="dtbl">
           <thead>
-            <tr><th>Kode</th><th>Password</th><th>Status</th><th>Terpakai</th><th>Last Seen</th></tr>
+            <tr><th><%= t('admin.vouchers.detail.code', 'Kode') %></th><th><%= t('admin.vouchers.detail.password', 'Password') %></th><th>Status</th><th><%= t('admin.vouchers.detail.used_at', 'Terpakai') %></th><th><%= t('admin.vouchers.detail.last_seen', 'Last Seen') %></th></tr>
           </thead>
           <tbody id="batchDetailList">
-            <tr><td colspan="5" class="text-center text-muted">Memuat...</td></tr>
+            <tr><td colspan="5" class="text-center text-muted"><%= t('common.loading_short', 'Memuat...') %></td></tr>
           </tbody>
         </table>
       </div>
     </div>
     <div class="mf">
-      <button type="button" class="btn btn-g" onclick="closeModal('batchDetailModal')">Tutup</button>
+      <button type="button" class="btn btn-g" onclick="closeModal('batchDetailModal')"><%= t('common.close', 'Tutup') %></button>
     </div>
   </div>
 </div>
 
 <script>
+  const I18N = {
+    profilePricePrefix: "<%= t('admin.vouchers.js.price_prefix', 'Harga:') %>",
+    profileDurationPrefix: "<%= t('admin.vouchers.js.duration_prefix', 'Durasi:') %>",
+    modeVoucherHint: "<%= t('admin.vouchers.js.mode_voucher_hint', 'Mode Voucher: Username dan Password sama. Durasi diambil dari metadata profile. Harga bisa diisi manual.') %>",
+    modeMemberHint: "<%= t('admin.vouchers.js.mode_member_hint', 'Mode Member: Username dan Password di-generate secara terpisah. Durasi diambil dari metadata profile. Harga bisa diisi manual.') %>",
+    chooseProfileFirst: "<%= t('admin.vouchers.js.choose_profile_first', 'Pilih profile hotspot terlebih dulu.') %>",
+    invalidQty: "<%= t('admin.vouchers.js.invalid_qty', 'Jumlah voucher tidak valid.') %>",
+    processing: "<%= t('admin.vouchers.js.processing', 'Proses...') %>",
+    createFailed: "<%= t('admin.vouchers.js.create_failed', 'Gagal membuat batch') %>",
+    batchCreatedPrefix: "<%= t('admin.vouchers.js.batch_created_prefix', 'Batch') %>",
+    batchCreatedSuffix: "<%= t('admin.vouchers.js.batch_created_suffix', 'dibuat. Sistem sedang membuat voucher di MikroTik.') %>",
+    createBtn: "<%= t('admin.vouchers.create.create_btn', 'Buat') %>",
+    noBatches: "<%= t('admin.vouchers.js.no_batches', 'Belum ada batch voucher.') %>",
+    defaultRouterName: "<%= t('admin.vouchers.js.default_router', 'Default') %>",
+    actionDetail: "<%= t('common.details', 'Detail') %>",
+    actionSync: "<%= t('admin.vouchers.actions.sync', 'Sync') %>",
+    actionPrint: "<%= t('admin.vouchers.actions.print', 'Print') %>",
+    actionCsv: "<%= t('admin.vouchers.actions.csv', 'CSV') %>",
+    actionDelete: "<%= t('common.delete', 'Hapus') %>",
+    detailLoadFailed: "<%= t('admin.vouchers.js.detail_failed', 'Gagal mengambil detail') %>",
+    detailTitlePrefix: "<%= t('admin.vouchers.js.detail_title_prefix', 'Detail Batch') %>",
+    noVouchers: "<%= t('admin.vouchers.js.no_vouchers', 'Tidak ada voucher.') %>",
+    syncFailed: "<%= t('admin.vouchers.js.sync_failed', 'Gagal sync') %>",
+    syncDonePrefix: "<%= t('admin.vouchers.js.sync_done_prefix', 'Sync selesai. Used baru:') %>",
+    syncDoneMiddle: "<%= t('admin.vouchers.js.sync_done_middle', 'Missing:') %>",
+    deleteCreatingWarn: "<%= t('admin.vouchers.js.delete_creating_warn', 'Batch sedang diproses. Tunggu sampai statusnya selesai, lalu coba hapus lagi.') %>",
+    deleteConfirmPrefix: "<%= t('admin.vouchers.js.delete_confirm_prefix', 'Hapus Batch') %>",
+    deleteConfirmLine1: "<%= t('admin.vouchers.js.delete_confirm_line1', '- Data voucher batch ini akan dihapus dari sistem.') %>",
+    deleteConfirmLine2: "<%= t('admin.vouchers.js.delete_confirm_line2', '- Ini TIDAK menghapus user Hotspot yang sudah terbuat di MikroTik.') %>",
+    deleteConfirmContinue: "<%= t('admin.vouchers.js.delete_confirm_continue', 'Lanjutkan?') %>",
+    deleteFailed: "<%= t('admin.vouchers.js.delete_failed', 'Gagal menghapus batch') %>",
+    deleteSuccessPrefix: "<%= t('admin.vouchers.js.delete_success_prefix', 'Batch') %>",
+    deleteSuccessSuffix: "<%= t('admin.vouchers.js.delete_success_suffix', 'berhasil dihapus.') %>",
+    deletedVouchersPrefix: "<%= t('admin.vouchers.js.deleted_vouchers_prefix', 'Vouchers terhapus:') %>",
+    usedPrefix: "<%= t('admin.vouchers.js.used_prefix', 'Terpakai:') %>"
+  };
+
   function openModal(id){ document.getElementById(id)?.classList.add('show'); }
   function closeModal(id){ document.getElementById(id)?.classList.remove('show'); }
 
@@ -208,7 +245,7 @@
     const raw = profilesCache.find(p => p.name === name);
     const meta = raw ? parseMikhmonOnLogin(raw.onLogin || raw['on-login']) : null;
     if (!meta) return document.getElementById('profileHint').innerText = '';
-    document.getElementById('profileHint').innerText = `Harga: Rp ${Number(meta.price||0).toLocaleString('id-ID')} • Durasi: ${meta.validity}`;
+    document.getElementById('profileHint').innerText = `${I18N.profilePricePrefix} Rp ${Number(meta.price||0).toLocaleString('id-ID')} • ${I18N.profileDurationPrefix} ${meta.validity}`;
     const priceEl = document.getElementById('price');
     if (priceEl && (priceEl.value === '' || Number(priceEl.value) === 0)) {
       priceEl.value = Number(meta.price || 0) ? String(Number(meta.price || 0)) : '';
@@ -219,9 +256,9 @@
     const mode = document.getElementById('mode')?.value;
     const hint = document.getElementById('modeHint');
     if (mode === 'voucher') {
-      hint.innerText = 'Mode Voucher: Username dan Password sama. Durasi diambil dari metadata profile. Harga bisa diisi manual.';
+      hint.innerText = I18N.modeVoucherHint;
     } else {
-      hint.innerText = 'Mode Member: Username dan Password di-generate secara terpisah. Durasi diambil dari metadata profile. Harga bisa diisi manual.';
+      hint.innerText = I18N.modeMemberHint;
     }
   }
 
@@ -234,14 +271,14 @@
     const charset = document.getElementById('charset')?.value || 'numbers';
     const price = document.getElementById('price')?.value;
 
-    if (!profile) return alert('Pilih profile hotspot terlebih dulu.');
-    if (!qty || qty < 1) return alert('Jumlah voucher tidak valid.');
+    if (!profile) return alert(I18N.chooseProfileFirst);
+    if (!qty || qty < 1) return alert(I18N.invalidQty);
 
     const routerId = getRouterId();
     const url = routerId ? `/admin/api/vouchers/batches?routerId=${routerId}` : `/admin/api/vouchers/batches`;
     const btn = document.getElementById('btnCreate');
     btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Proses...';
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + I18N.processing;
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -249,14 +286,14 @@
         body: JSON.stringify({ profile, qty, codeLength, prefix, mode, charset, price })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal membuat batch');
+      if (!res.ok) throw new Error(data.error || I18N.createFailed);
       await reloadBatches();
-      alert(`Batch #${data.batchId} dibuat. Sistem sedang membuat voucher di MikroTik.`);
+      alert(`${I18N.batchCreatedPrefix} #${data.batchId} ${I18N.batchCreatedSuffix}`);
     } catch (e) {
       alert(e.message);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-magic"></i> Buat';
+      btn.innerHTML = '<i class="bi bi-magic"></i> ' + I18N.createBtn;
     }
   }
 
@@ -267,7 +304,7 @@
     const batches = await res.json();
     const list = document.getElementById('batches-list');
     if (!Array.isArray(batches) || batches.length === 0) {
-      list.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Belum ada batch voucher.</td></tr>';
+      list.innerHTML = '<tr><td colspan="8" class="text-center text-muted">' + I18N.noBatches + '</td></tr>';
       updateStats([]);
       return;
     }
@@ -277,7 +314,7 @@
       const created = b.created_at ? new Date(b.created_at).toLocaleString('id-ID') : '-';
       const qty = `${b.qty_created || 0}/${b.qty_total || 0}`;
       const used = `${b.used_count || 0}/${b.vouchers_count || 0}`;
-      const routerName = b.router_name || 'Default';
+      const routerName = b.router_name || I18N.defaultRouterName;
       return `
         <tr>
           <td class="mono">#${b.id}</td>
@@ -288,11 +325,11 @@
           <td><span class="badge ${stClass}">${status}</span></td>
           <td>${created}</td>
           <td style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-g btn-sm" onclick="openDetail(${b.id})"><i class="bi bi-eye"></i> Detail</button>
-            <button class="btn btn-g btn-sm" onclick="syncBatch(${b.id})"><i class="bi bi-arrow-repeat"></i> Sync</button>
-            <a class="btn btn-g btn-sm" target="_blank" href="/admin/vouchers/batches/${b.id}/print"><i class="bi bi-printer"></i> Print</a>
-            <a class="btn btn-g btn-sm" href="/admin/vouchers/batches/${b.id}/export.csv"><i class="bi bi-filetype-csv"></i> CSV</a>
-            <button class="btn btn-g btn-sm" onclick="deleteBatch(${b.id}, '${status}')"><i class="bi bi-trash"></i> Hapus</button>
+            <button class="btn btn-g btn-sm" onclick="openDetail(${b.id})"><i class="bi bi-eye"></i> ${I18N.actionDetail}</button>
+            <button class="btn btn-g btn-sm" onclick="syncBatch(${b.id})"><i class="bi bi-arrow-repeat"></i> ${I18N.actionSync}</button>
+            <a class="btn btn-g btn-sm" target="_blank" href="/admin/vouchers/batches/${b.id}/print"><i class="bi bi-printer"></i> ${I18N.actionPrint}</a>
+            <a class="btn btn-g btn-sm" href="/admin/vouchers/batches/${b.id}/export.csv"><i class="bi bi-filetype-csv"></i> ${I18N.actionCsv}</a>
+            <button class="btn btn-g btn-sm" onclick="deleteBatch(${b.id}, '${status}')"><i class="bi bi-trash"></i> ${I18N.actionDelete}</button>
           </td>
         </tr>
       `;
@@ -316,11 +353,11 @@
     const url = routerId ? `/admin/api/vouchers/batches/${id}?routerId=${routerId}` : `/admin/api/vouchers/batches/${id}`;
     const res = await fetch(url);
     const data = await res.json();
-    if (!res.ok) return alert(data.error || 'Gagal mengambil detail');
-    document.getElementById('batchDetailTitle').innerText = `Detail Batch #${data.batch.id}`;
+    if (!res.ok) return alert(data.error || I18N.detailLoadFailed);
+    document.getElementById('batchDetailTitle').innerText = `${I18N.detailTitlePrefix} #${data.batch.id}`;
     const meta = document.getElementById('batchDetailMeta');
     meta.innerHTML = '';
-    meta.insertAdjacentHTML('beforeend', `<span class="pill"><i class="bi bi-hdd-network"></i> <b>${data.batch.router_name || 'Default'}</b></span>`);
+    meta.insertAdjacentHTML('beforeend', `<span class="pill"><i class="bi bi-hdd-network"></i> <b>${data.batch.router_name || I18N.defaultRouterName}</b></span>`);
     meta.insertAdjacentHTML('beforeend', `<span class="pill"><i class="bi bi-ticket"></i> <b>${data.batch.profile_name}</b></span>`);
     meta.insertAdjacentHTML('beforeend', `<span class="pill"><i class="bi bi-clock"></i> <b>${data.batch.validity || '-'}</b></span>`);
     meta.insertAdjacentHTML('beforeend', `<span class="pill"><i class="bi bi-cash-coin"></i> <b>Rp ${Number(data.batch.price||0).toLocaleString('id-ID')}</b></span>`);
@@ -329,7 +366,7 @@
     const list = document.getElementById('batchDetailList');
     const items = Array.isArray(data.vouchers) ? data.vouchers : [];
     if (items.length === 0) {
-      list.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Tidak ada voucher.</td></tr>';
+      list.innerHTML = '<tr><td colspan="5" class="text-center text-muted">' + I18N.noVouchers + '</td></tr>';
       openModal('batchDetailModal');
       return;
     }
@@ -358,9 +395,9 @@
     try {
       const res = await fetch(url, { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal sync');
+      if (!res.ok) throw new Error(data.error || I18N.syncFailed);
       await reloadBatches();
-      alert(`Sync selesai. Used baru: ${data.usedNew || 0}, Missing: ${data.missing || 0}`);
+      alert(`${I18N.syncDonePrefix} ${data.usedNew || 0}, ${I18N.syncDoneMiddle} ${data.missing || 0}`);
     } catch (e) {
       alert(e.message);
     }
@@ -368,13 +405,13 @@
 
   async function deleteBatch(id, status) {
     if (String(status) === 'creating') {
-      return alert('Batch sedang diproses. Tunggu sampai statusnya selesai, lalu coba hapus lagi.');
+      return alert(I18N.deleteCreatingWarn);
     }
     const ok = confirm(
-      `Hapus Batch #${id}?\n\n` +
-      `- Data voucher batch ini akan dihapus dari sistem.\n` +
-      `- Ini TIDAK menghapus user Hotspot yang sudah terbuat di MikroTik.\n\n` +
-      `Lanjutkan?`
+      `${I18N.deleteConfirmPrefix} #${id}?\n\n` +
+      `${I18N.deleteConfirmLine1}\n` +
+      `${I18N.deleteConfirmLine2}\n\n` +
+      `${I18N.deleteConfirmContinue}`
     );
     if (!ok) return;
     const routerId = getRouterId();
@@ -382,9 +419,9 @@
     try {
       const res = await fetch(url, { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal menghapus batch');
+      if (!res.ok) throw new Error(data.error || I18N.deleteFailed);
       await reloadBatches();
-      alert(`Batch #${id} berhasil dihapus. Vouchers terhapus: ${data.deletedVouchers || 0}. Terpakai: ${data.usedCount || 0}.`);
+      alert(`${I18N.deleteSuccessPrefix} #${id} ${I18N.deleteSuccessSuffix} ${I18N.deletedVouchersPrefix} ${data.deletedVouchers || 0}. ${I18N.usedPrefix} ${data.usedCount || 0}.`);
     } catch (e) {
       alert(e.message);
     }

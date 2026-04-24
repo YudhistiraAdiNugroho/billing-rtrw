@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Print Voucher #<%= tx.id %></title>
+  <title><%= t('agent.print_thermal', 'Print Thermal') %> Voucher #<%= tx.id %></title>
   <style>
     @page { margin: 0; }
     * { box-sizing: border-box; }
@@ -51,7 +51,7 @@
 </head>
 <body>
   <div class="top-actions">
-    <button type="button" onclick="window.print()">Print</button>
+    <button type="button" onclick="window.print()"><%= t('agent.print_thermal', 'Print Thermal') %></button>
     <button type="button" onclick="try{window.close()}catch(e){}">Close</button>
   </div>
   <div class="text-center">
@@ -67,44 +67,43 @@
 
   <div class="divider"></div>
 
-  <div class="text-center bold mb">STRUK VOUCHER HOTSPOT</div>
+  <div class="text-center bold mb"><%= t('agent.receipt.voucher_title', 'STRUK VOUCHER HOTSPOT') %></div>
 
   <div class="small">
-    <div class="row"><div>No. Transaksi</div><div class="bold">#<%= tx.id %></div></div>
-    <div class="row"><div>Tanggal</div><div class="bold"><%= tx.created_at ? new Date(tx.created_at).toLocaleString('id-ID') : new Date().toLocaleString('id-ID') %></div></div>
-    <div class="row"><div>Agent</div><div class="bold"><%= tx.agent_name || '' %><%= tx.agent_username ? (' (@' + tx.agent_username + ')') : '' %></div></div>
+    <div class="row"><div><%= t('agent.receipt.transaction_no', 'No. Transaksi') %></div><div class="bold">#<%= tx.id %></div></div>
+    <div class="row"><div><%= t('agent.receipt.date', 'Tanggal') %></div><div class="bold"><%= tx.created_at ? new Date(tx.created_at).toLocaleString('id-ID') : new Date().toLocaleString('id-ID') %></div></div>
+    <div class="row"><div><%= t('admin.nav.agents', 'Agent') %></div><div class="bold"><%= tx.agent_name || '' %><%= tx.agent_username ? (' (@' + tx.agent_username + ')') : '' %></div></div>
   </div>
 
   <div class="divider"></div>
 
   <div class="small">
-    <div class="row"><div>Paket</div><div class="bold"><%= tx.profile_name || '-' %></div></div>
+    <div class="row"><div><%= t('agent.package', 'Paket') %></div><div class="bold"><%= tx.profile_name || '-' %></div></div>
     <% if (tx.router_name) { %>
-      <div class="row"><div>Router</div><div class="bold"><%= tx.router_name %></div></div>
+      <div class="row"><div><%= t('agent.receipt.router', 'Router') %></div><div class="bold"><%= tx.router_name %></div></div>
     <% } %>
   </div>
 
   <div class="divider"></div>
 
   <div class="text-center mt">
-    <div class="small">KODE VOUCHER</div>
+    <div class="small"><%= t('agent.receipt.code', 'KODE VOUCHER') %></div>
     <div class="code"><%= tx.voucher_code || '-' %></div>
-    <div class="small mt">PASSWORD</div>
+    <div class="small mt"><%= t('agent.receipt.password', 'PASSWORD') %></div>
     <div class="code"><%= tx.voucher_password || '-' %></div>
   </div>
 
   <div class="divider"></div>
 
   <div class="row bold">
-    <div>HARGA</div>
+    <div><%= t('agent.price', 'HARGA') %></div>
     <div>Rp <%= Number(tx.amount_sell || 0).toLocaleString('id-ID') %></div>
   </div>
 
   <div class="divider"></div>
 
   <div class="text-center small mt">
-    Terima kasih.<br>
-    Simpan struk ini sebagai bukti transaksi.
+    <%= String(t('agent.receipt.thanks_voucher', 'Terima kasih.\nSimpan struk ini sebagai bukti transaksi.')).replace(/\n/g,'<br>') %>
   </div>
 
   <script>

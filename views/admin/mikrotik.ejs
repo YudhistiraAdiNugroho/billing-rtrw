@@ -23,14 +23,14 @@
       <div class="router-selector" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.1);padding:4px 12px;border-radius:20px">
         <i class="bi bi-hdd-network small"></i>
         <select id="global-router-id" class="fs" style="background:transparent;border:none;color:white;padding:0;font-size:13px;width:auto;cursor:pointer" onchange="changeRouter()">
-          <option value="" style="color:black">-- Default Router --</option>
+          <option value="" style="color:black"><%= t('admin.mikrotik.default_router', '-- Default Router --') %></option>
           <% routers.forEach(r => { %>
             <option value="<%= r.id %>" style="color:black"><%= r.name %></option>
           <% }) %>
         </select>
       </div>
-      <a href="#" onclick="downloadBackup(event)" class="btn btn-p btn-sm"><i class="bi bi-download"></i> Backup RSC</a>
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <a href="#" onclick="downloadBackup(event)" class="btn btn-p btn-sm"><i class="bi bi-download"></i> <%= t('admin.mikrotik.backup_rsc', 'Backup RSC') %></a>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -38,36 +38,36 @@
 
     <!-- Summary Cards -->
     <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-      <div class="sc p"><i class="bi bi-ethernet sc-icon"></i><div class="sc-label">PPPoE Online</div><div class="sc-val" id="pppoe-online-count">0</div></div>
-      <div class="sc s"><i class="bi bi-wifi sc-icon"></i><div class="sc-label">Hotspot Online</div><div class="sc-val" id="hotspot-online-count">0</div></div>
-      <div class="sc w"><i class="bi bi-people sc-icon"></i><div class="sc-label">Total Secrets</div><div class="sc-val" id="total-secrets-count">0</div></div>
-      <div class="sc d"><i class="bi bi-person-badge sc-icon"></i><div class="sc-label">Total Hotspot</div><div class="sc-val" id="total-hotspot-count">0</div></div>
+      <div class="sc p"><i class="bi bi-ethernet sc-icon"></i><div class="sc-label"><%= t('admin.mikrotik.stats.pppoe_online', 'PPPoE Online') %></div><div class="sc-val" id="pppoe-online-count">0</div></div>
+      <div class="sc s"><i class="bi bi-wifi sc-icon"></i><div class="sc-label"><%= t('admin.mikrotik.stats.hotspot_online', 'Hotspot Online') %></div><div class="sc-val" id="hotspot-online-count">0</div></div>
+      <div class="sc w"><i class="bi bi-people sc-icon"></i><div class="sc-label"><%= t('admin.mikrotik.stats.total_secrets', 'Total Secrets') %></div><div class="sc-val" id="total-secrets-count">0</div></div>
+      <div class="sc d"><i class="bi bi-person-badge sc-icon"></i><div class="sc-label"><%= t('admin.mikrotik.stats.total_hotspot', 'Total Hotspot') %></div><div class="sc-val" id="total-hotspot-count">0</div></div>
     </div>
 
     <div class="tabs">
-      <div class="tab active" onclick="showTab(event, 'pppoe')">PPPoE Secrets</div>
-      <div class="tab" onclick="showTab(event, 'hotspot')">Hotspot Users</div>
-      <div class="tab" onclick="showTab(event, 'pppoe-profiles')">PPPoE Profiles</div>
-      <div class="tab" onclick="showTab(event, 'hotspot-profiles-tab')">Hotspot Profiles</div>
+      <div class="tab active" onclick="showTab(event, 'pppoe')"><%= t('admin.mikrotik.tabs.pppoe_secrets', 'PPPoE Secrets') %></div>
+      <div class="tab" onclick="showTab(event, 'hotspot')"><%= t('admin.mikrotik.tabs.hotspot_users', 'Hotspot Users') %></div>
+      <div class="tab" onclick="showTab(event, 'pppoe-profiles')"><%= t('admin.mikrotik.tabs.pppoe_profiles', 'PPPoE Profiles') %></div>
+      <div class="tab" onclick="showTab(event, 'hotspot-profiles-tab')"><%= t('admin.mikrotik.tabs.hotspot_profiles', 'Hotspot Profiles') %></div>
     </div>
 
     <!-- PPPoE Tab -->
     <div id="pppoe" class="tab-content active">
       <div class="card">
         <div class="card-hd">
-          <h6><i class="bi bi-ethernet"></i> Daftar PPPoE Secrets</h6>
+          <h6><i class="bi bi-ethernet"></i> <%= t('admin.mikrotik.pppoe.title', 'Daftar PPPoE Secrets') %></h6>
           <div style="display:flex;gap:10px">
-            <input type="text" class="fc fc-sm" placeholder="Cari..." onkeyup="filterTable('pppoe-list', this.value)">
-            <button class="btn btn-p btn-sm" onclick="openAddSecret()"><i class="bi bi-plus-lg"></i> Tambah Secret</button>
+            <input type="text" class="fc fc-sm" placeholder="<%= t('admin.mikrotik.search_placeholder', 'Cari...') %>" onkeyup="filterTable('pppoe-list', this.value)">
+            <button class="btn btn-p btn-sm" onclick="openAddSecret()"><i class="bi bi-plus-lg"></i> <%= t('admin.mikrotik.actions.add_secret', 'Tambah Secret') %></button>
           </div>
         </div>
         <div class="tbl-wrap">
           <table class="dtbl">
             <thead>
-              <tr><th>Name</th><th>Profile</th><th>Local Address</th><th>Remote Address</th><th>Uptime</th><th>Status</th><th>Aksi</th></tr>
+              <tr><th>Name</th><th>Profile</th><th>Local Address</th><th>Remote Address</th><th>Uptime</th><th>Status</th><th><%= t('common.actions', 'Aksi') %></th></tr>
             </thead>
             <tbody id="pppoe-list">
-              <tr><td colspan="7" class="text-center text-muted">Memuat data...</td></tr>
+              <tr><td colspan="7" class="text-center text-muted"><%= t('common.loading', 'Memuat data...') %></td></tr>
             </tbody>
           </table>
         </div>
@@ -78,19 +78,19 @@
     <div id="hotspot" class="tab-content">
       <div class="card">
         <div class="card-hd">
-          <h6><i class="bi bi-wifi"></i> Daftar Hotspot Users</h6>
+          <h6><i class="bi bi-wifi"></i> <%= t('admin.mikrotik.hotspot.title', 'Daftar Hotspot Users') %></h6>
           <div style="display:flex;gap:10px">
-            <input type="text" class="fc fc-sm" placeholder="Cari..." onkeyup="filterTable('hotspot-list', this.value)">
-            <button class="btn btn-p btn-sm" onclick="openAddHotspot()"><i class="bi bi-plus-lg"></i> Tambah User</button>
+            <input type="text" class="fc fc-sm" placeholder="<%= t('admin.mikrotik.search_placeholder', 'Cari...') %>" onkeyup="filterTable('hotspot-list', this.value)">
+            <button class="btn btn-p btn-sm" onclick="openAddHotspot()"><i class="bi bi-plus-lg"></i> <%= t('admin.mikrotik.actions.add_user', 'Tambah User') %></button>
           </div>
         </div>
         <div class="tbl-wrap">
           <table class="dtbl">
             <thead>
-              <tr><th>Name</th><th>Profile</th><th>Address</th><th>Limit Uptime</th><th>Comment</th><th>Uptime</th><th>Status</th><th>Aksi</th></tr>
+              <tr><th>Name</th><th>Profile</th><th>Address</th><th>Limit Uptime</th><th>Comment</th><th>Uptime</th><th>Status</th><th><%= t('common.actions', 'Aksi') %></th></tr>
             </thead>
             <tbody id="hotspot-list">
-              <tr><td colspan="8" class="text-center text-muted">Memuat data...</td></tr>
+              <tr><td colspan="8" class="text-center text-muted"><%= t('common.loading', 'Memuat data...') %></td></tr>
             </tbody>
           </table>
         </div>
@@ -101,16 +101,16 @@
     <div id="pppoe-profiles" class="tab-content">
       <div class="card">
         <div class="card-hd">
-          <h6><i class="bi bi-file-earmark-text"></i> Daftar PPPoE Profiles</h6>
-          <button class="btn btn-p btn-sm" onclick="openAddPppoeProfile()"><i class="bi bi-plus-lg"></i> Tambah Profile</button>
+          <h6><i class="bi bi-file-earmark-text"></i> <%= t('admin.mikrotik.pppoe_profiles.title', 'Daftar PPPoE Profiles') %></h6>
+          <button class="btn btn-p btn-sm" onclick="openAddPppoeProfile()"><i class="bi bi-plus-lg"></i> <%= t('admin.mikrotik.actions.add_profile', 'Tambah Profile') %></button>
         </div>
         <div class="tbl-wrap">
           <table class="dtbl">
             <thead>
-              <tr><th>Name</th><th>Local Address</th><th>Remote Address</th><th>Rate Limit</th><th>Aksi</th></tr>
+              <tr><th>Name</th><th>Local Address</th><th>Remote Address</th><th>Rate Limit</th><th><%= t('common.actions', 'Aksi') %></th></tr>
             </thead>
             <tbody id="pppoe-profiles-list">
-              <tr><td colspan="5" class="text-center text-muted">Memuat data...</td></tr>
+              <tr><td colspan="5" class="text-center text-muted"><%= t('common.loading', 'Memuat data...') %></td></tr>
             </tbody>
           </table>
         </div>
@@ -121,16 +121,16 @@
     <div id="hotspot-profiles-tab" class="tab-content">
       <div class="card">
         <div class="card-hd">
-          <h6><i class="bi bi-file-earmark-text"></i> Daftar Hotspot User Profiles</h6>
-          <button class="btn btn-p btn-sm" onclick="openAddHotspotProfile()"><i class="bi bi-plus-lg"></i> Tambah Profile</button>
+          <h6><i class="bi bi-file-earmark-text"></i> <%= t('admin.mikrotik.hotspot_profiles.title', 'Daftar Hotspot User Profiles') %></h6>
+          <button class="btn btn-p btn-sm" onclick="openAddHotspotProfile()"><i class="bi bi-plus-lg"></i> <%= t('admin.mikrotik.actions.add_profile', 'Tambah Profile') %></button>
         </div>
         <div class="tbl-wrap">
           <table class="dtbl">
             <thead>
-              <tr><th>Name</th><th>Harga</th><th>Durasi</th><th>Rate Limit</th><th>Shared Users</th><th>Uptime Limit</th><th>Aksi</th></tr>
+              <tr><th>Name</th><th><%= t('admin.mikrotik.hotspot_profiles.price', 'Harga') %></th><th><%= t('admin.mikrotik.hotspot_profiles.duration', 'Durasi') %></th><th>Rate Limit</th><th>Shared Users</th><th>Uptime Limit</th><th><%= t('common.actions', 'Aksi') %></th></tr>
             </thead>
             <tbody id="hotspot-profiles-list">
-              <tr><td colspan="7" class="text-center text-muted">Memuat data...</td></tr>
+              <tr><td colspan="7" class="text-center text-muted"><%= t('common.loading', 'Memuat data...') %></td></tr>
             </tbody>
           </table>
         </div>
@@ -143,7 +143,7 @@
 <!-- Modal Secret -->
 <div class="mo" id="secretModal">
   <div class="mb">
-    <div class="mh"><span class="mt" id="secretModalTitle">Tambah Secret</span><button class="mc" onclick="closeModal('secretModal')">&times;</button></div>
+    <div class="mh"><span class="mt" id="secretModalTitle"><%= t('admin.mikrotik.actions.add_secret', 'Tambah Secret') %></span><button class="mc" onclick="closeModal('secretModal')">&times;</button></div>
     <form id="secretForm">
       <input type="hidden" id="secret_id">
       <div class="mbody">
@@ -168,8 +168,8 @@
         <div class="fg"><label class="fl">Comment</label><input class="fc" id="s_comment"></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('secretModal')">Batal</button>
-        <button type="submit" class="btn btn-p" id="secretSubmitBtn">Simpan</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('secretModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p" id="secretSubmitBtn"><%= t('common.save', 'Simpan') %></button>
       </div>
     </form>
   </div>
@@ -178,7 +178,7 @@
 <!-- Modal Hotspot -->
 <div class="mo" id="hotspotModal">
   <div class="mb">
-    <div class="mh"><span class="mt" id="hotspotModalTitle">Tambah User Hotspot</span><button class="mc" onclick="closeModal('hotspotModal')">&times;</button></div>
+    <div class="mh"><span class="mt" id="hotspotModalTitle"><%= t('admin.mikrotik.actions.add_hotspot_user', 'Tambah User Hotspot') %></span><button class="mc" onclick="closeModal('hotspotModal')">&times;</button></div>
     <form id="hotspotForm">
       <input type="hidden" id="h_id">
       <div class="mbody">
@@ -199,8 +199,8 @@
         <div class="fg"><label class="fl">Comment</label><input class="fc" id="h_comment"></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('hotspotModal')">Batal</button>
-        <button type="submit" class="btn btn-p" id="hotspotSubmitBtn">Simpan</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('hotspotModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p" id="hotspotSubmitBtn"><%= t('common.save', 'Simpan') %></button>
       </div>
     </form>
   </div>
@@ -209,7 +209,7 @@
 <!-- Modal PPPoE Profile -->
 <div class="mo" id="pppoeProfileModal">
   <div class="mb">
-    <div class="mh"><span class="mt" id="pppoeProfileModalTitle">Tambah PPPoE Profile</span><button class="mc" onclick="closeModal('pppoeProfileModal')">&times;</button></div>
+    <div class="mh"><span class="mt" id="pppoeProfileModalTitle"><%= t('admin.mikrotik.actions.add_pppoe_profile', 'Tambah PPPoE Profile') %></span><button class="mc" onclick="closeModal('pppoeProfileModal')">&times;</button></div>
     <form id="pppoeProfileForm">
       <input type="hidden" id="pp_id">
       <div class="mbody">
@@ -221,8 +221,8 @@
         <div class="fg"><label class="fl">Rate Limit (Rx/Tx e.g. 5M/10M)</label><input class="fc" id="pp_rate"></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('pppoeProfileModal')">Batal</button>
-        <button type="submit" class="btn btn-p">Simpan</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('pppoeProfileModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('common.save', 'Simpan') %></button>
       </div>
     </form>
   </div>
@@ -231,7 +231,7 @@
 <!-- Modal Hotspot Profile -->
 <div class="mo" id="hotspotProfileModal">
   <div class="mb">
-    <div class="mh"><span class="mt" id="hotspotProfileModalTitle">Tambah Hotspot Profile</span><button class="mc" onclick="closeModal('hotspotProfileModal')">&times;</button></div>
+    <div class="mh"><span class="mt" id="hotspotProfileModalTitle"><%= t('admin.mikrotik.actions.add_hotspot_profile', 'Tambah Hotspot Profile') %></span><button class="mc" onclick="closeModal('hotspotProfileModal')">&times;</button></div>
     <form id="hotspotProfileForm">
       <input type="hidden" id="hp_id">
       <div class="mbody">
@@ -250,14 +250,36 @@
         </div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('hotspotProfileModal')">Batal</button>
-        <button type="submit" class="btn btn-p">Simpan</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('hotspotProfileModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('common.save', 'Simpan') %></button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
+  const I18N = {
+    addSecret: "<%= t('admin.mikrotik.actions.add_secret', 'Tambah Secret') %>",
+    editSecret: "<%= t('admin.mikrotik.actions.edit_secret', 'Edit Secret') %>",
+    addHotspotUser: "<%= t('admin.mikrotik.actions.add_hotspot_user', 'Tambah User Hotspot') %>",
+    editHotspotUser: "<%= t('admin.mikrotik.actions.edit_hotspot_user', 'Edit User Hotspot') %>",
+    addPppoeProfile: "<%= t('admin.mikrotik.actions.add_pppoe_profile', 'Tambah PPPoE Profile') %>",
+    editPppoeProfile: "<%= t('admin.mikrotik.actions.edit_pppoe_profile', 'Edit PPPoE Profile') %>",
+    addHotspotProfile: "<%= t('admin.mikrotik.actions.add_hotspot_profile', 'Tambah Hotspot Profile') %>",
+    editHotspotProfile: "<%= t('admin.mikrotik.actions.edit_hotspot_profile', 'Edit Hotspot Profile') %>",
+    saveFailed: "<%= t('admin.mikrotik.errors.save_failed', 'Gagal menyimpan') %>",
+    deleteFailed: "<%= t('admin.mikrotik.errors.delete_failed', 'Gagal menghapus') %>",
+    deleteSecretConfirm: "<%= t('admin.mikrotik.confirm.delete_secret', 'Hapus secret ini?') %>",
+    deleteHotspotConfirm: "<%= t('admin.mikrotik.confirm.delete_hotspot_user', 'Hapus user hotspot ini?') %>",
+    deleteProfileConfirm: "<%= t('admin.mikrotik.confirm.delete_profile', 'Hapus profile ini?') %>",
+    emptySecrets: "<%= t('admin.mikrotik.empty.secrets', 'Tidak ada data secret') %>",
+    emptyHotspotUsers: "<%= t('admin.mikrotik.empty.hotspot_users', 'Tidak ada data user hotspot') %>",
+    loadFailed: "<%= t('admin.mikrotik.errors.load_failed', 'Gagal memuat data') %>",
+    statusOnline: "<%= t('admin.mikrotik.status.online', 'Online') %>",
+    statusOffline: "<%= t('admin.mikrotik.status.offline', 'Offline') %>",
+    statusDisabled: "<%= t('admin.mikrotik.status.disabled', 'Disabled') %>"
+  };
+
   function showTab(e, id) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -372,11 +394,16 @@
 
       const tbody = document.getElementById('pppoe-list');
       if (!pppoeData.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Tidak ada data secret</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">' + I18N.emptySecrets + '</td></tr>';
         return;
       }
       tbody.innerHTML = pppoeData.map((s, i) => {
         const active = activeSessions.find(a => a.name === s.name);
+        const statusHtml = active
+          ? '<span class="badge bs">' + I18N.statusOnline + '</span>'
+          : (s.disabled === true || s.disabled === 'true'
+            ? '<span class="badge bd">' + I18N.statusDisabled + '</span>'
+            : '<span class="badge bw">' + I18N.statusOffline + '</span>');
         return `
           <tr>
             <td class="fw6">${s.name}</td>
@@ -384,7 +411,7 @@
             <td>${s.localAddress || s['local-address'] || '-'}</td>
             <td>${s.remoteAddress || s['remote-address'] || (active ? active.address : '-')}</td>
             <td>${active ? active.uptime : '-'}</td>
-            <td>${active ? '<span class="badge bs">Online</span>' : (s.disabled === true || s.disabled === 'true' ? '<span class="badge bd">Disabled</span>' : '<span class="badge bw">Offline</span>')}</td>
+            <td>${statusHtml}</td>
             <td>
               <button class="btn btn-g btn-icon btn-sm" onclick="editSecret(${i})"><i class="bi bi-pencil"></i></button>
               <button class="btn btn-d btn-icon btn-sm" onclick="deleteSecret('${s.id}')"><i class="bi bi-trash"></i></button>
@@ -394,7 +421,7 @@
       }).join('');
     } catch (err) {
       console.error('Error loadSecrets:', err);
-      document.getElementById('pppoe-list').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Gagal memuat data</td></tr>';
+      document.getElementById('pppoe-list').innerHTML = '<tr><td colspan="7" class="text-center text-danger">' + I18N.loadFailed + '</td></tr>';
     }
   }
 
@@ -413,11 +440,16 @@
 
       const tbody = document.getElementById('hotspot-list');
       if (!hotspotData.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Tidak ada data user hotspot</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">' + I18N.emptyHotspotUsers + '</td></tr>';
         return;
       }
       tbody.innerHTML = hotspotData.map((h, i) => {
         const active = activeSessions.find(a => a.user === h.name);
+        const statusHtml = active
+          ? '<span class="badge bs">' + I18N.statusOnline + '</span>'
+          : (h.disabled === true || h.disabled === 'true'
+            ? '<span class="badge bd">' + I18N.statusDisabled + '</span>'
+            : '<span class="badge bw">' + I18N.statusOffline + '</span>');
         return `
           <tr>
             <td class="fw6">${h.name}</td>
@@ -426,7 +458,7 @@
             <td>${h.limitUptime || h['limit-uptime'] || '-'}</td>
             <td>${h.comment || '-'}</td>
             <td>${active ? active.uptime : '-'}</td>
-            <td>${active ? '<span class="badge bs">Online</span>' : (h.disabled === true || h.disabled === 'true' ? '<span class="badge bd">Disabled</span>' : '<span class="badge bw">Offline</span>')}</td>
+            <td>${statusHtml}</td>
             <td>
               <button class="btn btn-g btn-icon btn-sm" onclick="editHotspot(${i})"><i class="bi bi-pencil"></i></button>
               <button class="btn btn-d btn-icon btn-sm" onclick="deleteHotspot('${h.id}')"><i class="bi bi-trash"></i></button>
@@ -436,7 +468,7 @@
       }).join('');
     } catch (err) {
       console.error('Error loadHotspotUsers:', err);
-      document.getElementById('hotspot-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Gagal memuat data</td></tr>';
+      document.getElementById('hotspot-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger">' + I18N.loadFailed + '</td></tr>';
     }
   }
 
@@ -459,7 +491,7 @@
   function openAddSecret() {
     document.getElementById('secretForm').reset();
     document.getElementById('secret_id').value = '';
-    document.getElementById('secretModalTitle').innerText = 'Tambah Secret';
+    document.getElementById('secretModalTitle').innerText = I18N.addSecret;
     openModal('secretModal');
   }
 
@@ -473,7 +505,7 @@
     document.getElementById('s_local').value = s['local-address'] || '';
     document.getElementById('s_remote').value = s['remote-address'] || '';
     document.getElementById('s_comment').value = s.comment || '';
-    document.getElementById('secretModalTitle').innerText = 'Edit Secret';
+    document.getElementById('secretModalTitle').innerText = I18N.editSecret;
     openModal('secretModal');
   }
 
@@ -492,20 +524,20 @@
     const routerId = getRouterId();
     const url = id ? `/admin/api/mikrotik/secrets/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/secrets?routerId=${routerId}`;
     const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-    if(res.ok) { closeModal('secretModal'); loadSecrets(); } else alert('Gagal menyimpan');
+    if(res.ok) { closeModal('secretModal'); loadSecrets(); } else alert(I18N.saveFailed);
   };
 
   async function deleteSecret(id) {
-    if(!confirm('Hapus secret ini?')) return;
+    if(!confirm(I18N.deleteSecretConfirm)) return;
     const res = await fetch(`/admin/api/mikrotik/secrets/${id}/delete?routerId=${getRouterId()}`, { method: 'POST' });
-    if(res.ok) loadSecrets(); else alert('Gagal menghapus');
+    if(res.ok) loadSecrets(); else alert(I18N.deleteFailed);
   }
 
   // Hotspot Handlers
   function openAddHotspot() {
     document.getElementById('hotspotForm').reset();
     document.getElementById('h_id').value = '';
-    document.getElementById('hotspotModalTitle').innerText = 'Tambah User Hotspot';
+    document.getElementById('hotspotModalTitle').innerText = I18N.addHotspotUser;
     openModal('hotspotModal');
   }
 
@@ -518,7 +550,7 @@
     document.getElementById('h_uptime').value = h['limit-uptime'] || '';
     document.getElementById('h_mac').value = h['mac-address'] || '';
     document.getElementById('h_comment').value = h.comment || '';
-    document.getElementById('hotspotModalTitle').innerText = 'Edit User Hotspot';
+    document.getElementById('hotspotModalTitle').innerText = I18N.editHotspotUser;
     openModal('hotspotModal');
   }
 
@@ -537,20 +569,20 @@
     const routerId = getRouterId();
     const url = id ? `/admin/api/mikrotik/hotspot-users/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/hotspot-users?routerId=${routerId}`;
     const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-    if(res.ok) { closeModal('hotspotModal'); loadHotspotUsers(); } else alert('Gagal menyimpan');
+    if(res.ok) { closeModal('hotspotModal'); loadHotspotUsers(); } else alert(I18N.saveFailed);
   };
 
   async function deleteHotspot(id) {
-    if(!confirm('Hapus user hotspot ini?')) return;
+    if(!confirm(I18N.deleteHotspotConfirm)) return;
     const res = await fetch(`/admin/api/mikrotik/hotspot-users/${id}/delete?routerId=${getRouterId()}`, { method: 'POST' });
-    if(res.ok) loadHotspotUsers(); else alert('Gagal menghapus');
+    if(res.ok) loadHotspotUsers(); else alert(I18N.deleteFailed);
   }
 
   // PPPoE Profile Handlers
   function openAddPppoeProfile() {
     document.getElementById('pppoeProfileForm').reset();
     document.getElementById('pp_id').value = '';
-    document.getElementById('pppoeProfileModalTitle').innerText = 'Tambah PPPoE Profile';
+    document.getElementById('pppoeProfileModalTitle').innerText = I18N.addPppoeProfile;
     openModal('pppoeProfileModal');
   }
   function editPppoeProfile(idx) {
@@ -560,7 +592,7 @@
     document.getElementById('pp_local').value = p.localAddress || '';
     document.getElementById('pp_remote').value = p.remoteAddress || '';
     document.getElementById('pp_rate').value = p.rateLimit || '';
-    document.getElementById('pppoeProfileModalTitle').innerText = 'Edit PPPoE Profile';
+    document.getElementById('pppoeProfileModalTitle').innerText = I18N.editPppoeProfile;
     openModal('pppoeProfileModal');
   }
   document.getElementById('pppoeProfileForm').onsubmit = async (e) => {
@@ -575,19 +607,19 @@
     const routerId = getRouterId();
     const url = id && id !== data.name ? `/admin/api/mikrotik/pppoe-profiles/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/pppoe-profiles?routerId=${routerId}`;
     const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-    if(res.ok) { closeModal('pppoeProfileModal'); loadPppoeProfiles(); loadProfiles(); } else alert('Gagal menyimpan');
+    if(res.ok) { closeModal('pppoeProfileModal'); loadPppoeProfiles(); loadProfiles(); } else alert(I18N.saveFailed);
   };
   async function deletePppoeProfile(id) {
-    if(!confirm('Hapus profile ini?')) return;
+    if(!confirm(I18N.deleteProfileConfirm)) return;
     const res = await fetch(`/admin/api/mikrotik/pppoe-profiles/${id}/delete?routerId=${getRouterId()}`, { method: 'POST' });
-    if(res.ok) { loadPppoeProfiles(); loadProfiles(); } else alert('Gagal menghapus');
+    if(res.ok) { loadPppoeProfiles(); loadProfiles(); } else alert(I18N.deleteFailed);
   }
 
   // Hotspot Profile Handlers
   function openAddHotspotProfile() {
     document.getElementById('hotspotProfileForm').reset();
     document.getElementById('hp_id').value = '';
-    document.getElementById('hotspotProfileModalTitle').innerText = 'Tambah Hotspot Profile';
+    document.getElementById('hotspotProfileModalTitle').innerText = I18N.addHotspotProfile;
     syncMikhmonOnLogin();
     openModal('hotspotProfileModal');
   }
@@ -602,7 +634,7 @@
     const meta = parseMikhmonOnLogin(script);
     document.getElementById('hp_price').value = meta ? (meta.price || 0) : 0;
     document.getElementById('hp_validity').value = meta ? (meta.validity || '1d') : '1d';
-    document.getElementById('hotspotProfileModalTitle').innerText = 'Edit Hotspot Profile';
+    document.getElementById('hotspotProfileModalTitle').innerText = I18N.editHotspotProfile;
     openModal('hotspotProfileModal');
   }
   document.getElementById('hotspotProfileForm').onsubmit = async (e) => {
@@ -617,12 +649,12 @@
     const routerId = getRouterId();
     const url = id && id !== data.name ? `/admin/api/mikrotik/hotspot-user-profiles/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/hotspot-user-profiles?routerId=${routerId}`;
     const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-    if(res.ok) { closeModal('hotspotProfileModal'); loadHotspotUserProfiles(); loadProfiles(); } else alert('Gagal menyimpan');
+    if(res.ok) { closeModal('hotspotProfileModal'); loadHotspotUserProfiles(); loadProfiles(); } else alert(I18N.saveFailed);
   };
   async function deleteHotspotProfile(id) {
-    if(!confirm('Hapus profile ini?')) return;
+    if(!confirm(I18N.deleteProfileConfirm)) return;
     const res = await fetch(`/admin/api/mikrotik/hotspot-user-profiles/${id}/delete?routerId=${getRouterId()}`, { method: 'POST' });
-    if(res.ok) { loadHotspotUserProfiles(); loadProfiles(); } else alert('Gagal menghapus');
+    if(res.ok) { loadHotspotUserProfiles(); loadProfiles(); } else alert(I18N.deleteFailed);
   }
 
   function parseMikhmonOnLogin(script) {

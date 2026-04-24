@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="<%= lang || 'id' %>">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kebijakan Privasi | <%= company %>
-  </title>
+  <title><%= t('customer.pages.privacy.meta_title', 'Kebijakan Privasi') %> | <%= company %></title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
@@ -110,51 +109,45 @@
 <body>
   <div class="hero-section text-center">
     <div class="container">
-      <h1 class="display-5">Kebijakan Privasi</h1>
-      <p class="lead opacity-75">Bagaimana kami menjaga dan melindungi data pribadi Anda.</p>
+      <h1 class="display-5"><%= t('customer.pages.privacy.title', 'Kebijakan Privasi') %></h1>
+      <p class="lead opacity-75"><%= t('customer.pages.privacy.subtitle', 'Bagaimana kami menjaga dan melindungi data pribadi Anda.') %></p>
     </div>
   </div>
 
   <div class="container">
     <div class="content-card">
-      <p>Di <strong>
-          <%= company %>
-        </strong>, privasi pelanggan kami adalah prioritas utama. Dokumen Kebijakan Privasi ini menjelaskan jenis
-        informasi pribadi yang kami kumpulkan dan bagaimana kami menggunakannya.</p>
+      <p><%= String(t('customer.pages.privacy.p1', 'Di <strong>{company}</strong>, privasi pelanggan kami adalah prioritas utama. Dokumen Kebijakan Privasi ini menjelaskan jenis informasi pribadi yang kami kumpulkan dan bagaimana kami menggunakannya.')).replace('{company}', company) %></p>
 
-      <h4><i class="bi bi-database-check"></i> 1. Informasi yang Kami Kumpulkan</h4>
-      <p>Kami mengumpulkan informasi terbatas yang diperlukan untuk penyediaan layanan, termasuk:</p>
+      <h4><i class="bi bi-database-check"></i> 1. <%= t('customer.pages.privacy.s1_title', 'Informasi yang Kami Kumpulkan') %></h4>
+      <p><%= t('customer.pages.privacy.s1_body', 'Kami mengumpulkan informasi terbatas yang diperlukan untuk penyediaan layanan, termasuk:') %></p>
       <ul>
-        <li>Nama lengkap dan alamat pemasangan.</li>
-        <li>Nomor telepon/WhatsApp untuk keperluan notifikasi tagihan dan teknis.</li>
-        <li>Data penggunaan layanan untuk pemantauan kualitas jaringan.</li>
-        <li>Data transaksi pembayaran melalui payment gateway pihak ketiga.</li>
+        <li><%= t('customer.pages.privacy.s1_li1', 'Nama lengkap dan alamat pemasangan.') %></li>
+        <li><%= t('customer.pages.privacy.s1_li2', 'Nomor telepon/WhatsApp untuk keperluan notifikasi tagihan dan teknis.') %></li>
+        <li><%= t('customer.pages.privacy.s1_li3', 'Data penggunaan layanan untuk pemantauan kualitas jaringan.') %></li>
+        <li><%= t('customer.pages.privacy.s1_li4', 'Data transaksi pembayaran melalui payment gateway pihak ketiga.') %></li>
       </ul>
 
-      <h4><i class="bi bi-gear-wide-connected"></i> 2. Penggunaan Informasi</h4>
-      <p>Informasi yang kami kumpulkan digunakan untuk:</p>
+      <h4><i class="bi bi-gear-wide-connected"></i> 2. <%= t('customer.pages.privacy.s2_title', 'Penggunaan Informasi') %></h4>
+      <p><%= t('customer.pages.privacy.s2_body', 'Informasi yang kami kumpulkan digunakan untuk:') %></p>
       <ul>
-        <li>Memproses pendaftaran dan aktivasi layanan internet Anda.</li>
-        <li>Mengirimkan informasi tagihan dan pengingat pembayaran otomatis.</li>
-        <li>Memberikan dukungan teknis dan menanggapi keluhan Anda.</li>
-        <li>Meningkatkan kualitas jaringan dan pengalaman pengguna.</li>
+        <li><%= t('customer.pages.privacy.s2_li1', 'Memproses pendaftaran dan aktivasi layanan internet Anda.') %></li>
+        <li><%= t('customer.pages.privacy.s2_li2', 'Mengirimkan informasi tagihan dan pengingat pembayaran otomatis.') %></li>
+        <li><%= t('customer.pages.privacy.s2_li3', 'Memberikan dukungan teknis dan menanggapi keluhan Anda.') %></li>
+        <li><%= t('customer.pages.privacy.s2_li4', 'Meningkatkan kualitas jaringan dan pengalaman pengguna.') %></li>
       </ul>
 
-      <h4><i class="bi bi-shield-check"></i> 3. Keamanan Data</h4>
-      <p>Kami menerapkan standar keamanan teknis untuk melindungi data Anda dari akses yang tidak sah. Data sensitif
-        seperti kata sandi WiFi dan detail login disimpan dengan enkripsi di server kami.</p>
+      <h4><i class="bi bi-shield-check"></i> 3. <%= t('customer.pages.privacy.s3_title', 'Keamanan Data') %></h4>
+      <p><%= t('customer.pages.privacy.s3_body', 'Kami menerapkan standar keamanan teknis untuk melindungi data Anda dari akses yang tidak sah. Data sensitif seperti kata sandi WiFi dan detail login disimpan dengan enkripsi di server kami.') %></p>
 
-      <h4><i class="bi bi-people"></i> 4. Pihak Ketiga</h4>
-      <p>Kami tidak menjual atau menyewakan data pribadi Anda kepada pihak ketiga. Kami hanya berbagi data dengan mitra
-        payment gateway (seperti Tripay/Xendit/Midtrans) untuk memproses transaksi pembayaran Anda secara aman.</p>
+      <h4><i class="bi bi-people"></i> 4. <%= t('customer.pages.privacy.s4_title', 'Pihak Ketiga') %></h4>
+      <p><%= t('customer.pages.privacy.s4_body', 'Kami tidak menjual atau menyewakan data pribadi Anda kepada pihak ketiga. Kami hanya berbagi data dengan mitra payment gateway (seperti Tripay/Xendit/Midtrans) untuk memproses transaksi pembayaran Anda secara aman.') %></p>
 
-      <h4><i class="bi bi-patch-check"></i> 5. Persetujuan</h4>
-      <p>Dengan menggunakan layanan kami, Anda dengan ini menyetujui Kebijakan Privasi kami dan menyetujui
-        ketentuan-ketentuannya.</p>
+      <h4><i class="bi bi-patch-check"></i> 5. <%= t('customer.pages.privacy.s5_title', 'Persetujuan') %></h4>
+      <p><%= t('customer.pages.privacy.s5_body', 'Dengan menggunakan layanan kami, Anda dengan ini menyetujui Kebijakan Privasi kami dan menyetujui ketentuan-ketentuannya.') %></p>
 
       <div class="mt-5 text-center">
         <a href="<%= isLoggedIn ? '/customer/dashboard' : '/customer/login' %>" class="btn btn-back">
-          <i class="bi bi-arrow-left me-2"></i>Kembali ke <%= isLoggedIn ? 'Dashboard' : 'Portal' %>
+          <i class="bi bi-arrow-left me-2"></i><%= t('common.back_to', 'Kembali ke') %> <%= isLoggedIn ? t('customer.dashboard_title', 'Dashboard Pelanggan') : t('common.portal', 'Portal') %>
         </a>
       </div>
     </div>
@@ -162,7 +155,7 @@
 
   <div class="footer">
     &copy; <%= new Date().getFullYear() %>
-      <%= company %> • Keamanan Data Anda adalah Komitmen Kami
+      <%= company %> • <%= t('customer.pages.privacy.footer_tagline', 'Keamanan Data Anda adalah Komitmen Kami') %>
   </div>
   <%- include('partials/customer_bottom_nav', { activeNav: 'none' }) %>
 </body>

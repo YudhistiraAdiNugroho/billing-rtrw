@@ -68,17 +68,17 @@
         <i class="bi bi-person-vcard"></i><span><%= t('admin.nav.cashiers', 'Kasir') %></span>
       </a>
       <a href="/admin/agents" class="sb-item <%= activePage==='agents' ? 'active' : '' %>">
-        <i class="bi bi-person-badge"></i><span>Agent</span>
+        <i class="bi bi-person-badge"></i><span><%= t('admin.nav.agents', 'Agent') %></span>
       </a>
       <a href="/admin/agents/reports" class="sb-item <%= activePage==='agents_reports' ? 'active' : '' %>">
-        <i class="bi bi-journal-text"></i><span>Laporan Agent</span>
+        <i class="bi bi-journal-text"></i><span><%= t('admin.nav.agent_reports', 'Laporan Agent') %></span>
       </a>
       <% } %>
 
         <div class="sb-section"><%= t('admin.section.system', 'SISTEM') %></div>
         <% if (typeof session !=='undefined' && session.isAdmin) { %>
           <a href="/admin/update" class="sb-item <%= activePage==='update' ? 'active' : '' %>">
-            <i class="bi bi-cloud-arrow-down"></i><span>Update GitHub</span>
+            <i class="bi bi-cloud-arrow-down"></i><span><%= t('admin.nav.update', 'Update GitHub') %></span>
           </a>
           <a href="/admin/settings" class="sb-item <%= activePage==='settings' ? 'active' : '' %>">
             <i class="bi bi-gear"></i><span><%= t('admin.nav.settings', 'Pengaturan') %></span>

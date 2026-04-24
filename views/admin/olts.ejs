@@ -196,8 +196,8 @@
     </div>
     <div class="tb-right">
       <div class="d-flex gap-2">
-        <button class="btn btn-g btn-sm" onclick="openModal('manageOltsModal')"><i class="bi bi-gear"></i> Kelola OLT</button>
-        <button class="btn btn-p btn-sm" onclick="openModal('addOltModal')"><i class="bi bi-plus-lg"></i> Tambah OLT</button>
+        <button class="btn btn-g btn-sm" onclick="openModal('manageOltsModal')"><i class="bi bi-gear"></i> <%= t('admin.olts.manage', 'Kelola OLT') %></button>
+        <button class="btn btn-p btn-sm" onclick="openModal('addOltModal')"><i class="bi bi-plus-lg"></i> <%= t('admin.olts.add', 'Tambah OLT') %></button>
       </div>
     </div>
   </div>
@@ -211,10 +211,10 @@
       <!-- OLT Selector & Global Actions -->
       <div class="olt-selector-container">
         <div class="d-flex align-items-center gap-3">
-          <label class="fw-bold text-muted small text-uppercase">Pilih Perangkat OLT:</label>
+          <label class="fw-bold text-muted small text-uppercase"><%= t('admin.olts.select_label', 'Pilih Perangkat OLT:') %></label>
           <select id="olt-selector" class="custom-select-v2" onchange="handleOltChange()">
             <% if (olts.length === 0) { %>
-              <option value="">Tidak ada data OLT</option>
+              <option value=""><%= t('admin.olts.no_data', 'Tidak ada data OLT') %></option>
             <% } else { %>
               <% olts.forEach(olt => { %>
                 <option value="<%= olt.id %>" <%= olt.is_active ? '' : 'disabled' %>><%= olt.name %> (<%= olt.host %>)</option>
@@ -224,7 +224,7 @@
         </div>
         <div class="d-flex gap-2">
           <button class="btn btn-sm btn-p" onclick="refreshCurrentOlt()">
-            <i class="bi bi-arrow-clockwise"></i> Refresh Data
+            <i class="bi bi-arrow-clockwise"></i> <%= t('admin.olts.refresh_data', 'Refresh Data') %>
           </button>
         </div>
       </div>
@@ -235,42 +235,42 @@
           <div class="icon-box bg-blue"><i class="bi bi-device-hdd"></i></div>
           <div class="details">
             <h3 id="stat-total-onu">-</h3>
-            <p>Total ONU</p>
+            <p><%= t('admin.olts.stats.total_onu', 'Total ONU') %></p>
           </div>
         </div>
         <div class="stat-card-v2">
           <div class="icon-box bg-green"><i class="bi bi-wifi"></i></div>
           <div class="details">
             <h3 id="stat-online-onu">-</h3>
-            <p>Online</p>
+            <p><%= t('admin.olts.stats.online', 'Online') %></p>
           </div>
         </div>
         <div class="stat-card-v2">
           <div class="icon-box bg-red"><i class="bi bi-wifi-off"></i></div>
           <div class="details">
             <h3 id="stat-offline-onu">-</h3>
-            <p>Offline</p>
+            <p><%= t('admin.olts.stats.offline', 'Offline') %></p>
           </div>
         </div>
         <div class="stat-card-v2">
           <div class="icon-box bg-orange"><i class="bi bi-exclamation-triangle"></i></div>
           <div class="details">
             <h3 id="stat-weak-onu">-</h3>
-            <p>Sinyal Lemah</p>
+            <p><%= t('admin.olts.stats.weak_signal', 'Sinyal Lemah') %></p>
           </div>
         </div>
       </div>
 
       <!-- System Info Bar -->
       <div class="system-info-bar">
-        <div class="info-item"><i class="bi bi-thermometer-half"></i> Suhu: <strong id="stat-temp">-</strong></div>
-        <div class="info-item"><i class="bi bi-cpu"></i> CPU: <strong id="stat-cpu">-</strong></div>
-        <div class="info-item"><i class="bi bi-memory"></i> RAM: <strong id="stat-ram">-</strong></div>
-        <div class="info-item"><i class="bi bi-clock-history"></i> Uptime: <strong id="stat-uptime">-</strong></div>
+        <div class="info-item"><i class="bi bi-thermometer-half"></i> <%= t('admin.olts.system.temp', 'Suhu') %>: <strong id="stat-temp">-</strong></div>
+        <div class="info-item"><i class="bi bi-cpu"></i> <%= t('admin.olts.system.cpu', 'CPU') %>: <strong id="stat-cpu">-</strong></div>
+        <div class="info-item"><i class="bi bi-memory"></i> <%= t('admin.olts.system.ram', 'RAM') %>: <strong id="stat-ram">-</strong></div>
+        <div class="info-item"><i class="bi bi-clock-history"></i> <%= t('admin.olts.system.uptime', 'Uptime') %>: <strong id="stat-uptime">-</strong></div>
         <div class="info-item ms-auto">
           <div class="traffic-v2">
-            <span class="traffic-in-v2" title="Traffic In"><i class="bi bi-arrow-down"></i> <span id="stat-traffic-in">0 B</span></span>
-            <span class="traffic-out-v2" title="Traffic Out"><i class="bi bi-arrow-up"></i> <span id="stat-traffic-out">0 B</span></span>
+            <span class="traffic-in-v2" title="<%= t('admin.olts.system.traffic_in', 'Traffic In') %>"><i class="bi bi-arrow-down"></i> <span id="stat-traffic-in">0 B</span></span>
+            <span class="traffic-out-v2" title="<%= t('admin.olts.system.traffic_out', 'Traffic Out') %>"><i class="bi bi-arrow-up"></i> <span id="stat-traffic-out">0 B</span></span>
           </div>
         </div>
       </div>
@@ -280,32 +280,32 @@
         <div id="loading-overlay" class="loading-overlay">
           <div class="text-center">
             <div class="spinner-border text-primary" role="status"></div>
-            <div class="mt-2 fw-bold text-primary small">Mengambil Data OLT...</div>
+            <div class="mt-2 fw-bold text-primary small"><%= t('admin.olts.loading', 'Mengambil Data OLT...') %></div>
           </div>
         </div>
         
         <div class="card-header">
           <div class="d-flex align-items-center gap-3">
-            <h6 class="mb-0 fw-bold"><i class="bi bi-list-check me-2"></i> Daftar Perangkat ONU Terdaftar</h6>
+            <h6 class="mb-0 fw-bold"><i class="bi bi-list-check me-2"></i> <%= t('admin.olts.onu_list_title', 'Daftar Perangkat ONU Terdaftar') %></h6>
             <div id="search-container" style="display:none;">
-              <input type="text" id="onu-search" class="fc fc-sm" placeholder="Cari ID / SN..." onkeyup="filterOnuTable()" style="width: 250px; padding: 4px 12px; font-size: 12px;">
+              <input type="text" id="onu-search" class="fc fc-sm" placeholder="<%= t('admin.olts.search_placeholder', 'Cari ID / SN...') %>" onkeyup="filterOnuTable()" style="width: 250px; padding: 4px 12px; font-size: 12px;">
             </div>
           </div>
-          <div class="text-muted small">Update Terakhir: <span id="last-update">-</span></div>
+          <div class="text-muted small"><%= t('admin.olts.last_update', 'Update Terakhir') %>: <span id="last-update">-</span></div>
         </div>
         
         <div class="tbl-wrap" style="max-height: 600px; overflow: auto;">
           <table class="onu-table-v2" id="onu-table">
             <thead>
               <tr>
-                <th>No</th>
-                <th>Id</th>
-                <th>Serial Number</th>
-                <th>Status</th>
-                <th>TxPower</th>
-                <th>RxPower</th>
-                <th>Index OID</th>
-                <th style="text-align:right">Aksi</th>
+                <th><%= t('admin.olts.table.no', 'No') %></th>
+                <th><%= t('admin.olts.table.id', 'Id') %></th>
+                <th><%= t('admin.olts.table.serial', 'Serial Number') %></th>
+                <th><%= t('admin.olts.table.status', 'Status') %></th>
+                <th><%= t('admin.olts.table.tx', 'TxPower') %></th>
+                <th><%= t('admin.olts.table.rx', 'RxPower') %></th>
+                <th><%= t('admin.olts.table.oid', 'Index OID') %></th>
+                <th style="text-align:right"><%= t('common.actions', 'Aksi') %></th>
               </tr>
             </thead>
             <tbody id="onu-table-body">
@@ -313,7 +313,7 @@
                 <td colspan="8">
                   <div class="empty-state">
                     <i class="bi bi-hdd-network"></i>
-                    <p>Pilih perangkat OLT di atas untuk memantau data ONU.</p>
+                    <p><%= t('admin.olts.empty_select', 'Pilih perangkat OLT di atas untuk memantau data ONU.') %></p>
                   </div>
                 </td>
               </tr>
@@ -329,18 +329,18 @@
 <div class="mo" id="manageOltsModal">
   <div class="mb" style="max-width: 900px;">
     <div class="mh">
-      <span class="mt">Manajemen Perangkat OLT</span>
+      <span class="mt"><%= t('admin.olts.manage_modal.title', 'Manajemen Perangkat OLT') %></span>
       <button type="button" class="mc" onclick="closeModal('manageOltsModal')">&times;</button>
     </div>
     <div class="mbody">
       <table class="dtbl">
         <thead>
           <tr>
-            <th>Nama OLT</th>
-            <th>Host / IP</th>
-            <th>Brand</th>
-            <th>Status</th>
-            <th>Aksi</th>
+            <th><%= t('admin.olts.manage_modal.table.name', 'Nama OLT') %></th>
+            <th><%= t('admin.olts.manage_modal.table.host', 'Host / IP') %></th>
+            <th><%= t('admin.olts.manage_modal.table.brand', 'Brand') %></th>
+            <th><%= t('admin.olts.manage_modal.table.status', 'Status') %></th>
+            <th><%= t('admin.olts.manage_modal.table.actions', 'Aksi') %></th>
           </tr>
         </thead>
         <tbody>
@@ -349,11 +349,11 @@
               <td><strong><%= olt.name %></strong></td>
               <td><code><%= olt.host %></code></td>
               <td><span class="brand-badge brand-<%= olt.brand %>"><%= olt.brand %></span></td>
-              <td><span class="badge <%= olt.is_active ? 'bs' : 'bd' %>"><%= olt.is_active ? 'Aktif' : 'Nonaktif' %></span></td>
+              <td><span class="badge <%= olt.is_active ? 'bs' : 'bd' %>"><%= olt.is_active ? t('common.active', 'Aktif') : t('common.inactive', 'Nonaktif') %></span></td>
               <td>
                 <div class="d-flex gap-2">
                   <button class="btn btn-g btn-icon btn-sm" onclick="editOlt('<%= olt.id %>')"><i class="bi bi-pencil"></i></button>
-                  <form action="/admin/olts/<%= olt.id %>/delete" method="POST" onsubmit="return confirm('Hapus OLT ini?')">
+                  <form action="/admin/olts/<%= olt.id %>/delete" method="POST" onsubmit="return confirm(I18N.confirmDeleteOlt)">
                     <button type="submit" class="btn btn-d btn-icon btn-sm"><i class="bi bi-trash"></i></button>
                   </form>
                 </div>
@@ -364,7 +364,7 @@
       </table>
     </div>
     <div class="mf">
-      <button type="button" class="btn btn-g" onclick="closeModal('manageOltsModal')">Tutup</button>
+      <button type="button" class="btn btn-g" onclick="closeModal('manageOltsModal')"><%= t('common.close', 'Tutup') %></button>
     </div>
   </div>
 </div>
@@ -374,13 +374,13 @@
 <div class="mo" id="addOltModal">
   <div class="mb">
     <form action="/admin/olts" method="POST">
-      <div class="mh"><span class="mt">Tambah OLT Baru</span><button type="button" class="mc" onclick="closeModal('addOltModal')">&times;</button></div>
+      <div class="mh"><span class="mt"><%= t('admin.olts.add_modal.title', 'Tambah OLT Baru') %></span><button type="button" class="mc" onclick="closeModal('addOltModal')">&times;</button></div>
       <div class="mbody">
-        <div class="fg"><label class="fl">Nama OLT</label><input type="text" name="name" class="fc" placeholder="Contoh: OLT Pusat" required></div>
-        <div class="fg"><label class="fl">IP Address / Host</label><input type="text" name="host" class="fc" placeholder="192.168.1.10" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.olts.form.name', 'Nama OLT') %></label><input type="text" name="name" class="fc" placeholder="<%= t('admin.olts.form.name_placeholder', 'Contoh: OLT Pusat') %>" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.olts.form.host', 'IP Address / Host') %></label><input type="text" name="host" class="fc" placeholder="192.168.1.10" required></div>
         <div class="form-row">
-            <div class="fg"><label class="fl">SNMP Port</label><input type="number" name="snmp_port" class="fc" value="161"></div>
-            <div class="fg"><label class="fl">Brand / Type</label>
+            <div class="fg"><label class="fl"><%= t('admin.olts.form.snmp_port', 'SNMP Port') %></label><input type="number" name="snmp_port" class="fc" value="161"></div>
+            <div class="fg"><label class="fl"><%= t('admin.olts.form.brand', 'Brand / Type') %></label>
                 <select name="brand" class="fs">
                     <option value="zte">ZTE</option>
                     <option value="huawei">Huawei</option>
@@ -391,16 +391,16 @@
                 </select>
             </div>
         </div>
-        <div class="fg"><label class="fl">SNMP Community</label><input type="text" name="snmp_community" class="fc" value="public"></div>
+        <div class="fg"><label class="fl"><%= t('admin.olts.form.snmp_community', 'SNMP Community') %></label><input type="text" name="snmp_community" class="fc" value="public"></div>
         <div class="form-row">
-            <div class="fg"><label class="fl">Login User (Optional)</label><input type="text" name="web_user" class="fc" placeholder="admin"></div>
-            <div class="fg"><label class="fl">Login Pass (Optional)</label><input type="password" name="web_password" class="fc" placeholder="admin"></div>
+            <div class="fg"><label class="fl"><%= t('admin.olts.form.web_user_optional', 'Login User (Optional)') %></label><input type="text" name="web_user" class="fc" placeholder="admin"></div>
+            <div class="fg"><label class="fl"><%= t('admin.olts.form.web_password_optional', 'Login Pass (Optional)') %></label><input type="password" name="web_password" class="fc" placeholder="admin"></div>
         </div>
-        <div class="fg"><label class="fl">Deskripsi / Lokasi</label><textarea name="description" class="fc" rows="2"></textarea></div>
+        <div class="fg"><label class="fl"><%= t('admin.olts.form.description', 'Deskripsi / Lokasi') %></label><textarea name="description" class="fc" rows="2"></textarea></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('addOltModal')">Batal</button>
-        <button type="submit" class="btn btn-p">Simpan Perangkat</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('addOltModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('admin.olts.add_modal.save', 'Simpan Perangkat') %></button>
       </div>
     </form>
   </div>
@@ -410,13 +410,13 @@
 <div class="mo" id="editOltModal">
   <div class="mb">
     <form id="editOltForm" method="POST">
-      <div class="mh"><span class="mt">Edit Data OLT</span><button type="button" class="mc" onclick="closeModal('editOltModal')">&times;</button></div>
+      <div class="mh"><span class="mt"><%= t('admin.olts.edit_modal.title', 'Edit Data OLT') %></span><button type="button" class="mc" onclick="closeModal('editOltModal')">&times;</button></div>
       <div class="mbody">
-        <div class="fg"><label class="fl">Nama OLT</label><input type="text" name="name" id="e_name" class="fc" required></div>
-        <div class="fg"><label class="fl">IP Address / Host</label><input type="text" name="host" id="e_host" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.olts.form.name', 'Nama OLT') %></label><input type="text" name="name" id="e_name" class="fc" required></div>
+        <div class="fg"><label class="fl"><%= t('admin.olts.form.host', 'IP Address / Host') %></label><input type="text" name="host" id="e_host" class="fc" required></div>
         <div class="form-row">
-            <div class="fg"><label class="fl">SNMP Port</label><input type="number" name="snmp_port" id="e_snmp_port" class="fc"></div>
-            <div class="fg"><label class="fl">Brand / Type</label>
+            <div class="fg"><label class="fl"><%= t('admin.olts.form.snmp_port', 'SNMP Port') %></label><input type="number" name="snmp_port" id="e_snmp_port" class="fc"></div>
+            <div class="fg"><label class="fl"><%= t('admin.olts.form.brand', 'Brand / Type') %></label>
                 <select name="brand" id="e_brand" class="fs">
                     <option value="zte">ZTE</option>
                     <option value="huawei">Huawei</option>
@@ -427,23 +427,23 @@
                 </select>
             </div>
         </div>
-        <div class="fg"><label class="fl">SNMP Community</label><input type="text" name="snmp_community" id="e_snmp_community" class="fc"></div>
+        <div class="fg"><label class="fl"><%= t('admin.olts.form.snmp_community', 'SNMP Community') %></label><input type="text" name="snmp_community" id="e_snmp_community" class="fc"></div>
         <div class="form-row">
-            <div class="fg"><label class="fl">Login User</label><input type="text" name="web_user" id="e_web_user" class="fc"></div>
-            <div class="fg"><label class="fl">Login Pass</label><input type="password" name="web_password" id="e_web_password" class="fc"></div>
+            <div class="fg"><label class="fl"><%= t('admin.olts.form.web_user', 'Login User') %></label><input type="text" name="web_user" id="e_web_user" class="fc"></div>
+            <div class="fg"><label class="fl"><%= t('admin.olts.form.web_password', 'Login Pass') %></label><input type="password" name="web_password" id="e_web_password" class="fc"></div>
         </div>
-        <div class="fg"><label class="fl">Deskripsi / Lokasi</label><textarea name="description" id="e_description" class="fc" rows="2"></textarea></div>
+        <div class="fg"><label class="fl"><%= t('admin.olts.form.description', 'Deskripsi / Lokasi') %></label><textarea name="description" id="e_description" class="fc" rows="2"></textarea></div>
         <div class="fg">
-          <label class="fl">Status Monitoring</label>
+          <label class="fl"><%= t('admin.olts.form.monitoring_status', 'Status Monitoring') %></label>
           <select name="is_active" id="e_is_active" class="fs">
-            <option value="1">Aktif</option>
-            <option value="0">Nonaktif</option>
+            <option value="1"><%= t('common.active', 'Aktif') %></option>
+            <option value="0"><%= t('common.inactive', 'Nonaktif') %></option>
           </select>
         </div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('editOltModal')">Batal</button>
-        <button type="submit" class="btn btn-p">Update Perangkat</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('editOltModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('admin.olts.edit_modal.update', 'Update Perangkat') %></button>
       </div>
     </form>
   </div>
@@ -452,6 +452,23 @@
 <div id="olt-data-store" data-olts='<%- JSON.stringify(olts || []) %>' style="display:none;"></div>
 
 <script>
+const I18N = {
+  lang: "<%= lang || 'id' %>",
+  confirmDeleteOlt: "<%= t('admin.olts.confirm_delete', 'Hapus OLT ini?') %>",
+  serverConnectFailed: "<%= t('admin.olts.errors.server_connect_failed', 'Gagal menghubungi server') %>",
+  noOnuData: "<%= t('admin.olts.empty_no_onu', 'Tidak ada data ONU ditemukan.') %>",
+  tryAgain: "<%= t('admin.olts.actions.try_again', 'Coba Lagi') %>",
+  renamePrompt: "<%= t('admin.olts.actions.rename_prompt', 'Masukkan nama baru untuk ONU:') %>",
+  renameTitle: "<%= t('admin.olts.actions.rename', 'Ubah Nama') %>",
+  rebootTitle: "<%= t('admin.olts.actions.reboot', 'Reboot ONU') %>",
+  confirmReboot: "<%= t('admin.olts.confirm_reboot', 'Yakin ingin reboot ONU ini?') %>",
+  rebootSent: "<%= t('admin.olts.reboot_sent', 'Perintah reboot berhasil dikirim.') %>",
+  failedPrefix: "<%= t('admin.olts.failed_prefix', 'Gagal') %>: ",
+  errorPrefix: "<%= t('admin.olts.error_prefix', 'Error') %>: ",
+  statusOnline: "<%= t('admin.olts.status.online', 'Online') %>",
+  statusOffline: "<%= t('admin.olts.status.offline', 'Offline') %>"
+};
+
 function openModal(id) { document.getElementById(id).style.display = 'flex'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
@@ -490,7 +507,7 @@ async function loadOltDashboard(id) {
   
   try {
     const res = await fetch(`/admin/olts/${id}/stats?full=true`);
-    if (!res.ok) throw new Error('Gagal menghubungi server');
+    if (!res.ok) throw new Error(I18N.serverConnectFailed);
     const stats = await res.json();
     
     // Update Stats Cards
@@ -506,14 +523,16 @@ async function loadOltDashboard(id) {
     document.getElementById('stat-uptime').innerText = stats.uptime || 'N/A';
     document.getElementById('stat-traffic-in').innerText = formatBytes(stats.uplink_rx) + '/s';
     document.getElementById('stat-traffic-out').innerText = formatBytes(stats.uplink_tx) + '/s';
-    document.getElementById('last-update').innerText = new Date().toLocaleTimeString('id-ID');
+    document.getElementById('last-update').innerText = new Date().toLocaleTimeString(I18N.lang === 'en' ? 'en-US' : 'id-ID');
     
     // Render Table
     const tbody = document.getElementById('onu-table-body');
     if (stats.onus && stats.onus.length > 0) {
       document.getElementById('search-container').style.display = 'block';
       tbody.innerHTML = stats.onus.map((onu, index) => {
-        const statusClass = onu.status === 'Online' ? 'pill-online' : 'pill-offline';
+        const statusVal = String(onu.status || '');
+        const isOnline = statusVal.toLowerCase() === 'online';
+        const statusClass = isOnline ? 'pill-online' : 'pill-offline';
         const rxVal = parseFloat(onu.rx);
         let rxClass = 'power-good';
         if (!Number.isFinite(rxVal)) rxClass = '';
@@ -524,14 +543,14 @@ async function loadOltDashboard(id) {
           <td>${index + 1}</td>
           <td><code class="sn-mac">${onu.id || '-'}</code></td>
           <td><code class="sn-mac">${onu.sn || '-'}</code></td>
-          <td><span class="status-pill-v2 ${statusClass}"><i class="bi bi-circle-fill" style="font-size:6px;"></i> ${onu.status || '-'}</span></td>
+          <td><span class="status-pill-v2 ${statusClass}"><i class="bi bi-circle-fill" style="font-size:6px;"></i> ${formatStatus(statusVal) || '-'}</span></td>
           <td><span class="power-badge">${onu.tx || 'N/A'}</span></td>
           <td><span class="power-badge ${rxClass}">${onu.rx || 'N/A'}</span></td>
           <td><span class="text-muted small">${onu.index}</span></td>
           <td style="text-align:right">
             <div class="d-flex justify-content-end gap-1">
-              <button class="btn-action-v2 btn-rename-v2" onclick="renameOnuPrompt('${id}', '${onu.index}', '${onu.name}')" title="Ubah Nama"><i class="bi bi-pencil-square"></i></button>
-              <button class="btn-action-v2 btn-reboot-v2" onclick="rebootOnu('${id}', '${onu.index}')" title="Reboot ONU"><i class="bi bi-arrow-clockwise"></i></button>
+              <button class="btn-action-v2 btn-rename-v2" onclick="renameOnuPrompt('${id}', '${onu.index}', '${onu.name}')" title="${I18N.renameTitle}"><i class="bi bi-pencil-square"></i></button>
+              <button class="btn-action-v2 btn-reboot-v2" onclick="rebootOnu('${id}', '${onu.index}')" title="${I18N.rebootTitle}"><i class="bi bi-arrow-clockwise"></i></button>
             </div>
           </td>
         </tr>`;
@@ -541,16 +560,24 @@ async function loadOltDashboard(id) {
       tbody.innerHTML = `<tr><td colspan="8">
         <div class="empty-state">
           <i class="bi bi-exclamation-triangle"></i>
-          <p>${stats.error || 'Tidak ada data ONU ditemukan.'}</p>
-          ${stats.error ? '<button class="btn btn-sm btn-p mt-2" onclick="refreshCurrentOlt()">Coba Lagi</button>' : ''}
+          <p>${stats.error || I18N.noOnuData}</p>
+          ${stats.error ? '<button class="btn btn-sm btn-p mt-2" onclick="refreshCurrentOlt()">' + I18N.tryAgain + '</button>' : ''}
         </div>
       </td></tr>`;
     }
   } catch (e) {
-    document.getElementById('onu-table-body').innerHTML = `<tr><td colspan="8" class="text-center p-5 text-danger">Error: ${e.message}</td></tr>`;
+    document.getElementById('onu-table-body').innerHTML = `<tr><td colspan="8" class="text-center p-5 text-danger">${I18N.errorPrefix}${e.message}</td></tr>`;
   } finally {
     overlay.style.display = 'none';
   }
+}
+
+function formatStatus(statusVal) {
+  const v = String(statusVal || '').trim();
+  if (!v) return '';
+  if (v.toLowerCase() === 'online') return I18N.statusOnline;
+  if (v.toLowerCase() === 'offline') return I18N.statusOffline;
+  return v;
 }
 
 function handleOltChange() {
@@ -574,7 +601,7 @@ function filterOnuTable() {
 }
 
 async function renameOnuPrompt(oltId, index, oldName) {
-  const newName = prompt('Masukkan nama baru untuk ONU:', oldName);
+  const newName = prompt(I18N.renamePrompt, oldName);
   if (!newName || newName === oldName) return;
   try {
     const res = await fetch(`/admin/olts/${oltId}/onu/${index}/rename`, {
@@ -583,17 +610,17 @@ async function renameOnuPrompt(oltId, index, oldName) {
       body: new URLSearchParams({ name: newName })
     });
     const data = await res.json();
-    if (data.success) { refreshCurrentOlt(); } else { alert('Gagal: ' + data.error); }
-  } catch (e) { alert('Error: ' + e.message); }
+    if (data.success) { refreshCurrentOlt(); } else { alert(I18N.failedPrefix + data.error); }
+  } catch (e) { alert(I18N.errorPrefix + e.message); }
 }
 
 async function rebootOnu(oltId, index) {
-  if (!confirm('Yakin ingin reboot ONU ini?')) return;
+  if (!confirm(I18N.confirmReboot)) return;
   try {
     const res = await fetch(`/admin/olts/${oltId}/onu/${index}/reboot`, { method: 'POST' });
     const data = await res.json();
-    if (data.success) { alert('Perintah reboot berhasil dikirim.'); } else { alert('Gagal: ' + data.error); }
-  } catch (e) { alert('Error: ' + e.message); }
+    if (data.success) { alert(I18N.rebootSent); } else { alert(I18N.failedPrefix + data.error); }
+  } catch (e) { alert(I18N.errorPrefix + e.message); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {

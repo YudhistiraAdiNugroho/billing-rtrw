@@ -12,7 +12,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-box-seam"></i> <%= t('admin.packages.title', 'Paket Internet') %></div>
     <div class="tb-right">
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -32,7 +32,16 @@
       <div class="tbl-wrap">
         <table class="dtbl">
           <thead>
-            <tr><th>#</th><th>Nama Paket</th><th>Harga / Bulan</th><th>Kecepatan</th><th>Deskripsi</th><th>Pelanggan</th><th>Status</th><th>Aksi</th></tr>
+            <tr>
+              <th>#</th>
+              <th><%= t('admin.packages.table.name', 'Nama Paket') %></th>
+              <th><%= t('admin.packages.table.price_month', 'Harga / Bulan') %></th>
+              <th><%= t('admin.packages.table.speed', 'Kecepatan') %></th>
+              <th><%= t('admin.packages.table.description', 'Deskripsi') %></th>
+              <th><%= t('admin.packages.table.customers', 'Pelanggan') %></th>
+              <th><%= t('admin.packages.table.status', 'Status') %></th>
+              <th><%= t('common.actions', 'Aksi') %></th>
+            </tr>
           </thead>
           <tbody>
           <% if (packages.length===0) { %>
@@ -50,11 +59,11 @@
                 <% } else { %><span class="text-muted">-</span><% } %>
               </td>
               <td style="color:var(--muted);font-size:12px"><%= p.description||'-' %></td>
-              <td class="text-center"><span class="badge bm"><%= p.customer_count %> pelanggan</span></td>
-              <td><% if(p.is_active){%><span class="badge bs">Aktif</span><%}else{%><span class="badge bd">Nonaktif</span><%}%></td>
+              <td class="text-center"><span class="badge bm"><%= p.customer_count %> <%= t('admin.packages.customers_suffix', 'pelanggan') %></span></td>
+              <td><% if(p.is_active){%><span class="badge bs"><%= t('common.active', 'Aktif') %></span><%}else{%><span class="badge bd"><%= t('common.inactive', 'Nonaktif') %></span><%}%></td>
               <td>
                 <button class="btn btn-g btn-icon btn-sm" data-idx="<%= i %>" onclick="editPkg(+this.dataset.idx)"><i class="bi bi-pencil"></i></button>
-                <form method="POST" action="/admin/packages/<%= p.id %>/delete" style="display:inline" onsubmit="return confirm('Hapus paket ini? Pelanggan yang menggunakan paket ini akan kehilangan referensi paket.')">
+                <form method="POST" action="/admin/packages/<%= p.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.packages.confirm.delete', 'Hapus paket ini? Pelanggan yang menggunakan paket ini akan kehilangan referensi paket.') %>')">
                   <button class="btn btn-d btn-icon btn-sm"><i class="bi bi-trash"></i></button>
                 </form>
               </td>
@@ -70,33 +79,33 @@
 <!-- Modal Tambah -->
 <div class="mo" id="addModal">
   <div class="mb">
-    <div class="mh"><span class="mt"><i class="bi bi-plus-square"></i> Tambah Paket</span><button class="mc" onclick="closeModal('addModal')">&times;</button></div>
+    <div class="mh"><span class="mt"><i class="bi bi-plus-square"></i> <%= t('admin.packages.add', 'Tambah Paket') %></span><button class="mc" onclick="closeModal('addModal')">&times;</button></div>
     <form method="POST" action="/admin/packages">
       <div class="mbody">
         <div class="fg">
-          <label class="fl">Nama Paket (Profile MikroTik) *</label>
+          <label class="fl"><%= t('admin.packages.form.name_profile', 'Nama Paket (Profile MikroTik)') %> *</label>
           <div style="display:flex;gap:8px">
             <select class="fs" id="add_profile_select" style="max-width:200px" onchange="document.getElementById('add_name').value=this.value">
-              <option value="">-- Pilih dari MikroTik --</option>
+              <option value=""><%= t('admin.packages.form.pick_from_mikrotik', '-- Pilih dari MikroTik --') %></option>
             </select>
-            <input class="fc" name="name" id="add_name" required placeholder="Atau ketik manual...">
+            <input class="fc" name="name" id="add_name" required placeholder="<%= t('admin.packages.form.type_manual', 'Atau ketik manual...') %>">
           </div>
         </div>
         <div class="form-row">
-          <div class="fg"><label class="fl">Harga / Bulan (Rp) *</label><input class="fc" name="price" type="number" min="0" required placeholder="150000"></div>
-          <div class="fg"><label class="fl">Kecepatan Download (Mbps)</label><input class="fc" name="speed_down" type="number" step="any" min="0" placeholder="10"></div>
+          <div class="fg"><label class="fl"><%= t('admin.packages.form.price_month', 'Harga / Bulan (Rp)') %> *</label><input class="fc" name="price" type="number" min="0" required placeholder="150000"></div>
+          <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_down', 'Kecepatan Download (Mbps)') %></label><input class="fc" name="speed_down" type="number" step="any" min="0" placeholder="10"></div>
         </div>
         <div class="form-row">
-          <div class="fg"><label class="fl">Kecepatan Upload (Mbps)</label><input class="fc" name="speed_up" type="number" step="any" min="0" placeholder="5"></div>
-          <div class="fg"><label class="fl">Status</label>
-            <select class="fs" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select>
+          <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_up', 'Kecepatan Upload (Mbps)') %></label><input class="fc" name="speed_up" type="number" step="any" min="0" placeholder="5"></div>
+          <div class="fg"><label class="fl"><%= t('admin.packages.form.status', 'Status') %></label>
+            <select class="fs" name="is_active"><option value="1"><%= t('common.active', 'Aktif') %></option><option value="0"><%= t('common.inactive', 'Nonaktif') %></option></select>
           </div>
         </div>
-        <div class="fg"><label class="fl">Deskripsi</label><textarea class="fc" name="description" placeholder="Opsional..."></textarea></div>
+        <div class="fg"><label class="fl"><%= t('admin.packages.form.description', 'Deskripsi') %></label><textarea class="fc" name="description" placeholder="<%= t('admin.packages.form.optional', 'Opsional...') %>"></textarea></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('addModal')">Batal</button>
-        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Simpan</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('addModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> <%= t('common.save', 'Simpan') %></button>
       </div>
     </form>
   </div>
@@ -105,33 +114,33 @@
 <!-- Modal Edit -->
 <div class="mo" id="editModal">
   <div class="mb">
-    <div class="mh"><span class="mt"><i class="bi bi-pencil"></i> Edit Paket</span><button class="mc" onclick="closeModal('editModal')">&times;</button></div>
+    <div class="mh"><span class="mt"><i class="bi bi-pencil"></i> <%= t('admin.packages.edit', 'Edit Paket') %></span><button class="mc" onclick="closeModal('editModal')">&times;</button></div>
     <form method="POST" id="editForm">
       <div class="mbody">
         <div class="fg">
-          <label class="fl">Nama Paket (Profile MikroTik) *</label>
+          <label class="fl"><%= t('admin.packages.form.name_profile', 'Nama Paket (Profile MikroTik)') %> *</label>
           <div style="display:flex;gap:8px">
             <select class="fs" id="e_profile_select" style="max-width:200px" onchange="document.getElementById('e_name').value=this.value">
-              <option value="">-- Pilih dari MikroTik --</option>
+              <option value=""><%= t('admin.packages.form.pick_from_mikrotik', '-- Pilih dari MikroTik --') %></option>
             </select>
             <input class="fc" name="name" id="e_name" required>
           </div>
         </div>
         <div class="form-row">
-          <div class="fg"><label class="fl">Harga / Bulan (Rp) *</label><input class="fc" name="price" id="e_price" type="number" min="0" required></div>
-          <div class="fg"><label class="fl">Kecepatan Download (Mbps)</label><input class="fc" name="speed_down" id="e_down" type="number" step="any" min="0"></div>
+          <div class="fg"><label class="fl"><%= t('admin.packages.form.price_month', 'Harga / Bulan (Rp)') %> *</label><input class="fc" name="price" id="e_price" type="number" min="0" required></div>
+          <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_down', 'Kecepatan Download (Mbps)') %></label><input class="fc" name="speed_down" id="e_down" type="number" step="any" min="0"></div>
         </div>
         <div class="form-row">
-          <div class="fg"><label class="fl">Kecepatan Upload (Mbps)</label><input class="fc" name="speed_up" id="e_up" type="number" step="any" min="0"></div>
-          <div class="fg"><label class="fl">Status</label>
-            <select class="fs" name="is_active" id="e_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select>
+          <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_up', 'Kecepatan Upload (Mbps)') %></label><input class="fc" name="speed_up" id="e_up" type="number" step="any" min="0"></div>
+          <div class="fg"><label class="fl"><%= t('admin.packages.form.status', 'Status') %></label>
+            <select class="fs" name="is_active" id="e_active"><option value="1"><%= t('common.active', 'Aktif') %></option><option value="0"><%= t('common.inactive', 'Nonaktif') %></option></select>
           </div>
         </div>
-        <div class="fg"><label class="fl">Deskripsi</label><textarea class="fc" name="description" id="e_desc"></textarea></div>
+        <div class="fg"><label class="fl"><%= t('admin.packages.form.description', 'Deskripsi') %></label><textarea class="fc" name="description" id="e_desc"></textarea></div>
       </div>
       <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('editModal')">Batal</button>
-        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Update</button>
+        <button type="button" class="btn btn-g" onclick="closeModal('editModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> <%= t('admin.packages.update', 'Update') %></button>
       </div>
     </form>
   </div>

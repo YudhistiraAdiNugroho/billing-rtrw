@@ -18,7 +18,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-people"></i> <%= t('admin.customers.manage_title', 'Manajemen Pelanggan') %></div>
     <div class="tb-right">
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -32,10 +32,10 @@
 
     <!-- Stats -->
     <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="sc p"><i class="bi bi-people sc-icon"></i><div class="sc-label">Total</div><div class="sc-val"><%= stats.total %></div></div>
-      <div class="sc s"><i class="bi bi-check-circle sc-icon"></i><div class="sc-label">Aktif</div><div class="sc-val"><%= stats.active %></div></div>
-      <div class="sc w"><i class="bi bi-pause-circle sc-icon"></i><div class="sc-label">Disuspend</div><div class="sc-val"><%= stats.suspended %></div></div>
-      <div class="sc d"><i class="bi bi-x-circle sc-icon"></i><div class="sc-label">Nonaktif</div><div class="sc-val"><%= stats.inactive %></div></div>
+      <div class="sc p"><i class="bi bi-people sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.total', 'Total') %></div><div class="sc-val"><%= stats.total %></div></div>
+      <div class="sc s"><i class="bi bi-check-circle sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.active', 'Aktif') %></div><div class="sc-val"><%= stats.active %></div></div>
+      <div class="sc w"><i class="bi bi-pause-circle sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.suspended', 'Disuspend') %></div><div class="sc-val"><%= stats.suspended %></div></div>
+      <div class="sc d"><i class="bi bi-x-circle sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.inactive', 'Nonaktif') %></div><div class="sc-val"><%= stats.inactive %></div></div>
     </div>
 
     <!-- Search & Add -->
@@ -55,12 +55,12 @@
             <input class="fc" name="search" placeholder="<%= t('admin.customers.search_placeholder', 'Cari nama, telepon, tag...') %>" value="<%= search %>">
           </div>
           <select class="fs" name="status" style="width:140px" onchange="this.form.submit()">
-            <option value="">Semua Status</option>
-            <option value="active" <%= filterStatus==='active' ? 'selected':'' %>>Aktif</option>
-            <option value="suspended" <%= filterStatus==='suspended' ? 'selected':'' %>>Suspend</option>
-            <option value="inactive" <%= filterStatus==='inactive' ? 'selected':'' %>>Nonaktif</option>
+            <option value=""><%= t('admin.customers.filter.all_status', 'Semua Status') %></option>
+            <option value="active" <%= filterStatus==='active' ? 'selected':'' %>><%= t('admin.customers.filter.active', 'Aktif') %></option>
+            <option value="suspended" <%= filterStatus==='suspended' ? 'selected':'' %>><%= t('admin.customers.filter.suspended', 'Suspend') %></option>
+            <option value="inactive" <%= filterStatus==='inactive' ? 'selected':'' %>><%= t('admin.customers.filter.inactive', 'Nonaktif') %></option>
           </select>
-          <button class="btn btn-g btn-sm" type="submit"><i class="bi bi-search"></i> Cari</button>
+          <button class="btn btn-g btn-sm" type="submit"><i class="bi bi-search"></i> <%= t('common.search', 'Cari') %></button>
           <% if (search || filterStatus) { %><a href="/admin/customers" class="btn btn-g btn-sm"><i class="bi bi-x"></i> <%= t('common.reset', 'Reset') %></a><% } %>
         </form>
       </div>
@@ -68,8 +68,14 @@
         <table class="dtbl">
           <thead>
             <tr>
-              <th>#</th><th>Nama</th><th>Telepon / Tag ONU</th>
-              <th>Paket</th><th>Alamat</th><th>Status</th><th>Tagihan Belum Bayar</th><th>Aksi</th>
+              <th>#</th>
+              <th><%= t('admin.customers.table.name', 'Nama') %></th>
+              <th><%= t('admin.customers.table.phone_tag', 'Telepon / Tag ONU') %></th>
+              <th><%= t('admin.customers.table.package', 'Paket') %></th>
+              <th><%= t('admin.customers.table.address', 'Alamat') %></th>
+              <th><%= t('admin.customers.table.status', 'Status') %></th>
+              <th><%= t('admin.customers.table.unpaid', 'Tagihan Belum Bayar') %></th>
+              <th><%= t('admin.customers.table.actions', 'Aksi') %></th>
             </tr>
           </thead>
           <tbody>
@@ -92,25 +98,25 @@
               </td>
               <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= c.address || '-' %></td>
               <td>
-                <% if (c.status==='active') { %><span class="badge bs"><i class="bi bi-circle-fill" style="font-size:7px"></i>Aktif</span>
-                <% } else if (c.status==='suspended') { %><span class="badge bw">Suspend</span>
-                <% } else { %><span class="badge bm">Nonaktif</span><% } %>
+                <% if (c.status==='active') { %><span class="badge bs"><i class="bi bi-circle-fill" style="font-size:7px"></i><%= t('admin.customers.filter.active', 'Aktif') %></span>
+                <% } else if (c.status==='suspended') { %><span class="badge bw"><%= t('admin.customers.filter.suspended', 'Suspend') %></span>
+                <% } else { %><span class="badge bm"><%= t('admin.customers.filter.inactive', 'Nonaktif') %></span><% } %>
                 <div style="font-size:10px;margin-top:4px">
-                  <i class="bi bi-clock-history"></i> Auto Isolir: 
+                  <i class="bi bi-clock-history"></i> <%= t('admin.customers.auto_isolate.label', 'Auto Isolir') %>:
                   <span class="<%= c.auto_isolate === 0 ? 'text-danger' : 'text-success' %>">
-                    <%= c.auto_isolate === 0 ? 'OFF' : 'Tgl ' + (c.isolate_day || 10) %>
+                    <%= c.auto_isolate === 0 ? t('admin.customers.auto_isolate.off', 'OFF') : t('admin.customers.auto_isolate.date_prefix', 'Tgl ') + (c.isolate_day || 10) %>
                   </span>
                 </div>
               </td>
               <td class="text-center">
                 <% if (c.unpaid_count > 0) { %>
-                  <span class="badge bd"><%= c.unpaid_count %> tagihan</span>
-                <% } else { %><span class="text-muted" style="font-size:12px">Lunas</span><% } %>
+                  <span class="badge bd"><%= c.unpaid_count %> <%= t('admin.customers.unpaid_suffix', 'tagihan') %></span>
+                <% } else { %><span class="text-muted" style="font-size:12px"><%= t('admin.customers.paid_label', 'Lunas') %></span><% } %>
               </td>
               <td>
-                <button class="btn btn-g btn-icon btn-sm" title="Edit" data-idx="<%= i %>" onclick="editCust(+this.dataset.idx)"><i class="bi bi-pencil"></i></button>
-                <form method="POST" action="/admin/customers/<%= c.id %>/delete" style="display:inline" onsubmit="return confirm('Hapus pelanggan ini?')">
-                  <button class="btn btn-d btn-icon btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
+                <button class="btn btn-g btn-icon btn-sm" title="<%= t('common.edit', 'Edit') %>" data-idx="<%= i %>" onclick="editCust(+this.dataset.idx)"><i class="bi bi-pencil"></i></button>
+                <form method="POST" action="/admin/customers/<%= c.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.customers.confirm_delete', 'Hapus pelanggan ini?') %>')">
+                  <button class="btn btn-d btn-icon btn-sm" title="<%= t('common.delete', 'Hapus') %>"><i class="bi bi-trash"></i></button>
                 </form>
               </td>
             </tr>

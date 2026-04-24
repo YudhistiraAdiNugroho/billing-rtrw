@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Print Invoice #<%= invoice?.id || tx.id %></title>
+  <title><%= t('agent.print_thermal', 'Print Thermal') %> #<%= invoice?.id || tx.id %></title>
   <style>
     @page { margin: 0; }
     * { box-sizing: border-box; }
@@ -49,7 +49,7 @@
 </head>
 <body>
   <div class="top-actions">
-    <button type="button" onclick="window.print()">Print</button>
+    <button type="button" onclick="window.print()"><%= t('agent.print_thermal', 'Print Thermal') %></button>
     <button type="button" onclick="try{window.close()}catch(e){}">Close</button>
   </div>
 
@@ -66,40 +66,39 @@
 
   <div class="divider"></div>
 
-  <div class="text-center bold mb">STRUK PEMBAYARAN</div>
+  <div class="text-center bold mb"><%= t('agent.receipt.payment_title', 'STRUK PEMBAYARAN') %></div>
 
   <% const mns=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
   <div class="small">
-    <div class="row"><div>No. Transaksi</div><div class="bold">#<%= tx.id %></div></div>
-    <div class="row"><div>Tanggal</div><div class="bold"><%= tx.created_at ? new Date(tx.created_at).toLocaleString('id-ID') : new Date().toLocaleString('id-ID') %></div></div>
-    <div class="row"><div>Agent</div><div class="bold"><%= tx.agent_name || '' %><%= tx.agent_username ? (' (@' + tx.agent_username + ')') : '' %></div></div>
+    <div class="row"><div><%= t('agent.receipt.transaction_no', 'No. Transaksi') %></div><div class="bold">#<%= tx.id %></div></div>
+    <div class="row"><div><%= t('agent.receipt.date', 'Tanggal') %></div><div class="bold"><%= tx.created_at ? new Date(tx.created_at).toLocaleString('id-ID') : new Date().toLocaleString('id-ID') %></div></div>
+    <div class="row"><div><%= t('admin.nav.agents', 'Agent') %></div><div class="bold"><%= tx.agent_name || '' %><%= tx.agent_username ? (' (@' + tx.agent_username + ')') : '' %></div></div>
   </div>
 
   <div class="divider"></div>
 
   <div class="small">
-    <div class="row"><div>Pelanggan</div><div class="bold"><%= customer?.name || '-' %></div></div>
+    <div class="row"><div><%= t('agent.customer', 'Pelanggan') %></div><div class="bold"><%= customer?.name || '-' %></div></div>
     <% if (customer && (customer.phone || customer.genieacs_tag)) { %>
       <div class="row"><div>ID/HP</div><div class="bold"><%= customer.phone || customer.genieacs_tag %></div></div>
     <% } %>
-    <div class="row"><div>Invoice</div><div class="bold">#<%= invoice?.id || tx.invoice_id %></div></div>
+    <div class="row"><div><%= t('agent.invoice', 'Invoice') %></div><div class="bold">#<%= invoice?.id || tx.invoice_id %></div></div>
     <% if (invoice && invoice.period_month && invoice.period_year) { %>
-      <div class="row"><div>Periode</div><div class="bold"><%= mns[invoice.period_month-1] %> <%= invoice.period_year %></div></div>
+      <div class="row"><div><%= t('agent.period', 'Periode') %></div><div class="bold"><%= mns[invoice.period_month-1] %> <%= invoice.period_year %></div></div>
     <% } %>
   </div>
 
   <div class="divider"></div>
 
   <div class="row bold">
-    <div>TOTAL BAYAR</div>
+    <div><%= t('agent.receipt.total_paid', 'TOTAL BAYAR') %></div>
     <div>Rp <%= Number(invoice?.amount || tx.amount_invoice || 0).toLocaleString('id-ID') %></div>
   </div>
 
   <div class="divider"></div>
 
   <div class="text-center small mt">
-    Terima kasih atas pembayaran Anda.<br>
-    Simpan struk ini sebagai bukti pembayaran yang sah.
+    <%= String(t('agent.receipt.thanks_payment', 'Terima kasih atas pembayaran Anda.\nSimpan struk ini sebagai bukti pembayaran yang sah.')).replace(/\n/g,'<br>') %>
   </div>
 
   <script>
@@ -109,4 +108,3 @@
   </script>
 </body>
 </html>
-

@@ -114,7 +114,7 @@
         <h1 class="login-title">
           <%= company %>
         </h1>
-        <p class="login-sub">Administrator Portal</p>
+        <p class="login-sub"><%= t('admin.login.subtitle', 'Administrator Portal') %></p>
       </div>
 
       <% if (typeof error !=='undefined' && error) { %>
@@ -126,7 +126,7 @@
 
           <form method="POST" action="/admin/login">
             <div class="fg">
-              <label class="fl">Username</label>
+              <label class="fl"><%= t('admin.login.username', 'Username') %></label>
               <div style="position:relative">
                 <i class="bi bi-person" style="position:absolute;left:13px;top:10px;color:var(--muted)"></i>
                 <input class="fc" name="username" placeholder="admin" required style="padding-left:40px">
@@ -134,7 +134,7 @@
             </div>
 
             <div class="fg" style="margin-bottom:24px">
-              <label class="fl">Password</label>
+              <label class="fl"><%= t('admin.login.password', 'Password') %></label>
               <div style="position:relative">
                 <i class="bi bi-key" style="position:absolute;left:13px;top:10px;color:var(--muted)"></i>
                 <input class="fc" type="password" name="password" placeholder="••••••••" required
@@ -143,12 +143,12 @@
             </div>
 
             <button type="submit" class="btn btn-p w-100" style="padding:12px;justify-content:center">
-              <i class="bi bi-box-arrow-in-right"></i> Masuk Sekarang
+              <i class="bi bi-box-arrow-in-right"></i> <%= t('admin.login.sign_in', 'Masuk Sekarang') %>
             </button>
           </form>
 
           <a href="/customer/login" class="back-btn">
-            <i class="bi bi-arrow-left"></i> Kembali ke Portal Pelanggan
+            <i class="bi bi-arrow-left"></i> <%= t('admin.login.back_customer', 'Kembali ke Portal Pelanggan') %>
           </a>
     </div>
   </div>

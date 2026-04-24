@@ -18,7 +18,7 @@
         <option value="<%= y %>" <%= filterYear==y?'selected':'' %>><%= y %></option>
         <% } %>
       </select>
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -27,38 +27,38 @@
     <!-- Big Stats -->
     <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="sc s"><i class="bi bi-cash-stack sc-icon"></i>
-        <div class="sc-label">Total Pendapatan <%= filterYear %></div>
+        <div class="sc-label"><%= t('admin.reports.total_revenue_year', 'Total Pendapatan') %> <%= filterYear %></div>
         <div class="sc-val" style="font-size:20px">Rp <%= totalRevenue.toLocaleString('id-ID') %></div>
       </div>
       <div class="sc p"><i class="bi bi-receipt sc-icon"></i>
-        <div class="sc-label">Bulan Ini</div>
+        <div class="sc-label"><%= t('admin.reports.this_month', 'Bulan Ini') %></div>
         <div class="sc-val" style="font-size:20px">Rp <%= thisMonth.toLocaleString('id-ID') %></div>
       </div>
       <div class="sc d"><i class="bi bi-hourglass sc-icon"></i>
-        <div class="sc-label">Piutang Belum Bayar</div>
+        <div class="sc-label"><%= t('admin.reports.pending_receivable', 'Piutang Belum Bayar') %></div>
         <div class="sc-val" style="font-size:20px">Rp <%= pendingAmount.toLocaleString('id-ID') %></div>
       </div>
       <div class="sc w"><i class="bi bi-people sc-icon"></i>
-        <div class="sc-label">Total Pelanggan Aktif</div>
+        <div class="sc-label"><%= t('admin.reports.active_customers_total', 'Total Pelanggan Aktif') %></div>
         <div class="sc-val"><%= activeCustomers %></div>
       </div>
     </div>
 
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-top:14px">
       <div class="sc bp"><i class="bi bi-receipt-cutoff sc-icon"></i>
-        <div class="sc-label">Pendapatan Via Agent <%= filterYear %></div>
+        <div class="sc-label"><%= t('admin.reports.revenue_via_agent_year', 'Pendapatan Via Agent') %> <%= filterYear %></div>
         <div class="sc-val" style="font-size:20px">Rp <%= (revenueYearAgent || 0).toLocaleString('id-ID') %></div>
-        <div class="sc-sub">Bulan ini: Rp <%= (revenueThisMonthAgent || 0).toLocaleString('id-ID') %></div>
+        <div class="sc-sub"><%= t('admin.reports.this_month_prefix', 'Bulan ini:') %> Rp <%= (revenueThisMonthAgent || 0).toLocaleString('id-ID') %></div>
       </div>
       <div class="sc bm"><i class="bi bi-person-badge sc-icon"></i>
-        <div class="sc-label">Deposit Agent Masuk <%= filterYear %></div>
+        <div class="sc-label"><%= t('admin.reports.agent_deposit_year', 'Deposit Agent Masuk') %> <%= filterYear %></div>
         <div class="sc-val" style="font-size:20px">Rp <%= (agentDepositYear || 0).toLocaleString('id-ID') %></div>
-        <div class="sc-sub">Bulan ini: Rp <%= (agentDepositThisMonth || 0).toLocaleString('id-ID') %></div>
+        <div class="sc-sub"><%= t('admin.reports.this_month_prefix', 'Bulan ini:') %> Rp <%= (agentDepositThisMonth || 0).toLocaleString('id-ID') %></div>
       </div>
       <div class="sc s"><i class="bi bi-wallet2 sc-icon"></i>
-        <div class="sc-label">Kas Masuk (Tanpa Double) <%= filterYear %></div>
+        <div class="sc-label"><%= t('admin.reports.cash_in_year', 'Kas Masuk (Tanpa Double)') %> <%= filterYear %></div>
         <div class="sc-val" style="font-size:20px">Rp <%= (cashInYear || 0).toLocaleString('id-ID') %></div>
-        <div class="sc-sub">Bulan ini: Rp <%= (cashInThisMonth || 0).toLocaleString('id-ID') %></div>
+        <div class="sc-sub"><%= t('admin.reports.this_month_prefix', 'Bulan ini:') %> Rp <%= (cashInThisMonth || 0).toLocaleString('id-ID') %></div>
       </div>
     </div>
 
@@ -67,7 +67,7 @@
 
       <!-- Bar Chart -->
       <div class="card">
-        <div class="card-hd"><h6><i class="bi bi-bar-chart"></i> Pendapatan Bulanan <%= filterYear %></h6></div>
+        <div class="card-hd"><h6><i class="bi bi-bar-chart"></i> <%= t('admin.reports.monthly_revenue', 'Pendapatan Bulanan') %> <%= filterYear %></h6></div>
         <div class="card-bd">
           <canvas id="revenueChart" height="220"></canvas>
         </div>
@@ -75,16 +75,16 @@
 
       <!-- Top Unpaid -->
       <div class="card">
-        <div class="card-hd"><h6><i class="bi bi-exclamation-triangle"></i> Piutang Tertinggi</h6></div>
+        <div class="card-hd"><h6><i class="bi bi-exclamation-triangle"></i> <%= t('admin.reports.top_unpaid', 'Piutang Tertinggi') %></h6></div>
         <div class="card-bd" style="padding:0">
           <% if (topUnpaid.length===0) { %>
-            <div class="text-center text-muted" style="padding:24px;font-size:13px">Semua pelanggan sudah lunas 🎉</div>
+            <div class="text-center text-muted" style="padding:24px;font-size:13px"><%= t('admin.reports.all_paid', 'Semua pelanggan sudah lunas') %></div>
           <% } %>
           <% topUnpaid.forEach(u=>{ %>
           <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
             <div>
               <div style="font-size:13px;font-weight:600"><%= u.name %></div>
-              <div style="font-size:11px;color:var(--muted)"><%= u.phone %> &bull; <%= u.unpaid_count %> tagihan</div>
+              <div style="font-size:11px;color:var(--muted)"><%= u.phone %> &bull; <%= u.unpaid_count %> <%= t('admin.reports.invoices_suffix', 'tagihan') %></div>
             </div>
             <span class="badge bd">Rp <%= u.total_unpaid.toLocaleString('id-ID') %></span>
           </div>
@@ -95,18 +95,27 @@
 
     <!-- Monthly Breakdown Table -->
     <div class="card">
-      <div class="card-hd"><h6><i class="bi bi-table"></i> Rincian Per Bulan <%= filterYear %></h6></div>
+      <div class="card-hd"><h6><i class="bi bi-table"></i> <%= t('admin.reports.monthly_breakdown', 'Rincian Per Bulan') %> <%= filterYear %></h6></div>
       <div class="tbl-wrap">
         <table class="dtbl">
           <thead>
-            <tr><th>Bulan</th><th class="num">Total Tagihan</th><th class="num">Sudah Bayar</th><th class="num">Belum Bayar</th><th class="num">Pendapatan</th><th>Persentase</th></tr>
+            <tr>
+              <th><%= t('admin.reports.table.month', 'Bulan') %></th>
+              <th class="num"><%= t('admin.reports.table.total_invoices', 'Total Tagihan') %></th>
+              <th class="num"><%= t('admin.reports.table.paid', 'Sudah Bayar') %></th>
+              <th class="num"><%= t('admin.reports.table.unpaid', 'Belum Bayar') %></th>
+              <th class="num"><%= t('admin.reports.table.revenue', 'Pendapatan') %></th>
+              <th><%= t('admin.reports.table.pct', 'Persentase') %></th>
+            </tr>
           </thead>
           <tbody>
-          <% const mns=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+          <% const mns = (lang === 'en')
+            ? ['January','February','March','April','May','June','July','August','September','October','November','December']
+            : ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
              let grandTotal=0, grandPaid=0;
              monthlyData.forEach(m=>{ grandTotal+=m.total_invoices; grandPaid+=m.paid_count; }); %>
           <% if(monthlyData.length===0){ %>
-            <tr><td colspan="6" class="text-center text-muted" style="padding:24px">Belum ada data untuk tahun <%= filterYear %></td></tr>
+            <tr><td colspan="6" class="text-center text-muted" style="padding:24px"><%= t('admin.reports.no_data_year_prefix', 'Belum ada data untuk tahun') %> <%= filterYear %></td></tr>
           <% } %>
           <% monthlyData.forEach(m=>{ const pct=m.total_invoices>0?Math.round(m.paid_count/m.total_invoices*100):0; %>
             <tr>
@@ -132,13 +141,23 @@
 
     <!-- Recent Payments -->
     <div class="card">
-      <div class="card-hd"><h6><i class="bi bi-clock-history"></i> Pembayaran Terakhir</h6></div>
+      <div class="card-hd"><h6><i class="bi bi-clock-history"></i> <%= t('admin.reports.recent_payments', 'Pembayaran Terakhir') %></h6></div>
       <div class="tbl-wrap">
         <table class="dtbl">
-          <thead><tr><th>Pelanggan</th><th>Periode</th><th class="num">Jumlah</th><th>Dicatat Oleh</th><th>Waktu</th></tr></thead>
+          <thead>
+            <tr>
+              <th><%= t('admin.reports.table.customer', 'Pelanggan') %></th>
+              <th><%= t('admin.reports.table.period', 'Periode') %></th>
+              <th class="num"><%= t('admin.reports.table.amount', 'Jumlah') %></th>
+              <th><%= t('admin.reports.table.recorded_by', 'Dicatat Oleh') %></th>
+              <th><%= t('admin.reports.table.time', 'Waktu') %></th>
+            </tr>
+          </thead>
           <tbody>
-          <% const mn2=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
-          <% if(recentPayments.length===0){%><tr><td colspan="5" class="text-center text-muted" style="padding:24px">Belum ada pembayaran</td></tr><%}%>
+          <% const mn2 = (lang === 'en')
+            ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+            : ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
+          <% if(recentPayments.length===0){%><tr><td colspan="5" class="text-center text-muted" style="padding:24px"><%= t('admin.reports.no_payments', 'Belum ada pembayaran') %></td></tr><%}%>
           <% recentPayments.forEach(p=>{ %>
             <tr>
               <td class="fw6"><%= p.customer_name %></td>
@@ -156,7 +175,9 @@
 </div>
 
 <script>
-const monthLabels = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+const monthLabels = <%- JSON.stringify((lang === 'en')
+  ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  : ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']) %>;
 const revenueData = JSON.parse(`<%- JSON.stringify(chartData) %>`);
 const labels = monthLabels;
 const values = Array(12).fill(0);
@@ -167,7 +188,7 @@ new Chart(document.getElementById('revenueChart'), {
   data: {
     labels,
     datasets: [{
-      label: 'Pendapatan (Rp)',
+      label: "<%= t('admin.reports.chart.revenue_label', 'Pendapatan (Rp)') %>",
       data: values,
       backgroundColor: 'rgba(99,102,241,0.5)',
       borderColor: '#6366f1',

@@ -12,7 +12,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-gear"></i> <%= t('admin.settings.system_title', 'Pengaturan Sistem') %></div>
     <div class="tb-right">
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i> <%= t('common.logout', 'Logout') %></a>
     </div>
   </div>
@@ -27,88 +27,88 @@
     <form method="POST" action="/admin/settings">
 
         <div class="card mb16">
-          <div class="card-hd"><h6><i class="bi bi-telegram"></i> Pengaturan Telegram Bot (Backup Admin)</h6></div>
+          <div class="card-hd"><h6><i class="bi bi-telegram"></i> <%= t('admin.settings.telegram.title', 'Pengaturan Telegram Bot (Backup Admin)') %></h6></div>
           <div class="card-bd">
             <div class="form-row">
               <div class="fg">
-                <label class="fl">Status Bot Telegram</label>
+                <label class="fl"><%= t('admin.settings.telegram.status', 'Status Bot Telegram') %></label>
                 <select class="fs" name="telegram_enabled">
-                  <option value="true" <%= settings.telegram_enabled ? 'selected' : '' %>>Aktif</option>
-                  <option value="false" <%= !settings.telegram_enabled ? 'selected' : '' %>>Nonaktif</option>
+                  <option value="true" <%= settings.telegram_enabled ? 'selected' : '' %>><%= t('common.active', 'Aktif') %></option>
+                  <option value="false" <%= !settings.telegram_enabled ? 'selected' : '' %>><%= t('common.inactive', 'Nonaktif') %></option>
                 </select>
               </div>
               <div class="fg">
-                <label class="fl">Admin Telegram ID</label>
+                <label class="fl"><%= t('admin.settings.telegram.admin_id', 'Admin Telegram ID') %></label>
                 <input class="fc" name="telegram_admin_id" value="<%= settings.telegram_admin_id || '' %>" placeholder="Contoh: 12345678">
               </div>
             </div>
             <div class="fg">
-              <label class="fl">Telegram Bot Token</label>
+              <label class="fl"><%= t('admin.settings.telegram.bot_token', 'Telegram Bot Token') %></label>
               <div style="display:flex;gap:8px">
                 <input class="fc" name="telegram_bot_token" value="<%= settings.telegram_bot_token || '' %>" placeholder="Dapatkan dari @BotFather">
-                <button type="button" class="btn btn-g" onclick="syncTelegram()" title="Sinkronkan / Hapus Webhook Lama"><i class="bi bi-arrow-repeat"></i> Sinkronkan</button>
+                <button type="button" class="btn btn-g" onclick="syncTelegram()" title="<%= t('admin.settings.telegram.sync_title', 'Sinkronkan / Hapus Webhook Lama') %>"><i class="bi bi-arrow-repeat"></i> <%= t('admin.settings.telegram.sync', 'Sinkronkan') %></button>
               </div>
             </div>
           </div>
         </div>
 
         <div class="card mb16">
-          <div class="card-hd"><h6><i class="bi bi-whatsapp"></i> Pengaturan WhatsApp</h6></div>
+          <div class="card-hd"><h6><i class="bi bi-whatsapp"></i> <%= t('admin.settings.whatsapp.title', 'Pengaturan WhatsApp') %></h6></div>
           <div class="card-bd" style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
         
         <!-- General Info -->
         <div>
-          <h6 style="font-size:13px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px"><i class="bi bi-info-circle"></i> Info Aplikasi</h6>
+          <h6 style="font-size:13px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px"><i class="bi bi-info-circle"></i> <%= t('admin.settings.app_info', 'Info Aplikasi') %></h6>
           <div class="fg">
-            <label class="fl">Nama Aplikasi / Perusahaan</label>
+            <label class="fl"><%= t('admin.settings.company_name', 'Nama Aplikasi / Perusahaan') %></label>
             <input class="fc" name="company_header" value="<%= settings.company_header || '' %>">
           </div>
           <div class="fg">
-            <label class="fl">Info Footer</label>
+            <label class="fl"><%= t('admin.settings.footer_info', 'Info Footer') %></label>
             <input class="fc" name="footer_info" value="<%= settings.footer_info || '' %>">
           </div>
           <div class="form-row">
             <div class="fg">
-              <label class="fl">Nama Manajer / Owner</label>
+              <label class="fl"><%= t('admin.settings.owner_name', 'Nama Manajer / Owner') %></label>
               <input class="fc" name="company_manager" value="<%= settings.company_manager || '' %>" placeholder="Admin Pusat">
             </div>
             <div class="fg">
-              <label class="fl">Telepon Utama (CS)</label>
+              <label class="fl"><%= t('admin.settings.primary_phone', 'Telepon Utama (CS)') %></label>
               <input class="fc" name="company_phone" value="<%= settings.company_phone || '' %>" placeholder="081234567890">
             </div>
           </div>
           <div class="fg">
-            <label class="fl">Email Perusahaan</label>
+            <label class="fl"><%= t('admin.settings.company_email', 'Email Perusahaan') %></label>
             <input class="fc" name="company_email" value="<%= settings.company_email || '' %>" placeholder="support@isp.com">
           </div>
           <div class="fg">
-            <label class="fl">Alamat Kantor</label>
+            <label class="fl"><%= t('admin.settings.office_address', 'Alamat Kantor') %></label>
             <input class="fc" name="company_address" value="<%= settings.company_address || '' %>" placeholder="Jl. Utama No. 123">
           </div>
           <div class="form-row">
             <div class="fg">
-              <label class="fl">Latitude Kantor</label>
+              <label class="fl"><%= t('admin.settings.office_lat', 'Latitude Kantor') %></label>
               <input class="fc" name="office_lat" value="<%= settings.office_lat || '' %>" placeholder="-6.xxx">
             </div>
             <div class="fg">
-              <label class="fl">Longitude Kantor</label>
+              <label class="fl"><%= t('admin.settings.office_lng', 'Longitude Kantor') %></label>
               <input class="fc" name="office_lng" value="<%= settings.office_lng || '' %>" placeholder="106.xxx">
             </div>
           </div>
           <div class="fg">
-            <label class="fl">Jam Operasional</label>
+            <label class="fl"><%= t('admin.settings.operational_hours', 'Jam Operasional') %></label>
             <input class="fc" name="operational_hours" value="<%= settings.operational_hours || '' %>" placeholder="Setiap Hari: 08.00 - 22.00 WIB">
           </div>
           <div class="form-row">
             <div class="fg">
-              <label class="fl">Port Server</label>
+              <label class="fl"><%= t('admin.settings.server_port', 'Port Server') %></label>
               <input class="fc" type="number" name="server_port" value="<%= settings.server_port || 3001 %>">
             </div>
             <div class="fg">
-              <label class="fl">Login OTP Pelanggan</label>
+              <label class="fl"><%= t('admin.settings.customer_otp_login', 'Login OTP Pelanggan') %></label>
               <select class="fs" name="login_otp_enabled">
-                <option value="true" <%= settings.login_otp_enabled ? 'selected' : '' %>>Aktif (Kirim via WA)</option>
-                <option value="false" <%= !settings.login_otp_enabled ? 'selected' : '' %>>Nonaktif (Langsung)</option>
+                <option value="true" <%= settings.login_otp_enabled ? 'selected' : '' %>><%= t('admin.settings.otp_enabled', 'Aktif (Kirim via WA)') %></option>
+                <option value="false" <%= !settings.login_otp_enabled ? 'selected' : '' %>><%= t('admin.settings.otp_disabled', 'Nonaktif (Langsung)') %></option>
               </select>
             </div>
           </div>
@@ -116,7 +116,7 @@
 
         <!-- GenieACS & MikroTik -->
         <div>
-          <h6 style="font-size:13px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px"><i class="bi bi-router"></i> API Eksternal</h6>
+          <h6 style="font-size:13px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px"><i class="bi bi-router"></i> <%= t('admin.settings.external_api', 'API Eksternal') %></h6>
           <div class="fg">
             <label class="fl">GenieACS API URL</label>
             <input class="fc" name="genieacs_url" value="<%= settings.genieacs_url || '' %>" placeholder="http://192.168.8.89:7557">

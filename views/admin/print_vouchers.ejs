@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cetak Voucher Batch #<%= batch.id %></title>
+  <title><%= t('admin.print_vouchers.title', 'Cetak Voucher Batch') %> #<%= batch.id %></title>
   <style>
     @page { size: A4; margin: 6mm; }
     * { box-sizing: border-box; }
@@ -40,7 +40,11 @@
       if (!v) return '-';
       const s = String(v).trim();
       const mDay = s.match(/^(\d+)\s*d$/i);
-      if (mDay) return `${Number(mDay[1])} hari`;
+      if (mDay) {
+        const n = Number(mDay[1]);
+        if ((lang || 'id') === 'en') return `${n} day${n === 1 ? '' : 's'}`;
+        return `${n} ${t('admin.print_vouchers.days', 'hari')}`;
+      }
       return s;
     }
   %>
@@ -56,7 +60,7 @@
           </div>
           <% if (v.code !== v.password) { %>
             <div class="foot">
-              <div class="muted">Masukkan User (U) dan Pass (P).</div>
+              <div class="muted"><%= t('admin.print_vouchers.hint_user_pass', 'Masukkan User (U) dan Pass (P).') %></div>
             </div>
           <% } %>
         </div>
@@ -71,7 +75,7 @@
             <div class="pw right-meta">⏳ <%= formatValidity(batch.validity) %></div>
           <% } %>
         </div>
-        <div class="wa-btm">Telp/WA: <%= (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) ? '+' + settings.whatsapp_admin_numbers[0] : (settings.company_phone || '-') %></div>
+        <div class="wa-btm"><%= t('admin.print_vouchers.contact_label', 'Telp/WA') %>: <%= (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) ? '+' + settings.whatsapp_admin_numbers[0] : (settings.company_phone || '-') %></div>
       </div>
     <% }) %>
   </div>

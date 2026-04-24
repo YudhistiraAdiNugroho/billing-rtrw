@@ -22,7 +22,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-whatsapp"></i> <%= t('admin.whatsapp.status_title', 'Status WhatsApp') %></div>
     <div class="tb-right">
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> Admin</span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -42,25 +42,25 @@
         <p id="status-desc" class="text-muted"><%= t('admin.whatsapp.please_wait', 'Harap tunggu sebentar.') %></p>
         
         <div id="qr-section" style="display:none">
-          <p class="mb-3">Silakan pindai QR Code ini dengan aplikasi WhatsApp Anda:</p>
+          <p class="mb-3"><%= t('admin.whatsapp.qr_instruction', 'Silakan pindai QR Code ini dengan aplikasi WhatsApp Anda:') %></p>
           <div id="qr-container"></div>
-          <p class="mt-3 text-sm text-muted">QR Code akan diperbarui secara otomatis.</p>
+          <p class="mt-3 text-sm text-muted"><%= t('admin.whatsapp.qr_auto_refresh', 'QR Code akan diperbarui secara otomatis.') %></p>
         </div>
 
         <div id="info-section" style="display:none" class="wa-info">
           <div class="alert alert-s">
-            <i class="bi bi-check-circle-fill"></i> WhatsApp Terhubung
+            <i class="bi bi-check-circle-fill"></i> <%= t('admin.whatsapp.connected_title', 'WhatsApp Terhubung') %>
           </div>
-          <p>Terhubung sebagai: <strong id="wa-user">-</strong></p>
-          <p>Terakhir diperbarui: <span id="wa-time">-</span></p>
+          <p><%= t('admin.whatsapp.connected_as', 'Terhubung sebagai:') %> <strong id="wa-user">-</strong></p>
+          <p><%= t('admin.whatsapp.last_updated', 'Terakhir diperbarui:') %> <span id="wa-time">-</span></p>
         </div>
 
         <div class="mt-5" style="display:flex; justify-content:center; gap:10px">
           <button class="btn btn-g" onclick="checkStatus()"><i class="bi bi-arrow-clockwise"></i> <%= t('admin.whatsapp.refresh_status', 'Refresh Status') %></button>
-          <form method="POST" action="/admin/whatsapp/test-notification" onsubmit="return confirm('Kirim test notifikasi WhatsApp ke admin sekarang?');">
+          <form method="POST" action="/admin/whatsapp/test-notification" onsubmit="return confirm('<%= t('admin.whatsapp.confirm_test', 'Kirim test notifikasi WhatsApp ke admin sekarang?') %>');">
             <button class="btn btn-p"><i class="bi bi-send-check"></i> <%= t('admin.whatsapp.test_notification', 'Kirim Test Notif') %></button>
           </form>
-          <form method="POST" action="/admin/whatsapp/reset" onsubmit="return confirm('Apakah Anda yakin ingin menghapus sesi WhatsApp? Anda harus scan QR ulang setelah ini.')">
+          <form method="POST" action="/admin/whatsapp/reset" onsubmit="return confirm('<%= t('admin.whatsapp.confirm_reset', 'Apakah Anda yakin ingin menghapus sesi WhatsApp? Anda harus scan QR ulang setelah ini.') %>')">
             <button class="btn btn-d"><i class="bi bi-trash"></i> <%= t('admin.whatsapp.reset_session', 'Hapus Sesi / Reset') %></button>
           </form>
         </div>
@@ -71,6 +71,16 @@
 
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
+  const I18N = {
+    descOpen: "<%= t('admin.whatsapp.desc_open', 'Bot WhatsApp aktif dan siap mengirim notifikasi.') %>",
+    descQr: "<%= t('admin.whatsapp.desc_qr', 'Sesi tidak ditemukan atau kedaluwarsa.') %>",
+    descOffPrefix: "<%= t('admin.whatsapp.disconnected_prefix', 'Terputus') %>",
+    descOff: "<%= t('admin.whatsapp.desc_off', 'Bot WhatsApp sedang offline atau sedang mencoba menghubungkan ulang.') %>",
+    deviceFallback: "<%= t('admin.whatsapp.device_fallback', 'Device') %>",
+    waitQrLib: "<%= t('admin.whatsapp.wait_qr_lib', 'Menunggu library QR Code...') %>",
+    qrFail: "<%= t('admin.whatsapp.qr_fail', 'Gagal memproses QR Code. Silakan cek konsol browser.') %>"
+  };
+
   async function checkStatus() {
     try {
       const res = await fetch('/admin/api/whatsapp/status');
@@ -98,27 +108,27 @@
       if (status.connection === 'open') {
         icon.classList.add('status-open');
         text.innerText = connectedLabel;
-        desc.innerText = 'Bot WhatsApp aktif dan siap mengirim notifikasi.';
+        desc.innerText = I18N.descOpen;
         infoSection.style.display = 'block';
-        document.getElementById('wa-user').innerText = status.user?.id || status.user?.name || 'Device';
+        document.getElementById('wa-user').innerText = status.user?.id || status.user?.name || I18N.deviceFallback;
         document.getElementById('wa-time').innerText = new Date(status.lastUpdate).toLocaleTimeString();
       } else if (status.connection === 'qr' && status.qr) {
         console.log('Generating QR Code Canvas...');
         icon.classList.add('status-qr');
         text.innerText = needScanLabel;
-        desc.innerText = 'Sesi tidak ditemukan atau kedaluwarsa.';
+        desc.innerText = I18N.descQr;
         qrSection.style.display = 'block';
         
         qrContainer.innerHTML = '';
         if (typeof QRCode === 'undefined') {
           console.error('QRCode library still not loaded!');
-          qrContainer.innerText = 'Menunggu library QR Code...';
+          qrContainer.innerText = I18N.waitQrLib;
           return;
         }
         QRCode.toCanvas(status.qr, { width: 256, margin: 2 }, function (error, canvas) {
           if (error) {
             console.error('QR Generate Error:', error);
-            qrContainer.innerText = 'Gagal memproses QR Code. Silakan cek konsol browser.';
+            qrContainer.innerText = I18N.qrFail;
           } else {
             console.log('QR Code Canvas generated successfully.');
             qrContainer.appendChild(canvas);
@@ -126,8 +136,8 @@
         });
       } else {
         icon.classList.add('status-close');
-        text.innerText = 'Terputus (' + (status.connection || 'off') + ')';
-        desc.innerText = 'Bot WhatsApp sedang offline atau sedang mencoba menghubungkan ulang.';
+        text.innerText = I18N.descOffPrefix + ' (' + (status.connection || 'off') + ')';
+        desc.innerText = I18N.descOff;
       }
     } catch (e) {
       console.error('Failed to check WA status', e);
