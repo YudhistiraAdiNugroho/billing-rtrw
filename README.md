@@ -131,3 +131,5 @@ Managed by [Ali Jaya Net](https://github.com/alijayanet)
 
 ## info & donasi
 https://wa.me/6281947215703
+
+![Image](https://github.com/user-attachments/assets/724e5ac2-626e-4f2d-bd1f-1265b70b544f)
