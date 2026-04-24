@@ -44,6 +44,24 @@
       </div>
     </div>
 
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-top:14px">
+      <div class="sc bp"><i class="bi bi-receipt-cutoff sc-icon"></i>
+        <div class="sc-label">Pendapatan Via Agent <%= filterYear %></div>
+        <div class="sc-val" style="font-size:20px">Rp <%= (revenueYearAgent || 0).toLocaleString('id-ID') %></div>
+        <div class="sc-sub">Bulan ini: Rp <%= (revenueThisMonthAgent || 0).toLocaleString('id-ID') %></div>
+      </div>
+      <div class="sc bm"><i class="bi bi-person-badge sc-icon"></i>
+        <div class="sc-label">Deposit Agent Masuk <%= filterYear %></div>
+        <div class="sc-val" style="font-size:20px">Rp <%= (agentDepositYear || 0).toLocaleString('id-ID') %></div>
+        <div class="sc-sub">Bulan ini: Rp <%= (agentDepositThisMonth || 0).toLocaleString('id-ID') %></div>
+      </div>
+      <div class="sc s"><i class="bi bi-wallet2 sc-icon"></i>
+        <div class="sc-label">Kas Masuk (Tanpa Double) <%= filterYear %></div>
+        <div class="sc-val" style="font-size:20px">Rp <%= (cashInYear || 0).toLocaleString('id-ID') %></div>
+        <div class="sc-sub">Bulan ini: Rp <%= (cashInThisMonth || 0).toLocaleString('id-ID') %></div>
+      </div>
+    </div>
+
     <!-- Chart & Monthly Table -->
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:18px">
 

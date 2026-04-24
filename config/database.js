@@ -162,9 +162,60 @@ db.exec(`
     UNIQUE(router_id, code)
   );
 
+  CREATE TABLE IF NOT EXISTS agents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    name TEXT NOT NULL,
+    phone TEXT DEFAULT '',
+    balance INTEGER NOT NULL DEFAULT 0,
+    billing_fee INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_hotspot_prices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    router_id INTEGER REFERENCES routers(id) ON DELETE SET NULL,
+    profile_name TEXT NOT NULL,
+    validity TEXT DEFAULT '',
+    buy_price INTEGER NOT NULL DEFAULT 0,
+    sell_price INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id, router_id, profile_name)
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    type TEXT NOT NULL, -- topup, invoice_payment, voucher_sale, adjust
+    invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL,
+    customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+    router_id INTEGER REFERENCES routers(id) ON DELETE SET NULL,
+    profile_name TEXT DEFAULT '',
+    voucher_code TEXT DEFAULT '',
+    voucher_password TEXT DEFAULT '',
+    amount_invoice INTEGER NOT NULL DEFAULT 0,
+    amount_buy INTEGER NOT NULL DEFAULT 0,
+    amount_sell INTEGER NOT NULL DEFAULT 0,
+    fee INTEGER NOT NULL DEFAULT 0,
+    balance_before INTEGER NOT NULL DEFAULT 0,
+    balance_after INTEGER NOT NULL DEFAULT 0,
+    note TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE INDEX IF NOT EXISTS idx_voucher_batches_router ON voucher_batches(router_id);
   CREATE INDEX IF NOT EXISTS idx_vouchers_batch ON vouchers(batch_id);
   CREATE INDEX IF NOT EXISTS idx_vouchers_code ON vouchers(code);
+
+  CREATE INDEX IF NOT EXISTS idx_agents_username ON agents(username);
+  CREATE INDEX IF NOT EXISTS idx_agent_prices_agent ON agent_hotspot_prices(agent_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_prices_router_profile ON agent_hotspot_prices(router_id, profile_name);
+  CREATE INDEX IF NOT EXISTS idx_agent_tx_agent ON agent_transactions(agent_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_tx_created ON agent_transactions(created_at);
 `);
 
 // Tambahkan kolom baru jika belum ada

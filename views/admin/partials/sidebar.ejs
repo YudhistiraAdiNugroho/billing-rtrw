@@ -67,6 +67,12 @@
       <a href="/admin/cashiers" class="sb-item <%= activePage==='cashiers' ? 'active' : '' %>">
         <i class="bi bi-person-vcard"></i><span><%= t('admin.nav.cashiers', 'Kasir') %></span>
       </a>
+      <a href="/admin/agents" class="sb-item <%= activePage==='agents' ? 'active' : '' %>">
+        <i class="bi bi-person-badge"></i><span>Agent</span>
+      </a>
+      <a href="/admin/agents/reports" class="sb-item <%= activePage==='agents_reports' ? 'active' : '' %>">
+        <i class="bi bi-journal-text"></i><span>Laporan Agent</span>
+      </a>
       <% } %>
 
         <div class="sb-section"><%= t('admin.section.system', 'SISTEM') %></div>

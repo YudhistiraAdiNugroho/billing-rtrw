@@ -123,6 +123,10 @@ app.use('/admin', adminPortal);
 const techPortal = require('./routes/techPortal');
 app.use('/tech', techPortal);
 
+// Mount agent portal
+const agentPortal = require('./routes/agentPortal');
+app.use('/agent', agentPortal);
+
 // Fungsi untuk memulai server dengan penanganan port yang sudah digunakan
 function startServer(portToUse) {
     logger.info(`Mencoba memulai server pada port ${portToUse}...`);

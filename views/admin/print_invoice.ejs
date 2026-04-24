@@ -56,6 +56,9 @@
     <div>No. Struk: <span class="bold">INV-<%= invoice.id %>-<%= new Date().getFullYear() %></span></div>
     <div>Tanggal: <%= invoice.paid_at ? new Date(invoice.paid_at).toLocaleString('id-ID') : new Date().toLocaleString('id-ID') %></div>
     <div>Kasir: <%= invoice.paid_by_name || 'Sistem' %></div>
+    <% if (invoice.notes) { %>
+      <div>Catatan: <%= invoice.notes %></div>
+    <% } %>
   </div>
   
   <div class="divider"></div>

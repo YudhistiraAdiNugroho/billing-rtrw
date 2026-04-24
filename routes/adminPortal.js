@@ -11,6 +11,7 @@ const customerSvc = require('../services/customerService');
 const billingSvc = require('../services/billingService');
 const mikrotikService = require('../services/mikrotikService');
 const adminSvc = require('../services/adminService');
+const agentSvc = require('../services/agentService');
 const oltSvc = require('../services/oltService');
 const odpSvc = require('../services/odpService');
 const fs = require('fs');
@@ -379,6 +380,107 @@ router.post('/cashiers/:id/delete', requireAdminSession, restrictToAdmin, (req, 
   adminSvc.deleteCashier(req.params.id);
   req.session._msg = { type: 'success', text: 'Kasir berhasil dihapus.' };
   res.redirect('/admin/cashiers');
+});
+
+// --- AGENT MANAGEMENT ---
+router.get('/agents', requireAdminSession, restrictToAdmin, (req, res) => {
+  const agents = agentSvc.getAllAgents();
+  const routers = mikrotikService.getAllRouters();
+  res.render('admin/agents', {
+    title: 'Manajemen Agent',
+    company: company(),
+    activePage: 'agents',
+    agents,
+    routers,
+    msg: flashMsg(req)
+  });
+});
+
+router.post('/agents', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    agentSvc.createAgent(req.body);
+    req.session._msg = { type: 'success', text: 'Agent berhasil ditambahkan.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/agents');
+});
+
+router.post('/agents/:id/update', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    agentSvc.updateAgent(req.params.id, req.body);
+    req.session._msg = { type: 'success', text: 'Data agent diperbarui.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/agents');
+});
+
+router.post('/agents/:id/delete', requireAdminSession, restrictToAdmin, (req, res) => {
+  try {
+    agentSvc.deleteAgent(req.params.id);
+    req.session._msg = { type: 'success', text: 'Agent berhasil dihapus.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/agents');
+});
+
+router.post('/agents/:id/topup', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    const amount = Number(req.body.amount || 0);
+    const note = String(req.body.note || '').trim();
+    agentSvc.topupAgent(req.params.id, amount, note, req.session.adminUser || 'Admin');
+    req.session._msg = { type: 'success', text: 'Topup saldo berhasil.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal topup: ' + e.message };
+  }
+  res.redirect('/admin/agents');
+});
+
+router.get('/agents/reports', requireAdminSession, restrictToAdmin, (req, res) => {
+  const agents = agentSvc.getAllAgents();
+  const agentId = req.query.agentId ? Number(req.query.agentId) : null;
+  const txs = agentSvc.listAgentTransactions({ agentId, limit: 500 });
+  res.render('admin/agent_reports', {
+    title: 'Laporan Agent',
+    company: company(),
+    activePage: 'agents_reports',
+    agents,
+    agentId,
+    txs,
+    msg: flashMsg(req)
+  });
+});
+
+router.get('/api/agents/:id/prices', requireAdmin, restrictToAdmin, (req, res) => {
+  try {
+    const rows = agentSvc.getAgentPrices(Number(req.params.id));
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/api/agents/:id/prices', requireAdmin, restrictToAdmin, express.json(), (req, res) => {
+  try {
+    const agentId = Number(req.params.id);
+    const result = agentSvc.upsertAgentHotspotPrice(agentId, req.body);
+    res.json({ success: true, result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/api/agents/:id/prices/:priceId/delete', requireAdmin, restrictToAdmin, (req, res) => {
+  try {
+    const agentId = Number(req.params.id);
+    const priceId = Number(req.params.priceId);
+    const result = agentSvc.deleteAgentHotspotPrice(agentId, priceId);
+    res.json({ success: true, result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // ─── DASHBOARD ─────────────────────────────────────────────────────────────
@@ -952,17 +1054,64 @@ router.post('/tickets/:id/delete', requireAdminSession, (req, res) => {
 router.get('/reports', requireAdminSession, (req, res) => {
   const filterYear = parseInt(req.query.year) || new Date().getFullYear();
   const now = new Date();
-  const billing = billingSvc.getDashboardStats();
   const monthlyData = billingSvc.getMonthlyRevenue(filterYear);
   const recentPayments = billingSvc.getRecentPayments(10);
   const topUnpaid = billingSvc.getTopUnpaid(5);
   const activeCustomers = customerSvc.getCustomerStats().active;
 
+  const yStr = String(filterYear);
+  const revenueYearAllRow = db.prepare(
+    "SELECT SUM(amount) as t FROM invoices WHERE status='paid' AND strftime('%Y', paid_at) = ?"
+  ).get(yStr);
+  const revenueYearAll = Number(revenueYearAllRow?.t || 0);
+
+  const revenueYearDirectRow = db.prepare(
+    "SELECT SUM(amount) as t FROM invoices WHERE status='paid' AND strftime('%Y', paid_at) = ? AND (paid_by_name IS NULL OR paid_by_name NOT LIKE 'Agent %')"
+  ).get(yStr);
+  const revenueYearDirect = Number(revenueYearDirectRow?.t || 0);
+  const revenueYearAgent = Math.max(0, revenueYearAll - revenueYearDirect);
+
+  const agentDepositYearRow = db.prepare(
+    "SELECT SUM(amount_buy) as t FROM agent_transactions WHERE type='topup' AND strftime('%Y', created_at) = ?"
+  ).get(yStr);
+  const agentDepositYear = Number(agentDepositYearRow?.t || 0);
+
+  const nowYearStr = String(now.getFullYear());
+  const nowMonthStr = String(now.getMonth() + 1).padStart(2, '0');
+  const revenueThisMonthAllRow = db.prepare(
+    "SELECT SUM(amount) as t FROM invoices WHERE status='paid' AND strftime('%Y', paid_at) = ? AND strftime('%m', paid_at) = ?"
+  ).get(nowYearStr, nowMonthStr);
+  const revenueThisMonthAll = Number(revenueThisMonthAllRow?.t || 0);
+
+  const revenueThisMonthDirectRow = db.prepare(
+    "SELECT SUM(amount) as t FROM invoices WHERE status='paid' AND strftime('%Y', paid_at) = ? AND strftime('%m', paid_at) = ? AND (paid_by_name IS NULL OR paid_by_name NOT LIKE 'Agent %')"
+  ).get(nowYearStr, nowMonthStr);
+  const revenueThisMonthDirect = Number(revenueThisMonthDirectRow?.t || 0);
+  const revenueThisMonthAgent = Math.max(0, revenueThisMonthAll - revenueThisMonthDirect);
+
+  const agentDepositMonthRow = db.prepare(
+    "SELECT SUM(amount_buy) as t FROM agent_transactions WHERE type='topup' AND strftime('%Y', created_at) = ? AND strftime('%m', created_at) = ?"
+  ).get(nowYearStr, nowMonthStr);
+  const agentDepositThisMonth = Number(agentDepositMonthRow?.t || 0);
+
+  const cashInYear = revenueYearDirect + agentDepositYear;
+  const cashInThisMonth = revenueThisMonthDirect + agentDepositThisMonth;
+  const pendingAmountRow = db.prepare("SELECT SUM(amount) as t FROM invoices WHERE status='unpaid'").get();
+  const pendingAmount = Number(pendingAmountRow?.t || 0);
+
   res.render('admin/reports', {
     title: 'Laporan Keuangan', company: company(), activePage: 'reports',
     filterYear, monthlyData, chartData: monthlyData, recentPayments, topUnpaid,
-    totalRevenue: billing.totalRevenue, thisMonth: billing.thisMonth,
-    pendingAmount: billing.pendingAmount, activeCustomers
+    totalRevenue: revenueYearAll,
+    thisMonth: revenueThisMonthAll,
+    pendingAmount,
+    activeCustomers,
+    revenueYearAgent,
+    revenueThisMonthAgent,
+    agentDepositYear,
+    agentDepositThisMonth,
+    cashInYear,
+    cashInThisMonth
   });
 });
 

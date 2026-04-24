@@ -120,7 +120,8 @@ function getTopUnpaid(limit = 5) {
 
 function getInvoicesByAny(val) {
   if (!val) return [];
-  const cleanVal = val.replace(/\D/g, '');
+  const raw = String(val || '').trim();
+  const cleanVal = raw.replace(/\D/g, '');
   
   // Find customer ID first using phone, pppoe, or genieacs_tag
   let customer = null;
@@ -130,19 +131,35 @@ function getInvoicesByAny(val) {
   }
   
   if (!customer) {
-    customer = db.prepare(`SELECT id FROM customers WHERE pppoe_username = ? OR genieacs_tag = ?`).get(val, val);
+    customer = db.prepare(`SELECT id FROM customers WHERE pppoe_username = ? OR genieacs_tag = ?`).get(raw, raw);
   }
 
-  if (!customer) return [];
+  if (customer) {
+    return db.prepare(`
+      SELECT i.*, p.name as package_name
+      FROM invoices i
+      JOIN customers c ON i.customer_id = c.id
+      LEFT JOIN packages p ON c.package_id = p.id
+      WHERE i.customer_id = ?
+      ORDER BY i.period_year DESC, i.period_month DESC
+    `).all(customer.id);
+  }
+
+  const keyword = raw.toLowerCase();
+  if (keyword.length < 3) return [];
   
   return db.prepare(`
-    SELECT i.*, p.name as package_name
+    SELECT i.*, p.name as package_name, c.name as customer_name, c.phone as customer_phone
     FROM invoices i
     JOIN customers c ON i.customer_id = c.id
     LEFT JOIN packages p ON c.package_id = p.id
-    WHERE i.customer_id = ?
+    WHERE lower(c.name) LIKE ?
+       OR lower(c.phone) LIKE ?
+       OR lower(c.genieacs_tag) LIKE ?
+       OR lower(c.pppoe_username) LIKE ?
     ORDER BY i.period_year DESC, i.period_month DESC
-  `).all(customer.id);
+    LIMIT 300
+  `).all(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
 }
 
 function getUnpaidInvoicesByCustomerId(customerId) {

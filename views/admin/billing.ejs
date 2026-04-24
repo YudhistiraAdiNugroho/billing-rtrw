@@ -95,7 +95,12 @@
                 <% if(inv.status==='paid'){%><span class="badge bs"><i class="bi bi-check-circle-fill" style="font-size:9px"></i> Lunas</span>
                 <%}else{%><span class="badge bd"><i class="bi bi-clock-fill" style="font-size:9px"></i> Belum Bayar</span><%}%>
               </td>
-              <td style="font-size:12px"><%= inv.paid_by_name||'-' %></td>
+              <td style="font-size:12px">
+                <div><%= inv.paid_by_name||'-' %></div>
+                <% if (inv.notes) { %>
+                  <div style="font-size:10px;color:var(--muted)"><%= inv.notes %></div>
+                <% } %>
+              </td>
               <td style="font-size:11px;color:var(--muted)"><%= inv.paid_at ? new Date(inv.paid_at).toLocaleString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-' %></td>
               <td>
                 <% if(inv.status==='unpaid'){%>
