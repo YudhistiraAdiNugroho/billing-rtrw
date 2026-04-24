@@ -105,12 +105,12 @@ Setelah instalasi berhasil, portal dapat diakses melalui browser:
 ## ⚙️ Konfigurasi Tambahan
 
 ```bash
-install pm2 -g
+npm install pm2 -g
 ```
 ## ⚙️ Jalankan Aplikasi Menggunakan pm2
 
 ```bash
-pm2 start app-customer.js --name billing-rtrw
+pm2 start app-customer.js
 ```
 
 
