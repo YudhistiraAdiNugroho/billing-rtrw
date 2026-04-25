@@ -114,6 +114,7 @@
                 <% } else { %><span class="text-muted" style="font-size:12px"><%= t('admin.customers.paid_label', 'Lunas') %></span><% } %>
               </td>
               <td>
+                <button class="btn btn-s btn-icon btn-sm" title="<%= t('admin.customers.actions.generate_invoice', 'Generate Tagihan') %>" data-idx="<%= i %>" onclick="openGenInvoice(+this.dataset.idx)"><i class="bi bi-lightning-charge"></i></button>
                 <button class="btn btn-g btn-icon btn-sm" title="<%= t('common.edit', 'Edit') %>" data-idx="<%= i %>" onclick="editCust(+this.dataset.idx)"><i class="bi bi-pencil"></i></button>
                 <form method="POST" action="/admin/customers/<%= c.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.customers.confirm_delete', 'Hapus pelanggan ini?') %>')">
                   <button class="btn btn-d btn-icon btn-sm" title="<%= t('common.delete', 'Hapus') %>"><i class="bi bi-trash"></i></button>
@@ -398,6 +399,47 @@
   </div>
 </div>
 
+<!-- Modal Generate Tagihan (Per Pelanggan) -->
+<div class="mo" id="genInvoiceModal">
+  <div class="mb" style="max-width:520px">
+    <div class="mh"><span class="mt"><i class="bi bi-lightning-charge"></i> <%= t('admin.customers.generate_invoice_title', 'Generate Tagihan (Pelanggan)') %></span><button class="mc" onclick="closeModal('genInvoiceModal')">&times;</button></div>
+    <form method="POST" id="genInvoiceForm">
+      <div class="mbody">
+        <div class="alert alert-i"><i class="bi bi-info-circle"></i> <%= t('admin.customers.generate_invoice_hint', 'Tagihan hanya dibuat untuk pelanggan yang dipilih. Jika sudah ada, tidak akan dibuat ulang.') %></div>
+        <div class="fg">
+          <label class="fl"><%= t('admin.customers.generate_invoice_customer', 'Pelanggan') %></label>
+          <input class="fc" id="genInvoiceCustomer" readonly>
+        </div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl"><%= t('admin.billing.month', 'Bulan') %></label>
+            <select class="fs" name="month" required>
+              <% const genMns = (lang === 'en')
+                ? ['January','February','March','April','May','June','July','August','September','October','November','December']
+                : ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+                 for(let m=1;m<=12;m++){%>
+              <option value="<%= m %>" <%= m===new Date().getMonth()+1?'selected':'' %>><%= genMns[m-1] %></option>
+              <% } %>
+            </select>
+          </div>
+          <div class="fg">
+            <label class="fl"><%= t('admin.billing.year', 'Tahun') %></label>
+            <select class="fs" name="year" required>
+              <% for(let y=new Date().getFullYear()+1; y>=2023; y--){ %>
+              <option value="<%= y %>" <%= y===new Date().getFullYear() ? 'selected' : '' %>><%= y %></option>
+              <% } %>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="mf">
+        <button type="button" class="btn btn-g" onclick="closeModal('genInvoiceModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-lightning-charge"></i> <%= t('admin.customers.generate_invoice_btn', 'Generate') %></button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Modal Map Picker -->
 <div class="mo" id="mapPickerModal">
   <div class="mb" style="max-width:800px">
@@ -508,6 +550,14 @@ function editCust(idx) {
   document.getElementById('e_isolate_day').value=(c.isolate_day || 10);
   openModal('editModal');
   loadPppoeEdit(c.router_id || '', c.id || '');
+}
+
+function openGenInvoice(idx) {
+  const c = customersData[idx];
+  if (!c) return;
+  document.getElementById('genInvoiceForm').action = '/admin/customers/' + c.id + '/billing/generate';
+  document.getElementById('genInvoiceCustomer').value = (c.name || '-') + (c.phone ? (' (' + c.phone + ')') : '');
+  openModal('genInvoiceModal');
 }
 
 function buildPppoeList(datalistEl, users) {
