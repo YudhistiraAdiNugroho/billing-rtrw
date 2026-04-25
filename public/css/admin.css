@@ -114,7 +114,7 @@ textarea.fc{resize:vertical;min-height:75px}
 .sinput i{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none}
 
 /* ── MODAL ── */
-.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center}
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center}
 .mo.show{display:flex}
 .mb{background:var(--bg2);border:1px solid var(--border);border-radius:14px;width:90%;max-width:520px;max-height:90vh;overflow-y:auto}
 .mh{padding:18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
@@ -218,4 +218,3 @@ html,body{width:100%}
   .mb{width:96%;border-radius:16px 16px 0 0;position:fixed;bottom:0;left:0;right:0;max-height:92vh;margin:0 auto}
   .mo.show{align-items:flex-end}
 }
-
