@@ -847,6 +847,21 @@ router.post('/customers/:id/unisolate', requireAdminSession, async (req, res) =>
   res.redirect('back');
 });
 
+router.post('/customers/:id/billing/generate', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    const { month, year } = req.body;
+    const result = billingSvc.generateInvoiceForCustomer(req.params.id, parseInt(month), parseInt(year));
+    if (result.created) {
+      req.session._msg = { type: 'success', text: `Tagihan berhasil dibuat untuk "${result.customerName}" periode ${month}/${year}.` };
+    } else {
+      req.session._msg = { type: 'success', text: `Tagihan sudah ada untuk "${result.customerName}" periode ${month}/${year}.` };
+    }
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal generate tagihan: ' + e.message };
+  }
+  res.redirect('back');
+});
+
 // ─── PACKAGES ──────────────────────────────────────────────────────────────
 router.get('/packages', requireAdminSession, (req, res) => {
   res.render('admin/packages', {

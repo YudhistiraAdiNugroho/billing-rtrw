@@ -4,7 +4,7 @@
 const db = require('../config/database');
 
 function generateMonthlyInvoices(month, year) {
-  const customers = db.prepare("SELECT * FROM customers WHERE status='active' AND package_id IS NOT NULL").all();
+  const customers = db.prepare("SELECT * FROM customers WHERE status IN ('active','suspended') AND package_id IS NOT NULL").all();
   const existing  = db.prepare('SELECT customer_id FROM invoices WHERE period_month=? AND period_year=?').all(month, year);
   const existingIds = new Set(existing.map(e => e.customer_id));
   const insert = db.prepare(`INSERT INTO invoices (customer_id, period_month, period_year, amount) VALUES (?, ?, ?, ?)`);
@@ -18,6 +18,30 @@ function generateMonthlyInvoices(month, year) {
   });
   run();
   return created;
+}
+
+function generateInvoiceForCustomer(customerId, month, year) {
+  const cid = Number(customerId);
+  const m = Number(month);
+  const y = Number(year);
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error('Customer ID tidak valid');
+  if (!Number.isFinite(m) || m < 1 || m > 12) throw new Error('Bulan tidak valid');
+  if (!Number.isFinite(y) || y < 2000 || y > 3000) throw new Error('Tahun tidak valid');
+
+  const customer = db.prepare('SELECT id, name, package_id FROM customers WHERE id=?').get(cid);
+  if (!customer) throw new Error('Pelanggan tidak ditemukan');
+  if (!customer.package_id) throw new Error('Pelanggan belum memiliki paket');
+
+  const exists = db.prepare('SELECT id FROM invoices WHERE customer_id=? AND period_month=? AND period_year=? LIMIT 1').get(cid, m, y);
+  if (exists) {
+    return { created: false, invoiceId: exists.id, customerName: customer.name };
+  }
+
+  const pkg = db.prepare('SELECT price FROM packages WHERE id=?').get(customer.package_id);
+  if (!pkg) throw new Error('Paket pelanggan tidak ditemukan');
+
+  const r = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount) VALUES (?, ?, ?, ?)').run(cid, m, y, pkg.price);
+  return { created: true, invoiceId: r.lastInsertRowid, customerName: customer.name };
 }
 
 function getAllInvoices({ month, year, status, search, limit = 300 } = {}) {
@@ -201,7 +225,7 @@ function updatePaymentInfo(invoiceId, data) {
 module.exports = {
   getInvoicesByAny,
   getUnpaidInvoicesByCustomerId,
-  generateMonthlyInvoices, getAllInvoices, getInvoiceById,
+  generateMonthlyInvoices, generateInvoiceForCustomer, getAllInvoices, getInvoiceById,
   markAsPaid, markAsUnpaid, deleteInvoice,
   getInvoiceSummary, getMonthlyRevenue,
   getDashboardStats, getRecentPayments, getTopUnpaid,

@@ -525,7 +525,14 @@
       },
       "unpaid_suffix": "invoices",
       "paid_label": "Paid",
-      "confirm_delete": "Delete this customer?"
+      "confirm_delete": "Delete this customer?",
+      "actions": {
+        "generate_invoice": "Generate Invoice"
+      },
+      "generate_invoice_title": "Generate Invoice (Customer)",
+      "generate_invoice_hint": "The invoice is created only for the selected customer. If it already exists, it will not be created again.",
+      "generate_invoice_customer": "Customer",
+      "generate_invoice_btn": "Generate"
     },
     "agents": {
       "title": "Agents",
