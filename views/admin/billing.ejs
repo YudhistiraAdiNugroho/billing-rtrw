@@ -220,6 +220,9 @@
 function openModal(id){document.getElementById(id).classList.add('show')}
 function closeModal(id){document.getElementById(id).classList.remove('show')}
 document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show')}));
+const MONTHS = <%- JSON.stringify((lang === 'en')
+  ? ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  : ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']) %>;
 const I18N = {
   customerPrefix: "<%= t('admin.billing.js.customer_prefix', 'Pelanggan:') %>",
   loadingOther: "<%= t('admin.billing.loading_other_invoices', 'Loading tagihan lainnya...') %>",
@@ -263,7 +266,7 @@ document.addEventListener('click', async function(e) {
         div.innerHTML = `
           <input type="checkbox" name="invoice_ids" value="${inv.id}" id="inv_${inv.id}" ${isCurrent ? 'checked' : ''} style="width:16px; height:16px">
           <label for="inv_${inv.id}" style="font-size:13px; cursor:pointer">
-            ${I18N.periodPrefix} ${((<%= lang === 'en' ? "['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']" : "['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']" %>)[inv.period_month] || '')} ${inv.period_year} 
+            ${I18N.periodPrefix} ${(MONTHS[inv.period_month] || '')} ${inv.period_year} 
             <span class="text-muted">(${inv.package_name || I18N.packageFallback})</span> - 
             <strong style="color:var(--success)">Rp ${inv.amount.toLocaleString('id-ID')}</strong>
           </label>
