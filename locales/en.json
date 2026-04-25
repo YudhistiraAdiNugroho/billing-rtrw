@@ -527,12 +527,23 @@
       "paid_label": "Paid",
       "confirm_delete": "Delete this customer?",
       "actions": {
-        "generate_invoice": "Generate Invoice"
+        "generate_invoice": "Generate Invoice",
+        "pay_invoice": "Pay Invoice"
       },
       "generate_invoice_title": "Generate Invoice (Customer)",
       "generate_invoice_hint": "The invoice is created only for the selected customer. If it already exists, it will not be created again.",
       "generate_invoice_customer": "Customer",
-      "generate_invoice_btn": "Generate"
+      "generate_invoice_btn": "Generate",
+      "pay_invoice_title": "Pay Invoice (Customer)",
+      "pay_invoice_hint": "For early payments: choose the period. If the invoice doesn't exist, the system will create it and immediately mark it as Paid.",
+      "pay_invoice_customer": "Customer",
+      "pay_invoice_notes_placeholder": "Example: Early payment",
+      "pay_invoice_btn": "Pay",
+      "paid_badge": "Paid",
+      "paid_months_label": "Already paid:",
+      "none_paid": "No paid months yet",
+      "total_selected_label": "Selected total:",
+      "months_suffix": "months"
     },
     "agents": {
       "title": "Agents",
@@ -1037,6 +1048,11 @@
       "status": "Status",
       "paid": "PAID",
       "paid_at": "Paid",
+      "paid_through": "Paid through",
+      "paid_year_prefix": "Paid in",
+      "none_paid": "No paid invoices yet",
+      "unpaid_summary_prefix": "There are",
+      "unpaid_summary_suffix": "unpaid invoices",
       "pay_online": "PAY ONLINE",
       "unpaid": "UNPAID",
       "empty": "No billing data.",

@@ -862,6 +862,39 @@ router.post('/customers/:id/billing/generate', requireAdminSession, express.urle
   res.redirect('back');
 });
 
+router.post('/customers/:id/billing/pay', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const { month, months, year, paid_by_name, notes } = req.body;
+    const y = parseInt(year);
+
+    if (months != null) {
+      const sum = billingSvc.payInvoicesForCustomerMonths(req.params.id, y, months, paid_by_name, notes);
+      const done = sum.paidMonths.length;
+      const already = sum.alreadyPaidMonths.length;
+      const created = sum.createdMonths.length;
+      const total = Number(sum.totalAmount) || 0;
+      req.session._msg = { type: 'success', text: `Pembayaran berhasil untuk "${sum.customerName}" tahun ${sum.year}. Total: Rp ${total.toLocaleString('id-ID')} (${sum.totalMonths || 0} bulan). Dibayar: ${done} bulan, dibuat: ${created}, sudah lunas: ${already}.` };
+    } else {
+      const m = parseInt(month);
+      const result = billingSvc.payInvoiceForCustomerPeriod(req.params.id, m, y, paid_by_name, notes);
+      if (result.alreadyPaid) {
+        req.session._msg = { type: 'success', text: `Tagihan periode ${m}/${y} untuk "${result.customerName}" sudah lunas.` };
+      } else {
+        const verb = result.created ? 'dibuat & dilunasi' : 'dilunasi';
+        req.session._msg = { type: 'success', text: `Tagihan periode ${m}/${y} untuk "${result.customerName}" berhasil ${verb}.` };
+      }
+    }
+
+    const freshCustomer = customerSvc.getAllCustomers().find(c => String(c.id) === String(req.params.id));
+    if (freshCustomer && freshCustomer.status === 'suspended' && freshCustomer.unpaid_count === 0) {
+      await customerSvc.activateCustomer(req.params.id);
+    }
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal bayar: ' + e.message };
+  }
+  res.redirect('back');
+});
+
 // ─── PACKAGES ──────────────────────────────────────────────────────────────
 router.get('/packages', requireAdminSession, (req, res) => {
   res.render('admin/packages', {
@@ -942,6 +975,26 @@ router.get('/api/billing/unpaid/:customerId', requireAdmin, (req, res) => {
   try {
     const invoices = billingSvc.getUnpaidInvoicesByCustomerId(req.params.customerId);
     res.json(invoices);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/api/customers/:id/paid-months', requireAdmin, (req, res) => {
+  try {
+    const year = parseInt(req.query.year || new Date().getFullYear());
+    const months = billingSvc.getPaidMonthsForCustomerYear(req.params.id, year);
+    res.json({ year, months });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/api/customers/:id/billing-year', requireAdmin, (req, res) => {
+  try {
+    const year = parseInt(req.query.year || new Date().getFullYear());
+    const summary = billingSvc.getCustomerBillingYearSummary(req.params.id, year);
+    res.json(summary);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

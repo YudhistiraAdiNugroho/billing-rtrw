@@ -617,7 +617,52 @@
                       <div class="section-block">
                         <% if (invoices && invoices.length> 0) { %>
                           <% const monthNames = (lang === 'en') ? ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] : ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']; %>
+                          <% const paidInvoices = invoices.filter(i => i.status === 'paid'); %>
                           <% const unpaidInvoices = invoices.filter(i => i.status !== 'paid'); %>
+                          <%
+                            let paidThrough = null;
+                            let paidYear = null;
+                            let paidYearRanges = null;
+                            if (paidInvoices.length > 0) {
+                              paidInvoices.sort((a, b) => (a.period_year === b.period_year) ? (a.period_month - b.period_month) : (a.period_year - b.period_year));
+                              const lastPaid = paidInvoices[paidInvoices.length - 1];
+                              paidThrough = `${monthNames[lastPaid.period_month]} ${lastPaid.period_year}`;
+                              paidYear = lastPaid.period_year;
+                              const months = [...new Set(paidInvoices.filter(p => p.period_year === paidYear).map(p => p.period_month))].sort((a, b) => a - b);
+                              const ranges = [];
+                              if (months.length > 0) {
+                                let s = months[0];
+                                let p = months[0];
+                                for (let i = 1; i < months.length; i++) {
+                                  const m = months[i];
+                                  if (m === p + 1) { p = m; continue; }
+                                  ranges.push([s, p]);
+                                  s = m; p = m;
+                                }
+                                ranges.push([s, p]);
+                              }
+                              paidYearRanges = ranges.map(([a, b]) => (a === b ? monthNames[a] : `${monthNames[a]}–${monthNames[b]}`)).join(', ');
+                            }
+                          %>
+                          <div class="mb-3" style="display:flex;flex-direction:column;gap:10px">
+                            <% if (paidThrough) { %>
+                              <div class="alert alert-success mb-0 py-2" style="background: rgba(34, 197, 94, 0.10); border-color: rgba(34, 197, 94, 0.35); color: rgba(226, 232, 240, 0.95);">
+                                <i class="bi bi-shield-check me-2"></i><%= t('customer.billing.paid_through', 'Sudah lunas sampai') %>: <strong><%= paidThrough %></strong>
+                                <% if (paidYear && paidYearRanges) { %>
+                                  <div class="small" style="opacity:.9;margin-top:4px"><%= t('customer.billing.paid_year_prefix', 'Sudah lunas tahun') %> <%= paidYear %>: <%= paidYearRanges %></div>
+                                <% } %>
+                              </div>
+                            <% } else { %>
+                              <div class="alert alert-secondary mb-0 py-2" style="background: rgba(148, 163, 184, 0.08); border-color: rgba(148, 163, 184, 0.20); color: rgba(226, 232, 240, 0.92);">
+                                <i class="bi bi-info-circle me-2"></i><%= t('customer.billing.none_paid', 'Belum ada tagihan yang lunas') %>
+                              </div>
+                            <% } %>
+                            <% if (unpaidInvoices && unpaidInvoices.length > 0) { %>
+                              <div class="alert alert-warning mb-0 py-2" style="background: rgba(245, 158, 11, 0.10); border-color: rgba(245, 158, 11, 0.35); color: rgba(226, 232, 240, 0.95);">
+                                <i class="bi bi-exclamation-triangle me-2"></i><%= t('customer.billing.unpaid_summary_prefix', 'Masih ada') %> <strong><%= unpaidInvoices.length %></strong> <%= t('customer.billing.unpaid_summary_suffix', 'tagihan belum dibayar') %>
+                              </div>
+                            <% } %>
+                          </div>
                           <div class="table-responsive">
                             <table class="table table-hover">
                               <thead>

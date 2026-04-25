@@ -44,6 +44,119 @@ function generateInvoiceForCustomer(customerId, month, year) {
   return { created: true, invoiceId: r.lastInsertRowid, customerName: customer.name };
 }
 
+function payInvoiceForCustomerPeriod(customerId, month, year, paidByName, notes) {
+  const cid = Number(customerId);
+  const m = Number(month);
+  const y = Number(year);
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error('Customer ID tidak valid');
+  if (!Number.isFinite(m) || m < 1 || m > 12) throw new Error('Bulan tidak valid');
+  if (!Number.isFinite(y) || y < 2000 || y > 3000) throw new Error('Tahun tidak valid');
+
+  const customer = db.prepare('SELECT id, name FROM customers WHERE id=?').get(cid);
+  if (!customer) throw new Error('Pelanggan tidak ditemukan');
+
+  const inv = db.prepare('SELECT id, status FROM invoices WHERE customer_id=? AND period_month=? AND period_year=? LIMIT 1').get(cid, m, y);
+  if (inv && inv.status === 'paid') {
+    return { created: false, paid: false, alreadyPaid: true, invoiceId: inv.id, customerName: customer.name };
+  }
+
+  const ensure = generateInvoiceForCustomer(cid, m, y);
+  markAsPaid(ensure.invoiceId, paidByName, notes);
+  return { created: ensure.created, paid: true, alreadyPaid: false, invoiceId: ensure.invoiceId, customerName: ensure.customerName };
+}
+
+function payInvoicesForCustomerMonths(customerId, year, months, paidByName, notes) {
+  const cid = Number(customerId);
+  const y = Number(year);
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error('Customer ID tidak valid');
+  if (!Number.isFinite(y) || y < 2000 || y > 3000) throw new Error('Tahun tidak valid');
+
+  const rawMonths = Array.isArray(months) ? months : (months == null ? [] : [months]);
+  const selectedMonths = [...new Set(rawMonths.map(m => parseInt(m)).filter(m => Number.isFinite(m) && m >= 1 && m <= 12))].sort((a, b) => a - b);
+  if (selectedMonths.length === 0) throw new Error('Pilih minimal 1 bulan');
+
+  const customer = db.prepare('SELECT id, name, package_id FROM customers WHERE id=?').get(cid);
+  if (!customer) throw new Error('Pelanggan tidak ditemukan');
+  if (!customer.package_id) throw new Error('Pelanggan belum memiliki paket');
+
+  const pkg = db.prepare('SELECT price FROM packages WHERE id=?').get(customer.package_id);
+  if (!pkg) throw new Error('Paket pelanggan tidak ditemukan');
+
+  const selectInv = db.prepare('SELECT id, status, amount FROM invoices WHERE customer_id=? AND period_month=? AND period_year=? LIMIT 1');
+  const insertInv = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount) VALUES (?, ?, ?, ?)');
+  const payInv = db.prepare(`UPDATE invoices SET status='paid', paid_at=CURRENT_TIMESTAMP, paid_by_name=?, notes=? WHERE id=?`);
+
+  const summary = { customerName: customer.name, year: y, paidMonths: [], alreadyPaidMonths: [], createdMonths: [], totalAmount: 0, totalMonths: 0 };
+  const run = db.transaction(() => {
+    for (const m of selectedMonths) {
+      const inv = selectInv.get(cid, m, y);
+      if (inv && inv.status === 'paid') {
+        summary.alreadyPaidMonths.push(m);
+        continue;
+      }
+      let invoiceId = inv ? inv.id : null;
+      let amount = inv ? Number(inv.amount) : Number(pkg.price);
+      if (!invoiceId) {
+        const r = insertInv.run(cid, m, y, pkg.price);
+        invoiceId = r.lastInsertRowid;
+        summary.createdMonths.push(m);
+        amount = Number(pkg.price);
+      }
+      payInv.run(paidByName || 'Admin', notes || '', invoiceId);
+      summary.paidMonths.push(m);
+      summary.totalAmount += (Number.isFinite(amount) ? amount : 0);
+      summary.totalMonths += 1;
+    }
+  });
+  run();
+
+  return summary;
+}
+
+function getPaidMonthsForCustomerYear(customerId, year) {
+  const cid = Number(customerId);
+  const y = Number(year);
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error('Customer ID tidak valid');
+  if (!Number.isFinite(y) || y < 2000 || y > 3000) throw new Error('Tahun tidak valid');
+  const rows = db.prepare(`
+    SELECT period_month
+    FROM invoices
+    WHERE customer_id=? AND period_year=? AND status='paid'
+    ORDER BY period_month ASC
+  `).all(cid, y);
+  return rows.map(r => r.period_month);
+}
+
+function getCustomerBillingYearSummary(customerId, year) {
+  const cid = Number(customerId);
+  const y = Number(year);
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error('Customer ID tidak valid');
+  if (!Number.isFinite(y) || y < 2000 || y > 3000) throw new Error('Tahun tidak valid');
+
+  const customer = db.prepare(`
+    SELECT c.id, c.name, p.price as package_price
+    FROM customers c
+    LEFT JOIN packages p ON c.package_id = p.id
+    WHERE c.id=?
+  `).get(cid);
+  if (!customer) throw new Error('Pelanggan tidak ditemukan');
+
+  const invoices = db.prepare(`
+    SELECT period_month as month, status, amount
+    FROM invoices
+    WHERE customer_id=? AND period_year=?
+    ORDER BY period_month ASC
+  `).all(cid, y);
+
+  return {
+    customerId: customer.id,
+    customerName: customer.name,
+    year: y,
+    packagePrice: customer.package_price || 0,
+    invoices
+  };
+}
+
 function getAllInvoices({ month, year, status, search, limit = 300 } = {}) {
   let q = `
     SELECT i.*, c.name as customer_name, c.phone as customer_phone, c.genieacs_tag, p.name as package_name
@@ -225,7 +338,7 @@ function updatePaymentInfo(invoiceId, data) {
 module.exports = {
   getInvoicesByAny,
   getUnpaidInvoicesByCustomerId,
-  generateMonthlyInvoices, generateInvoiceForCustomer, getAllInvoices, getInvoiceById,
+  generateMonthlyInvoices, generateInvoiceForCustomer, payInvoiceForCustomerPeriod, payInvoicesForCustomerMonths, getPaidMonthsForCustomerYear, getCustomerBillingYearSummary, getAllInvoices, getInvoiceById,
   markAsPaid, markAsUnpaid, deleteInvoice,
   getInvoiceSummary, getMonthlyRevenue,
   getDashboardStats, getRecentPayments, getTopUnpaid,

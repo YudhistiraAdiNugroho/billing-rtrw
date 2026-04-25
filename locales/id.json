@@ -527,12 +527,23 @@
       "paid_label": "Lunas",
       "confirm_delete": "Hapus pelanggan ini?",
       "actions": {
-        "generate_invoice": "Generate Tagihan"
+        "generate_invoice": "Generate Tagihan",
+        "pay_invoice": "Bayar Tagihan"
       },
       "generate_invoice_title": "Generate Tagihan (Pelanggan)",
       "generate_invoice_hint": "Tagihan hanya dibuat untuk pelanggan yang dipilih. Jika sudah ada, tidak akan dibuat ulang.",
       "generate_invoice_customer": "Pelanggan",
-      "generate_invoice_btn": "Generate"
+      "generate_invoice_btn": "Generate",
+      "pay_invoice_title": "Bayar Tagihan (Pelanggan)",
+      "pay_invoice_hint": "Untuk pembayaran di muka: pilih periode. Jika tagihan belum ada, sistem akan membuat tagihan lalu langsung menandai Lunas.",
+      "pay_invoice_customer": "Pelanggan",
+      "pay_invoice_notes_placeholder": "Contoh: Bayar di muka",
+      "pay_invoice_btn": "Bayar",
+      "paid_badge": "Lunas",
+      "paid_months_label": "Sudah lunas:",
+      "none_paid": "Belum ada yang lunas",
+      "total_selected_label": "Total dipilih:",
+      "months_suffix": "bulan"
     },
     "agents": {
       "title": "Agent",
@@ -1037,6 +1048,11 @@
       "status": "Status",
       "paid": "LUNAS",
       "paid_at": "Dibayar",
+      "paid_through": "Sudah lunas sampai",
+      "paid_year_prefix": "Sudah lunas tahun",
+      "none_paid": "Belum ada tagihan yang lunas",
+      "unpaid_summary_prefix": "Masih ada",
+      "unpaid_summary_suffix": "tagihan belum dibayar",
       "pay_online": "BAYAR ONLINE",
       "unpaid": "BELUM BAYAR",
       "empty": "Tidak ada data tagihan.",
