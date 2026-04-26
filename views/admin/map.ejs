@@ -28,6 +28,27 @@
     .lc { background: white; border: 1px solid #e2e8f0; padding: 10px; border-radius: 10px; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
     .lc i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
     .lc span { font-size: 12px; font-weight: 700; color: #334155; }
+    
+    .odps-panel { background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 12px; overflow: hidden; }
+    .odps-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 12px; border-bottom: 1px solid #e2e8f0; }
+    .odps-title { font-weight: 900; font-size: 13px; color: #0f172a; display: inline-flex; align-items: center; gap: 8px; }
+    .odps-search { width: 240px; max-width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: 700; font-size: 12px; outline: none; }
+    .odps-search:focus { border-color: rgba(59,130,246,0.85); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+    .odps-table-wrap { max-height: 240px; overflow: auto; }
+    .odps-table { width: 100%; border-collapse: collapse; }
+    .odps-table th, .odps-table td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
+    .odps-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; color: #64748b; font-weight: 900; position: sticky; top: 0; background: white; z-index: 1; }
+    .odps-name { font-weight: 900; font-size: 13px; color: #0f172a; line-height: 1.2; }
+    .odps-desc { margin-top: 4px; font-size: 12px; color: #64748b; font-weight: 600; line-height: 1.25; }
+    .odps-coord { font-size: 12px; color: #334155; font-weight: 800; white-space: nowrap; }
+    .odps-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    .btn-ghost { background: #f8fafc; border: 1px solid #cbd5e1; color: #0f172a; }
+    .btn-ghost:hover { background: #f1f5f9; border-color: #94a3b8; }
+    @media (max-width: 768px) {
+      .odps-head { flex-wrap: wrap; }
+      .odps-search { width: 100%; }
+      .odps-hide-sm { display: none; }
+    }
 
     /* Picker Map in Modal */
     #picker-map { height: 250px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #cbd5e1; z-index: 1; }
@@ -136,6 +157,49 @@
     </div>
 
     <div id="map"></div>
+    
+    <div class="odps-panel" style="margin-top: 12px;">
+      <div class="odps-head">
+        <div class="odps-title"><i class="bi bi-box-seam-fill"></i> <span><%= t('admin.map.odp_list.title', 'Daftar ODP') %></span></div>
+        <input id="odpSearch" class="odps-search" type="text" placeholder="<%= t('admin.map.odp_list.search', 'Cari ODP...') %>">
+      </div>
+      <div class="odps-table-wrap">
+        <table class="odps-table">
+          <thead>
+            <tr>
+              <th><%= t('admin.map.odp_list.name', 'Nama') %></th>
+              <th class="odps-hide-sm"><%= t('admin.map.odp_list.coord', 'Koordinat') %></th>
+              <th style="width: 96px; text-align: right;"><%= t('admin.map.odp_list.action', 'Aksi') %></th>
+            </tr>
+          </thead>
+          <tbody id="odpsTbody">
+            <% if (odps && odps.length > 0) { %>
+              <% odps.forEach(o => { %>
+                <tr data-name="<%= String(o.name || '').toLowerCase() %>">
+                  <td>
+                    <div class="odps-name"><%= o.name %></div>
+                    <% if (o.description) { %>
+                      <div class="odps-desc"><%= o.description %></div>
+                    <% } %>
+                  </td>
+                  <td class="odps-hide-sm">
+                    <div class="odps-coord"><%= (Number(o.lat) || 0).toFixed(6) %>, <%= (Number(o.lng) || 0).toFixed(6) %></div>
+                  </td>
+                  <td>
+                    <div class="odps-actions">
+                      <button type="button" class="btn btn-sm btn-p" data-odp-id="<%= Number(o.id) %>" onclick="editOdpFromBtn(this)" title="<%= t('common.edit', 'Edit') %>"><i class="bi bi-pencil"></i></button>
+                      <button type="button" class="btn btn-sm btn-ghost" data-odp-id="<%= Number(o.id) %>" onclick="focusOdpFromBtn(this)" title="<%= t('admin.map.odp_list.focus', 'Fokus') %>"><i class="bi bi-geo-alt"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr><td colspan="3" style="padding: 14px 12px; color:#64748b; font-weight: 800;"><%= t('admin.map.odp_list.empty', 'Belum ada ODP. Klik Tambah ODP untuk menambahkan.') %></td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -458,6 +522,24 @@
     initEditPickerMap(odp.lat, odp.lng);
   }
 
+  function editOdpById(id) {
+    const n = Number(id);
+    if (!Number.isFinite(n) || !odps || !Array.isArray(odps)) return;
+    const found = odps.find(o => Number(o.id) === n);
+    if (!found) return;
+    editOdp(found);
+  }
+
+  function editOdpFromBtn(btn) {
+    if (!btn || !btn.dataset) return;
+    editOdpById(btn.dataset.odpId);
+  }
+
+  function focusOdpFromBtn(btn) {
+    if (!btn || !btn.dataset) return;
+    focusOdp(btn.dataset.odpId);
+  }
+
   // Right Click to get coordinates
   map.on('contextmenu', function(e) {
     const lat = e.latlng.lat.toFixed(6);
@@ -487,6 +569,32 @@
 
   const customerTrafficIntervals = {};
   const customerTrafficSeries = {};
+
+  function focusOdp(id) {
+    const k = String(id);
+    const m = odpMarkers[k];
+    if (!m || !m.marker) return;
+    map.setView(m.marker.getLatLng(), 18, { animate: true });
+    try { m.marker.openPopup(); } catch {}
+  }
+
+  (function bindOdpSearch() {
+    const input = document.getElementById('odpSearch');
+    const tbody = document.getElementById('odpsTbody');
+    if (!input || !tbody) return;
+
+    function apply() {
+      const q = String(input.value || '').trim().toLowerCase();
+      const rows = Array.from(tbody.querySelectorAll('tr[data-name]'));
+      rows.forEach(r => {
+        const name = String(r.getAttribute('data-name') || '');
+        r.style.display = !q || name.includes(q) ? '' : 'none';
+      });
+    }
+
+    input.addEventListener('input', apply);
+    apply();
+  })();
 
   function drawSparkline(canvas, series, maxMbps, color) {
     if (!canvas) return;
