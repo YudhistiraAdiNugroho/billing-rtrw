@@ -2154,6 +2154,12 @@ router.post('/whatsapp/broadcast', requireAdminSession, express.urlencoded({ ext
     const { target, message, delay: customDelay } = req.body;
     if (!message) throw new Error('Pesan tidak boleh kosong');
     const delayMs = (parseInt(customDelay) || getSetting('whatsapp_broadcast_delay', 2)) * 1000;
+    if (customDelay) {
+      const v = parseInt(customDelay);
+      if (Number.isFinite(v) && v >= 1 && v <= 60) {
+        saveSettings({ whatsapp_broadcast_delay: v });
+      }
+    }
 
     if (global.broadcastStatus.active) {
       throw new Error('Ada proses broadcast yang sedang berjalan. Silakan tunggu hingga selesai.');
@@ -2235,6 +2241,26 @@ router.post('/whatsapp/broadcast', requireAdminSession, express.urlencoded({ ext
     req.session._msg = { type: 'success', text: `Broadcast sedang diproses untuk dikirim ke ${uniqueCustomers.length} pelanggan.` };
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal Broadcast: ' + e.message };
+  }
+  res.redirect('/admin/whatsapp/broadcast');
+});
+
+router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    const enabled = req.body && req.body.enabled ? true : false;
+    const delay = req.body && req.body.delay ? parseInt(req.body.delay) : null;
+    const next = { whatsapp_auto_billing_enabled: enabled };
+    if (delay != null && Number.isFinite(delay) && delay >= 1 && delay <= 60) {
+      next.whatsapp_broadcast_delay = delay;
+    }
+    const msg = req.body && typeof req.body.message === 'string' ? req.body.message.trim() : '';
+    if (msg) {
+      next.whatsapp_auto_billing_message = msg;
+    }
+    saveSettings(next);
+    req.session._msg = { type: 'success', text: `Pengingat tagihan otomatis ${enabled ? 'diaktifkan' : 'dimatikan'}.` };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal menyimpan pengaturan: ' + e.message };
   }
   res.redirect('/admin/whatsapp/broadcast');
 });

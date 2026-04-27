@@ -33,7 +33,7 @@
           (<span id="failedCount" class="text-danger ms-1">0</span> <%= t('admin.broadcast.failed', 'Gagal') %>)
         </div>
       </div>
-      <form method="POST" action="/admin/whatsapp/broadcast" onsubmit="return confirm('<%= t('admin.broadcast.confirm_send', 'Kirim pesan broadcast sekarang? Pastikan target dan pesan sudah benar.') %>');">
+      <form id="broadcastForm" method="POST" action="/admin/whatsapp/broadcast" data-confirm="<%= t('admin.broadcast.confirm_send', 'Kirim pesan broadcast sekarang? Pastikan target dan pesan sudah benar.') %>">
         <div class="card-bd">
           <div class="alert alert-i" style="margin-bottom: 10px;">
             <i class="bi bi-info-circle"></i> <%= t('admin.broadcast.info', 'Pesan akan dikirim menggunakan nomor WhatsApp Bot Anda secara otomatis dengan jeda aman per pesan agar tidak terdeteksi sebagai spam.') %>
@@ -75,6 +75,63 @@
         </div>
         <div class="card-bd" style="border-top: 1px solid var(--border); background: var(--bg2); display: flex; justify-content: flex-end;">
           <button type="submit" class="btn btn-p"><i class="bi bi-send"></i> <%= t('admin.broadcast.start', 'Mulai Broadcast') %></button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <h6><i class="bi bi-alarm"></i> Pengingat Tagihan Otomatis</h6>
+      </div>
+      <form method="POST" action="/admin/whatsapp/auto-billing" onsubmit="return confirm('Simpan pengaturan pengingat tagihan otomatis?');">
+        <div class="card-bd">
+          <%
+            const defaultAutoBillingMsg =
+              `Yth. Pelanggan {{nama}},\n\n` +
+              `Ini adalah pengingat sebelum tanggal jatuh tempo/isolir.\n\n` +
+              `📦 *Paket:* {{paket}}\n` +
+              `💰 *Total Tagihan:* Rp {{tagihan}}\n` +
+              `📅 *Periode:* {{rincian}}\n\n` +
+              `Mohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\n` +
+              `Terima kasih atas kerja samanya.\n` +
+              `Salam,\nAdmin ${company}`;
+            const autoBillingMsg = getSetting('whatsapp_auto_billing_message', defaultAutoBillingMsg);
+          %>
+          <div class="form-row" style="margin-bottom: 12px;">
+            <div class="fg" style="width: 100%;">
+              <label class="fl">Status</label>
+              <label style="display:flex; align-items:center; gap:10px; font-weight:800; color: var(--text);">
+                <input type="checkbox" name="enabled" value="1" <%= getSetting('whatsapp_auto_billing_enabled', false) ? 'checked' : '' %>>
+                Aktifkan pengingat tagihan otomatis
+              </label>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
+                Sistem akan mengirim pengingat ke pelanggan yang punya tunggakan pada H-1 sebelum tanggal isolir (isolate_day).
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom: 12px;">
+            <div class="fg">
+              <label class="fl">Jeda Antar Pesan (Detik)</label>
+              <input class="fc" type="number" name="delay" value="<%= getSetting('whatsapp_broadcast_delay', 2) %>" min="1" max="60">
+              <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
+                Dipakai untuk pengingat otomatis dan default broadcast.
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="fg" style="width: 100%;">
+              <label class="fl">Isi Pesan WhatsApp</label>
+              <textarea class="fc" name="message" rows="8" required style="width: 100%;"><%= autoBillingMsg %></textarea>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
+                <i class="bi bi-info-circle"></i> Variabel: <b>{{nama}}</b>, <b>{{tagihan}}</b>, <b>{{rincian}}</b>, <b>{{paket}}</b>, <b>{{link}}</b> (link login otomatis).
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-bd" style="border-top: 1px solid var(--border); background: var(--bg2); display: flex; justify-content: flex-end;">
+          <button type="submit" class="btn btn-p"><i class="bi bi-save"></i> Simpan</button>
         </div>
       </form>
     </div>
@@ -129,6 +186,14 @@ const sentCountEl = document.getElementById('sentCount');
 const totalCountEl = document.getElementById('totalCount');
 const failedCountEl = document.getElementById('failedCount');
 const submitBtn = document.querySelector('button[type="submit"]');
+const broadcastForm = document.getElementById('broadcastForm');
+
+if (broadcastForm) {
+  broadcastForm.addEventListener('submit', function (e) {
+    const msg = String(broadcastForm.dataset.confirm || '').trim();
+    if (msg && !confirm(msg)) e.preventDefault();
+  });
+}
 
 async function checkBroadcastStatus() {
   try {
