@@ -1255,6 +1255,81 @@ router.post('/billing/:id/unpay', requireAdminSession, (req, res) => {
   res.redirect('back');
 });
 
+router.post('/billing/:id/qris-assign', requireAdminSession, (req, res) => {
+  try {
+    const invId = Number(req.params.id);
+    if (!Number.isFinite(invId) || invId <= 0) throw new Error('Invoice ID tidak valid');
+
+    const force = String(req.query.force || '') === '1';
+    const inv = db.prepare('SELECT id, status, amount, qris_amount_unique FROM invoices WHERE id=?').get(invId);
+    if (!inv) throw new Error('Tagihan tidak ditemukan');
+    if (String(inv.status) !== 'unpaid') throw new Error('Hanya tagihan BELUM BAYAR yang bisa dibuat kode QRIS.');
+
+    if (!force && inv.qris_amount_unique) {
+      req.session._msg = { type: 'success', text: 'Kode QRIS sudah ada untuk tagihan ini.' };
+      return res.redirect('back');
+    }
+
+    const baseAmount = Number(inv.amount || 0);
+    if (!Number.isFinite(baseAmount) || baseAmount <= 0) throw new Error('Nominal tagihan tidak valid');
+
+    const exists = db.prepare('SELECT id FROM invoices WHERE status=? AND qris_amount_unique=? AND id!=? LIMIT 1');
+    const update = db.prepare(`
+      UPDATE invoices
+      SET qris_unique_code=?, qris_amount_unique=?, qris_assigned_at=CURRENT_TIMESTAMP
+      WHERE id=?
+    `);
+
+    let chosenCode = 0;
+    let chosenAmount = 0;
+
+    for (let i = 0; i < 50; i++) {
+      const code = 1 + Math.floor(Math.random() * 999);
+      const amount = baseAmount + code;
+      if (!exists.get('unpaid', amount, invId)) {
+        chosenCode = code;
+        chosenAmount = amount;
+        break;
+      }
+    }
+
+    if (!chosenAmount) {
+      for (let code = 1; code <= 999; code++) {
+        const amount = baseAmount + code;
+        if (!exists.get('unpaid', amount, invId)) {
+          chosenCode = code;
+          chosenAmount = amount;
+          break;
+        }
+      }
+    }
+
+    if (!chosenAmount) throw new Error('Gagal membuat nominal unik (slot 1-999 penuh).');
+
+    update.run(chosenCode, chosenAmount, invId);
+    req.session._msg = { type: 'success', text: `Kode QRIS dibuat: Rp ${Number(chosenAmount).toLocaleString('id-ID')} (kode ${chosenCode}).` };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal membuat kode QRIS: ' + e.message };
+  }
+  res.redirect('back');
+});
+
+router.post('/billing/:id/qris-clear', requireAdminSession, (req, res) => {
+  try {
+    const invId = Number(req.params.id);
+    if (!Number.isFinite(invId) || invId <= 0) throw new Error('Invoice ID tidak valid');
+    db.prepare(`
+      UPDATE invoices
+      SET qris_unique_code=NULL, qris_amount_unique=NULL, qris_assigned_at=NULL
+      WHERE id=?
+    `).run(invId);
+    req.session._msg = { type: 'success', text: 'Kode QRIS dihapus dari tagihan.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal menghapus kode QRIS: ' + e.message };
+  }
+  res.redirect('back');
+});
+
 router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
   try {
     const inv = billingSvc.getInvoiceById(req.params.id);
@@ -1269,6 +1344,10 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
       throw new Error('Bot WhatsApp belum terhubung. Silakan cek status WhatsApp di menu Admin.');
     }
 
+    const qrisAmountUnique = Number(inv.qris_amount_unique || 0) || 0;
+    const qrisCode = Number(inv.qris_unique_code || 0) || 0;
+    const qrisQrUrl = String(getSetting('qris_static_qr_url', '') || '').trim();
+
     // Hitung Tagihan
     const unpaidInvoices = billingSvc.getUnpaidInvoicesByCustomerId(customer.id);
     const totalTagihan = unpaidInvoices.reduce((sum, i) => sum + i.amount, 0);
@@ -1279,15 +1358,25 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
     const host = req.get('host');
     const loginLink = `${protocol}://${host}/customer/login`;
 
+    const templateQris = `Yth. *{{nama}}*,\n\nTagihan internet Anda untuk periode *{{periode}}*.\n\n📦 *Paket:* {{paket}}\n💳 *Pembayaran QRIS (Semua E-Wallet)*\n💰 *Nominal (WAJIB tepat):* Rp {{qris_nominal}}\n🏷️ *Kode:* {{qris_kode}}\n{{qris_qr}}\n\nCatatan: nominal harus sama persis agar sistem dapat mendeteksi pembayaran.\n\nTerima kasih.\nSalam,\nAdmin ${getSetting('company_header', 'ISP')}`;
+
     // Pesan Template (Sama dengan Broadcast Unpaid)
     const template = `Yth. *{{nama}}*,\n\nBerdasarkan data sistem kami, Anda memiliki tagihan internet yang *BELUM LUNAS*.\n\n📦 *Paket:* {{paket}}\n💰 *Total Tagihan:* Rp {{tagihan}}\n📅 *Periode:* {{rincian}}\n\nMohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\nTerima kasih atas kerja samanya.\nSalam,\nAdmin ${getSetting('company_header', 'ISP')}`;
 
-    const formattedMsg = template
-      .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
-      .replace(/{{tagihan}}/gi, totalTagihan.toLocaleString('id-ID'))
-      .replace(/{{rincian}}/gi, rincianBulan || '-')
-      .replace(/{{paket}}/gi, inv.package_name || '-')
-      .replace(/{{link}}/gi, loginLink);
+    const formattedMsg = (qrisAmountUnique > 0 && qrisCode > 0)
+      ? templateQris
+          .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
+          .replace(/{{periode}}/gi, `${inv.period_month}/${inv.period_year}`)
+          .replace(/{{paket}}/gi, inv.package_name || '-')
+          .replace(/{{qris_nominal}}/gi, Number(qrisAmountUnique).toLocaleString('id-ID'))
+          .replace(/{{qris_kode}}/gi, String(qrisCode).padStart(3, '0'))
+          .replace(/{{qris_qr}}/gi, qrisQrUrl ? `🔗 QRIS: ${qrisQrUrl}` : '')
+      : template
+          .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
+          .replace(/{{tagihan}}/gi, totalTagihan.toLocaleString('id-ID'))
+          .replace(/{{rincian}}/gi, rincianBulan || '-')
+          .replace(/{{paket}}/gi, inv.package_name || '-')
+          .replace(/{{link}}/gi, loginLink);
 
     const sent = await sendWA(customer.phone, formattedMsg);
     if (!sent) throw new Error('Gagal mengirim pesan melalui WhatsApp Bot.');
@@ -1776,6 +1865,77 @@ router.get('/vouchers', requireAdminSession, (req, res) => {
   });
 });
 
+router.get('/api/vouchers/template', requireAdminSession, (req, res) => {
+  const settings = getSettings();
+  res.json({
+    use_template: !!settings.voucher_print_use_template,
+    default_style: String(settings.voucher_print_default_style || ''),
+    header: String(settings.voucher_print_template_header || ''),
+    row: String(settings.voucher_print_template_row || ''),
+    footer: String(settings.voucher_print_template_footer || '')
+  });
+});
+
+router.post('/api/vouchers/template', requireAdminSession, restrictToAdmin, express.json({ limit: '1mb' }), (req, res) => {
+  try {
+    const useTemplate = !!req.body.use_template;
+    const defaultStyle = String(req.body.default_style || '').trim().toLowerCase();
+    const header = String(req.body.header || '');
+    const row = String(req.body.row || '');
+    const footer = String(req.body.footer || '');
+    saveSettings({
+      voucher_print_use_template: useTemplate,
+      voucher_print_default_style: defaultStyle,
+      voucher_print_template_header: header,
+      voucher_print_template_row: row,
+      voucher_print_template_footer: footer
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/api/webhook/payment-notif/logs', requireAdminSession, (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 200));
+    const service = String(req.query.service || '').trim();
+    const q = String(req.query.q || '').trim();
+
+    const where = [];
+    const params = [];
+    if (service) {
+      where.push('service = ?');
+      params.push(service);
+    }
+    if (q) {
+      where.push('(content LIKE ? OR service LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`);
+    }
+
+    const sql = `
+      SELECT id, created_at, service, content, parsed_amount, parsed_ok, matched_invoice_id, ip
+      FROM webhook_payment_notifs
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY id DESC
+      LIMIT ?
+    `;
+    const rows = db.prepare(sql).all(...params, limit);
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.post('/api/webhook/payment-notif/clear', requireAdminSession, restrictToAdmin, express.json(), (req, res) => {
+  try {
+    db.prepare('DELETE FROM webhook_payment_notifs').run();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 router.get('/vouchers/batches/:id/print', requireAdminSession, (req, res) => {
   const batchId = Number(req.params.id);
   const batch = db.prepare(`
@@ -1793,12 +1953,234 @@ router.get('/vouchers/batches/:id/print', requireAdminSession, (req, res) => {
     ORDER BY code ASC
   `).all(batchId);
 
+  const settings = getSettings();
+  const requestedStyle = String(req.query.style || '').trim().toLowerCase();
+  const style = requestedStyle || String(settings.voucher_print_default_style || '').trim().toLowerCase() || (settings.voucher_print_use_template ? 'template' : 'cards');
+
+  const escapeHtml = (s) => String(s ?? '').replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  const stripUnsafe = (html) => {
+    let out = String(html || '');
+    out = out.replace(/<\?(?:php)?[\s\S]*?\?>/gi, '');
+    out = out.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    out = out.replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '');
+    return out;
+  };
+
+  const applyVars = (tpl, vars) => {
+    let out = String(tpl || '');
+    out = out.replace(/%([a-zA-Z0-9_#]+)%/g, (m, k) => (vars[k] != null ? vars[k] : m));
+    out = out.replace(/\{\{\s*([a-zA-Z0-9_#]+)\s*\}\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
+    return out;
+  };
+
+  const formatValidity = (v) => {
+    if (!v) return '-';
+    const s = String(v).trim();
+    const mDay = s.match(/^(\d+)\s*d$/i);
+    if (mDay) return `${Number(mDay[1])} hari`;
+    return s;
+  };
+
+  let renderedHtml = '';
+  let templateError = '';
+  const builtinTemplate = (name) => {
+    const phone = (Array.isArray(settings.whatsapp_admin_numbers) && settings.whatsapp_admin_numbers.length > 0)
+      ? ('+' + String(settings.whatsapp_admin_numbers[0]))
+      : String(settings.company_phone || '');
+    const companyName = settings.company_header || company();
+    const timeStamp = new Date().toISOString();
+    const priceNumber = Number(batch.price || 0);
+    const priceText = priceNumber.toLocaleString('id-ID');
+    const validityText = formatValidity(batch.validity);
+
+    const rows = (vouchers || []).map((v, i) => {
+      const credential = (String(v.code) === String(v.password))
+        ? escapeHtml(String(v.code))
+        : `U: ${escapeHtml(v.code)}<br>P: ${escapeHtml(v.password)}`;
+      return {
+        idx: i + 1,
+        username: escapeHtml(v.code),
+        password: escapeHtml(v.password),
+        credential,
+        profile: escapeHtml(batch.profile_name || v.profile_name || ''),
+        company: escapeHtml(companyName),
+        phone: escapeHtml(phone),
+        timeStamp: escapeHtml(timeStamp),
+        currency: 'Rp',
+        price: escapeHtml(String(priceNumber)),
+        priceText: escapeHtml(priceText),
+        validity: escapeHtml(batch.validity || ''),
+        validityText: escapeHtml(validityText),
+      };
+    });
+
+    if (name === 'mks') {
+      const css = `<style>
+@page{size:A4;margin:6mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;color:#0f172a}
+.v-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.vc{border:1px solid #0f172a;border-radius:10px;min-height:110px;padding:8px;position:relative;break-inside:avoid;overflow:hidden}
+.vc:before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,rgba(59,130,246,.03),rgba(16,185,129,.025))}
+.vc>*{position:relative}
+.vh{font-weight:900;font-size:11px;letter-spacing:.2px}
+.vp{position:absolute;top:8px;right:8px;font-size:10.5px;font-weight:800;background:rgba(16,185,129,.16);border:1px solid rgba(16,185,129,.35);padding:2px 7px;border-radius:999px}
+.vm{font-size:10px;color:#334155;margin-top:6px}
+.vu{font-weight:950;font-size:18px;letter-spacing:1px;margin-top:8px;font-family:Consolas,monospace;line-height:1.15}
+.vf{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);font-size:9.5px;color:#334155;white-space:nowrap}
+</style>`;
+      const html = rows.map(r => `<div class="vc">
+  <div class="vh">${r.company}</div>
+  <div class="vp">${r.currency} ${r.priceText}</div>
+  <div class="vm">${r.profile} • ${r.validityText}</div>
+  <div class="vu">${r.credential}</div>
+  <div class="vf">WA: ${r.phone}</div>
+</div>`).join('\n');
+      return `${css}<div class="v-grid">\n${html}\n</div>`;
+    }
+
+    if (name === 'simple') {
+      const css = `<style>
+@page{size:A4;margin:6mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;color:#0f172a}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.card{border:1.5px solid #334155;border-radius:10px;padding:8px 8px 22px;min-height:110px;position:relative;break-inside:avoid}
+.hd{font-weight:800;font-size:11px}
+.code{font-weight:900;font-size:22px;letter-spacing:2px;margin-top:6px;font-family:Consolas,monospace}
+.meta{font-size:10px;color:#334155;margin-top:4px}
+.wa{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);font-size:9.5px;color:#334155;white-space:nowrap}
+</style>`;
+      const html = rows.map(r => `<div class="card">
+  <div class="hd">${r.company}</div>
+  <div class="meta">${r.profile} • ${r.validityText} • ${r.currency} ${r.priceText}</div>
+  <div class="code">${r.username}</div>
+  <div class="meta">${r.password}</div>
+  <div class="wa">WA: ${r.phone}</div>
+</div>`).join('\n');
+      return `${css}<div class="grid">\n${html}\n</div>`;
+    }
+
+    if (name === 'minimal') {
+      const css = `<style>
+@page{size:A4;margin:6mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;color:#0f172a}
+.g{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.c{border:1px dashed #334155;border-radius:8px;padding:6px 6px 18px;min-height:84px;position:relative;break-inside:avoid}
+.t{font-weight:900;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m{font-size:9.5px;color:#334155;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.k{font-weight:950;font-size:18px;letter-spacing:2px;margin-top:8px;font-family:Consolas,monospace}
+.w{position:absolute;left:6px;right:6px;bottom:5px;font-size:9px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>`;
+      const html = rows.map(r => `<div class="c">
+  <div class="t">${r.company}</div>
+  <div class="m">${r.profile}</div>
+  <div class="k">${r.username}</div>
+  <div class="w">${r.validityText} • ${r.currency} ${r.priceText} • ${r.phone}</div>
+</div>`).join('\n');
+      return `${css}<div class="g">\n${html}\n</div>`;
+    }
+
+    return '';
+  };
+
+  if (style === 'mks' || style === 'simple' || style === 'minimal') {
+    renderedHtml = builtinTemplate(style);
+  } else if (style === 'template') {
+    const headerTpl = String(settings.voucher_print_template_header || '');
+    const rowTpl = String(settings.voucher_print_template_row || '');
+    const footerTpl = String(settings.voucher_print_template_footer || '');
+
+    if (rowTpl.trim()) {
+      const looksLikePhpOnly = (tpl) => {
+        const s = String(tpl || '');
+        const hasHtml = /<\s*[a-zA-Z][^>]*>/.test(s);
+        const phpSignals = /(\$[a-zA-Z_])|(\bif\s*\()|(\bsubstr\s*\()|(\bstrlen\s*\()|(\belse(if)?\b)|(\bforeach\b)/.test(s);
+        const manyPhp = (s.match(/\$/g) || []).length >= 3;
+        return !hasHtml && (phpSignals || manyPhp);
+      };
+      const combined = `${headerTpl}\n${rowTpl}\n${footerTpl}`;
+      if (/<\?(?:php)?/i.test(combined) || looksLikePhpOnly(combined)) {
+        templateError = 'Template yang dipaste masih format PHP (Mikhmon). Di sini hanya mendukung template HTML + placeholder (%username% dll).';
+      }
+
+      const phone = (Array.isArray(settings.whatsapp_admin_numbers) && settings.whatsapp_admin_numbers.length > 0)
+        ? ('+' + String(settings.whatsapp_admin_numbers[0]))
+        : String(settings.company_phone || '');
+      const timeStamp = new Date().toISOString();
+      const priceNumber = Number(batch.price || 0);
+      const priceText = priceNumber.toLocaleString('id-ID');
+      const validityText = formatValidity(batch.validity);
+
+      const parts = [];
+      parts.push(stripUnsafe(applyVars(headerTpl, {
+        company: escapeHtml(settings.company_header || company()),
+        phone: escapeHtml(phone),
+        timeStamp: escapeHtml(timeStamp),
+        currency: 'Rp',
+        validityText: escapeHtml(validityText),
+        priceText: escapeHtml(priceText)
+      })));
+
+      vouchers.forEach((v, i) => {
+        const credential = (String(v.code) === String(v.password))
+          ? escapeHtml(String(v.code))
+          : `U: ${escapeHtml(v.code)}<br>P: ${escapeHtml(v.password)}`;
+        const vars = {
+          username: escapeHtml(v.code),
+          password: escapeHtml(v.password),
+          profile: escapeHtml(batch.profile_name || v.profile_name || ''),
+          validity: escapeHtml(batch.validity || ''),
+          validityText: escapeHtml(validityText),
+          price: escapeHtml(String(priceNumber)),
+          priceText: escapeHtml(priceText),
+          currency: 'Rp',
+          company: escapeHtml(settings.company_header || company()),
+          phone: escapeHtml(phone),
+          timeStamp: escapeHtml(timeStamp),
+          '#': escapeHtml(String(i + 1)),
+          credential
+        };
+        parts.push(stripUnsafe(applyVars(rowTpl, vars)));
+      });
+
+      parts.push(stripUnsafe(applyVars(footerTpl, {
+        company: escapeHtml(settings.company_header || company()),
+        phone: escapeHtml(phone),
+        timeStamp: escapeHtml(timeStamp),
+        currency: 'Rp',
+        validityText: escapeHtml(validityText),
+        priceText: escapeHtml(priceText)
+      })));
+
+      renderedHtml = parts.join('\n');
+    }
+  }
+
+  let finalStyle = style;
+  if (finalStyle === 'template') {
+    const s = String(renderedHtml || '').trim();
+    if (!s || !/<\s*[a-zA-Z][^>]*>/.test(s) || templateError) {
+      renderedHtml = '';
+      finalStyle = 'cards';
+    }
+  }
+
   res.render('admin/print_vouchers', {
     title: 'Cetak Voucher',
     company: company(),
-    settings: getSettings(),
+    settings,
     batch,
-    vouchers
+    vouchers,
+    style: finalStyle,
+    renderedHtml,
+    templateError
   });
 });
 

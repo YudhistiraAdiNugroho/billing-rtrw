@@ -3,6 +3,8 @@ const path = require('path');
 const dns = require('dns');
 require('dotenv').config();
 const { logger } = require('./config/logger');
+const db = require('./config/database');
+const customerSvc = require('./services/customerService');
 
 // Prefer IPv4 to avoid AggregateError (IPv6 timeouts) on some servers
 if (dns.setDefaultResultOrder) {
@@ -70,6 +72,157 @@ app.get('/lang/:lang', (req, res) => {
 // Konstanta
 const VERSION = '2.0.0';
 
+const insertWebhookPaymentNotif = db.prepare(`
+  INSERT INTO webhook_payment_notifs (service, content, parsed_amount, parsed_ok, ip, user_agent)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+
+const updateWebhookPaymentNotifMatch = db.prepare(`
+  UPDATE webhook_payment_notifs
+  SET matched_invoice_id = ?
+  WHERE id = ?
+`);
+
+const selectInvoiceByUniqueAmount = db.prepare(`
+  SELECT i.id, i.customer_id, i.status, i.amount, i.qris_amount_unique, i.qris_unique_code, i.notes,
+         c.status as customer_status
+  FROM invoices i
+  JOIN customers c ON c.id = i.customer_id
+  WHERE i.status = 'unpaid' AND i.qris_amount_unique = ?
+  ORDER BY i.id DESC
+  LIMIT 2
+`);
+
+const markInvoicePaidAppendNote = db.prepare(`
+  UPDATE invoices
+  SET status='paid',
+      paid_at=CURRENT_TIMESTAMP,
+      paid_by_name=?,
+      notes=CASE
+        WHEN notes IS NULL OR TRIM(notes) = '' THEN ?
+        ELSE notes || '\n' || ?
+      END,
+      qris_paid_notif_id=?
+  WHERE id=?
+`);
+
+const countUnpaidInvoicesForCustomer = db.prepare(`SELECT COUNT(1) as c FROM invoices WHERE customer_id=? AND status='unpaid'`);
+
+function parseRupiahAmountFromNotification(content) {
+  const text = String(content || '').replace(/\u00A0/g, ' ').trim();
+  if (!text) return null;
+
+  const candidates = [
+    /(?:\bRp\.?\s*|IDR\s*)([0-9][0-9\.\,\s]*)/i,
+    /(?:sebesar|senilai|nominal|masuk|transfer|top\s*up|topup|saldo\s+masuk)\s*(?:saldo\s*)?(?:\bRp\.?\s*)?([0-9][0-9\.\,\s]*)/i,
+  ];
+
+  let raw = null;
+  for (const re of candidates) {
+    const m = text.match(re);
+    if (m && m[1]) {
+      raw = String(m[1]);
+      break;
+    }
+  }
+  if (!raw) return null;
+
+  let num = raw.replace(/\s+/g, '');
+  if (num.includes(',')) num = num.split(',')[0];
+  num = num.replace(/\./g, '');
+  num = num.replace(/[^\d]/g, '');
+  if (!num) return null;
+
+  const amount = Number.parseInt(num, 10);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+app.post('/api/webhook/v1/payment-notif', async (req, res) => {
+  const { service, content, secret_key } = req.body || {};
+  const expected = process.env.MY_WEBHOOK_SECRET;
+
+  if (!expected || typeof expected !== 'string' || expected.length < 8) {
+    logger.error('[WEBHOOK][payment-notif] MY_WEBHOOK_SECRET belum diset (minimal 8 karakter). Request ditolak.');
+    return res.status(403).send('Forbidden');
+  }
+
+  if (String(secret_key || '') !== expected) {
+    logger.warn(`[WEBHOOK][payment-notif] Forbidden: secret_key mismatch. service=${String(service || '-')}`);
+    return res.status(403).send('Forbidden');
+  }
+
+  const rawText = String(content || '');
+  logger.info(`[WEBHOOK][payment-notif] IN service=${String(service || '-')} content="${rawText.replace(/\r?\n/g, ' ').slice(0, 500)}"`);
+
+  try {
+    const amount = parseRupiahAmountFromNotification(rawText);
+    const ip = String((req.headers['x-forwarded-for'] || '').toString().split(',')[0].trim() || req.ip || '');
+    const ua = String(req.get('user-agent') || '');
+    let notifId = null;
+    try {
+      const r = insertWebhookPaymentNotif.run(
+        String(service || ''),
+        rawText,
+        amount != null ? amount : null,
+        amount != null ? 1 : 0,
+        ip,
+        ua
+      );
+      notifId = Number(r?.lastInsertRowid || 0) || null;
+    } catch (e) {
+      logger.error(`[WEBHOOK][payment-notif] DB log insert failed: ${e && e.message ? e.message : String(e)}`);
+    }
+
+    let matchedInvoiceId = null;
+    if (amount != null) {
+      try {
+        const candidates = selectInvoiceByUniqueAmount.all(amount);
+        if (Array.isArray(candidates) && candidates.length === 1) {
+          const inv = candidates[0];
+          const invId = Number(inv.id || 0);
+          const custId = Number(inv.customer_id || 0);
+          if (invId > 0) {
+            const noteLine = `AUTO-QRIS: cocok nominal unik Rp ${amount} (service=${String(service || '-')}, notif=${notifId || '-'})`;
+            markInvoicePaidAppendNote.run('QRIS', noteLine, noteLine, notifId || null, invId);
+            matchedInvoiceId = invId;
+
+            if (notifId) {
+              try { updateWebhookPaymentNotifMatch.run(invId, notifId); } catch {}
+            }
+
+            if (custId > 0 && String(inv.customer_status || '') === 'suspended') {
+              const cnt = countUnpaidInvoicesForCustomer.get(custId);
+              const unpaid = Number(cnt?.c || 0);
+              if (unpaid === 0) {
+                try { await customerSvc.activateCustomer(custId); } catch (e) {
+                  logger.error(`[WEBHOOK][payment-notif] Activate customer failed: ${e && e.message ? e.message : String(e)}`);
+                }
+              }
+            }
+
+            logger.info(`[WEBHOOK][payment-notif] MATCH invoice=${invId} amount=${amount}`);
+          }
+        } else if (Array.isArray(candidates) && candidates.length > 1) {
+          logger.error(`[WEBHOOK][payment-notif] MATCH ambiguous: amount=${amount} candidates=${candidates.map(x => x.id).join(',')}`);
+        }
+      } catch (e) {
+        logger.error(`[WEBHOOK][payment-notif] MATCH error: ${e && e.message ? e.message : String(e)}`);
+      }
+    }
+
+    if (amount != null) {
+      logger.info(`[WEBHOOK][payment-notif] PARSED service=${String(service || '-')} amount=${amount}`);
+      return res.status(200).json({ status: 'processed', parsed: true, amount, matched_invoice_id: matchedInvoiceId });
+    }
+
+    logger.error(`[WEBHOOK][payment-notif] FAILED parse: "${rawText.replace(/\r?\n/g, ' ').slice(0, 500)}"`);
+    return res.status(200).json({ status: 'processed', parsed: false, amount: null });
+  } catch (err) {
+    logger.error(`[WEBHOOK][payment-notif] ERROR ${err && err.stack ? err.stack : String(err)}`);
+    return res.status(200).json({ status: 'processed', parsed: false, amount: null });
+  }
+});
+
 // Inisialisasi database billing
 try {
   require('./config/database');
@@ -113,6 +266,23 @@ app.set('views', path.join(__dirname, 'views'));
 app.get('/manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json');
   res.sendFile(path.join(__dirname, 'public', 'manifest.webmanifest'));
+});
+app.get('/admin/manifest.webmanifest', (req, res) => {
+  res.type('application/manifest+json');
+  res.send({
+    name: 'Admin Billing',
+    short_name: 'Admin',
+    start_url: '/admin/settings?source=pwa',
+    scope: '/admin/',
+    display: 'standalone',
+    orientation: 'portrait',
+    background_color: '#0f172a',
+    theme_color: '#0f172a',
+    icons: [
+      { src: '/img/pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+      { src: '/img/logo.png', sizes: '2000x545', type: 'image/png', purpose: 'any' }
+    ]
+  });
 });
 app.use(express.static(path.join(__dirname, 'public')));
 // Mount customer portal
