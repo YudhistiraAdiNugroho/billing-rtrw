@@ -233,6 +233,17 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS webhook_payment_notifs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service TEXT DEFAULT '',
+    content TEXT NOT NULL,
+    parsed_amount INTEGER,
+    parsed_ok INTEGER NOT NULL DEFAULT 0,
+    ip TEXT DEFAULT '',
+    user_agent TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE INDEX IF NOT EXISTS idx_voucher_batches_router ON voucher_batches(router_id);
   CREATE INDEX IF NOT EXISTS idx_vouchers_batch ON vouchers(batch_id);
   CREATE INDEX IF NOT EXISTS idx_vouchers_code ON vouchers(code);
@@ -244,6 +255,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_agent_prices_router_profile ON agent_hotspot_prices(router_id, profile_name);
   CREATE INDEX IF NOT EXISTS idx_agent_tx_agent ON agent_transactions(agent_id);
   CREATE INDEX IF NOT EXISTS idx_agent_tx_created ON agent_transactions(created_at);
+
+  CREATE INDEX IF NOT EXISTS idx_webhook_payment_notifs_created ON webhook_payment_notifs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_webhook_payment_notifs_service ON webhook_payment_notifs(service);
 `);
 
 // Tambahkan kolom baru jika belum ada
@@ -286,6 +300,12 @@ try { db.exec("ALTER TABLE invoices ADD COLUMN payment_reference TEXT"); } catch
 try { db.exec("ALTER TABLE invoices ADD COLUMN payment_payload TEXT"); } catch (e) {}
 try { db.exec("ALTER TABLE invoices ADD COLUMN payment_expires_at DATETIME"); } catch (e) {}
 
+// Kolom untuk QRIS statis (semi-otomatis via nominal unik)
+try { db.exec("ALTER TABLE invoices ADD COLUMN qris_unique_code INTEGER"); } catch (e) {}
+try { db.exec("ALTER TABLE invoices ADD COLUMN qris_amount_unique INTEGER"); } catch (e) {}
+try { db.exec("ALTER TABLE invoices ADD COLUMN qris_assigned_at DATETIME"); } catch (e) {}
+try { db.exec("ALTER TABLE invoices ADD COLUMN qris_paid_notif_id INTEGER"); } catch (e) {}
+
 // Kolom untuk Login OLT (Web/API)
 try { db.exec("ALTER TABLE olts ADD COLUMN web_user TEXT DEFAULT 'admin'"); } catch (e) {}
 try { db.exec("ALTER TABLE olts ADD COLUMN web_password TEXT DEFAULT 'admin'"); } catch (e) {}
@@ -296,5 +316,8 @@ try { db.exec("ALTER TABLE vouchers ADD COLUMN last_seen_uptime TEXT DEFAULT ''"
 try { db.exec("ALTER TABLE vouchers ADD COLUMN last_seen_at DATETIME"); } catch (e) {}
 try { db.exec("ALTER TABLE voucher_batches ADD COLUMN mode TEXT DEFAULT 'voucher'"); } catch (e) {}
 try { db.exec("ALTER TABLE voucher_batches ADD COLUMN charset TEXT DEFAULT 'numbers'"); } catch (e) {}
+
+// Relasi notifikasi webhook → invoice (untuk audit)
+try { db.exec("ALTER TABLE webhook_payment_notifs ADD COLUMN matched_invoice_id INTEGER"); } catch (e) {}
 
 module.exports = db;
