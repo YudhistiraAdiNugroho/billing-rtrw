@@ -11,19 +11,19 @@
     <p class="text-secondary mt-2 small"><%= t('tech.history_page.empty', 'Belum ada riwayat tugas yang diselesaikan.') %></p>
   </div>
 <% } else { %>
-  <% tickets.forEach(t => { %>
+  <% tickets.forEach(ticket => { %>
     <div class="t-card border-success border-opacity-25" style="opacity: 0.8;">
       <div class="d-flex justify-content-between align-items-start mb-2">
         <span class="badge-status badge-resolved">
           <i class="bi bi-check-circle-fill"></i> <%= t('tech.ticket.resolved', 'Selesai') %>
         </span>
-        <span class="text-secondary" style="font-size: 11px;"><%= new Date(t.updated_at).toLocaleString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'}) %></span>
+        <span class="text-secondary" style="font-size: 11px;"><%= new Date(ticket.updated_at).toLocaleString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'}) %></span>
       </div>
       
-      <div class="fw-bold mb-1" style="font-size: 14px;"><%= t.customer_name %></div>
+      <div class="fw-bold mb-1" style="font-size: 14px;"><%= ticket.customer_name %></div>
       
       <div class="text-secondary" style="font-size: 12px;">
-        <i class="bi bi-tools me-1"></i><%= t.subject %>
+        <i class="bi bi-tools me-1"></i><%= ticket.subject %>
       </div>
     </div>
   <% }) %>

@@ -64,40 +64,40 @@
           <% if (tickets.length===0) { %>
             <tr><td colspan="7" class="text-center text-muted" style="padding:32px"><%= t('admin.tickets.empty', 'Tidak ada tiket keluhan') %></td></tr>
           <% } %>
-          <% tickets.forEach((t) => { %>
+          <% tickets.forEach((ticket) => { %>
             <tr>
-              <td class="text-muted">#<%= t.id %></td>
+              <td class="text-muted">#<%= ticket.id %></td>
               <td style="font-size:12px;color:var(--muted)">
-                <%= new Date(t.created_at).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'short'}) %>
+                <%= new Date(ticket.created_at).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'short'}) %>
               </td>
               <td>
-                <div class="fw6"><%= t.customer_name %></div>
-                <div style="font-size:11px;color:var(--muted)"><%= t.customer_phone || '-' %></div>
+                <div class="fw6"><%= ticket.customer_name %></div>
+                <div style="font-size:11px;color:var(--muted)"><%= ticket.customer_phone || '-' %></div>
               </td>
-              <td style="color:var(--primary)"><%= t.subject %></td>
+              <td style="color:var(--primary)"><%= ticket.subject %></td>
               <td>
-                <% if (t.technician_name) { %>
-                  <div class="fw6" style="font-size:12px"><i class="bi bi-person-badge me-1"></i><%= t.technician_name %></div>
+                <% if (ticket.technician_name) { %>
+                  <div class="fw6" style="font-size:12px"><i class="bi bi-person-badge me-1"></i><%= ticket.technician_name %></div>
                 <% } else { %>
                   <span class="text-muted small"><%= t('admin.tickets.no_technician', 'Belum ada') %></span>
                 <% } %>
               </td>
               <td>
-                <% if(t.status==='open'){%><span class="badge bd"><%= t('admin.tickets.status.open', 'Belum Ditangani') %></span>
-                <%}else if(t.status==='in_progress'){%><span class="badge bw"><%= t('admin.tickets.status.working_short', 'Dikerjakan') %></span>
+                <% if(ticket.status==='open'){%><span class="badge bd"><%= t('admin.tickets.status.open', 'Belum Ditangani') %></span>
+                <%}else if(ticket.status==='in_progress'){%><span class="badge bw"><%= t('admin.tickets.status.working_short', 'Dikerjakan') %></span>
                 <%}else{%><span class="badge bs"><%= t('admin.tickets.status.resolved', 'Selesai') %></span><%}%>
               </td>
               <td>
                 <button class="btn btn-g btn-icon btn-sm update-btn" title="<%= t('admin.tickets.actions.update_status', 'Update Status') %>"
-                  data-id="<%= t.id %>"
-                  data-status="<%= t.status %>"
-                  data-message="<%= t.message %>"
-                  data-subject="<%= t.subject %>"
-                  data-customer="<%= t.customer_name %>"
-                  data-tech="<%= t.technician_name || t('admin.tickets.no_technician', 'Belum ada') %>">
+                  data-id="<%= ticket.id %>"
+                  data-status="<%= ticket.status %>"
+                  data-message="<%= ticket.message %>"
+                  data-subject="<%= ticket.subject %>"
+                  data-customer="<%= ticket.customer_name %>"
+                  data-tech="<%= ticket.technician_name || t('admin.tickets.no_technician', 'Belum ada') %>">
                   <i class="bi bi-pencil"></i>
                 </button>
-                <form method="POST" action="/admin/tickets/<%= t.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.tickets.confirm.delete', 'Hapus keluhan ini?') %>')">
+                <form method="POST" action="/admin/tickets/<%= ticket.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.tickets.confirm.delete', 'Hapus keluhan ini?') %>')">
                   <button class="btn btn-d btn-icon btn-sm" title="<%= t('common.delete', 'Hapus') %>"><i class="bi bi-trash"></i></button>
                 </form>
               </td>

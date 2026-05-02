@@ -64,30 +64,30 @@
             <% if (!txs || txs.length === 0) { %>
               <tr><td colspan="8" class="text-center text-muted" style="padding:24px"><%= t('admin.agent_reports.empty', 'Belum ada transaksi.') %></td></tr>
             <% } else { %>
-              <% txs.forEach(t => { %>
+              <% txs.forEach(tx => { %>
                 <tr>
-                  <td style="font-size:11px;color:var(--muted)"><%= t.created_at ? new Date(t.created_at).toLocaleString((lang || 'id') === 'en' ? 'en-US' : 'id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-' %></td>
-                  <td class="fw6"><%= t.agent_name %></td>
+                  <td style="font-size:11px;color:var(--muted)"><%= tx.created_at ? new Date(tx.created_at).toLocaleString((lang || 'id') === 'en' ? 'en-US' : 'id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-' %></td>
+                  <td class="fw6"><%= tx.agent_name %></td>
                   <td>
-                    <span class="badge <%= t.type==='topup' ? 'bs' : (t.type==='invoice_payment' ? 'bm' : (t.type==='voucher_sale' ? 'bp' : 'bd')) %>">
-                      <%= t.type === 'topup' ? t('admin.agent_reports.type.topup', 'TOPUP') : (t.type === 'invoice_payment' ? t('admin.agent_reports.type.invoice', 'TAGIHAN') : (t.type === 'voucher_sale' ? t('admin.agent_reports.type.voucher', 'VOUCHER') : t('admin.agent_reports.type.adjust', 'ADJUST'))) %>
+                    <span class="badge <%= tx.type==='topup' ? 'bs' : (tx.type==='invoice_payment' ? 'bm' : (tx.type==='voucher_sale' ? 'bp' : 'bd')) %>">
+                      <%= tx.type === 'topup' ? t('admin.agent_reports.type.topup', 'TOPUP') : (tx.type === 'invoice_payment' ? t('admin.agent_reports.type.invoice', 'TAGIHAN') : (tx.type === 'voucher_sale' ? t('admin.agent_reports.type.voucher', 'VOUCHER') : t('admin.agent_reports.type.adjust', 'ADJUST'))) %>
                     </span>
                   </td>
                   <td style="font-size:12px">
-                    <% if (t.type === 'invoice_payment') { %>
-                      <div class="fw6"><%= t.customer_name || '-' %></div>
-                      <div class="text-muted" style="font-size:11px"><%= t('admin.agent_reports.invoice_prefix', 'INV #') %><%= t.invoice_id %> &bull; Rp <%= Number(t.amount_invoice||0).toLocaleString('id-ID') %></div>
-                    <% } else if (t.type === 'voucher_sale') { %>
-                      <div class="fw6"><%= t.profile_name || '-' %> <span class="text-muted" style="font-size:11px"><%= t.router_name ? '(' + t.router_name + ')' : '' %></span></div>
-                      <div class="text-muted" style="font-size:11px"><code><%= t.voucher_code %></code> / <code><%= t.voucher_password %></code></div>
+                    <% if (tx.type === 'invoice_payment') { %>
+                      <div class="fw6"><%= tx.customer_name || '-' %></div>
+                      <div class="text-muted" style="font-size:11px"><%= t('admin.agent_reports.invoice_prefix', 'INV #') %><%= tx.invoice_id %> &bull; Rp <%= Number(tx.amount_invoice||0).toLocaleString('id-ID') %></div>
+                    <% } else if (tx.type === 'voucher_sale') { %>
+                      <div class="fw6"><%= tx.profile_name || '-' %> <span class="text-muted" style="font-size:11px"><%= tx.router_name ? '(' + tx.router_name + ')' : '' %></span></div>
+                      <div class="text-muted" style="font-size:11px"><code><%= tx.voucher_code %></code> / <code><%= tx.voucher_password %></code></div>
                     <% } else { %>
-                      <div class="text-muted"><%= t.note || '-' %></div>
+                      <div class="text-muted"><%= tx.note || '-' %></div>
                     <% } %>
                   </td>
-                  <td class="num fw6" style="color:var(--danger)">Rp <%= Number(t.amount_buy||0).toLocaleString('id-ID') %></td>
-                  <td class="num">Rp <%= Number(t.amount_sell||0).toLocaleString('id-ID') %></td>
-                  <td class="num" style="color:var(--success)">Rp <%= Number(t.fee||0).toLocaleString('id-ID') %></td>
-                  <td class="num fw6">Rp <%= Number(t.balance_after||0).toLocaleString('id-ID') %></td>
+                  <td class="num fw6" style="color:var(--danger)">Rp <%= Number(tx.amount_buy||0).toLocaleString('id-ID') %></td>
+                  <td class="num">Rp <%= Number(tx.amount_sell||0).toLocaleString('id-ID') %></td>
+                  <td class="num" style="color:var(--success)">Rp <%= Number(tx.fee||0).toLocaleString('id-ID') %></td>
+                  <td class="num fw6">Rp <%= Number(tx.balance_after||0).toLocaleString('id-ID') %></td>
                 </tr>
               <% }) %>
             <% } %>

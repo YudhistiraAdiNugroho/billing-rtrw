@@ -575,44 +575,44 @@
           <div class="text-muted" style="color:var(--muted)!important;font-size:12px"><%= t('agent.no_transactions', 'Belum ada transaksi.') %></div>
         <% } else { %>
           <div class="listx">
-            <% txs.forEach(t => { %>
+            <% txs.forEach(tx => { %>
               <div class="itemx">
                 <div class="top">
                   <div style="min-width:0">
                     <div class="t1">
-                      <% if (t.type === 'topup') { %>
+                      <% if (tx.type === 'topup') { %>
                         <%= t('agent.tx_type.topup', 'TOPUP') %>
-                      <% } else if (t.type === 'invoice_payment') { %>
+                      <% } else if (tx.type === 'invoice_payment') { %>
                         <%= t('agent.tx_type.invoice', 'TAGIHAN') %>
-                      <% } else if (t.type === 'voucher_sale') { %>
+                      <% } else if (tx.type === 'voucher_sale') { %>
                         <%= t('agent.tx_type.voucher', 'VOUCHER') %>
                       <% } else { %>
                         <%= t('agent.tx_type.generic', 'TRANSAKSI') %>
                       <% } %>
-                      <span style="color:var(--muted);font-size:11px">• <%= t.created_at ? new Date(t.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-' %></span>
+                      <span style="color:var(--muted);font-size:11px">• <%= tx.created_at ? new Date(tx.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-' %></span>
                     </div>
                     <div class="t2">
-                      <% if (t.type === 'invoice_payment') { %>
-                        Invoice #<%= t.invoice_id %> • Rp <%= Number(t.amount_invoice||0).toLocaleString('id-ID') %>
-                      <% } else if (t.type === 'voucher_sale') { %>
-                        <%= t.profile_name %> • <code><%= t.voucher_code %></code>
+                      <% if (tx.type === 'invoice_payment') { %>
+                        Invoice #<%= tx.invoice_id %> • Rp <%= Number(tx.amount_invoice||0).toLocaleString('id-ID') %>
+                      <% } else if (tx.type === 'voucher_sale') { %>
+                        <%= tx.profile_name %> • <code><%= tx.voucher_code %></code>
                       <% } else { %>
-                        <%= t.note || '-' %>
+                        <%= tx.note || '-' %>
                       <% } %>
                     </div>
                   </div>
                   <div class="text-end">
-                    <div class="fw-bold">Rp <%= Number(t.balance_after||0).toLocaleString('id-ID') %></div>
-                    <% if (t.type === 'topup') { %>
-                      <span class="badgey s"><i class="bi bi-plus-circle"></i> +Rp <%= Number(t.amount_buy||0).toLocaleString('id-ID') %></span>
+                    <div class="fw-bold">Rp <%= Number(tx.balance_after||0).toLocaleString('id-ID') %></div>
+                    <% if (tx.type === 'topup') { %>
+                      <span class="badgey s"><i class="bi bi-plus-circle"></i> +Rp <%= Number(tx.amount_buy||0).toLocaleString('id-ID') %></span>
                     <% } else { %>
-                      <span class="badgey d"><i class="bi bi-dash-circle"></i> -Rp <%= Number(t.amount_buy||0).toLocaleString('id-ID') %></span>
+                      <span class="badgey d"><i class="bi bi-dash-circle"></i> -Rp <%= Number(tx.amount_buy||0).toLocaleString('id-ID') %></span>
                     <% } %>
                   </div>
                 </div>
-                <% if (t.type === 'voucher_sale' || t.type === 'invoice_payment') { %>
+                <% if (tx.type === 'voucher_sale' || tx.type === 'invoice_payment') { %>
                   <div class="tx-actions">
-                    <a class="btn-mini" href="/agent/print/tx/<%= t.id %>" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px">
+                    <a class="btn-mini" href="/agent/print/tx/<%= tx.id %>" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px">
                       <i class="bi bi-printer"></i> <%= t('agent.print_thermal', 'Print Thermal') %>
                     </a>
                   </div>

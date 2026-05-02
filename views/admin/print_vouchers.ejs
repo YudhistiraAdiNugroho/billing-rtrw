@@ -8,6 +8,8 @@
     @page { size: A4; margin: 6mm; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #0f172a; }
+    .tpl { width: 100%; }
+    .tpl .page-break { break-after: page; page-break-after: always; }
     .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .card { border: 1.5px solid #334155; border-radius: 10px; padding: 8px 8px 22px; min-height: 110px; position: relative; overflow: hidden; display:flex; gap: 10px; align-items:stretch; break-inside: avoid; page-break-inside: avoid; }
     .card::before { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(59,130,246,.03), rgba(16,185,129,.025)); }
@@ -48,37 +50,46 @@
       return s;
     }
   %>
-  <div class="grid">
-    <% vouchers.forEach(v => { %>
-      <div class="card">
-        <div class="left">
-          <div class="row">
-            <div class="co"><%= settings.company_header || company %></div>
-          </div>
-          <div class="row" style="margin-top:6px">
-            <div class="pills"></div>
-          </div>
-          <% if (v.code !== v.password) { %>
-            <div class="foot">
-              <div class="muted"><%= t('admin.print_vouchers.hint_user_pass', 'Masukkan User (U) dan Pass (P).') %></div>
+  <% if (templateError) { %>
+    <div class="no-print" style="padding:10px 12px;background:#fff7ed;border:1px solid #fb923c;margin:8px;border-radius:8px;font-size:12px">
+      <b>Template Print:</b> <%= templateError %>
+    </div>
+  <% } %>
+  <% if (style === 'template' && renderedHtml) { %>
+    <div class="tpl"><%- renderedHtml %></div>
+  <% } else { %>
+    <div class="grid">
+      <% vouchers.forEach(v => { %>
+        <div class="card">
+          <div class="left">
+            <div class="row">
+              <div class="co"><%= settings.company_header || company %></div>
             </div>
-          <% } %>
+            <div class="row" style="margin-top:6px">
+              <div class="pills"></div>
+            </div>
+            <% if (v.code !== v.password) { %>
+              <div class="foot">
+                <div class="muted"><%= t('admin.print_vouchers.hint_user_pass', 'Masukkan User (U) dan Pass (P).') %></div>
+              </div>
+            <% } %>
+          </div>
+          <div class="right">
+            <div class="pill price-pill price-top">💰 Rp <%= Number(batch.price || 0).toLocaleString('id-ID') %></div>
+            <% if (v.code === v.password) { %>
+              <div class="code"><%= v.code %></div>
+              <div class="pw right-meta">⏳ <%= formatValidity(batch.validity) %></div>
+            <% } else { %>
+              <div class="code" style="font-size:16px; letter-spacing:1px">U: <%= v.code %></div>
+              <div class="code" style="font-size:16px; letter-spacing:1px; margin-top:4px">P: <%= v.password %></div>
+              <div class="pw right-meta">⏳ <%= formatValidity(batch.validity) %></div>
+            <% } %>
+          </div>
+          <div class="wa-btm"><%= t('admin.print_vouchers.contact_label', 'Telp/WA') %>: <%= (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) ? '+' + settings.whatsapp_admin_numbers[0] : (settings.company_phone || '-') %></div>
         </div>
-        <div class="right">
-          <div class="pill price-pill price-top">💰 Rp <%= Number(batch.price || 0).toLocaleString('id-ID') %></div>
-          <% if (v.code === v.password) { %>
-            <div class="code"><%= v.code %></div>
-            <div class="pw right-meta">⏳ <%= formatValidity(batch.validity) %></div>
-          <% } else { %>
-            <div class="code" style="font-size:16px; letter-spacing:1px">U: <%= v.code %></div>
-            <div class="code" style="font-size:16px; letter-spacing:1px; margin-top:4px">P: <%= v.password %></div>
-            <div class="pw right-meta">⏳ <%= formatValidity(batch.validity) %></div>
-          <% } %>
-        </div>
-        <div class="wa-btm"><%= t('admin.print_vouchers.contact_label', 'Telp/WA') %>: <%= (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) ? '+' + settings.whatsapp_admin_numbers[0] : (settings.company_phone || '-') %></div>
-      </div>
-    <% }) %>
-  </div>
+      <% }) %>
+    </div>
+  <% } %>
 
   <script>
     window.onload = function() {

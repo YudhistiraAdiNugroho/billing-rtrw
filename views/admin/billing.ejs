@@ -104,7 +104,17 @@
                 <span class="badge bm"><%= mns[inv.period_month-1] %> <%= inv.period_year %></span>
               </td>
               <td style="font-size:12px;color:var(--muted)"><%= inv.package_name||'-' %></td>
-              <td class="num fw6" style="color:var(--success)">Rp <%= inv.amount.toLocaleString('id-ID') %></td>
+              <td class="num fw6" style="color:var(--success)">
+                Rp <%= inv.amount.toLocaleString('id-ID') %>
+                <% if (inv.status === 'unpaid' && inv.qris_amount_unique) { %>
+                  <div style="font-size:11px;color:var(--muted);margin-top:4px">
+                    QRIS: <span class="mono">Rp <%= Number(inv.qris_amount_unique).toLocaleString('id-ID') %></span>
+                    <% if (inv.qris_unique_code) { %>
+                      <span class="badge bm" style="margin-left:6px">Kode <%= String(inv.qris_unique_code).padStart(3, "0") %></span>
+                    <% } %>
+                  </div>
+                <% } %>
+              </td>
               <td>
                 <% if(inv.status==='paid'){%><span class="badge bs"><i class="bi bi-check-circle-fill" style="font-size:9px"></i> <%= t('admin.billing.status.paid', 'Lunas') %></span>
                 <%}else{%><span class="badge bd"><i class="bi bi-clock-fill" style="font-size:9px"></i> <%= t('admin.billing.status.unpaid', 'Belum Bayar') %></span><%}%>
@@ -125,7 +135,18 @@
                     data-period="<%= mns[inv.period_month-1] %> <%= inv.period_year %>">
                     <i class="bi bi-check-lg"></i>
                   </button>
-                  <form method="POST" action="/admin/customers/<%= inv.customer_id %>/unisolate" style="display:inline" onsubmit="return confirm('<%= t('admin.billing.confirm.unisolate_without_payment', 'Buka isolir pelanggan ini tanpa bayar?') %>')">
+                  <form method="POST" action="/admin/billing/<%= inv.id %>/qris-assign" style="display:inline" title="Buat nominal unik QRIS (semi-otomatis)" onsubmit="return true">
+                    <button class="btn btn-g btn-icon btn-sm"><i class="bi bi-qr-code"></i></button>
+                  </form>
+                  <% if (inv.qris_amount_unique) { %>
+                    <form method="POST" action="/admin/billing/<%= inv.id %>/qris-assign?force=1" style="display:inline" title="Regenerate kode QRIS" onsubmit="return confirm('Ganti kode QRIS untuk tagihan ini?')">
+                      <button class="btn btn-w btn-icon btn-sm"><i class="bi bi-arrow-repeat"></i></button>
+                    </form>
+                    <form method="POST" action="/admin/billing/<%= inv.id %>/qris-clear" style="display:inline" title="Hapus kode QRIS" onsubmit="return confirm('Hapus kode QRIS dari tagihan ini?')">
+                      <button class="btn btn-d btn-icon btn-sm"><i class="bi bi-x-lg"></i></button>
+                    </form>
+                  <% } %>
+                  <form method="POST" action="/admin/customers/<%= inv.customer_id %>/unisolate" style="display:inline" class="needs-confirm" data-confirm-key="confirmUnisolate">
                     <button class="btn btn-p btn-icon btn-sm" title="<%= t('admin.billing.actions.unisolate', 'Buka Isolir') %>"><i class="bi bi-wifi"></i></button>
                   </form>
                   <form method="POST" action="/admin/billing/<%= inv.id %>/whatsapp" style="display:inline">
@@ -133,14 +154,14 @@
                   </form>
                 <%}else{%>
                   <a href="/admin/billing/<%= inv.id %>/print" target="_blank" class="btn btn-s btn-icon btn-sm" title="<%= t('admin.billing.actions.print_invoice', 'Cetak Struk/Invoice') %>"><i class="bi bi-printer"></i></a>
-                  <form method="POST" action="/admin/billing/<%= inv.id %>/unpay" style="display:inline" onsubmit="return confirm('<%= t('admin.billing.confirm.unpay', 'Batalkan status lunas?') %>')">
+                  <form method="POST" action="/admin/billing/<%= inv.id %>/unpay" style="display:inline" class="needs-confirm" data-confirm-key="confirmUnpay">
                     <button class="btn btn-w btn-icon btn-sm" title="<%= t('admin.billing.actions.unpay', 'Batalkan Lunas') %>"><i class="bi bi-arrow-counterclockwise"></i></button>
                   </form>
                 <%}%>
-                  <form method="POST" action="/admin/customers/<%= inv.customer_id %>/isolate" style="display:inline" onsubmit="return confirm('<%= t('admin.billing.confirm.isolate_manual', 'Isolir pelanggan ini secara manual?') %>')">
+                  <form method="POST" action="/admin/customers/<%= inv.customer_id %>/isolate" style="display:inline" class="needs-confirm" data-confirm-key="confirmIsolateManual">
                     <button class="btn btn-w btn-icon btn-sm" title="<%= t('admin.billing.actions.isolate_manual', 'Isolir Manual') %>"><i class="bi bi-wifi-off"></i></button>
                   </form>
-                  <form method="POST" action="/admin/billing/<%= inv.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.billing.confirm.delete', 'Hapus tagihan ini?') %>')">
+                  <form method="POST" action="/admin/billing/<%= inv.id %>/delete" style="display:inline" class="needs-confirm" data-confirm-key="confirmDelete">
                     <button class="btn btn-d btn-icon btn-sm" title="<%= t('common.delete', 'Hapus') %>"><i class="bi bi-trash"></i></button>
                   </form>
               </td>
@@ -220,15 +241,29 @@
 function openModal(id){document.getElementById(id).classList.add('show')}
 function closeModal(id){document.getElementById(id).classList.remove('show')}
 document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show')}));
-const MONTHS = <%- JSON.stringify((lang === 'en')
+const LANG = "<%= lang || 'id' %>";
+const MONTHS = (LANG === "en")
   ? ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  : ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']) %>;
+  : ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
 const I18N = {
   customerPrefix: "<%= t('admin.billing.js.customer_prefix', 'Pelanggan:') %>",
   loadingOther: "<%= t('admin.billing.loading_other_invoices', 'Loading tagihan lainnya...') %>",
   periodPrefix: "<%= t('admin.billing.table.period', 'Periode') %>",
-  packageFallback: "<%= t('admin.billing.js.package_fallback', 'Internet') %>"
+  packageFallback: "<%= t('admin.billing.js.package_fallback', 'Internet') %>",
+  confirmUnisolate: "<%= t('admin.billing.confirm.unisolate_without_payment', 'Buka isolir pelanggan ini tanpa bayar?') %>",
+  confirmUnpay: "<%= t('admin.billing.confirm.unpay', 'Batalkan status lunas?') %>",
+  confirmIsolateManual: "<%= t('admin.billing.confirm.isolate_manual', 'Isolir pelanggan ini secara manual?') %>",
+  confirmDelete: "<%= t('admin.billing.confirm.delete', 'Hapus tagihan ini?') %>"
 };
+
+document.addEventListener('submit', function(e) {
+  const form = e.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  if (!form.classList.contains('needs-confirm')) return;
+  const key = String(form.dataset.confirmKey || '');
+  const msg = I18N[key] || 'Lanjutkan?';
+  if (!confirm(msg)) e.preventDefault();
+});
 
 // Handle "Tandai Lunas" via data-* attributes (avoid EJS/HTML quote conflict)
 document.addEventListener('click', async function(e) {

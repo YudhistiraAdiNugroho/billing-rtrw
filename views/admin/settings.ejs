@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title><%= t('admin.settings.title', 'Pengaturan') %> | <%= company %></title>
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="/admin/manifest.webmanifest">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="/css/admin.css">
 </head>
@@ -23,6 +25,61 @@
       <i class="bi bi-<%= msg.type==='success'?'check-circle':'exclamation-circle' %>"></i> <%= msg.text %>
     </div>
     <% } %>
+
+    <div class="card mb16">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h6 style="margin:0"><i class="bi bi-wallet2"></i> <%= t('admin.settings.ewallet_logs.title', 'Log Notifikasi E-Wallet (Webhook)') %></h6>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-g btn-sm" onclick="enableEwalletNotif()"><i class="bi bi-bell"></i> <%= t('admin.settings.ewallet_logs.enable_notif', 'Aktifkan Notif') %></button>
+          <button type="button" class="btn btn-p btn-sm" onclick="toggleEwalletLive()" id="ew_live_btn"><i class="bi bi-broadcast"></i> <%= t('admin.settings.ewallet_logs.live', 'Live') %></button>
+          <button type="button" class="btn btn-g btn-sm" onclick="loadEwalletLogs()"><i class="bi bi-arrow-clockwise"></i> <%= t('common.refresh', 'Refresh') %></button>
+          <button type="button" class="btn btn-d btn-sm" onclick="clearEwalletLogs()"><i class="bi bi-trash"></i> <%= t('common.clear', 'Clear') %></button>
+        </div>
+      </div>
+      <div class="card-bd">
+        <div class="form-row" style="align-items:flex-end">
+          <div class="fg">
+            <label class="fl"><%= t('admin.settings.ewallet_logs.service', 'Service') %></label>
+            <input class="fc" id="ew_service" placeholder="DANA / Gojek / ShopeePay (opsional)">
+          </div>
+          <div class="fg" style="flex:2">
+            <label class="fl"><%= t('admin.settings.ewallet_logs.search', 'Cari') %></label>
+            <input class="fc" id="ew_q" placeholder="kata kunci (opsional)">
+          </div>
+          <div class="fg w160">
+            <label class="fl"><%= t('admin.settings.ewallet_logs.limit', 'Limit') %></label>
+            <select class="fs" id="ew_limit">
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200" selected>200</option>
+              <option value="500">500</option>
+            </select>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:6px">
+          Endpoint MacroDroid: <span class="mono">POST /api/webhook/v1/payment-notif</span>
+        </div>
+        <div class="hint" style="margin-top:6px" id="ew_notif_hint"></div>
+        <div class="tbl-wrap" style="margin-top:10px;max-height:420px;overflow:auto">
+          <table class="dtbl">
+            <thead>
+              <tr>
+                <th style="width:160px"><%= t('common.time', 'Waktu') %></th>
+                <th style="width:110px">Service</th>
+                <th style="width:120px"><%= t('admin.settings.ewallet_logs.amount', 'Nominal') %></th>
+                <th style="width:80px">OK</th>
+                <th style="width:90px">Match</th>
+                <th><%= t('admin.settings.ewallet_logs.content', 'Content') %></th>
+                <th style="width:80px"><%= t('common.actions', 'Aksi') %></th>
+              </tr>
+            </thead>
+            <tbody id="ew_logs_body">
+              <tr><td colspan="7" class="text-center text-muted"><%= t('common.loading', 'Memuat data...') %></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
     <form method="POST" action="/admin/settings">
 
@@ -210,6 +267,24 @@
             </div>
           </div>
 
+          <div style="background: rgba(0,0,0,0.02); padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+            <h6 style="font-size:12px; margin-bottom: 10px;">QRIS Statis (Semi-Otomatis)</h6>
+            <div class="form-row3">
+              <div class="fg">
+                <label class="fl">QRIS Static QR URL (opsional)</label>
+                <input class="fc" name="qris_static_qr_url" value="<%= settings.qris_static_qr_url || '' %>" placeholder="https://.../qris.png atau link QRIS">
+              </div>
+              <div class="fg">
+                <label class="fl">Catatan</label>
+                <input class="fc" value="Pakai tombol QR di Billing untuk buat nominal unik." readonly>
+              </div>
+              <div class="fg">
+                <label class="fl">Metode</label>
+                <input class="fc" value="Semua e-wallet (QRIS) + nominal unik" readonly>
+              </div>
+            </div>
+          </div>
+
           <!-- Tripay Section -->
           <div style="background: rgba(0,0,0,0.02); padding: 15px; border-radius: 12px; margin-bottom: 15px;">
             <h6 style="font-size:12px; margin-bottom: 10px;">Tripay Configuration</h6>
@@ -356,6 +431,207 @@ async function syncTelegram() {
     else alert('Gagal: ' + data.error);
   } catch (e) { alert('Error: ' + e.message); }
 }
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+if ('serviceWorker' in navigator) {
+  try { navigator.serviceWorker.register('/sw.js', { scope: '/admin/' }).catch(() => {}); } catch {}
+}
+
+async function copyText(text) {
+  const v = String(text ?? '');
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(v);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = v;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function canNotify() {
+  return typeof Notification !== 'undefined';
+}
+
+function notifEnabled() {
+  return localStorage.getItem('ew_notif_enabled') === '1';
+}
+
+function setNotifEnabled(v) {
+  localStorage.setItem('ew_notif_enabled', v ? '1' : '0');
+}
+
+function updateNotifHint() {
+  const el = document.getElementById('ew_notif_hint');
+  if (!el) return;
+  const perm = canNotify() ? Notification.permission : 'unsupported';
+  const enabled = notifEnabled();
+  let msg = '';
+  if (perm === 'unsupported') msg = 'Notifikasi browser tidak didukung di device ini.';
+  else if (perm === 'denied') msg = 'Notifikasi diblokir. Izinkan di pengaturan browser.';
+  else if (perm === 'granted') msg = enabled ? 'Notif aktif. Notifikasi muncul saat ada log baru (mode Live).' : 'Notif siap, tapi masih nonaktif.';
+  else msg = 'Klik "Aktifkan Notif" untuk minta izin notifikasi.';
+  el.textContent = msg;
+}
+
+async function enableEwalletNotif() {
+  if (!canNotify()) return updateNotifHint();
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') {
+      setNotifEnabled(true);
+      updateNotifHint();
+      try { new Notification('E-Wallet Monitor', { body: 'Notifikasi aktif.' }); } catch {}
+      return;
+    }
+    setNotifEnabled(false);
+    updateNotifHint();
+  } catch {
+    setNotifEnabled(false);
+    updateNotifHint();
+  }
+}
+
+let ewLastId = Number(localStorage.getItem('ew_last_id') || 0);
+let ewLiveTimer = null;
+let ewLiveActive = false;
+
+function showEwalletNotification(row) {
+  if (!notifEnabled()) return;
+  if (!canNotify() || Notification.permission !== 'granted') return;
+  const svc = String(row?.service || 'E-Wallet');
+  const amt = row?.parsed_ok ? `Rp ${(Number(row.parsed_amount) || 0).toLocaleString('id-ID')}` : 'Nominal tidak terdeteksi';
+  const body = String(row?.content || '').replace(/\r?\n/g, ' ').slice(0, 140);
+  try {
+    new Notification(`${svc}: ${amt}`, { body });
+  } catch {}
+}
+
+function toggleEwalletLive() {
+  ewLiveActive = !ewLiveActive;
+  const btn = document.getElementById('ew_live_btn');
+  if (btn) {
+    btn.className = ewLiveActive ? 'btn btn-d btn-sm' : 'btn btn-p btn-sm';
+    btn.innerHTML = ewLiveActive ? '<i class="bi bi-stop-circle"></i> Stop' : '<i class="bi bi-broadcast"></i> Live';
+  }
+  if (ewLiveTimer) {
+    clearInterval(ewLiveTimer);
+    ewLiveTimer = null;
+  }
+  if (ewLiveActive) {
+    loadEwalletLogs(true);
+    ewLiveTimer = setInterval(() => loadEwalletLogs(true), 5000);
+  }
+}
+
+async function loadEwalletLogs() {
+  const body = document.getElementById('ew_logs_body');
+  const service = document.getElementById('ew_service')?.value || '';
+  const q = document.getElementById('ew_q')?.value || '';
+  const limit = document.getElementById('ew_limit')?.value || '200';
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Memuat...</td></tr>';
+  try {
+    const url = `/admin/api/webhook/payment-notif/logs?limit=${encodeURIComponent(limit)}&service=${encodeURIComponent(service)}&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Gagal memuat log');
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    if (rows.length === 0) {
+      body.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Belum ada data.</td></tr>';
+      return;
+    }
+    const newest = rows[0];
+    const newestId = Number(newest?.id || 0);
+    if (newestId && ewLastId === 0) {
+      ewLastId = newestId;
+      localStorage.setItem('ew_last_id', String(ewLastId));
+    } else if (newestId && newestId > ewLastId) {
+      ewLastId = newestId;
+      localStorage.setItem('ew_last_id', String(ewLastId));
+      showEwalletNotification(newest);
+    }
+
+    body.innerHTML = rows.map(r => {
+      const ok = Number(r.parsed_ok || 0) ? 'Y' : 'N';
+      const amount = (r.parsed_amount != null && r.parsed_amount !== '') ? Number(r.parsed_amount).toLocaleString('id-ID') : '-';
+      const created = r.created_at ? escHtml(r.created_at) : '-';
+      const svc = escHtml(r.service || '-');
+      const content = escHtml((r.content || '').replace(/\r?\n/g, ' '));
+      const okBadge = ok === 'Y' ? '<span class="badge s">OK</span>' : '<span class="badge w">-</span>';
+      const amountHtml = ok === 'Y'
+        ? `<span class="mono" style="font-weight:900;color:#065f46">Rp ${amount}</span>`
+        : `<span class="mono">Rp ${amount}</span>`;
+      const rawEnc = encodeURIComponent(String(r.content || ''));
+      const rawShortEnc = encodeURIComponent(String(r.content || '').replace(/\r?\n/g, ' ').slice(0, 180));
+      const matchedId = Number(r.matched_invoice_id || 0) || 0;
+      const matchHtml = matchedId
+        ? `<a class="mono" href="/admin/billing?search=${matchedId}" target="_blank">#${matchedId}</a>`
+        : '<span class="muted">-</span>';
+      return `<tr>
+        <td class="mono">${created}</td>
+        <td>${svc}</td>
+        <td>${amountHtml}</td>
+        <td>${okBadge}</td>
+        <td>${matchHtml}</td>
+        <td style="max-width:720px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${content}">${content}</td>
+        <td>
+          <button type="button" class="btn btn-g btn-sm btn-copy-ew" data-raw="${rawEnc}" data-short="${rawShortEnc}">
+            <i class="bi bi-copy"></i>
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    body.querySelectorAll('.btn-copy-ew').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const rawEnc = btn.getAttribute('data-raw') || '';
+        const rawShortEnc = btn.getAttribute('data-short') || '';
+        const decoded = decodeURIComponent(rawEnc);
+        const shortText = rawShortEnc ? decodeURIComponent(rawShortEnc) : 'Tersalin.';
+        const ok = await copyText(decoded);
+        if (ok) {
+          alert(`Tersalin:\n${shortText}`);
+        } else {
+          alert('Gagal menyalin.');
+        }
+      });
+    });
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7" class="text-center text-muted">${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function clearEwalletLogs() {
+  if (!confirm('Hapus semua log e-wallet?')) return;
+  try {
+    const res = await fetch('/admin/api/webhook/payment-notif/clear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Gagal menghapus log');
+    await loadEwalletLogs();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+setTimeout(loadEwalletLogs, 200);
+setTimeout(updateNotifHint, 250);
 setTimeout(()=>document.querySelectorAll('.alert').forEach(a=>a.style.display='none'),5000);
 </script>
 </body>

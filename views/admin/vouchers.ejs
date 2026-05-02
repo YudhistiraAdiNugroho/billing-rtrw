@@ -116,7 +116,18 @@
     <div class="card">
       <div class="card-hd">
         <h6><i class="bi bi-list-check"></i> <%= t('admin.vouchers.batches.title', 'Batch Voucher') %></h6>
-        <div style="display:flex;gap:10px;align-items:center">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="muted" style="font-size:12px"><%= t('admin.vouchers.print_style', 'Style Print') %></span>
+            <select class="fc" id="print_style" style="min-width:220px" onchange="onPrintStyleChanged()">
+              <option value="cards" <%= (settings.voucher_print_default_style || '') === 'cards' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_cards', 'Kartu (Default)') %></option>
+              <option value="mks" <%= (settings.voucher_print_default_style || '') === 'mks' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_mks', 'Template Jadi: MKS') %></option>
+              <option value="simple" <%= (settings.voucher_print_default_style || '') === 'simple' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_simple', 'Template Jadi: Simple') %></option>
+              <option value="minimal" <%= (settings.voucher_print_default_style || '') === 'minimal' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_minimal', 'Template Jadi: Minimal') %></option>
+              <option value="template" <%= (settings.voucher_print_default_style || '') === 'template' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_custom', 'Template Custom (Editor)') %></option>
+            </select>
+          </div>
+          <button class="btn btn-g btn-sm" onclick="openModal('voucherTemplateModal')"><i class="bi bi-layout-text-sidebar-reverse"></i> <%= t('admin.vouchers.template.btn', 'Template Print') %></button>
           <button class="btn btn-g btn-sm" onclick="reloadBatches()"><i class="bi bi-arrow-clockwise"></i> <%= t('common.refresh', 'Refresh') %></button>
         </div>
       </div>
@@ -168,6 +179,67 @@
   </div>
 </div>
 
+<div class="mo" id="voucherTemplateModal">
+  <div class="mb" style="max-width:980px">
+    <div class="mh">
+      <span class="mt"><%= t('admin.vouchers.template.title', 'Template Print Voucher') %></span>
+      <button class="mc" onclick="closeModal('voucherTemplateModal')">&times;</button>
+    </div>
+    <div class="mbody">
+      <div class="fg" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+        <div style="flex:1;min-width:240px">
+          <label class="fl"><%= t('admin.vouchers.template.preset', 'Preset') %></label>
+          <select class="fc" id="tpl_preset" onchange="applyTemplatePreset(this.value)">
+            <option value=""><%= t('common.choose', '-- Pilih --') %></option>
+            <option value="mks"><%= t('admin.vouchers.template.preset_mks', 'Mikhmon (MKS)') %></option>
+            <option value="simple"><%= t('admin.vouchers.template.preset_simple', 'Simple') %></option>
+            <option value="empty"><%= t('admin.vouchers.template.preset_empty', 'Kosong') %></option>
+          </select>
+        </div>
+        <div class="hint" style="flex:2;min-width:260px">
+          <%= t('admin.vouchers.template.preset_hint', 'Catatan: template Mikhmon yang masih berisi kode PHP tidak bisa dipakai langsung. Gunakan preset ini lalu edit sesuai kebutuhan.') %>
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:12px">
+        <label class="fl"><%= t('admin.vouchers.template.use', 'Gunakan template custom sebagai default print') %></label>
+        <select class="fc" id="tpl_use">
+          <option value="0" <%= settings.voucher_print_use_template ? '' : 'selected' %>><%= t('common.off', 'Off') %></option>
+          <option value="1" <%= settings.voucher_print_use_template ? 'selected' : '' %>><%= t('common.on', 'On') %></option>
+        </select>
+      </div>
+      <div class="fg" style="margin-bottom:12px">
+        <label class="fl"><%= t('admin.vouchers.template.default_style', 'Default style print') %></label>
+        <select class="fc" id="tpl_default_style">
+          <option value="cards" <%= (settings.voucher_print_default_style || '') === 'cards' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_cards', 'Kartu (Default)') %></option>
+          <option value="mks" <%= (settings.voucher_print_default_style || '') === 'mks' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_mks', 'Template Jadi: MKS') %></option>
+          <option value="simple" <%= (settings.voucher_print_default_style || '') === 'simple' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_simple', 'Template Jadi: Simple') %></option>
+          <option value="minimal" <%= (settings.voucher_print_default_style || '') === 'minimal' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_minimal', 'Template Jadi: Minimal') %></option>
+          <option value="template" <%= (settings.voucher_print_default_style || '') === 'template' ? 'selected' : '' %>><%= t('admin.vouchers.print_style_custom', 'Template Custom (Editor)') %></option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl"><%= t('admin.vouchers.template.header', 'Header (opsional)') %></label>
+        <textarea class="fc" id="tpl_header" rows="5" spellcheck="false"><%= settings.voucher_print_template_header || '' %></textarea>
+      </div>
+      <div class="fg">
+        <label class="fl"><%= t('admin.vouchers.template.row', 'Row (wajib, diulang untuk setiap voucher)') %></label>
+        <textarea class="fc" id="tpl_row" rows="10" spellcheck="false"><%= settings.voucher_print_template_row || '' %></textarea>
+        <div class="hint">
+          Variables: %credential% %username% %password% %profile% %validity% %validityText% %price% %priceText% %currency% %company% %phone% %timeStamp% %#%
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl"><%= t('admin.vouchers.template.footer', 'Footer (opsional)') %></label>
+        <textarea class="fc" id="tpl_footer" rows="5" spellcheck="false"><%= settings.voucher_print_template_footer || '' %></textarea>
+      </div>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-g" onclick="closeModal('voucherTemplateModal')"><%= t('common.close', 'Tutup') %></button>
+      <button type="button" class="btn btn-p" onclick="saveVoucherTemplate()"><%= t('common.save', 'Simpan') %></button>
+    </div>
+  </div>
+</div>
+
 <script>
   const I18N = {
     profilePricePrefix: "<%= t('admin.vouchers.js.price_prefix', 'Harga:') %>",
@@ -203,11 +275,40 @@
     deleteSuccessPrefix: "<%= t('admin.vouchers.js.delete_success_prefix', 'Batch') %>",
     deleteSuccessSuffix: "<%= t('admin.vouchers.js.delete_success_suffix', 'berhasil dihapus.') %>",
     deletedVouchersPrefix: "<%= t('admin.vouchers.js.deleted_vouchers_prefix', 'Vouchers terhapus:') %>",
-    usedPrefix: "<%= t('admin.vouchers.js.used_prefix', 'Terpakai:') %>"
+    usedPrefix: "<%= t('admin.vouchers.js.used_prefix', 'Terpakai:') %>",
+    templateSaved: "<%= t('admin.vouchers.template.saved', 'Template tersimpan.') %>",
+    templateSaveFailed: "<%= t('admin.vouchers.template.save_failed', 'Gagal menyimpan template') %>"
   };
 
   function openModal(id){ document.getElementById(id)?.classList.add('show'); }
   function closeModal(id){ document.getElementById(id)?.classList.remove('show'); }
+
+  function applyTemplatePreset(preset) {
+    const headerEl = document.getElementById('tpl_header');
+    const rowEl = document.getElementById('tpl_row');
+    const footerEl = document.getElementById('tpl_footer');
+    if (!headerEl || !rowEl || !footerEl) return;
+
+    const presets = {
+      empty: { header: '', row: '', footer: '' },
+      simple: {
+        header: `<style>\n@page{size:A4;margin:6mm}\n*{box-sizing:border-box}\nbody{margin:0;font-family:Arial,sans-serif;color:#0f172a}\n.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}\n.card{border:1.5px solid #334155;border-radius:10px;padding:8px 8px 22px;min-height:110px;position:relative;break-inside:avoid}\n.hd{font-weight:800;font-size:11px}\n.code{font-weight:900;font-size:22px;letter-spacing:2px;margin-top:6px;font-family:Consolas,monospace}\n.meta{font-size:10px;color:#334155;margin-top:4px}\n.wa{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);font-size:9.5px;color:#334155;white-space:nowrap}\n</style>\n<div class="grid">`,
+        row: `<div class="card">\n  <div class="hd">%company%</div>\n  <div class="meta">%profile% • %validityText% • %currency% %priceText%</div>\n  <div class="code">%username%</div>\n  <div class="meta">%password%</div>\n  <div class="wa">WA: %phone%</div>\n</div>`,
+        footer: `</div>`
+      },
+      mks: {
+        header: `<style>\n@page{size:A4;margin:6mm}\n*{box-sizing:border-box}\nbody{margin:0;font-family:Arial,sans-serif;color:#0f172a}\n.v-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}\n.vc{border:1px solid #0f172a;border-radius:10px;min-height:110px;padding:8px;position:relative;break-inside:avoid;overflow:hidden}\n.vc:before{content:\"\";position:absolute;inset:0;background:linear-gradient(120deg,rgba(59,130,246,.03),rgba(16,185,129,.025))}\n.vc>*{position:relative}\n.vh{font-weight:900;font-size:11px;letter-spacing:.2px}\n.vp{position:absolute;top:8px;right:8px;font-size:10.5px;font-weight:800;background:rgba(16,185,129,.16);border:1px solid rgba(16,185,129,.35);padding:2px 7px;border-radius:999px}\n.vm{font-size:10px;color:#334155;margin-top:6px}\n.vu{font-weight:950;font-size:18px;letter-spacing:1px;margin-top:8px;font-family:Consolas,monospace}\n.vf{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);font-size:9.5px;color:#334155;white-space:nowrap}\n</style>\n<div class="v-grid">`,
+        row: `<div class="vc">\n  <div class="vh">%company%</div>\n  <div class="vp">%currency% %priceText%</div>\n  <div class="vm">%profile% • %validityText%</div>\n  <div class="vu">%credential%</div>\n  <div class="vf">WA: %phone%</div>\n</div>`,
+        footer: `</div>`
+      }
+    };
+
+    const p = presets[preset];
+    if (!p) return;
+    headerEl.value = p.header;
+    rowEl.value = p.row;
+    footerEl.value = p.footer;
+  }
 
   function getRouterId() {
     const v = document.getElementById('global-router-id')?.value;
@@ -250,6 +351,13 @@
     }
     document.getElementById('profileHint').innerText = '';
   }
+
+  (function initPrintStyle() {
+    const ps = document.getElementById('print_style');
+    if (!ps) return;
+    const current = String(ps.value || 'cards');
+    ps.value = current || 'cards';
+  })();
 
   function onProfileChanged() {
     const name = document.getElementById('profileName')?.value;
@@ -326,6 +434,10 @@
       const qty = `${b.qty_created || 0}/${b.qty_total || 0}`;
       const used = `${b.used_count || 0}/${b.vouchers_count || 0}`;
       const routerName = b.router_name || I18N.defaultRouterName;
+      const selectedStyle = String(document.getElementById('print_style')?.value || 'cards');
+      const printHref = selectedStyle === 'cards'
+        ? `/admin/vouchers/batches/${b.id}/print`
+        : `/admin/vouchers/batches/${b.id}/print?style=${encodeURIComponent(selectedStyle)}`;
       return `
         <tr>
           <td class="mono">#${b.id}</td>
@@ -338,7 +450,7 @@
           <td style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-g btn-sm" onclick="openDetail(${b.id})"><i class="bi bi-eye"></i> ${I18N.actionDetail}</button>
             <button class="btn btn-g btn-sm" onclick="syncBatch(${b.id})"><i class="bi bi-arrow-repeat"></i> ${I18N.actionSync}</button>
-            <a class="btn btn-g btn-sm" target="_blank" href="/admin/vouchers/batches/${b.id}/print"><i class="bi bi-printer"></i> ${I18N.actionPrint}</a>
+            <a class="btn btn-g btn-sm" target="_blank" href="${printHref}"><i class="bi bi-printer"></i> ${I18N.actionPrint}</a>
             <a class="btn btn-g btn-sm" href="/admin/vouchers/batches/${b.id}/export.csv"><i class="bi bi-filetype-csv"></i> ${I18N.actionCsv}</a>
             <button class="btn btn-g btn-sm" onclick="deleteBatch(${b.id}, '${status}')"><i class="bi bi-trash"></i> ${I18N.actionDelete}</button>
           </td>
@@ -346,6 +458,34 @@
       `;
     }).join('');
     updateStats(batches);
+  }
+
+  async function saveVoucherTemplate() {
+    const use_template = document.getElementById('tpl_use')?.value === '1';
+    const default_style = document.getElementById('tpl_default_style')?.value || '';
+    const header = document.getElementById('tpl_header')?.value || '';
+    const row = document.getElementById('tpl_row')?.value || '';
+    const footer = document.getElementById('tpl_footer')?.value || '';
+    try {
+      const res = await fetch('/admin/api/vouchers/template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_template, default_style, header, row, footer })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || I18N.templateSaveFailed);
+      alert(I18N.templateSaved);
+      closeModal('voucherTemplateModal');
+      const ps = document.getElementById('print_style');
+      if (ps) ps.value = default_style || 'cards';
+      await reloadBatches();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function onPrintStyleChanged() {
+    reloadBatches();
   }
 
   function updateStats(batches) {

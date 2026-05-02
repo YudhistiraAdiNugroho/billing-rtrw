@@ -51,22 +51,22 @@
             <% if (technicians.length === 0) { %>
               <tr><td colspan="7" class="text-center text-muted" style="padding:20px"><%= t('admin.technicians.empty', 'Belum ada data teknisi.') %></td></tr>
             <% } else { %>
-              <% technicians.forEach(t => { %>
+            <% technicians.forEach(tech => { %>
                 <tr>
-                  <td><strong><%= t.name %></strong></td>
-                  <td><code><%= t.username %></code></td>
-                  <td><span class="text-muted"><%= t.password %></span></td>
-                  <td><%= t.phone || '-' %></td>
-                  <td><%= t.area || '-' %></td>
+                  <td><strong><%= tech.name %></strong></td>
+                  <td><code><%= tech.username %></code></td>
+                  <td><span class="text-muted"><%= tech.password %></span></td>
+                  <td><%= tech.phone || '-' %></td>
+                  <td><%= tech.area || '-' %></td>
                   <td>
-                    <span class="badge <%= t.is_active ? 'bs' : 'bd' %>">
-                      <%= t.is_active ? t('common.active', 'Aktif') : t('common.inactive', 'Nonaktif') %>
+                    <span class="badge <%= tech.is_active ? 'bs' : 'bd' %>">
+                      <%= tech.is_active ? t('common.active', 'Aktif') : t('common.inactive', 'Nonaktif') %>
                     </span>
                   </td>
                   <td>
                     <div class="d-flex gap-2">
-                      <button class="btn btn-g btn-icon btn-sm" onclick='editTech(<%- JSON.stringify(t) %>)'><i class="bi bi-pencil"></i></button>
-                      <form action="/admin/technicians/<%= t.id %>/delete" method="POST" onsubmit="return confirm(I18N.confirmDeleteTechnician)">
+                      <button class="btn btn-g btn-icon btn-sm" onclick='editTech(<%- JSON.stringify(tech) %>)'><i class="bi bi-pencil"></i></button>
+                      <form action="/admin/technicians/<%= tech.id %>/delete" method="POST" onsubmit="return confirm(I18N.confirmDeleteTechnician)">
                         <button type="submit" class="btn btn-d btn-icon btn-sm"><i class="bi bi-trash"></i></button>
                       </form>
                     </div>
