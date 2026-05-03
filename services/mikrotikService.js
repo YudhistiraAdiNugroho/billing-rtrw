@@ -500,6 +500,126 @@ function deleteRouter(id) {
   return db.prepare('DELETE FROM routers WHERE id = ?').run(id);
 }
 
+// --- FIREWALL & ISOLIR STATIC IP ---
+async function setupIsolirFirewall(routerId = null) {
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    
+    // 1. Ensure Address List exists (implicitly by adding or just checking)
+    // We'll add a dummy entry to ensure it's there or just proceed to rules
+    
+    // 2. Add NAT Rule for Redirect to Isolir Page (Port 80)
+    const natMenu = conn.client.menu('/ip/firewall/nat');
+    const existingNat = await natMenu.where('comment', 'ISOLIR_REDIRECT').get();
+    
+    // Auto-detect server IP or use a setting
+    const settings = getSettingsWithCache();
+    const serverUrl = settings.app_url || 'http://192.168.1.1:3002'; // Fallback
+    
+    if (existingNat.length === 0) {
+      await natMenu.add({
+        chain: 'dstnat',
+        'src-address-list': 'LIST_ISOLIR',
+        protocol: 'tcp',
+        'dst-port': '80',
+        action: 'redirect',
+        'to-ports': '3002', // Port internal aplikasi billing
+        comment: 'ISOLIR_REDIRECT'
+      });
+    }
+
+    // 3. Add Filter Rule to block all other traffic for isolated users
+    const filterMenu = conn.client.menu('/ip/firewall/filter');
+    const existingFilter = await filterMenu.where('comment', 'BLOCK_ISOLIR').get();
+    if (existingFilter.length === 0) {
+      await filterMenu.add({
+        chain: 'forward',
+        'src-address-list': 'LIST_ISOLIR',
+        action: 'drop',
+        comment: 'BLOCK_ISOLIR'
+      });
+    }
+
+    return { success: true, message: 'Firewall Isolir berhasil disiapkan di MikroTik' };
+  } catch (e) {
+    logger.error('Error setupIsolirFirewall:', e);
+    throw e;
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
+async function manageStaticIp(data, routerId = null) {
+  const { ip, name, limit, isolate } = data;
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    
+    // 1. Manage Simple Queue for Bandwidth
+    const queueMenu = conn.client.menu('/queue/simple');
+    const existingQueue = await queueMenu.where('target', `${ip}/32`).get();
+    
+    const queueData = {
+      name: `CUST-${name}`,
+      target: `${ip}/32`,
+      'max-limit': limit || '5M/5M',
+      comment: `Managed by Billing - ${name}`
+    };
+
+    if (existingQueue.length > 0) {
+      await queueMenu.set(queueData, existingQueue[0]['.id']);
+    } else {
+      await queueMenu.add(queueData);
+    }
+
+    // 2. Manage Address List for Isolation
+    const addrListMenu = conn.client.menu('/ip/firewall/address-list');
+    const existingEntry = await addrListMenu.where('address', ip).where('list', 'LIST_ISOLIR').get();
+
+    if (isolate) {
+      if (existingEntry.length === 0) {
+        await addrListMenu.add({ list: 'LIST_ISOLIR', address: ip, comment: name });
+      }
+    } else {
+      if (existingEntry.length > 0) {
+        await addrListMenu.remove(existingEntry[0]['.id']);
+      }
+    }
+
+    return true;
+  } catch (e) {
+    logger.error('Error manageStaticIp:', e);
+    throw e;
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
+async function removeStaticIp(ip, routerId = null) {
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    
+    // Remove Queue
+    const queueMenu = conn.client.menu('/queue/simple');
+    const queues = await queueMenu.where('target', `${ip}/32`).get();
+    for (const q of queues) await queueMenu.remove(q['.id']);
+
+    // Remove from Address List
+    const addrListMenu = conn.client.menu('/ip/firewall/address-list');
+    const entries = await addrListMenu.where('address', ip).where('list', 'LIST_ISOLIR').get();
+    for (const e of entries) await addrListMenu.remove(e['.id']);
+
+    return true;
+  } catch (e) {
+    logger.error('Error removeStaticIp:', e);
+    throw e;
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
 module.exports = {
   getConnection,
   getPppoeProfiles,
@@ -532,5 +652,8 @@ module.exports = {
   getRouterById,
   createRouter,
   updateRouter,
-  deleteRouter
+  deleteRouter,
+  setupIsolirFirewall,
+  manageStaticIp,
+  removeStaticIp
 };

@@ -260,6 +260,17 @@ app.get('/login', (req, res) => {
   res.redirect('/customer/login');
 });
 
+// Halaman Isolir (Akses langsung dari redirect MikroTik)
+app.get('/isolated', (req, res) => {
+  const { getSettingsWithCache } = require('./config/settingsManager');
+  const settings = getSettingsWithCache();
+  res.render('isolated', {
+    company: settings.company_header || 'My ISP',
+    adminPhone: settings.company_phone || '',
+    address: settings.company_address || ''
+  });
+});
+
 // Tambahkan view engine dan static
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));

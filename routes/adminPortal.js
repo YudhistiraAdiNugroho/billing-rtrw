@@ -935,12 +935,12 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
   res.redirect('/admin/customers');
 });
 
-router.post('/customers/:id/delete', requireAdminSession, (req, res) => {
+router.post('/customers/:id/delete', requireAdminSession, async (req, res) => {
   try {
-    customerSvc.deleteCustomer(req.params.id);
+    await customerSvc.deleteCustomer(req.params.id);
     req.session._msg = { type: 'success', text: 'Pelanggan berhasil dihapus.' };
   } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal menghapus: ' + e.message };
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
   }
   res.redirect('/admin/customers');
 });
@@ -2785,6 +2785,15 @@ router.get('/api/routers/:id/test', requireAdmin, async (req, res) => {
       return res.json({ success: true, message: 'Koneksi ke Router Berhasil!' });
     }
     throw new Error('Gagal terhubung ke router');
+  } catch (e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+router.post('/api/routers/:id/setup-firewall', requireAdmin, async (req, res) => {
+  try {
+    const result = await mikrotikService.setupIsolirFirewall(req.params.id);
+    res.json(result);
   } catch (e) {
     res.json({ success: false, error: e.message });
   }

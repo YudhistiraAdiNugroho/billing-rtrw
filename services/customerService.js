@@ -39,8 +39,8 @@ function getCustomerById(id) {
 
 function createCustomer(data) {
   return db.prepare(`
-    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, isolir_profile, status, install_date, notes, auto_isolate, isolate_day)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
     data.package_id ? parseInt(data.package_id) : null,
@@ -55,13 +55,16 @@ function createCustomer(data) {
     data.status || 'active',
     data.install_date || null, data.notes || '',
     data.auto_isolate !== undefined ? parseInt(data.auto_isolate) : 1,
-    data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10
+    data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
+    data.connection_type || 'pppoe',
+    data.static_ip || '',
+    data.mac_address || ''
   );
 }
 
 function updateCustomer(id, data) {
   return db.prepare(`
-    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?
+    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?
     WHERE id=?
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
@@ -79,6 +82,9 @@ function updateCustomer(id, data) {
     data.auto_isolate !== undefined ? parseInt(data.auto_isolate) : 1,
     data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
     data.cable_path || null,
+    data.connection_type || 'pppoe',
+    data.static_ip || '',
+    data.mac_address || '',
     id
   );
 }
@@ -87,7 +93,16 @@ function updateCustomerCablePath(id, path) {
   return db.prepare('UPDATE customers SET cable_path = ? WHERE id = ?').run(path, id);
 }
 
-function deleteCustomer(id) {
+async function deleteCustomer(id) {
+  const customer = getCustomerById(id);
+  if (customer && customer.connection_type === 'static' && customer.static_ip) {
+    const mikrotikSvc = require('./mikrotikService');
+    try {
+      await mikrotikSvc.removeStaticIp(customer.static_ip, customer.router_id);
+    } catch (e) {
+      console.error('Failed to remove static IP from MikroTik during customer deletion:', e);
+    }
+  }
   return db.prepare('DELETE FROM customers WHERE id=?').run(id);
 }
 
@@ -165,11 +180,19 @@ async function suspendCustomer(id) {
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
   
   updateCustomer(id, { ...customer, status: 'suspended' });
-  
-  if (customer.pppoe_username) {
-    const mikrotikSvc = require('./mikrotikService');
+  const mikrotikSvc = require('./mikrotikService');
+
+  if (customer.connection_type === 'static' && customer.static_ip) {
+    const pkg = getPackageById(customer.package_id);
+    const limit = pkg ? `${Math.round(pkg.speed_up/1000)}M/${Math.round(pkg.speed_down/1000)}M` : '5M/5M';
+    await mikrotikSvc.manageStaticIp({
+      ip: customer.static_ip,
+      name: customer.name,
+      limit: limit,
+      isolate: true
+    }, customer.router_id);
+  } else if (customer.pppoe_username) {
     const isolirProfile = customer.isolir_profile || 'isolir';
-    // setPppoeProfile sudah otomatis melakukan kick jika profile berubah
     await mikrotikSvc.setPppoeProfile(customer.pppoe_username, isolirProfile, customer.router_id);
   }
   return true;
@@ -180,12 +203,20 @@ async function activateCustomer(id) {
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
   
   updateCustomer(id, { ...customer, status: 'active' });
-  
-  if (customer.pppoe_username) {
-    const mikrotikSvc = require('./mikrotikService');
+  const mikrotikSvc = require('./mikrotikService');
+
+  if (customer.connection_type === 'static' && customer.static_ip) {
+    const pkg = getPackageById(customer.package_id);
+    const limit = pkg ? `${Math.round(pkg.speed_up/1000)}M/${Math.round(pkg.speed_down/1000)}M` : '5M/5M';
+    await mikrotikSvc.manageStaticIp({
+      ip: customer.static_ip,
+      name: customer.name,
+      limit: limit,
+      isolate: false
+    }, customer.router_id);
+  } else if (customer.pppoe_username) {
     const pkg = getPackageById(customer.package_id);
     const targetProfile = pkg ? pkg.name : 'default';
-    // setPppoeProfile sudah otomatis melakukan kick jika profile berubah
     await mikrotikSvc.setPppoeProfile(customer.pppoe_username, targetProfile, customer.router_id);
   }
   return true;

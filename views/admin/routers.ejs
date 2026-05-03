@@ -71,6 +71,7 @@
               </td>
               <td>
                 <button class="btn btn-g btn-icon btn-sm" title="<%= t('admin.routers.actions.test', 'Test Koneksi') %>" onclick="testConn(<%= r.id %>)"><i class="bi bi-plug"></i></button>
+                <button class="btn btn-g btn-icon btn-sm" title="Setup Firewall Isolir" onclick="setupFirewall(<%= r.id %>)"><i class="bi bi-shield-lock"></i></button>
                 <button class="btn btn-g btn-icon btn-sm" title="<%= t('common.edit', 'Edit') %>" onclick="editRouter(<%= i %>)"><i class="bi bi-pencil"></i></button>
                 <form method="POST" action="/admin/routers/<%= r.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.routers.confirm.delete', 'Hapus router ini?') %>')">
                   <button class="btn btn-d btn-icon btn-sm" title="<%= t('common.delete', 'Hapus') %>"><i class="bi bi-trash"></i></button>
@@ -179,6 +180,15 @@ async function testConn(id) {
   if(!confirm(I18N.testConfirm)) return;
   try {
     const res = await fetch('/admin/api/routers/' + id + '/test');
+    const data = await res.json();
+    alert(data.success ? '✅ ' + data.message : '❌ ' + data.error);
+  } catch (e) { alert(I18N.systemError); }
+}
+
+async function setupFirewall(id) {
+  if(!confirm('Setup otomatis Firewall Isolir di MikroTik? Ini akan menambahkan Address List dan Rule NAT/Filter.')) return;
+  try {
+    const res = await fetch('/admin/api/routers/' + id + '/setup-firewall', { method: 'POST' });
     const data = await res.json();
     alert(data.success ? '✅ ' + data.message : '❌ ' + data.error);
   } catch (e) { alert(I18N.systemError); }
