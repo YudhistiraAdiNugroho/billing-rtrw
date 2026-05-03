@@ -358,6 +358,30 @@ router.post('/olts/:id/onu/:index/rename', requireAdminSession, restrictToAdmin,
   }
 });
 
+router.post('/olts/:id/onu/authorize', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const output = await oltSvc.authorizeOnu(req.params.id, req.body);
+    res.json({ success: true, message: 'Otorisasi berhasil.', output });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/olts/:id/onu/configure-wan', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const { method, sn } = req.body;
+    let output;
+    if (method === 'tr069') {
+      output = await oltSvc.configureWanViaAcs(sn, req.body);
+    } else {
+      output = await oltSvc.configureOnuWan(req.params.id, req.body);
+    }
+    res.json({ success: true, message: 'Konfigurasi WAN berhasil.', output });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post('/olts', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
   try {
     oltSvc.createOlt(req.body);
@@ -553,6 +577,19 @@ router.get('/api/customers/:id/pppoe-traffic', requireAdminSession, async (req, 
     return res.json({ ok: false, error: e.message || 'failed' });
   } finally {
     if (conn && conn.api) conn.api.close();
+  }
+});
+
+router.post('/api/customers/:id/cable-path', requireAdminSession, (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { path } = req.body;
+    if (!id) throw new Error('ID pelanggan tidak valid');
+    customerSvc.updateCustomerCablePath(id, path);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[API] Save Cable Path Error:', e);
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 

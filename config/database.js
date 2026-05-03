@@ -289,6 +289,9 @@ try {
   db.exec("ALTER TABLE customers ADD COLUMN lng TEXT");
 } catch (e) { /* ignore if already exists */ }
 try {
+  db.exec("ALTER TABLE customers ADD COLUMN cable_path TEXT");
+} catch (e) { /* ignore if already exists */ }
+try {
   db.exec("ALTER TABLE odps ADD COLUMN port_capacity INTEGER NOT NULL DEFAULT 16");
 } catch (e) { /* ignore if already exists */ }
 

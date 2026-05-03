@@ -61,7 +61,7 @@ function createCustomer(data) {
 
 function updateCustomer(id, data) {
   return db.prepare(`
-    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?
+    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?
     WHERE id=?
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
@@ -78,8 +78,13 @@ function updateCustomer(id, data) {
     data.install_date || null, data.notes || '',
     data.auto_isolate !== undefined ? parseInt(data.auto_isolate) : 1,
     data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
+    data.cable_path || null,
     id
   );
+}
+
+function updateCustomerCablePath(id, path) {
+  return db.prepare('UPDATE customers SET cable_path = ? WHERE id = ?').run(path, id);
 }
 
 function deleteCustomer(id) {
@@ -189,5 +194,5 @@ async function activateCustomer(id) {
 module.exports = {
   getAllCustomers, getCustomerById, createCustomer, updateCustomer, deleteCustomer, getCustomerStats,
   getAllPackages, getPackageById, createPackage, updatePackage, deletePackage,
-  suspendCustomer, activateCustomer, findCustomerByAny
+  suspendCustomer, activateCustomer, findCustomerByAny, updateCustomerCablePath
 };

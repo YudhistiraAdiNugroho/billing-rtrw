@@ -3,6 +3,8 @@ const net = require('net');
 const Database = require('better-sqlite3');
 const path = require('path');
 const winston = require('winston');
+const axios = require('axios');
+const genieacs = require('../config/genieacs');
 
 // Logger configuration
 const logger = winston.createLogger({
@@ -73,12 +75,37 @@ const BRAND_PROFILES = {
   ],
   zte: [
     {
-      name: 'ZTE_C300',
-      status_table: '1.3.6.1.4.1.3902.1012.3.28.1.1.2',
-      name_table:   '1.3.6.1.4.1.3902.1012.3.28.1.1.3',
-      probe_oid:    '1.3.6.1.4.1.3902.1012.3.28.1.1.2',
-      is_counter: true,
+      name: 'ZTE_GPON_C300',
+      status_table: '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.9',
+      name_table:   '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.2',
+      sn_table:     '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.6',
+      rx_power_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.2', // 0.01 dBm
+      probe_oid:    '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.9',
+      unauth_sn_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.2',
+      unauth_type_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.10',
+      distance_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.4',
+      firmware_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.5',
+      uptime_table:   '1.3.6.1.4.1.3902.1015.1010.11.2.1.6',
     },
+    {
+      name: 'ZTE_GPON_C600',
+      status_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.10',
+      name_table:   '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.2',
+      sn_table:     '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.3',
+      rx_power_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.7.1.3',
+      probe_oid:    '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.10',
+      unauth_sn_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.11.1.2',
+      unauth_type_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.11.1.10',
+    },
+    {
+      name: 'ZTE_GPON_OLD',
+      status_table: '1.3.6.1.4.1.3902.1012.3.28.2.1.4',
+      name_table:   '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.2',
+      sn_table:     '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.6',
+      rx_power_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.2',
+      probe_oid:    '1.3.6.1.4.1.3902.1012.3.28.2.1.4',
+      unauth_sn_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.2',
+    }
   ],
   vsol: [
     {
@@ -93,11 +120,37 @@ const BRAND_PROFILES = {
   huawei: [
     {
       name: 'HUAWEI_GPON',
-      status_table: '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
+      status_table: '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
       name_table:   '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.3',
-      sn_table:     '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.1',
-      rx_power_table: '1.3.6.1.4.1.2011.6.128.1.1.2.51.1.4', // 0.01 dBm
-      probe_oid:    '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
+      sn_table:     '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
+      rx_power_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.4', // 0.01 dBm
+      probe_oid:    '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
+      unauth_sn_table: '1.3.6.1.4.1.2011.6.128.1.1.2.45.1.4',
+      unauth_type_table: '1.3.6.1.4.1.2011.6.128.1.1.2.45.1.5',
+      distance_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.20',
+      firmware_table: '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.10',
+      uptime_table:   '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.15',
+    }
+  ],
+  fiberhome: [
+    {
+      name: 'FIBERHOME_GPON',
+      status_table: '1.3.6.1.4.1.27332.1.1.1.8.1.7',
+      name_table:   '1.3.6.1.4.1.27332.1.1.1.8.1.3',
+      sn_table:     '1.3.6.1.4.1.27332.1.1.1.8.1.4',
+      rx_power_table: '1.3.6.1.4.1.27332.1.1.1.11.1.4',
+      probe_oid:    '1.3.6.1.4.1.27332.1.1.1.8.1.7',
+      unauth_sn_table: '1.3.6.1.4.1.27332.1.1.1.1.1.1.10',
+    }
+  ],
+  bdcom: [
+    {
+      name: 'BDCOM_GPON',
+      status_table: '1.3.6.1.4.1.3320.101.10.1.1.7',
+      name_table:   '1.3.6.1.4.1.3320.101.10.1.1.3',
+      sn_table:     '1.3.6.1.4.1.3320.101.10.1.1.4',
+      rx_power_table: '1.3.6.1.4.1.3320.101.10.3.1.4',
+      probe_oid:    '1.3.6.1.4.1.3320.101.10.1.1.7',
     }
   ],
   cdata: [
@@ -116,9 +169,11 @@ const BRAND_PROFILES = {
 const ONLINE_VALUES = {
   hioso: [1, 3, 4],
   hsgq:  [1, 3, 4],
-  zte:   [],
+  zte:   [1, 3, 'working', 'online'],
   vsol:  [1],
-  huawei: [5], // 5: operation
+  huawei: [5, 1, 'active', 'online'], // 5: operation
+  fiberhome: [1, 2, 3],
+  bdcom: [1, 2, 3],
   cdata: [1, 3],
 };
 
@@ -152,9 +207,9 @@ const SYSTEM_OIDS = {
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
   zte: {
-    temp:      '1.3.6.1.4.1.3902.1012.3.1.1.1.2.1',
-    cpu:       '1.3.6.1.4.1.3902.1012.3.1.1.1.1.1',
-    ram:       '1.3.6.1.4.1.3902.1012.3.1.1.1.3.1',
+    temp:      '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.10.1.1.1', // Temp sensor 1
+    cpu:       '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.10.1.1.1', // CPU Usage
+    ram:       '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.11.1.1.1', // RAM Usage
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
@@ -166,9 +221,23 @@ const SYSTEM_OIDS = {
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
   huawei: {
-    temp:      '1.3.6.1.4.1.2011.6.128.1.1.2.2.1.2.0',
-    cpu:       '1.3.6.1.4.1.2011.6.128.1.1.2.2.1.3.0',
-    ram:       '1.3.6.1.4.1.2011.6.128.1.1.2.2.1.4.0',
+    temp:      '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.14.0.0',
+    cpu:       '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.14.0.0',
+    ram:       '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.15.0.0',
+    uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
+    uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
+  },
+  fiberhome: {
+    temp:      '1.3.6.1.4.1.27332.1.1.1.9.1.12.1.1',
+    cpu:       '1.3.6.1.4.1.27332.1.1.1.9.1.12.1.1',
+    ram:       '1.3.6.1.4.1.27332.1.1.1.9.1.14.1.1',
+    uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
+    uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
+  },
+  bdcom: {
+    temp:      '1.3.6.1.4.1.3320.101.11.1.13.1',
+    cpu:       '1.3.6.1.4.1.3320.101.11.1.13.1',
+    ram:       '1.3.6.1.4.1.3320.101.11.1.14.1',
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
@@ -179,6 +248,49 @@ const SYSTEM_OIDS = {
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
+};
+
+const CARD_OIDS = {
+  zte: {
+    type:   '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.4',
+    status: '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.6',
+    ports:  '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.7',
+    cpu:    '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.10',
+    ram:    '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.11',
+    serial: '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.12',
+  },
+  huawei: {
+    type:   '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.4',
+    status: '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.6',
+    ports:  '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.3',
+    cpu:    '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.14',
+    ram:    '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.15',
+    serial: '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.9',
+  },
+  fiberhome: {
+    type:   '1.3.6.1.4.1.27332.1.1.1.9.1.3',
+    status: '1.3.6.1.4.1.27332.1.1.1.9.1.5',
+    ports:  '1.3.6.1.4.1.27332.1.1.1.9.1.6',
+    cpu:    '1.3.6.1.4.1.27332.1.1.1.9.1.12',
+    ram:    '1.3.6.1.4.1.27332.1.1.1.9.1.14',
+    serial: '1.3.6.1.4.1.27332.1.1.1.9.1.8',
+  },
+  bdcom: {
+    type:   '1.3.6.1.4.1.3320.101.11.1.3',
+    status: '1.3.6.1.4.1.3320.101.11.1.5',
+    ports:  '1.3.6.1.4.1.3320.101.11.1.6',
+    cpu:    '1.3.6.1.4.1.3320.101.11.1.13',
+    ram:    '1.3.6.1.4.1.3320.101.11.1.14',
+    serial: '1.3.6.1.4.1.3320.101.11.1.8',
+  }
+};
+
+const CARD_STATUS_MAP = {
+  1: 'INSERVICE',
+  2: 'STANDBY',
+  3: 'OFFLINE',
+  4: 'FAILED',
+  5: 'INIT',
 };
 
 // ─── DB CRUD ────────────────────────────────────────────────────────────────
@@ -1016,6 +1128,86 @@ const fetchSystemMetrics = async (session, brandKey, stats) => {
   }
 };
 
+/**
+ * Ambil daftar card/board OLT.
+ */
+const fetchCardMetrics = async (session, brandKey, stats) => {
+  const oids = CARD_OIDS[brandKey];
+  if (!oids) return;
+
+  try {
+    const typeMap   = await slowWalk(session, oids.type);
+    const statusMap = await slowWalk(session, oids.status);
+    const portMap   = await slowWalk(session, oids.ports);
+    const serialMap = await slowWalk(session, oids.serial);
+    const cpuMap    = await slowWalk(session, oids.cpu);
+    const ramMap    = await slowWalk(session, oids.ram);
+
+    const cards = [];
+    const indices = Object.keys(typeMap);
+
+    for (const idx of indices) {
+      const type = safeToString(typeMap[idx]);
+      if (!type || type === '0') continue;
+
+      const statusNum = bufferToInt(statusMap[idx]);
+      const statusText = CARD_STATUS_MAP[statusNum] || (statusNum != null ? String(statusNum) : 'UNKNOWN');
+      
+      const cpuVal = bufferToInt(cpuMap[idx]);
+      const ramVal = bufferToInt(ramMap[idx]);
+
+      cards.push({
+        index: idx,
+        type: type,
+        status: statusText,
+        ports: bufferToInt(portMap[idx]) || 0,
+        serial: decodeSn(serialMap[idx]),
+        cpu: cpuVal != null ? `${cpuVal}%` : 'N/A',
+        ram: ramVal != null ? `${ramVal}%` : 'N/A',
+      });
+    }
+
+    if (cards.length > 0) {
+      stats.cards = cards.sort((a, b) => String(a.index).localeCompare(String(b.index), undefined, { numeric: true }));
+    }
+  } catch (e) {
+    logger.error(`fetchCardMetrics error: ${e.message}`);
+  }
+};
+
+/**
+ * Ambil daftar ONU yang belum diotorisasi (Unregistered).
+ */
+const fetchUnauthOnus = async (session, profile, stats) => {
+  if (!profile.unauth_sn_table) return;
+
+  try {
+    const snMap = await slowWalk(session, profile.unauth_sn_table);
+    let typeMap = {};
+    if (profile.unauth_type_table) {
+      typeMap = await slowWalk(session, profile.unauth_type_table);
+    }
+
+    const indices = Object.keys(snMap);
+    for (const idx of indices) {
+      const sn = decodeSn(snMap[idx]);
+      if (!sn || sn === 'N/A') continue;
+
+      const type = safeToString(typeMap[idx]) || 'GENERIC';
+      const onuId = hiosoOnuIdFromIndex(idx);
+
+      stats.unauth_onus.push({
+        index: idx,
+        id: onuId || idx,
+        sn: sn,
+        type: type
+      });
+    }
+  } catch (e) {
+    logger.error(`fetchUnauthOnus error: ${e.message}`);
+  }
+};
+
 const decodeRxPower = (brand, val) => {
   const rx = computeRxDbm(brand, val);
   if (rx == null) return 'N/A';
@@ -1044,6 +1236,8 @@ async function getOltStats(id, full = false) {
     onus_offline: 0,
     onus_weak:   0,
     onus:        [],
+    unauth_onus: [],
+    cards:       [],
     voltage:     'N/A',
     uplink_rx:   0,
     uplink_tx:   0,
@@ -1124,6 +1318,10 @@ async function getOltStats(id, full = false) {
         const onlineVals = getOnlineValues(detectedBrandKey, activeProfile);
 
         await fetchSystemMetrics(session, detectedBrandKey, stats);
+        if (full) {
+          await fetchCardMetrics(session, detectedBrandKey, stats);
+          await fetchUnauthOnus(session, activeProfile, stats);
+        }
 
         // 4. Mode Counter (ZTE)
         if (activeProfile.is_counter) {
@@ -1145,11 +1343,18 @@ async function getOltStats(id, full = false) {
         let snMap = {};
         let rxMap = {};
         let txMap = {};
+        let distMap = {};
+        let fwMap = {};
+        let upMap = {};
+
         if (full) {
           const snPick = await pickSnTable(session, activeProfile);
           snMap = snPick.map || {};
           if (activeProfile.rx_power_table) rxMap = await slowWalk(session, activeProfile.rx_power_table);
           if (activeProfile.tx_power_table) txMap = await slowWalk(session, activeProfile.tx_power_table);
+          if (activeProfile.distance_table) distMap = await slowWalk(session, activeProfile.distance_table);
+          if (activeProfile.firmware_table) fwMap = await slowWalk(session, activeProfile.firmware_table);
+          if (activeProfile.uptime_table)   upMap = await slowWalk(session, activeProfile.uptime_table);
         }
 
         const allIndices = new Set([...Object.keys(statusMap), ...Object.keys(nameMap)]);
@@ -1172,9 +1377,16 @@ async function getOltStats(id, full = false) {
           const snVal = getByIdx(snMap, idx);
           const rxVal = getByIdx(rxMap, idx);
           const txVal = getByIdx(txMap, idx);
+          const distVal = getByIdx(distMap, idx);
+          const fwVal = getByIdx(fwMap, idx);
+          const upVal = getByIdx(upMap, idx);
+
           const sn   = snVal ? decodeSn(snVal) : '-';
           const rx   = decodeRxPower(detectedBrandKey, rxVal);
           const tx   = decodeRxPower(detectedBrandKey, txVal);
+          const distance = bufferToInt(distVal) ? (bufferToInt(distVal) / 10).toFixed(1) + ' m' : '-';
+          const firmware = safeToString(fwVal) || '-';
+          const onuUptime = upVal ? decodeUptime(bufferToInt(upVal)) : '-';
           const onuId = hiosoOnuIdFromIndex(idx);
           
           if (isUp) stats.onus_online++;
@@ -1196,13 +1408,20 @@ async function getOltStats(id, full = false) {
               sn,
               status: isUp ? 'Online' : 'Offline',
               tx: txShown,
-              rx: rxShown
+              rx: rxShown,
+              distance,
+              firmware,
+              uptime: onuUptime
             });
           }
         }
 
         stats.onus_weak = weakCount;
         stats.onus = onus.sort((a, b) => a.name.localeCompare(b.name));
+
+        if (full) {
+          await enrichOnusWithAcsData(stats.onus);
+        }
 
         safeResolve(stats);
       } catch (err) {
@@ -1245,4 +1464,276 @@ async function renameOnu(oltId, index, newName) {
   });
 }
 
-module.exports = { getAllOlts, getActiveOlts, getOltById, createOlt, updateOlt, deleteOlt, getOltStats, rebootOnu, renameOnu };
+/**
+ * Otorisasi ONU (Provisioning) via Telnet CLI.
+ */
+async function authorizeOnu(oltId, data) {
+  const olt = getOltById(oltId);
+  if (!olt) throw new Error('OLT tidak ditemukan');
+
+  const brand = (olt.brand || 'hioso').toLowerCase();
+  const { index, sn, name, vlan } = data;
+
+  // Parsing index (format ZTE: 1/board/port:onuId)
+  let board = 1, port = 1, onuId = 1;
+  if (index.includes('/')) {
+    const parts = index.split(/[/: ]+/).filter(Boolean);
+    if (parts.length >= 3) {
+      board = parts[parts.length - 3];
+      port = parts[parts.length - 2];
+      onuId = parts[parts.length - 1];
+    }
+  }
+
+  const cmds = [];
+  if (brand === 'zte') {
+    cmds.push('enable');
+    cmds.push('configure terminal');
+    cmds.push(`interface gpon-olt_1/${board}/${port}`);
+    cmds.push(`onu ${onuId} type ALL sn ${sn}`);
+    cmds.push('exit');
+    cmds.push(`interface gpon-onu_1/${board}/${port}:${onuId}`);
+    if (name) cmds.push(`name ${name}`);
+    cmds.push('tcont 1 profile UP-100M'); // Default profile
+    cmds.push('gemport 1 tcont 1');
+    if (vlan) cmds.push(`service-port 1 vport 1 user-vlan ${vlan} vlan ${vlan}`);
+    cmds.push('exit');
+    cmds.push('end');
+    cmds.push('write');
+  } else if (brand === 'huawei') {
+    cmds.push('enable');
+    cmds.push('config');
+    cmds.push(`interface gpon 0/${board}`);
+    cmds.push(`ont add ${port} ${onuId} sn-auth ${sn} omci ont-lineprofile-id 1 ont-srvprofile-id 1`);
+    if (name) cmds.push(`ont name ${port} ${onuId} "${name}"`);
+    cmds.push('quit');
+    if (vlan) cmds.push(`service-port vlan ${vlan} gpon 0/${board}/${port} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}`);
+    cmds.push('save');
+  } else {
+    throw new Error(`Fitur otorisasi otomatis belum didukung untuk brand ${brand}`);
+  }
+
+  return await telnetLoginAndRun(olt.host, olt.web_user, olt.web_password, cmds);
+}
+
+/**
+ * Cari data tambahan ONU dari ACS (WiFi, Client Count, dll)
+ */
+async function enrichOnusWithAcsData(onus) {
+  try {
+    logger.info(`[ACS-Sync] Memulai sinkronisasi data untuk ${onus.length} ONU`);
+    const acsDevices = await genieacs.getDevices();
+    if (!acsDevices || !acsDevices.length) {
+      logger.warn('[ACS-Sync] Tidak ada perangkat ditemukan di GenieACS');
+      return onus;
+    }
+
+    const normalizeSN = (sn) => String(sn || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+    for (const onu of onus) {
+      const targetSn = normalizeSN(onu.sn);
+      if (!targetSn || targetSn === '-') continue;
+
+      logger.debug(`[ACS-Sync] Mencari SN: ${targetSn}`);
+
+      // Cari device di ACS berdasarkan SN (fuzzy match)
+      const acsDev = acsDevices.find(d => {
+        const sn1 = d.Device?.DeviceInfo?.SerialNumber?._value;
+        const sn2 = d.InternetGatewayDevice?.DeviceInfo?.SerialNumber?._value;
+        const sn3 = d._id;
+        
+        const acsSn = normalizeSN(sn1 || sn2 || sn3);
+        const match = acsSn.includes(targetSn) || targetSn.includes(acsSn);
+        if (match) logger.info(`[ACS-Sync] Match Found: ${targetSn} matches ${acsSn} (ID: ${d._id})`);
+        return match;
+      });
+
+      if (acsDev) {
+        // Ambil SSID (Cek beberapa path umum)
+        const ssid = 
+          acsDev.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.SSID?._value ||
+          acsDev.Device?.WiFi?.SSID?.['1']?.SSID?._value || 
+          acsDev.Device?.WiFi?.SSID?.['1']?.SSID || 
+          acsDev.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['5']?.SSID?._value || '-';
+        
+        onu.wifi_ssid = ssid;
+        
+        // Hitung Client Connected (Sum up all radios if possible)
+        let associations = 0;
+        const paths = [
+          'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations',
+          'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations',
+          'Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries',
+          'Device.WiFi.AccessPoint.2.AssociatedDeviceNumberOfEntries',
+          'InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries',
+          'Device.Hosts.HostNumberOfEntries'
+        ];
+
+        for (const p of paths) {
+          const val = getNestedValue(acsDev, p);
+          if (val !== undefined && val !== null) {
+            associations += parseInt(val) || 0;
+          }
+        }
+        
+        onu.client_count = associations;
+        onu.acs_id = acsDev._id;
+        logger.info(`[ACS-Sync] Updated ${onu.sn}: SSID=${onu.wifi_ssid}, Users=${onu.client_count}`);
+      }
+    }
+  } catch (e) {
+    logger.error(`[ACS-Sync] Error: ${e.message}`);
+  }
+  return onus;
+}
+
+function getNestedValue(obj, path) {
+  return path.split('.').reduce((prev, curr) => {
+    if (prev && prev[curr] !== undefined) {
+      const val = prev[curr];
+      return (val && val._value !== undefined) ? val._value : val;
+    }
+    return undefined;
+  }, obj);
+}
+
+/**
+ * Konfigurasi WAN ONU via TR069 (GenieACS).
+ */
+async function configureWanViaAcs(sn, data) {
+  const acsDevices = await genieacs.getDevices();
+  const acsDev = acsDevices.find(d => d._id.includes(sn) || (d.Device?.DeviceInfo?.SerialNumber?._value && d.Device.DeviceInfo.SerialNumber._value.includes(sn)));
+  
+  if (!acsDev) throw new Error(`Perangkat dengan SN ${sn} tidak ditemukan di ACS.`);
+
+  const { mode, vlan, username, password, lans, ssids } = data;
+  const params = {};
+
+  // Helper to build binding strings
+  // Typical formats: "LAN1,LAN2" or "WLAN1,WLAN2"
+  const lanBind = lans ? lans.split(',').map(l => `LAN${l}`).join(',') : '';
+  const ssidBind = ssids ? ssids.split(',').map(s => `WLAN${s}`).join(',') : '';
+
+  if (mode === 'PPPoE') {
+    const basePath = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.";
+    params[`${basePath}Enable`] = true;
+    params[`${basePath}ConnectionType`] = "IP_Routed";
+    params[`${basePath}Name`] = "INTERNET";
+    params[`${basePath}Username`] = username;
+    params[`${basePath}Password`] = password;
+    if (vlan) {
+      params[`${basePath}VLANID`] = vlan;
+    }
+    // LAN & SSID Binding for Broadcom/Typical ONUs
+    if (lanBind) params[`${basePath}X_BROADCOM_COM_LANBind`] = lanBind;
+    if (ssidBind) params[`${basePath}X_BROADCOM_COM_WLANBind`] = ssidBind;
+    
+  } else {
+    const basePath = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.";
+    params[`${basePath}Enable`] = true;
+    params[`${basePath}ConnectionType`] = "IP_Bridged";
+    if (vlan) {
+      params[`${basePath}VLANID`] = vlan;
+    }
+    // LAN & SSID Binding
+    if (lanBind) params[`${basePath}X_BROADCOM_COM_LANBind`] = lanBind;
+    if (ssidBind) params[`${basePath}X_BROADCOM_COM_WLANBind`] = ssidBind;
+  }
+
+  return await genieacs.setParameterValues(acsDev._id, params);
+}
+
+/**
+ * Konfigurasi WAN ONU (PPPoE / Bridge) via Telnet CLI.
+ */
+ async function configureOnuWan(oltId, data) {
+  const olt = getOltById(oltId);
+  if (!olt) throw new Error('OLT tidak ditemukan');
+
+  const brand = (olt.brand || 'hioso').toLowerCase();
+  const { index, mode, vlan, username, password, lans, ssids } = data;
+
+  // Parsing index
+  let board = 1, port = 1, onuId = 1;
+  if (index.includes('/')) {
+    const parts = index.split(/[/: ]+/).filter(Boolean);
+    if (parts.length >= 3) {
+      board = parts[parts.length - 3];
+      port = parts[parts.length - 2];
+      onuId = parts[parts.length - 1];
+    }
+  }
+
+  const cmds = [];
+  if (brand === 'zte') {
+    cmds.push('enable');
+    cmds.push('configure terminal');
+    
+    if (mode === 'PPPoE') {
+      // ZTE C300/C320 PPPoE Config via OMCI (pon-onu-mng)
+      cmds.push(`pon-onu-mng gpon-onu_1/${board}/${port}:${onuId}`);
+      
+      // 1. Configure WAN IP with PPPoE
+      // Note: vlan here is used as vlan-profile name. Usually named 'VLAN100' or just '100'
+      cmds.push(`wan-ip 1 mode pppoe username ${username} password ${password} vlan-profile ${vlan} host 1`);
+      
+      // 2. Binding LAN & SSID
+      if (lans || ssids) {
+        let bindCmd = `wan 1`;
+        if (lans) bindCmd += ` ethuni ${lans}`;
+        if (ssids) bindCmd += ` ssid ${ssids}`;
+        bindCmd += ` service internet host 1`;
+        cmds.push(bindCmd);
+      }
+      
+      cmds.push('exit');
+      
+      // OLT side service-port
+      cmds.push(`interface gpon-onu_1/${board}/${port}:${onuId}`);
+      cmds.push(`service-port 1 vport 1 user-vlan ${vlan} vlan ${vlan}`);
+    } else {
+      // Bridge Mode
+      cmds.push(`pon-onu-mng gpon-onu_1/${board}/${port}:${onuId}`);
+      
+      // Tagging each selected port to the target VLAN
+      if (vlan) {
+        if (lans) {
+          lans.split(',').forEach(l => {
+            cmds.push(`vlan port eth_0/${l} mode tag vlan ${vlan}`);
+          });
+        }
+        if (ssids) {
+          ssids.split(',').forEach(s => {
+            cmds.push(`vlan port wifi_0/${s} mode tag vlan ${vlan}`);
+          });
+        }
+      }
+      
+      cmds.push('exit');
+      
+      // OLT side service-port
+      cmds.push(`interface gpon-onu_1/${board}/${port}:${onuId}`);
+      cmds.push(`service-port 1 vport 1 user-vlan ${vlan} vlan ${vlan}`);
+    }
+    
+    cmds.push('exit');
+    cmds.push('end');
+    cmds.push('write');
+  } else if (brand === 'huawei') {
+     cmds.push('enable');
+     cmds.push('config');
+     if (mode === 'PPPoE') {
+       // Huawei usually configures WAN via OMCI/TR069, but basic service-port is needed
+       cmds.push(`service-port vlan ${vlan} gpon 0/${board}/${port} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}`);
+     } else {
+       cmds.push(`service-port vlan ${vlan} gpon 0/${board}/${port} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}`);
+     }
+     cmds.push('save');
+   } else {
+     throw new Error(`Fitur konfigurasi WAN belum didukung untuk brand ${brand}`);
+   }
+ 
+   return await telnetLoginAndRun(olt.host, olt.web_user, olt.web_password, cmds);
+ }
+ 
+ module.exports = { getAllOlts, getActiveOlts, getOltById, createOlt, updateOlt, deleteOlt, getOltStats, rebootOnu, renameOnu, authorizeOnu, configureOnuWan, configureWanViaAcs };

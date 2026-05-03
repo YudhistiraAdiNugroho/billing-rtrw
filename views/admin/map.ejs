@@ -6,6 +6,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="/css/admin.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.Editable/1.2.0/Leaflet.Editable.js"></script>
   <style>
     #map { height: calc(100vh - 200px); border-radius: 8px; margin-top: 10px; z-index: 1; background: #e5e7eb; }
     .map-controls { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -50,9 +52,39 @@
       .odps-hide-sm { display: none; }
     }
 
+    /* Editable Handles Visibility */
+    .leaflet-vertex-icon {
+      background: #ff0000 !important;
+      border: 2px solid #ffffff !important;
+      border-radius: 50% !important;
+      box-shadow: 0 0 10px rgba(255,0,0,1) !important;
+      width: 18px !important;
+      height: 18px !important;
+      margin-left: -9px !important;
+      margin-top: -9px !important;
+      z-index: 9999 !important;
+      display: block !important;
+      cursor: move !important;
+    }
+    .leaflet-middle-marker {
+      background: #00ff00 !important;
+      border: 2px solid #ffffff !important;
+      border-radius: 50% !important;
+      box-shadow: 0 0 8px rgba(0,255,0,1) !important;
+      width: 14px !important;
+      height: 14px !important;
+      margin-left: -7px !important;
+      margin-top: -7px !important;
+      z-index: 9998 !important;
+      display: block !important;
+      cursor: crosshair !important;
+      opacity: 0.9 !important;
+    }
+
     /* Picker Map in Modal */
     #picker-map { height: 250px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #cbd5e1; z-index: 1; }
     #edit-picker-map { height: 250px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #cbd5e1; z-index: 1; }
+    #cable-drawing-map { height: 450px; border-radius: 8px; border: 1px solid #cbd5e1; z-index: 1; background: #e5e7eb; }
     .picker-icon-odp { color: #f59e0b; font-size: 24px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); display: block; width: 24px; height: 24px; text-align: center; line-height: 24px; text-shadow: -1.5px -1.5px 0 #fff, 1.5px -1.5px 0 #fff, -1.5px 1.5px 0 #fff, 1.5px 1.5px 0 #fff; }
 
     .marker-odp { color: #f59e0b; font-size: 18px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); text-shadow: -1.5px -1.5px 0 #fff, 1.5px -1.5px 0 #fff, -1.5px 1.5px 0 #fff, 1.5px 1.5px 0 #fff; }
@@ -254,7 +286,25 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- Modal Drawing Jalur Kabel -->
+<div class="mo" id="cablePathModal">
+  <div class="mb" style="max-width: 900px;">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-pencil-fill"></i> Gambar Jalur Kabel</span>
+      <button type="button" class="mc" onclick="closeModal('cablePathModal')">&times;</button>
+    </div>
+    <div class="mbody">
+      <div id="cable-drawing-map"></div>
+      <p class="text-muted mt-2 small"><i class="bi bi-info-circle"></i> Tarik titik oranye untuk mengubah jalur. Klik pada garis untuk menambah titik lekukan baru.</p>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="addMorePoints()"><i class="bi bi-plus-circle"></i> Tambah Titik Lekukan</button>
+      <button type="button" class="btn btn-g" onclick="closeModal('cablePathModal')">Batal</button>
+      <button type="button" class="btn btn-p" onclick="saveCablePath()">Simpan Jalur Kabel</button>
+    </div>
+  </div>
+</div>
+
 <script id="settings-data" type="application/json"><%- JSON.stringify(settings) %></script>
 <script id="customers-data" type="application/json"><%- JSON.stringify(customers).replace(/<\/script/g, '<\\/script').replace(/<!--/g, '<\\!--') %></script>
 <script id="odps-data" type="application/json"><%- JSON.stringify(odps).replace(/<\/script/g, '<\\/script').replace(/<!--/g, '<\\!--') %></script>
@@ -280,7 +330,12 @@
   };
 
   // Initialize Map
-  const map = L.map('map').setView([officeCoords.lat, officeCoords.lng], 13);
+  const map = L.map('map', {
+    editable: true
+  }).setView([officeCoords.lat, officeCoords.lng], 13);
+
+  let currentEditingPolyline = null;
+  let currentEditingCustomer = null;
 
   // Layers
   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -294,8 +349,8 @@
     attribution: '© Google Satellite'
   });
 
-  osm.addTo(map); // Default set to OSM first to ensure it's not blank
-  googleHybrid.addTo(map); // Then overlay satellite
+  osm.addTo(map);
+  googleHybrid.addTo(map);
 
   const baseMaps = {
     [I18N.layerOsm]: osm,
@@ -317,7 +372,7 @@
   const odpMarkers = {}; // Store ODP coordinates for line mapping
   odps.forEach(odp => {
     if (odp.lat && odp.lng) {
-      odpMarkers[odp.id] = [odp.lat, odp.lng];
+      odpMarkers[odp.id] = [parseFloat(odp.lat), parseFloat(odp.lng)];
       const marker = L.marker([odp.lat, odp.lng], {
         icon: L.divIcon({
           html: '<i class="bi bi-box-seam-fill marker-odp"></i>',
@@ -352,17 +407,27 @@
       
       // Draw line to ODP if connected
       if (cust.odp_id && odpMarkers[cust.odp_id]) {
-        L.polyline([
-          [cust.lat, cust.lng],
-          odpMarkers[cust.odp_id]
-        ], {
+        let pathCoords = [[parseFloat(cust.lat), parseFloat(cust.lng)], odpMarkers[cust.odp_id]];
+        
+        if (cust.cable_path) {
+          try {
+            pathCoords = JSON.parse(cust.cable_path);
+          } catch(e) {}
+        }
+
+        const polyline = L.polyline(pathCoords, {
           color: is_active ? '#3b82f6' : '#ef4444',
           weight: 3,
           opacity: 0.8,
           dashArray: '10, 10',
-          className: 'flowing-line',
-          interactive: false
+          className: 'flowing-line'
         }).addTo(map);
+
+        polyline.on('click', (e) => {
+          if (currentEditingPolyline === polyline) {
+             L.DomEvent.stopPropagation(e);
+          }
+        });
       }
 
       const marker = L.marker([cust.lat, cust.lng], {
@@ -411,9 +476,9 @@
           </div>
 
           <div class="popup-actions">
-             <a href="/admin/customers?search=${encodeURIComponent(cust.name || '')}" class="btn btn-sm btn-g"><i class="bi bi-eye me-1"></i>${I18N.viewDetails}</a>
-             <a href="${waLink}" target="_blank" rel="noopener" class="btn btn-sm btn-wa"><i class="bi bi-whatsapp me-1"></i>WhatsApp</a>
-             <a href="${mapsLink}" target="_blank" rel="noopener" class="btn btn-sm btn-g"><i class="bi bi-geo-alt me-1"></i>Maps</a>
+             <button onclick="startCableDrawing(${cust.id}, ${cust.lat}, ${cust.lng}, ${cust.odp_id})" class="btn btn-sm btn-p"><i class="bi bi-pencil-fill me-1"></i>Gambar Jalur</button>
+             <a href="/admin/customers?search=${encodeURIComponent(cust.name || '')}" class="btn btn-sm btn-g"><i class="bi bi-eye me-1"></i>Detail</a>
+             <a href="${waLink}" target="_blank" class="btn btn-sm btn-wa"><i class="bi bi-whatsapp"></i></a>
           </div>
         </div>
       `);
@@ -422,6 +487,142 @@
       marker.on('popupclose', () => stopCustomerTrafficPopup(cust.id));
     }
   });
+
+  // Cable Drawing Modal Map
+  let drawingMap, drawingPolyline, drawingMarkers = [];
+  
+  function interpolatePoints(p1, p2, count) {
+    const points = [p1];
+    for (let i = 1; i <= count; i++) {
+      const lat = p1[0] + (p2[0] - p1[0]) * (i / (count + 1));
+      const lng = p1[1] + (p2[1] - p1[1]) * (i / (count + 1));
+      points.push([lat, lng]);
+    }
+    points.push(p2);
+    return points;
+  }
+
+  function renderEditorMarkers() {
+    // Clear old markers
+    drawingMarkers.forEach(m => drawingMap.removeLayer(m));
+    drawingMarkers = [];
+
+    const latlngs = drawingPolyline.getLatLngs();
+    
+    latlngs.forEach((ll, index) => {
+      const isEdge = index === 0 || index === latlngs.length - 1;
+      
+      const marker = L.marker(ll, {
+        draggable: true,
+        zIndexOffset: 2000,
+        icon: L.divIcon({
+          html: `<div style="background: ${isEdge ? '#3b82f6' : '#ff0000'}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>`,
+          className: 'custom-div-icon',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        })
+      }).addTo(drawingMap);
+
+      marker.on('drag', (e) => {
+        const newLatLngs = drawingPolyline.getLatLngs();
+        newLatLngs[index] = e.latlng;
+        drawingPolyline.setLatLngs(newLatLngs);
+      });
+
+      drawingMarkers.push(marker);
+    });
+  }
+
+  function startCableDrawing(customerId, lat, lng, odpId) {
+    const odpCoord = odpMarkers[odpId];
+    if (!odpCoord) return alert('Data ODP tidak ditemukan');
+
+    currentEditingCustomer = customerId;
+    openModal('cablePathModal');
+
+    setTimeout(() => {
+      try {
+        if (drawingMap) drawingMap.remove();
+        
+        drawingMap = L.map('cable-drawing-map').setView([lat, lng], 17);
+        
+        L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+          maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+        }).addTo(drawingMap);
+
+        const customer = customers.find(c => c.id === customerId);
+        let pathCoords = [];
+        if (customer && customer.cable_path) {
+          try { pathCoords = JSON.parse(customer.cable_path); } catch(e) {}
+        }
+        
+        if (pathCoords.length <= 2) {
+          pathCoords = interpolatePoints([parseFloat(lat), parseFloat(lng)], odpCoord, 5);
+        }
+
+        drawingPolyline = L.polyline(pathCoords, {
+          color: '#f59e0b', weight: 6, dashArray: '5, 5', interactive: false
+        }).addTo(drawingMap);
+
+        renderEditorMarkers();
+
+        setTimeout(() => {
+          drawingMap.invalidateSize();
+          drawingMap.fitBounds(drawingPolyline.getBounds(), { padding: [50, 50] });
+        }, 200);
+
+      } catch (err) {
+        console.error("Drawing map error:", err);
+      }
+    }, 600);
+  }
+
+  function addMorePoints() {
+    if (!drawingPolyline || !drawingMap) return;
+    const latlngs = drawingPolyline.getLatLngs();
+    const newPath = [];
+    for (let i = 0; i < latlngs.length - 1; i++) {
+      newPath.push(latlngs[i]);
+      const midLat = (latlngs[i].lat + latlngs[i+1].lat) / 2;
+      const midLng = (latlngs[i].lng + latlngs[i+1].lng) / 2;
+      newPath.push(L.latLng(midLat, midLng));
+    }
+    newPath.push(latlngs[latlngs.length - 1]);
+    drawingPolyline.setLatLngs(newPath);
+    renderEditorMarkers();
+  }
+
+  async function saveCablePath() {
+    if (!drawingPolyline || !currentEditingCustomer) return;
+    
+    const latlngs = drawingPolyline.getLatLngs().map(ll => [ll.lat, ll.lng]);
+    const pathJson = JSON.stringify(latlngs);
+
+    try {
+      const res = await fetch(`/admin/api/customers/${currentEditingCustomer}/cable-path`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ path: pathJson })
+      });
+      
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const data = await res.json();
+        if (data.ok) {
+          alert('Jalur kabel berhasil disimpan!');
+          location.reload();
+        } else {
+          alert('Gagal menyimpan: ' + data.error);
+        }
+      } else {
+        const text = await res.text();
+        console.error("Server returned non-JSON response:", text);
+        alert('Gagal menyimpan: Server mengembalikan respon tidak valid (HTML/404). Periksa konsol browser.');
+      }
+    } catch (e) {
+      alert('Error: ' + e.message);
+    }
+  }
 
   // Modal functions
   let pickerMap, pickerMarker;

@@ -164,6 +164,7 @@
     .btn-action-v2:hover { background: #f1f5f9; color: #1e293b; border-color: #cbd5e1; }
     .btn-reboot-v2:hover { color: #ef4444; background: #fef2f2; border-color: #fee2e2; }
     .btn-rename-v2:hover { color: #3b82f6; background: #eff6ff; border-color: #dbeafe; }
+    .btn-wan-v2:hover { color: #059669; background: #ecfdf5; border-color: #d1fae5; }
 
     .traffic-v2 { display: flex; gap: 12px; font-family: monospace; font-size: 12px; font-weight: 600; }
     .traffic-in-v2 { color: #10b981; }
@@ -275,6 +276,57 @@
         </div>
       </div>
 
+      <!-- Card List Section -->
+      <div id="card-list-container" style="display: none;">
+        <div class="onu-main-card" style="margin-bottom: 20px;">
+          <div class="card-header">
+            <h4 class="fw-bold m-0 text-primary small text-uppercase"><i class="bi bi-grid-3x3-gap"></i> <%= t('admin.olts.card_list', 'Daftar Board / Card') %></h4>
+          </div>
+          <div class="table-responsive">
+            <table class="onu-table-v2">
+              <thead>
+                <tr>
+                  <th>SLOT</th>
+                  <th>TYPE</th>
+                  <th>STATUS</th>
+                  <th>PORTS</th>
+                  <th>SERIAL</th>
+                  <th>CPU</th>
+                  <th>RAM</th>
+                </tr>
+              </thead>
+              <tbody id="card-table-body">
+                <!-- Cards rendered here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unauth ONU Section -->
+      <div id="unauth-list-container" style="display: none;">
+        <div class="onu-main-card" style="margin-bottom: 20px; border-left: 4px solid #ffc107;">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="fw-bold m-0 text-warning small text-uppercase"><i class="bi bi-exclamation-triangle"></i> <%= t('admin.olts.unauth_onu', 'ONU Belum Terdaftar (Unauth)') %></h4>
+          </div>
+          <div class="table-responsive">
+            <table class="onu-table-v2">
+              <thead>
+                <tr>
+                  <th>PORT/INDEX</th>
+                  <th>SN / SERIAL NUMBER</th>
+                  <th>TYPE</th>
+                  <th>AKSI</th>
+                </tr>
+              </thead>
+              <tbody id="unauth-table-body">
+                <!-- Unauth ONUs rendered here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Main ONU Table Card -->
       <div class="onu-main-card position-relative">
         <div id="loading-overlay" class="loading-overlay">
@@ -304,13 +356,12 @@
                 <th><%= t('admin.olts.table.status', 'Status') %></th>
                 <th><%= t('admin.olts.table.tx', 'TxPower') %></th>
                 <th><%= t('admin.olts.table.rx', 'RxPower') %></th>
-                <th><%= t('admin.olts.table.oid', 'Index OID') %></th>
                 <th style="text-align:right"><%= t('common.actions', 'Aksi') %></th>
               </tr>
             </thead>
             <tbody id="onu-table-body">
               <tr>
-                <td colspan="8">
+                <td colspan="7">
                   <div class="empty-state">
                     <i class="bi bi-hdd-network"></i>
                     <p><%= t('admin.olts.empty_select', 'Pilih perangkat OLT di atas untuk memantau data ONU.') %></p>
@@ -449,6 +500,84 @@
   </div>
 </div>
 
+<!-- WAN Configuration Modal -->
+<div class="mo" id="wanConfigModal">
+  <div class="mb" style="max-width: 500px;">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-globe"></i> Konfigurasi WAN ONU</span>
+      <button type="button" class="mc" onclick="closeModal('wanConfigModal')">&times;</button>
+    </div>
+    <form id="wanConfigForm" onsubmit="submitWanConfig(event)">
+      <div class="mbody">
+        <input type="hidden" id="wan_olt_id">
+        <input type="hidden" id="wan_onu_index">
+        <input type="hidden" id="wan_onu_sn">
+        
+        <div class="fg">
+          <label class="fl">NAMA ONU</label>
+          <input type="text" id="wan_onu_name" class="fc" readonly>
+        </div>
+
+        <div class="fg">
+          <label class="fl">METODE KONFIGURASI</label>
+          <select id="wan_method" class="fs">
+            <option value="telnet">Telnet CLI (OLT OMCI)</option>
+            <option value="tr069">TR069 (GenieACS)</option>
+          </select>
+        </div>
+        
+        <div class="fg">
+          <label class="fl">MODE WAN</label>
+          <select id="wan_mode" class="fs" onchange="toggleWanFields()">
+            <option value="Bridge">Bridge</option>
+            <option value="PPPoE">PPPoE</option>
+          </select>
+        </div>
+        
+        <div class="fg">
+          <label class="fl">VLAN ID</label>
+          <input type="number" id="wan_vlan" class="fc" value="100" required>
+        </div>
+
+        <div class="fg">
+          <label class="fl">BINDING LAN</label>
+          <div class="d-flex flex-wrap gap-3 mt-1">
+            <label class="d-flex align-items-center gap-1 small cursor-pointer"><input type="checkbox" name="wan_lan" value="1" checked> LAN1</label>
+            <label class="d-flex align-items-center gap-1 small cursor-pointer"><input type="checkbox" name="wan_lan" value="2"> LAN2</label>
+            <label class="d-flex align-items-center gap-1 small cursor-pointer"><input type="checkbox" name="wan_lan" value="3"> LAN3</label>
+            <label class="d-flex align-items-center gap-1 small cursor-pointer"><input type="checkbox" name="wan_lan" value="4"> LAN4</label>
+          </div>
+        </div>
+
+        <div class="fg">
+          <label class="fl">BINDING SSID (WIFI)</label>
+          <div class="d-flex flex-wrap gap-3 mt-1">
+            <label class="d-flex align-items-center gap-1 small cursor-pointer"><input type="checkbox" name="wan_ssid" value="1" checked> SSID1</label>
+            <label class="d-flex align-items-center gap-1 small cursor-pointer"><input type="checkbox" name="wan_ssid" value="2"> SSID2</label>
+            <label class="d-flex align-items-center gap-1 small cursor-pointer"><input type="checkbox" name="wan_ssid" value="3"> SSID3</label>
+            <label class="d-flex align-items-center gap-1 small cursor-pointer"><input type="checkbox" name="wan_ssid" value="4"> SSID4</label>
+          </div>
+        </div>
+        
+        <div id="pppoe_fields" style="display: none;">
+          <div class="fg">
+            <label class="fl">PPPoE USERNAME</label>
+            <input type="text" id="wan_username" class="fc">
+          </div>
+          <div class="fg">
+            <label class="fl">PPPoE PASSWORD</label>
+            <input type="password" id="wan_password" class="fc">
+          </div>
+        </div>
+      </div>
+      <div class="mf">
+        <button type="button" class="btn btn-g" onclick="closeModal('wanConfigModal')"><%= t('common.cancel', 'Batal') %></button>
+        <button type="submit" class="btn btn-p"><%= t('admin.olts.edit_modal.update', 'Update Konfigurasi') %></button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div id="olt-data-store" data-olts='<%- JSON.stringify(olts || []) %>' style="display:none;"></div>
 
 <script>
@@ -469,8 +598,8 @@ const I18N = {
   statusOffline: "<%= t('admin.olts.status.offline', 'Offline') %>"
 };
 
-function openModal(id) { document.getElementById(id).style.display = 'flex'; }
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
 const oltsData = JSON.parse(document.getElementById('olt-data-store').dataset.olts);
 
@@ -525,6 +654,48 @@ async function loadOltDashboard(id) {
     document.getElementById('stat-traffic-out').innerText = formatBytes(stats.uplink_tx) + '/s';
     document.getElementById('last-update').innerText = new Date().toLocaleTimeString(I18N.lang === 'en' ? 'en-US' : 'id-ID');
     
+    // Render Card List
+    const cardContainer = document.getElementById('card-list-container');
+    const cardBody = document.getElementById('card-table-body');
+    if (stats.cards && stats.cards.length > 0) {
+      cardContainer.style.display = 'block';
+      cardBody.innerHTML = stats.cards.map(card => {
+        const statusClass = card.status === 'INSERVICE' || card.status === 'ONLINE' ? 'pill-online' : 'pill-offline';
+        return `<tr>
+          <td><strong>${card.index}</strong></td>
+          <td><span class="badge-v2">${card.type}</span></td>
+          <td><span class="status-pill-v2 ${statusClass}">${card.status}</span></td>
+          <td>${card.ports}</td>
+          <td><code class="sn-mac">${card.serial}</code></td>
+          <td>${card.cpu}</td>
+          <td>${card.ram}</td>
+        </tr>`;
+      }).join('');
+    } else {
+      cardContainer.style.display = 'none';
+    }
+
+    // Render Unauth List
+    const unauthContainer = document.getElementById('unauth-list-container');
+    const unauthBody = document.getElementById('unauth-table-body');
+    if (stats.unauth_onus && stats.unauth_onus.length > 0) {
+      unauthContainer.style.display = 'block';
+      unauthBody.innerHTML = stats.unauth_onus.map(onu => {
+        return `<tr>
+          <td><code class="sn-mac">${onu.id || onu.index}</code></td>
+          <td><code class="sn-mac">${onu.sn}</code></td>
+          <td><span class="badge-v2">${onu.type}</span></td>
+          <td>
+            <button class="btn btn-sm btn-p" onclick="authorizeOnuPrompt('${id}', '${onu.index}', '${onu.sn}')">
+              <i class="bi bi-check-circle"></i> Otorisasi
+            </button>
+          </td>
+        </tr>`;
+      }).join('');
+    } else {
+      unauthContainer.style.display = 'none';
+    }
+
     // Render Table
     const tbody = document.getElementById('onu-table-body');
     if (stats.onus && stats.onus.length > 0) {
@@ -546,9 +717,11 @@ async function loadOltDashboard(id) {
           <td><span class="status-pill-v2 ${statusClass}"><i class="bi bi-circle-fill" style="font-size:6px;"></i> ${formatStatus(statusVal) || '-'}</span></td>
           <td><span class="power-badge">${onu.tx || 'N/A'}</span></td>
           <td><span class="power-badge ${rxClass}">${onu.rx || 'N/A'}</span></td>
-          <td><span class="text-muted small">${onu.index}</span></td>
           <td style="text-align:right">
             <div class="d-flex justify-content-end gap-1">
+              <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="configureWanPrompt('${id}', '${onu.index}', '${onu.name}', '${onu.sn}')" style="font-size: 11px;">
+                <i class="bi bi-gear-fill"></i> WAN
+              </button>
               <button class="btn-action-v2 btn-rename-v2" onclick="renameOnuPrompt('${id}', '${onu.index}', '${onu.name}')" title="${I18N.renameTitle}"><i class="bi bi-pencil-square"></i></button>
               <button class="btn-action-v2 btn-reboot-v2" onclick="rebootOnu('${id}', '${onu.index}')" title="${I18N.rebootTitle}"><i class="bi bi-arrow-clockwise"></i></button>
             </div>
@@ -557,7 +730,7 @@ async function loadOltDashboard(id) {
       }).join('');
     } else {
       document.getElementById('search-container').style.display = 'none';
-      tbody.innerHTML = `<tr><td colspan="8">
+      tbody.innerHTML = `<tr><td colspan="7">
         <div class="empty-state">
           <i class="bi bi-exclamation-triangle"></i>
           <p>${stats.error || I18N.noOnuData}</p>
@@ -566,7 +739,7 @@ async function loadOltDashboard(id) {
       </td></tr>`;
     }
   } catch (e) {
-    document.getElementById('onu-table-body').innerHTML = `<tr><td colspan="8" class="text-center p-5 text-danger">${I18N.errorPrefix}${e.message}</td></tr>`;
+    document.getElementById('onu-table-body').innerHTML = `<tr><td colspan="7" class="text-center p-5 text-danger">${I18N.errorPrefix}${e.message}</td></tr>`;
   } finally {
     overlay.style.display = 'none';
   }
@@ -621,6 +794,90 @@ async function rebootOnu(oltId, index) {
     const data = await res.json();
     if (data.success) { alert(I18N.rebootSent); } else { alert(I18N.failedPrefix + data.error); }
   } catch (e) { alert(I18N.errorPrefix + e.message); }
+}
+
+async function authorizeOnuPrompt(oltId, index, sn) {
+  const name = prompt('Masukkan Nama Pelanggan:', '');
+  if (!name) return;
+  const vlan = prompt('Masukkan VLAN ID:', '100');
+  if (!vlan) return;
+
+  const overlay = document.getElementById('loading-overlay');
+  overlay.style.display = 'flex';
+
+  try {
+    const res = await fetch(`/admin/olts/${oltId}/onu/authorize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ index, sn, name, vlan })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('ONU berhasil diotorisasi!');
+      refreshCurrentOlt();
+    } else {
+      alert(I18N.failedPrefix + data.error);
+    }
+  } catch (e) {
+    alert(I18N.errorPrefix + e.message);
+  } finally {
+    overlay.style.display = 'none';
+  }
+}
+
+function configureWanPrompt(oltId, index, name, sn) {
+  document.getElementById('wan_olt_id').value = oltId;
+  document.getElementById('wan_onu_index').value = index;
+  document.getElementById('wan_onu_name').value = name;
+  document.getElementById('wan_onu_sn').value = sn;
+  openModal('wanConfigModal');
+}
+
+function toggleWanFields() {
+  const mode = document.getElementById('wan_mode').value;
+  document.getElementById('pppoe_fields').style.display = mode === 'PPPoE' ? 'block' : 'none';
+}
+
+async function submitWanConfig(e) {
+  e.preventDefault();
+  const oltId = document.getElementById('wan_olt_id').value;
+  const lans = Array.from(document.querySelectorAll('input[name="wan_lan"]:checked')).map(cb => cb.value);
+  const ssids = Array.from(document.querySelectorAll('input[name="wan_ssid"]:checked')).map(cb => cb.value);
+  
+  const payload = {
+    index: document.getElementById('wan_onu_index').value,
+    sn: document.getElementById('wan_onu_sn').value,
+    method: document.getElementById('wan_method').value,
+    mode: document.getElementById('wan_mode').value,
+    vlan: document.getElementById('wan_vlan').value,
+    username: document.getElementById('wan_username').value,
+    password: document.getElementById('wan_password').value,
+    lans: lans.join(','),
+    ssids: ssids.join(',')
+  };
+
+  const overlay = document.getElementById('loading-overlay');
+  overlay.style.display = 'flex';
+
+  try {
+    const res = await fetch(`/admin/olts/${oltId}/onu/configure-wan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('Konfigurasi WAN berhasil diterapkan!');
+      closeModal('wanConfigModal');
+      refreshCurrentOlt();
+    } else {
+      alert(I18N.failedPrefix + data.error);
+    }
+  } catch (e) {
+    alert(I18N.errorPrefix + e.message);
+  } finally {
+    overlay.style.display = 'none';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
