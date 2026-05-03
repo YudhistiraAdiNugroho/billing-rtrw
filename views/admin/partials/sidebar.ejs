@@ -49,6 +49,9 @@
     <a href="/admin/tickets" class="sb-item <%= activePage==='tickets' ? 'active' : '' %>">
       <i class="bi bi-headset"></i><span><%= t('admin.nav.customer_tickets', 'Keluhan Pelanggan') %></span>
     </a>
+    <a href="/admin/inventory" class="sb-item <%= activePage==='inventory' ? 'active' : '' %>">
+      <i class="bi bi-boxes"></i><span>Inventaris (Stok)</span>
+    </a>
 
     <% if (typeof session !=='undefined' && session.isAdmin) { %>
       <div class="sb-section"><%= t('admin.section.user_management', 'MANAJEMEN USER') %></div>
@@ -73,6 +76,15 @@
           </a>
           <a href="/admin/settings" class="sb-item <%= activePage==='settings' ? 'active' : '' %>">
             <i class="bi bi-gear"></i><span><%= t('admin.nav.settings', 'Pengaturan') %></span>
+          </a>
+          <a href="/admin/backup" class="sb-item <%= activePage==='backup' ? 'active' : '' %>">
+            <i class="bi bi-hdd-stack"></i><span>Backup & Recovery</span>
+          </a>
+          <a href="/admin/monitoring" class="sb-item <%= activePage==='monitoring' ? 'active' : '' %>">
+            <i class="bi bi-activity"></i><span>Monitoring Sistem</span>
+          </a>
+          <a href="/admin/audit-logs" class="sb-item <%= activePage==='audit_logs' ? 'active' : '' %>">
+            <i class="bi bi-shield-lock"></i><span>Log Aktivitas</span>
           </a>
 
           <% } %>

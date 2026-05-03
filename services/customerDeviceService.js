@@ -3,6 +3,7 @@
  */
 const axios = require('axios');
 const { getSettingsWithCache } = require('../config/settingsManager');
+const auditTrail = require('./auditTrailService');
 const { logger } = require('../config/logger');
 
 async function findDeviceByTag(tag) {
@@ -354,7 +355,7 @@ function fallbackCustomer(tag) {
   };
 }
 
-async function updateSSID(tag, newSSID) {
+async function updateSSID(tag, newSSID, actor = null) {
   try {
     const device = await resolveDeviceToken(tag);
     if (!device) return false;
@@ -398,13 +399,31 @@ async function updateSSID(tag, newSSID) {
       await axios.post(tasksUrl, { name: 'refreshObject', objectName: 'Device.WiFi.SSID' }, { auth, timeout: 15000 });
     } catch (e) {}
 
+    // Catat audit trail jika berhasil
+    if (ok && actor) {
+      auditTrail.logAuditTrail({
+        action: 'UPDATE_SSID',
+        entity_type: 'device',
+        entity_id: tag,
+        actor_type: actor.type || 'unknown',
+        actor_id: actor.id || null,
+        actor_name: actor.name || null,
+        details: {
+          oldSSID: device._id || 'unknown',
+          newSSID: newSSID
+        },
+        ip_address: actor.ip || null,
+        user_agent: actor.userAgent || null
+      });
+    }
+
     return ok;
   } catch (e) {
     return false;
   }
 }
 
-async function updatePassword(tag, newPassword) {
+async function updatePassword(tag, newPassword, actor = null) {
   try {
     if (newPassword.length < 8) {
       logger.warn(`[updatePassword] Password too short for tag ${tag}`);
@@ -468,6 +487,23 @@ async function updatePassword(tag, newPassword) {
       await axios.post(tasksUrl, { name: 'refreshObject', objectName: 'Device.WiFi.AccessPoint' }, { auth, timeout: 15000 });
     } catch (e) {}
 
+    // Catat audit trail jika berhasil
+    if (ok && actor) {
+      auditTrail.logAuditTrail({
+        action: 'UPDATE_PASSWORD',
+        entity_type: 'device',
+        entity_id: tag,
+        actor_type: actor.type || 'unknown',
+        actor_id: actor.id || null,
+        actor_name: actor.name || null,
+        details: {
+          device_id: deviceId
+        },
+        ip_address: actor.ip || null,
+        user_agent: actor.userAgent || null
+      });
+    }
+
     return ok;
   } catch (e) {
     logger.error(`[updatePassword] Error: ${e.message}`, e.response?.data || '');
@@ -475,7 +511,7 @@ async function updatePassword(tag, newPassword) {
   }
 }
 
-async function requestReboot(tag) {
+async function requestReboot(tag, actor = null) {
   const device = await resolveDeviceToken(tag);
   if (!device || !device._id) return { ok: false, message: 'Perangkat tidak ditemukan.' };
   const settings = getSettingsWithCache();
@@ -487,6 +523,24 @@ async function requestReboot(tag) {
       { name: 'reboot', timestamp: new Date().toISOString() },
       { auth }
     );
+
+    // Catat audit trail jika berhasil
+    if (actor) {
+      auditTrail.logAuditTrail({
+        action: 'REBOOT_DEVICE',
+        entity_type: 'device',
+        entity_id: tag,
+        actor_type: actor.type || 'unknown',
+        actor_id: actor.id || null,
+        actor_name: actor.name || null,
+        details: {
+          device_id: device._id
+        },
+        ip_address: actor.ip || null,
+        user_agent: actor.userAgent || null
+      });
+    }
+
     return { ok: true, message: 'Perintah reboot terkirim. Tunggu beberapa menit hingga ONU online.' };
   } catch (e) {
     return { ok: false, message: 'Gagal mengirim reboot ke GenieACS.' };

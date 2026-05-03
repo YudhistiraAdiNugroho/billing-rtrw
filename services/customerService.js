@@ -5,18 +5,24 @@ const db = require('../config/database');
 
 // ─── CUSTOMERS ───────────────────────────────────────────────
 function getAllCustomers(search = '') {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+
   const base = `
     SELECT c.*, p.name as package_name, p.price as package_price,
-           p.speed_down, p.speed_up,
+           p.speed_down, p.speed_up, p.fup_limit_gb, p.use_fup,
            r.name as router_name,
            o.name as olt_name,
            odp.name as odp_name,
-           (SELECT COUNT(*) FROM invoices WHERE customer_id=c.id AND status='unpaid') as unpaid_count
+           (SELECT COUNT(*) FROM invoices WHERE customer_id=c.id AND status='unpaid') as unpaid_count,
+           u.bytes_in, u.bytes_out
     FROM customers c
     LEFT JOIN packages p ON c.package_id = p.id
     LEFT JOIN routers r ON c.router_id = r.id
     LEFT JOIN olts o ON c.olt_id = o.id
     LEFT JOIN odps odp ON c.odp_id = odp.id
+    LEFT JOIN customer_usage u ON u.customer_id = c.id AND u.period_month = ${month} AND u.period_year = ${year}
   `;
   if (search) {
     const s = `%${search}%`;
@@ -131,18 +137,48 @@ function getPackageById(id) {
 function createPackage(data) {
   const down = Math.round(parseFloat(data.speed_down || 0) * 1000);
   const up = Math.round(parseFloat(data.speed_up || 0) * 1000);
+  const n_down = Math.round(parseFloat(data.night_speed_down || 0) * 1000);
+  const n_up = Math.round(parseFloat(data.night_speed_up || 0) * 1000);
+  const f_down = Math.round(parseFloat(data.fup_speed_down || 0) * 1000);
+  const f_limit = parseFloat(data.fup_limit_gb || 0);
+
   return db.prepare(`
-    INSERT INTO packages (name, price, speed_down, speed_up, description)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(data.name, parseInt(data.price) || 0, down, up, data.description || '');
+    INSERT INTO packages (
+      name, price, speed_down, speed_up, 
+      use_night_speed, night_profile_name, night_speed_down, night_speed_up, 
+      use_fup, fup_profile_name, fup_limit_gb, fup_speed_down, 
+      description
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    data.name, parseInt(data.price) || 0, down, up, 
+    data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
+    data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
+    data.description || ''
+  );
 }
 
 function updatePackage(id, data) {
   const down = Math.round(parseFloat(data.speed_down || 0) * 1000);
   const up = Math.round(parseFloat(data.speed_up || 0) * 1000);
+  const n_down = Math.round(parseFloat(data.night_speed_down || 0) * 1000);
+  const n_up = Math.round(parseFloat(data.night_speed_up || 0) * 1000);
+  const f_down = Math.round(parseFloat(data.fup_speed_down || 0) * 1000);
+  const f_limit = parseFloat(data.fup_limit_gb || 0);
+
   return db.prepare(`
-    UPDATE packages SET name=?, price=?, speed_down=?, speed_up=?, description=?, is_active=? WHERE id=?
-  `).run(data.name, parseInt(data.price) || 0, down, up, data.description || '', data.is_active == '1' ? 1 : 0, id);
+    UPDATE packages 
+    SET name=?, price=?, speed_down=?, speed_up=?, 
+        use_night_speed=?, night_profile_name=?, night_speed_down=?, night_speed_up=?, 
+        use_fup=?, fup_profile_name=?, fup_limit_gb=?, fup_speed_down=?, 
+        description=?, is_active=? 
+    WHERE id=?
+  `).run(
+    data.name, parseInt(data.price) || 0, down, up, 
+    data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
+    data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
+    data.description || '', data.is_active == '1' ? 1 : 0, id
+  );
 }
 
 function deletePackage(id) {

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title><%= title %> | <%= company %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+  <style>
+    .inv-tabs { display: flex; gap: 4px; background: var(--bg3); padding: 4px; border-radius: 10px; margin-bottom: 20px; width: fit-content; }
+    .inv-tab { padding: 8px 20px; border-radius: 7px; border: none; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; transition: all .2s; }
+    .inv-tab.active { background: var(--bg2); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+    .stock-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .stock-low { background: var(--ddim); color: var(--danger); }
+    .stock-ok { background: var(--sdim); color: var(--success); }
+    .log-type-in { color: var(--success); }
+    .log-type-out { color: var(--danger); }
+    .log-type-adjust { color: var(--warning); }
+    .flex-1 { flex: 1 1 auto; }
+    .w300 { width: 300px; }
+    .fs11 { font-size: 11px; }
+  </style>
+</head>
+<body>
+<%- include('partials/sidebar', { activePage: 'inventory', company }) %>
+
+<div class="mw">
+  <div class="topbar">
+    <div class="tb-title">
+      <button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+      <i class="bi bi-boxes"></i>
+      <span><%= title %></span>
+    </div>
+    <div class="tb-right">
+      <button class="btn btn-p btn-sm" onclick="openAddItem()"><i class="bi bi-plus-lg"></i> Tambah Barang</button>
+      <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
+    </div>
+  </div>
+
+  <div class="page">
+    <% if (msg) { %>
+      <div class="alert alert-<%= msg.type === 'success' ? 's' : 'd' %> mb16">
+        <i class="bi bi-<%= msg.type === 'success' ? 'check-circle' : 'exclamation-triangle' %>"></i>
+        <%= msg.text %>
+      </div>
+    <% } %>
+
+    <div class="inv-tabs">
+      <button class="inv-tab active" onclick="showTab('items')">Daftar Barang</button>
+      <button class="inv-tab" onclick="showTab('categories')">Kategori</button>
+      <button class="inv-tab" onclick="showTab('logs')">Riwayat Stok</button>
+    </div>
+
+    <!-- TABS: ITEMS -->
+    <div id="tab-items" class="tab-content">
+      <div class="card">
+        <div class="card-hd">
+          <h6><i class="bi bi-list-ul"></i> Semua Barang Inventaris</h6>
+          <div class="sinput">
+            <i class="bi bi-search"></i>
+            <input type="text" class="fc fc-sm" placeholder="Cari barang..." onkeyup="filterItems(this.value)">
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="dtbl">
+            <thead>
+              <tr>
+                <th>Nama Barang</th>
+                <th>Kategori</th>
+                <th>Brand / Model</th>
+                <th class="num">Stok Tersedia</th>
+                <th class="num">Terpasang</th>
+                <th class="text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="items-list">
+              <% items.forEach(item => { %>
+                <tr>
+                  <td>
+                    <div class="fw6"><%= item.name %></div>
+                    <div class="text-muted fs11"><%= item.description %></div>
+                  </td>
+                  <td><span class="badge bp"><%= item.category_name || '-' %></span></td>
+                  <td><%= item.brand %> <%= item.model %></td>
+                  <td class="num">
+                    <span class="stock-badge <%= (item.stock_available || 0) <= item.min_stock ? 'stock-low' : 'stock-ok' %>">
+                      <%= item.stock_available || 0 %> <%= item.unit %>
+                    </span>
+                  </td>
+                  <td class="num text-muted"><%= item.stock_assigned || 0 %> <%= item.unit %></td>
+                  <td>
+                    <div class="flex jc-fe gap">
+                      <button class="btn btn-g btn-icon" <%- `onclick="viewStock(${item.id}, '${item.name}')"` %> title="Detail Stok"><i class="bi bi-eye"></i></button>
+                      <button class="btn btn-g btn-icon" <%- `onclick="openAddStock(${item.id}, '${item.name}')"` %> title="Tambah Stok"><i class="bi bi-plus-circle"></i></button>
+                      <button class="btn btn-g btn-icon" <%- `onclick='openEditItem(${JSON.stringify(item)})'` %> title="Edit"><i class="bi bi-pencil"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABS: CATEGORIES -->
+    <div id="tab-categories" class="tab-content" style="display:none">
+      <div class="form-row">
+        <div class="card flex-1">
+          <div class="card-hd"><h6><i class="bi bi-tags"></i> Daftar Kategori</h6></div>
+          <div class="tbl-wrap">
+            <table class="dtbl">
+              <thead>
+                <tr>
+                  <th>Nama Kategori</th>
+                  <th>Keterangan</th>
+                  <th class="text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% categories.forEach(cat => { %>
+                  <tr>
+                    <td class="fw6"><%= cat.name %></td>
+                    <td class="text-muted"><%= cat.description %></td>
+                    <td>
+                      <div class="flex jc-fe gap">
+                        <button class="btn btn-g btn-icon" <%- `onclick='openEditCategory(${JSON.stringify(cat)})'` %>><i class="bi bi-pencil"></i></button>
+                        <form action="/admin/inventory/category/delete/<%= cat.id %>" method="POST" onsubmit="return confirm('Hapus kategori ini?')">
+                          <button class="btn btn-g btn-icon text-danger"><i class="bi bi-trash"></i></button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card w300">
+          <div class="card-hd"><h6><i class="bi bi-plus-lg"></i> Tambah Kategori</h6></div>
+          <div class="card-bd">
+            <form action="/admin/inventory/category/add" method="POST">
+              <div class="fg"><label class="fl">Nama Kategori</label><input class="fc" name="name" required></div>
+              <div class="fg"><label class="fl">Keterangan</label><textarea class="fc" name="description"></textarea></div>
+              <button class="btn btn-p w-100">Simpan Kategori</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABS: LOGS -->
+    <div id="tab-logs" class="tab-content" style="display:none">
+      <div class="card">
+        <div class="card-hd"><h6><i class="bi bi-clock-history"></i> Riwayat Pergerakan Barang</h6></div>
+        <div class="tbl-wrap">
+          <table class="dtbl">
+            <thead>
+              <tr>
+                <th>Waktu</th>
+                <th>Barang</th>
+                <th>SN</th>
+                <th>Tipe</th>
+                <th class="num">Qty</th>
+                <th>Petugas</th>
+                <th>Catatan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% logs.forEach(log => { %>
+                <tr>
+                  <td class="text-muted" style="font-size:11px"><%= new Date(log.created_at).toLocaleString('id-ID') %></td>
+                  <td class="fw6"><%= log.item_name %></td>
+                  <td class="text-muted"><%= log.serial_number || '-' %></td>
+                  <td>
+                    <span class="badge log-type-<%= log.type %>">
+                      <%= log.type === 'in' ? 'Masuk' : log.type === 'out' ? 'Keluar' : log.type === 'adjust' ? 'Penyesuaian' : log.type %>
+                    </span>
+                  </td>
+                  <td class="num fw6"><%= log.quantity > 0 ? '+' : '' %><%= log.quantity %></td>
+                  <td><%= log.actor %></td>
+                  <td class="text-muted"><%= log.note %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD/EDIT ITEM -->
+<div class="mo" id="modal-item">
+  <div class="mb">
+    <div class="mh"><div class="mt" id="item-modal-title">Tambah Barang Baru</div><button class="mc" onclick="closeModal('modal-item')">&times;</button></div>
+    <form id="item-form" method="POST" action="/admin/inventory/item/add">
+      <div class="mbody">
+        <div class="fg">
+          <label class="fl">Kategori</label>
+          <select class="fs" name="category_id" id="i_category_id" required>
+            <option value="">-- Pilih Kategori --</option>
+            <% categories.forEach(cat => { %>
+              <option value="<%= cat.id %>"><%= cat.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Nama Barang</label><input class="fc" name="name" id="i_name" required></div>
+        <div class="form-row">
+          <div class="fg"><label class="fl">Brand</label><input class="fc" name="brand" id="i_brand"></div>
+          <div class="fg"><label class="fl">Model</label><input class="fc" name="model" id="i_model"></div>
+        </div>
+        <div class="form-row">
+          <div class="fg"><label class="fl">Satuan (Unit)</label><input class="fc" name="unit" id="i_unit" value="pcs" required></div>
+          <div class="fg"><label class="fl">Stok Minimum</label><input class="fc" type="number" name="min_stock" id="i_min_stock" value="5" required></div>
+        </div>
+        <div class="fg"><label class="fl">Deskripsi</label><textarea class="fc" name="description" id="i_description"></textarea></div>
+      </div>
+      <div class="mf"><button type="button" class="btn btn-g" onclick="closeModal('modal-item')">Batal</button><button class="btn btn-p">Simpan Barang</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: ADD STOCK -->
+<div class="mo" id="modal-stock">
+  <div class="mb">
+    <div class="mh"><div class="mt">Input Stok Masuk</div><button class="mc" onclick="closeModal('modal-stock')">&times;</button></div>
+    <form action="/admin/inventory/stock/add" method="POST">
+      <input type="hidden" name="item_id" id="s_item_id">
+      <div class="mbody">
+        <div class="fg"><label class="fl">Nama Barang</label><input class="fc" id="s_item_name" readonly></div>
+        <div class="fg"><label class="fl">Serial Number (Opsional)</label><input class="fc" name="serial_number" placeholder="Contoh: SN12345678"></div>
+        <div class="form-row">
+          <div class="fg"><label class="fl">Jumlah (Qty)</label><input class="fc" type="number" name="quantity" value="1" min="1" required></div>
+          <div class="fg">
+            <label class="fl">Kondisi</label>
+            <select class="fs" name="condition">
+              <option value="new">Baru</option>
+              <option value="used">Bekas / Copotan</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg"><label class="fl">Lokasi Penyimpanan</label><input class="fc" name="location" value="Gudang Utama"></div>
+        <div class="fg"><label class="fl">Catatan</label><textarea class="fc" name="note" placeholder="Contoh: Pembelian dari Supplier X"></textarea></div>
+      </div>
+      <div class="mf"><button type="button" class="btn btn-g" onclick="closeModal('modal-stock')">Batal</button><button class="btn btn-p">Tambah Stok</button></div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function showTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.inv-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tab).style.display = 'block';
+    event.currentTarget.classList.add('active');
+  }
+
+  function openAddItem() {
+    document.getElementById('item-modal-title').innerText = 'Tambah Barang Baru';
+    document.getElementById('item-form').action = '/admin/inventory/item/add';
+    document.getElementById('item-form').reset();
+    document.getElementById('modal-item').classList.add('show');
+  }
+
+  function openEditItem(item) {
+    document.getElementById('item-modal-title').innerText = 'Edit Barang';
+    document.getElementById('item-form').action = '/admin/inventory/item/edit/' + item.id;
+    document.getElementById('i_category_id').value = item.category_id || '';
+    document.getElementById('i_name').value = item.name;
+    document.getElementById('i_brand').value = item.brand;
+    document.getElementById('i_model').value = item.model;
+    document.getElementById('i_unit').value = item.unit;
+    document.getElementById('i_min_stock').value = item.min_stock;
+    document.getElementById('i_description').value = item.description;
+    document.getElementById('modal-item').classList.add('show');
+  }
+
+  function openAddStock(itemId, itemName) {
+    document.getElementById('s_item_id').value = itemId;
+    document.getElementById('s_item_name').value = itemName;
+    document.getElementById('modal-stock').classList.add('show');
+  }
+
+  function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+  function filterItems(q) {
+    const rows = document.querySelectorAll('#items-list tr');
+    q = q.toLowerCase();
+    rows.forEach(row => {
+      const text = row.innerText.toLowerCase();
+      row.style.display = text.includes(q) ? '' : 'none';
+    });
+  }
+
+  function toggleSidebar() { document.querySelector('.sidebar').classList.toggle('open'); }
+</script>
+</body>
+</html>

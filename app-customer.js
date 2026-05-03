@@ -5,6 +5,8 @@ require('dotenv').config();
 const { logger } = require('./config/logger');
 const db = require('./config/database');
 const customerSvc = require('./services/customerService');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { scheduleAutoBackup } = require('./services/backupService');
 
 // Prefer IPv4 to avoid AggregateError (IPv6 timeouts) on some servers
 if (dns.setDefaultResultOrder) {
@@ -372,6 +374,13 @@ if (getSetting('telegram_enabled', false)) {
 // Mulai cron jobs (generate tagihan otomatis, dll)
 const { startCronJobs } = require('./services/cronService');
 startCronJobs();
+
+// Mulai auto backup
+scheduleAutoBackup();
+
+// Error handling middleware (harus di akhir setelah semua routes)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Export app untuk testing
 module.exports = app;

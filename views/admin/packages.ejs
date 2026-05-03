@@ -102,6 +102,52 @@
           </div>
         </div>
         <div class="fg"><label class="fl"><%= t('admin.packages.form.description', 'Deskripsi') %></label><textarea class="fc" name="description" placeholder="<%= t('admin.packages.form.optional', 'Opsional...') %>"></textarea></div>
+        
+        <!-- Dynamic Speed & FUP Section -->
+        <div style="background: rgba(0,0,0,0.02); padding: 15px; border-radius: 12px; margin-top: 15px;">
+          <div class="flex ai-c mb8" style="gap:10px">
+            <input type="checkbox" name="use_night_speed" id="add_use_night" value="1" onchange="toggleAddNight()">
+            <h6 style="font-size:12px; margin: 0; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;"><i class="bi bi-clock"></i> Aktifkan Jam Kalong</h6>
+          </div>
+          <div id="add_night_fields" style="display:none">
+            <div class="fg">
+              <label class="fl">Nama Profile Malam (MikroTik)</label>
+              <div style="display:flex;gap:8px">
+                <select class="fs" id="add_night_profile_select" style="max-width:200px" onchange="document.getElementById('add_night_profile_input').value=this.value">
+                  <option value="">-- Pilih Profile --</option>
+                </select>
+                <input class="fc" name="night_profile_name" id="add_night_profile_input" placeholder="Atau ketik manual...">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="fg"><label class="fl">Download Malam (Mbps)</label><input class="fc" name="night_speed_down" type="number" step="any" min="0" placeholder="20"></div>
+              <div class="fg"><label class="fl">Upload Malam (Mbps)</label><input class="fc" name="night_speed_up" type="number" step="any" min="0" placeholder="10"></div>
+            </div>
+            <div style="font-size: 10px; color: var(--muted); margin-top: 4px;">Sistem akan ganti profile ppp pelanggan ke profile ini pada jam 00:00 - 06:00.</div>
+          </div>
+          
+          <hr style="opacity:0.1; margin: 15px 0;">
+
+          <div class="flex ai-c mb8" style="gap:10px">
+            <input type="checkbox" name="use_fup" id="add_use_fup" value="1" onchange="toggleAddFup()">
+            <h6 style="font-size:12px; margin: 0; color: var(--danger); text-transform: uppercase; letter-spacing: 0.5px;"><i class="bi bi-speedometer2"></i> Aktifkan FUP</h6>
+          </div>
+          <div id="add_fup_fields" style="display:none">
+            <div class="fg">
+              <label class="fl">Nama Profile FUP (MikroTik)</label>
+              <div style="display:flex;gap:8px">
+                <select class="fs" id="add_fup_profile_select" style="max-width:200px" onchange="document.getElementById('add_fup_profile_input').value=this.value">
+                  <option value="">-- Pilih Profile --</option>
+                </select>
+                <input class="fc" name="fup_profile_name" id="add_fup_profile_input" placeholder="Atau ketik manual...">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="fg"><label class="fl">Batas Kuota (GB)</label><input class="fc" name="fup_limit_gb" type="number" step="any" min="0" placeholder="300"></div>
+              <div class="fg"><label class="fl">Speed Setelah FUP (Mbps)</label><input class="fc" name="fup_speed_down" type="number" step="any" min="0" placeholder="2"></div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="mf">
         <button type="button" class="btn btn-g" onclick="closeModal('addModal')"><%= t('common.cancel', 'Batal') %></button>
@@ -137,6 +183,51 @@
           </div>
         </div>
         <div class="fg"><label class="fl"><%= t('admin.packages.form.description', 'Deskripsi') %></label><textarea class="fc" name="description" id="e_desc"></textarea></div>
+
+        <!-- Dynamic Speed & FUP Section (Edit) -->
+        <div style="background: rgba(0,0,0,0.02); padding: 15px; border-radius: 12px; margin-top: 15px;">
+          <div class="flex ai-c mb8" style="gap:10px">
+            <input type="checkbox" name="use_night_speed" id="e_use_night" value="1" onchange="toggleEditNight()">
+            <h6 style="font-size:12px; margin: 0; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;"><i class="bi bi-clock"></i> Aktifkan Jam Kalong</h6>
+          </div>
+          <div id="e_night_fields" style="display:none">
+            <div class="fg">
+              <label class="fl">Nama Profile Malam (MikroTik)</label>
+              <div style="display:flex;gap:8px">
+                <select class="fs" id="e_night_profile_select" style="max-width:200px" onchange="document.getElementById('e_night_profile').value=this.value">
+                  <option value="">-- Pilih Profile --</option>
+                </select>
+                <input class="fc" name="night_profile_name" id="e_night_profile">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="fg"><label class="fl">Download Malam (Mbps)</label><input class="fc" name="night_speed_down" id="e_night_down" type="number" step="any" min="0"></div>
+              <div class="fg"><label class="fl">Upload Malam (Mbps)</label><input class="fc" name="night_speed_up" id="e_night_up" type="number" step="any" min="0"></div>
+            </div>
+          </div>
+          
+          <hr style="opacity:0.1; margin: 15px 0;">
+
+          <div class="flex ai-c mb8" style="gap:10px">
+            <input type="checkbox" name="use_fup" id="e_use_fup" value="1" onchange="toggleEditFup()">
+            <h6 style="font-size:12px; margin: 0; color: var(--danger); text-transform: uppercase; letter-spacing: 0.5px;"><i class="bi bi-speedometer2"></i> Aktifkan FUP</h6>
+          </div>
+          <div id="e_fup_fields" style="display:none">
+            <div class="fg">
+              <label class="fl">Nama Profile FUP (MikroTik)</label>
+              <div style="display:flex;gap:8px">
+                <select class="fs" id="e_fup_profile_select" style="max-width:200px" onchange="document.getElementById('e_fup_profile').value=this.value">
+                  <option value="">-- Pilih Profile --</option>
+                </select>
+                <input class="fc" name="fup_profile_name" id="e_fup_profile">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="fg"><label class="fl">Batas Kuota (GB)</label><input class="fc" name="fup_limit_gb" id="e_fup_limit" type="number" step="any" min="0"></div>
+              <div class="fg"><label class="fl">Speed Setelah FUP (Mbps)</label><input class="fc" name="fup_speed_down" id="e_fup_speed" type="number" step="any" min="0"></div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="mf">
         <button type="button" class="btn btn-g" onclick="closeModal('editModal')"><%= t('common.cancel', 'Batal') %></button>
@@ -160,10 +251,27 @@ function editPkg(idx) {
   document.getElementById('e_price').value=p.price||0;
   document.getElementById('e_down').value=p.speed_down ? (p.speed_down/1000) : 0;
   document.getElementById('e_up').value=p.speed_up ? (p.speed_up/1000) : 0;
+  document.getElementById('e_night_down').value=p.night_speed_down ? (p.night_speed_down/1000) : 0;
+  document.getElementById('e_night_up').value=p.night_speed_up ? (p.night_speed_up/1000) : 0;
+  document.getElementById('e_night_profile').value=p.night_profile_name || '';
+  document.getElementById('e_use_night').checked = !!p.use_night_speed;
+  document.getElementById('e_night_fields').style.display = p.use_night_speed ? 'block' : 'none';
+
+  document.getElementById('e_fup_limit').value=p.fup_limit_gb || 0;
+  document.getElementById('e_fup_speed').value=p.fup_speed_down ? (p.fup_speed_down/1000) : 0;
+  document.getElementById('e_fup_profile').value=p.fup_profile_name || '';
+  document.getElementById('e_use_fup').checked = !!p.use_fup;
+  document.getElementById('e_fup_fields').style.display = p.use_fup ? 'block' : 'none';
+
   document.getElementById('e_active').value=p.is_active?'1':'0';
   document.getElementById('e_desc').value=p.description||'';
   openModal('editModal');
 }
+
+function toggleAddNight() { document.getElementById('add_night_fields').style.display = document.getElementById('add_use_night').checked ? 'block' : 'none'; }
+function toggleAddFup() { document.getElementById('add_fup_fields').style.display = document.getElementById('add_use_fup').checked ? 'block' : 'none'; }
+function toggleEditNight() { document.getElementById('e_night_fields').style.display = document.getElementById('e_use_night').checked ? 'block' : 'none'; }
+function toggleEditFup() { document.getElementById('e_fup_fields').style.display = document.getElementById('e_use_fup').checked ? 'block' : 'none'; }
 setTimeout(()=>document.querySelectorAll('.alert').forEach(a=>a.style.display='none'),4000);
 
 // Load MikroTik profiles into select dropdowns
@@ -174,10 +282,19 @@ async function loadProfiles() {
     const profiles = await res.json();
     const selAdd = document.getElementById('add_profile_select');
     const selEdit = document.getElementById('e_profile_select');
+    const selAddNight = document.getElementById('add_night_profile_select');
+    const selAddFup = document.getElementById('add_fup_profile_select');
+    const selEditNight = document.getElementById('e_night_profile_select');
+    const selEditFup = document.getElementById('e_fup_profile_select');
+
     profiles.forEach(p => {
       const opt = `<option value="${p.name}">${p.name}</option>`;
       selAdd.innerHTML += opt;
       selEdit.innerHTML += opt;
+      if (selAddNight) selAddNight.innerHTML += opt;
+      if (selAddFup) selAddFup.innerHTML += opt;
+      if (selEditNight) selEditNight.innerHTML += opt;
+      if (selEditFup) selEditFup.innerHTML += opt;
     });
   } catch (e) {
     console.error('Failed to load MikroTik profiles', e);

@@ -17,6 +17,79 @@ const customerSvc = require('./customerService.js');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 
+// Rate Limiting untuk WhatsApp Bot Self-Service
+const rateLimitStore = new Map(); // Format: { phone: { count: 0, lastReset: timestamp } }
+const MAX_COMMANDS_PER_MINUTE = 10;
+const COMMAND_COOLDOWN_MS = 2000; // 2 detik cooldown antar perintah
+const commandCooldownStore = new Map(); // Format: { phone: lastCommandTimestamp }
+
+function checkRateLimit(phone) {
+  const now = Date.now();
+  const userLimit = rateLimitStore.get(phone);
+  
+  if (!userLimit) {
+    rateLimitStore.set(phone, { count: 1, lastReset: now });
+    return { allowed: true, remaining: MAX_COMMANDS_PER_MINUTE - 1 };
+  }
+  
+  // Reset counter setiap menit
+  if (now - userLimit.lastReset >= 60000) {
+    rateLimitStore.set(phone, { count: 1, lastReset: now });
+    return { allowed: true, remaining: MAX_COMMANDS_PER_MINUTE - 1 };
+  }
+  
+  // Cek limit
+  if (userLimit.count >= MAX_COMMANDS_PER_MINUTE) {
+    const resetTime = userLimit.lastReset + 60000;
+    const waitTime = Math.ceil((resetTime - now) / 1000);
+    return { allowed: false, waitTime };
+  }
+  
+  // Increment counter
+  userLimit.count++;
+  return { allowed: true, remaining: MAX_COMMANDS_PER_MINUTE - userLimit.count };
+}
+
+function checkCommandCooldown(phone) {
+  const now = Date.now();
+  const lastCommand = commandCooldownStore.get(phone);
+  
+  if (!lastCommand) {
+    commandCooldownStore.set(phone, now);
+    return { allowed: true };
+  }
+  
+  const elapsed = now - lastCommand;
+  if (elapsed < COMMAND_COOLDOWN_MS) {
+    const waitTime = Math.ceil((COMMAND_COOLDOWN_MS - elapsed) / 1000);
+    return { allowed: false, waitTime };
+  }
+  
+  commandCooldownStore.set(phone, now);
+  return { allowed: true };
+}
+
+function getPhoneFromKey(key) {
+  if (!key) return null;
+  const remoteJid = key.remoteJid || key;
+  if (!remoteJid) return null;
+  
+  // Extract phone number from JID
+  const [user, host] = remoteJid.split('@');
+  if (!user || !host) return null;
+  
+  // Remove non-digits
+  const phone = user.replace(/\D/g, '');
+  if (!phone) return null;
+  
+  // Convert 0 to 62
+  if (phone.startsWith('0')) {
+    return '62' + phone.slice(1);
+  }
+  
+  return phone;
+}
+
 function waBrand() {
   const companyHeader = getSetting('company_header', 'ALIJAYA WEBPORTAL');
   const footerInfo = getSetting('footer_info', 'Internet Tanpa Batas');
@@ -626,6 +699,31 @@ export async function startWhatsAppBot() {
         const isAdmin = isWhatsappAdminKey(m.key, adminSet);
         const parsed = parseCommand(text, isAdmin);
         if (!parsed) continue;
+
+        // Rate Limiting Check
+        const phone = getPhoneFromKey(m.key);
+        if (phone) {
+          // Cek command cooldown (2 detik)
+          const cooldownCheck = checkCommandCooldown(phone);
+          if (!cooldownCheck.allowed) {
+            await reply(`⏳ Mohon tunggu *${cooldownCheck.waitTime} detik* sebelum mengirim perintah lagi.`);
+            logger.warn(`[WhatsApp Bot] Rate limit cooldown triggered for ${phone}`);
+            continue;
+          }
+
+          // Cek rate limit per menit (10 perintah)
+          const rateLimitCheck = checkRateLimit(phone);
+          if (!rateLimitCheck.allowed) {
+            await reply(`⚠️ Anda telah mencapai batas perintah. Tunggu *${rateLimitCheck.waitTime} detik* sebelum mencoba lagi.`);
+            logger.warn(`[WhatsApp Bot] Rate limit exceeded for ${phone}`);
+            continue;
+          }
+
+          // Log rate limit info
+          if (rateLimitCheck.remaining <= 3) {
+            logger.info(`[WhatsApp Bot] Rate limit warning for ${phone}: ${rateLimitCheck.remaining} commands remaining`);
+          }
+        }
 
         const reply = async (msg) => {
           await sock.sendMessage(remote, { text: waAutoWrap(msg) }, { quoted: m });

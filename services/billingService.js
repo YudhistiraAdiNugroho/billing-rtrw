@@ -2,6 +2,8 @@
  * Service: Logika Billing & Tagihan
  */
 const db = require('../config/database');
+const auditTrail = require('./auditTrailService');
+const { logger } = require('../config/logger');
 
 function generateMonthlyInvoices(month, year) {
   const customers = db.prepare("SELECT * FROM customers WHERE status IN ('active','suspended') AND package_id IS NOT NULL").all();
@@ -189,18 +191,66 @@ function getInvoiceById(id) {
   `).get(id);
 }
 
-function markAsPaid(invoiceId, paidByName, notes) {
-  return db.prepare(`
+function markAsPaid(invoiceId, paidByName, notes, actor = null) {
+  const result = db.prepare(`
     UPDATE invoices SET status='paid', paid_at=CURRENT_TIMESTAMP, paid_by_name=?, notes=? WHERE id=?
   `).run(paidByName || 'Admin', notes || '', invoiceId);
+
+  // Catat audit trail jika berhasil
+  if (result.changes > 0 && actor) {
+    const invoice = db.prepare('SELECT id, customer_id, period_month, period_year, amount FROM invoices WHERE id=?').get(invoiceId);
+    if (invoice) {
+      auditTrail.logAuditTrail({
+        action: 'MARK_INVOICE_PAID',
+        entity_type: 'invoice',
+        entity_id: String(invoiceId),
+        actor_type: actor.type || 'unknown',
+        actor_id: actor.id || null,
+        actor_name: actor.name || null,
+        details: {
+          customer_id: invoice.customer_id,
+          period: `${invoice.period_month}/${invoice.period_year}`,
+          amount: invoice.amount,
+          paid_by: paidByName || 'Admin',
+          notes: notes || ''
+        },
+        ip_address: actor.ip || null,
+        user_agent: actor.userAgent || null
+      });
+    }
+  }
+
+  return result;
 }
 
 function markAsUnpaid(invoiceId) {
   return db.prepare(`UPDATE invoices SET status='unpaid', paid_at=NULL, paid_by_name='', notes='' WHERE id=?`).run(invoiceId);
 }
 
-function deleteInvoice(id) {
-  return db.prepare('DELETE FROM invoices WHERE id=?').run(id);
+function deleteInvoice(id, actor = null) {
+  const invoice = db.prepare('SELECT id, customer_id, period_month, period_year, amount FROM invoices WHERE id=?').get(id);
+  const result = db.prepare('DELETE FROM invoices WHERE id=?').run(id);
+
+  // Catat audit trail jika berhasil
+  if (result.changes > 0 && actor && invoice) {
+    auditTrail.logAuditTrail({
+      action: 'DELETE_INVOICE',
+      entity_type: 'invoice',
+      entity_id: String(id),
+      actor_type: actor.type || 'unknown',
+      actor_id: actor.id || null,
+      actor_name: actor.name || null,
+      details: {
+        customer_id: invoice.customer_id,
+        period: `${invoice.period_month}/${invoice.period_year}`,
+        amount: invoice.amount
+      },
+      ip_address: actor.ip || null,
+      user_agent: actor.userAgent || null
+    });
+  }
+
+  return result;
 }
 
 function getInvoiceSummary(month, year) {
