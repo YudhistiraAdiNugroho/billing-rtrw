@@ -42,6 +42,9 @@ const BRAND_PROFILES = {
       tx_power_table: '1.3.6.1.4.1.25355.3.2.6.14.2.1.4',
       rx_power_table: '1.3.6.1.4.1.25355.3.2.6.14.2.1.8',
       probe_oid:    '1.3.6.1.4.1.25355.3.2.6.3.2.1.39',
+      /** OLT_OID_REFERENCE: integer meter (bukan per 0,1 m seperti ZTE/Huawei) */
+      distance_table: '1.3.6.1.4.1.25355.3.2.6.3.2.1.25',
+      distance_tenths_meter: false,
     },
     {
       name: 'HIOSO_EPON_B',
@@ -84,6 +87,7 @@ const BRAND_PROFILES = {
       unauth_sn_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.2',
       unauth_type_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.10',
       distance_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.4',
+      distance_tenths_meter: true,
       firmware_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.5',
       uptime_table:   '1.3.6.1.4.1.3902.1015.1010.11.2.1.6',
     },
@@ -128,6 +132,7 @@ const BRAND_PROFILES = {
       unauth_sn_table: '1.3.6.1.4.1.2011.6.128.1.1.2.45.1.4',
       unauth_type_table: '1.3.6.1.4.1.2011.6.128.1.1.2.45.1.5',
       distance_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.20',
+      distance_tenths_meter: true,
       firmware_table: '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.10',
       uptime_table:   '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.15',
     }
@@ -308,9 +313,11 @@ function getOltById(id) {
 }
 
 function createOlt(data) {
+  const apiBase = String(data.api_base_url || '').trim();
+  const telnetPort = parseInt(data.telnet_port, 10);
   const stmt = db.prepare(`
-    INSERT INTO olts (name, host, snmp_community, snmp_port, brand, description, is_active, web_user, web_password)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO olts (name, host, snmp_community, snmp_port, brand, description, is_active, web_user, web_password, api_base_url, telnet_port, enable_password)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   return stmt.run(
     data.name,
@@ -321,14 +328,23 @@ function createOlt(data) {
     data.description || '',
     data.is_active !== undefined ? data.is_active : 1,
     data.web_user || '',
-    data.web_password || ''
+    data.web_password || '',
+    apiBase || null,
+    Number.isFinite(telnetPort) && telnetPort > 0 ? telnetPort : 23,
+    data.enable_password != null && String(data.enable_password).length ? String(data.enable_password) : null
   );
 }
 
 function updateOlt(id, data) {
+  const prev = getOltById(id);
+  const apiBase = String(data.api_base_url || '').trim();
+  const telnetPort = parseInt(data.telnet_port, 10);
+  const enablePass = String(data.enable_password || '').trim().length > 0
+    ? String(data.enable_password).trim()
+    : (prev && prev.enable_password) || null;
   const stmt = db.prepare(`
     UPDATE olts 
-    SET name = ?, host = ?, snmp_community = ?, snmp_port = ?, brand = ?, description = ?, is_active = ?, web_user = ?, web_password = ?
+    SET name = ?, host = ?, snmp_community = ?, snmp_port = ?, brand = ?, description = ?, is_active = ?, web_user = ?, web_password = ?, api_base_url = ?, telnet_port = ?, enable_password = ?
     WHERE id = ?
   `);
   return stmt.run(
@@ -341,6 +357,9 @@ function updateOlt(id, data) {
     data.is_active ? 1 : 0,
     data.web_user || '',
     data.web_password || '',
+    apiBase || null,
+    Number.isFinite(telnetPort) && telnetPort > 0 ? telnetPort : 23,
+    enablePass,
     id
   );
 }
@@ -394,6 +413,19 @@ const decodeSn = (val) => {
   }
   return val.toString().toUpperCase();
 };
+
+/**
+ * SN di SNMP sering jadi hex rapat (mis. 88D2742B900D); di CLI OLT bisa ditampilkan bertitik dua (88:D2:74:2B:90:0D).
+ * Untuk perintah otorisasi, keduanya harus jadi bentuk yang sama (hex huruf besar tanpa separator, atau SN GPON vendor).
+ */
+function normalizeSnForOltProvision(sn) {
+  const raw = String(sn == null ? '' : sn).trim();
+  if (!raw) return raw;
+  const alnum = raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (/^[A-F0-9]+$/.test(alnum) && (alnum.length === 12 || alnum.length === 16)) return alnum;
+  if (/^[A-Z]{4}/.test(alnum) && alnum.length >= 8) return alnum;
+  return alnum;
+}
 
 const decodeUptime = (ticks) => {
   if (!ticks) return 'N/A';
@@ -459,12 +491,17 @@ const telnetReadUntil = (socket, matcher, timeoutMs) => {
   });
 };
 
-const telnetLoginAndRun = async (host, user, pass, commands) => {
+const telnetLoginAndRun = async (host, user, pass, commands, opts = {}) => {
+  const telnetPort = Number(opts.port) > 0 ? Number(opts.port) : 23;
+  const enablePassword = opts.enablePassword != null && String(opts.enablePassword).length > 0
+    ? String(opts.enablePassword)
+    : null;
+
   const socket = new net.Socket();
   socket.setTimeout(15000);
 
   await new Promise((resolve, reject) => {
-    socket.connect(23, host, resolve);
+    socket.connect(telnetPort, host, resolve);
     socket.once('error', reject);
   });
 
@@ -494,8 +531,27 @@ const telnetLoginAndRun = async (host, user, pass, commands) => {
     throw new Error('Telnet prompt not detected');
   }
 
+  if (enablePassword) {
+    try {
+      socket.write('enable\r\n');
+      const enBuf = await telnetReadUntil(socket, (b) => /password\s*[:>]\s*$/im.test(b) || promptRe.test(b), 12000);
+      if (/password\s*[:>]\s*$/im.test(enBuf)) {
+        socket.write(enablePassword + '\r\n');
+        await telnetReadUntil(socket, promptRe, 12000);
+      }
+    } catch (e) {
+      socket.destroy();
+      throw new Error('Telnet enable gagal: ' + (e.message || String(e)));
+    }
+  }
+
+  let cmdList = Array.isArray(commands) ? [...commands] : [];
+  while (cmdList.length && /^enable\s*$/i.test(String(cmdList[0]).trim())) {
+    cmdList.shift();
+  }
+
   const outputs = [];
-  for (const cmd of commands) {
+  for (const cmd of cmdList) {
     socket.write(cmd + '\r\n');
     const out = await telnetReadUntil(socket, promptRe, 15000);
     outputs.push(out);
@@ -1384,7 +1440,12 @@ async function getOltStats(id, full = false) {
           const sn   = snVal ? decodeSn(snVal) : '-';
           const rx   = decodeRxPower(detectedBrandKey, rxVal);
           const tx   = decodeRxPower(detectedBrandKey, txVal);
-          const distance = bufferToInt(distVal) ? (bufferToInt(distVal) / 10).toFixed(1) + ' m' : '-';
+          const distInt = bufferToInt(distVal);
+          let distance = '-';
+          if (activeProfile.distance_table && distInt != null && distInt > 0) {
+            const tenths = activeProfile.distance_tenths_meter !== false;
+            distance = tenths ? (distInt / 10).toFixed(1) + ' m' : `${distInt} m`;
+          }
           const firmware = safeToString(fwVal) || '-';
           const onuUptime = upVal ? decodeUptime(bufferToInt(upVal)) : '-';
           const onuId = hiosoOnuIdFromIndex(idx);
@@ -1473,6 +1534,7 @@ async function authorizeOnu(oltId, data) {
 
   const brand = (olt.brand || 'hioso').toLowerCase();
   const { index, sn, name, vlan } = data;
+  const snCli = normalizeSnForOltProvision(sn);
 
   // Parsing index (format ZTE: 1/board/port:onuId)
   let board = 1, port = 1, onuId = 1;
@@ -1490,7 +1552,7 @@ async function authorizeOnu(oltId, data) {
     cmds.push('enable');
     cmds.push('configure terminal');
     cmds.push(`interface gpon-olt_1/${board}/${port}`);
-    cmds.push(`onu ${onuId} type ALL sn ${sn}`);
+    cmds.push(`onu ${onuId} type ALL sn ${snCli}`);
     cmds.push('exit');
     cmds.push(`interface gpon-onu_1/${board}/${port}:${onuId}`);
     if (name) cmds.push(`name ${name}`);
@@ -1504,7 +1566,7 @@ async function authorizeOnu(oltId, data) {
     cmds.push('enable');
     cmds.push('config');
     cmds.push(`interface gpon 0/${board}`);
-    cmds.push(`ont add ${port} ${onuId} sn-auth ${sn} omci ont-lineprofile-id 1 ont-srvprofile-id 1`);
+    cmds.push(`ont add ${port} ${onuId} sn-auth ${snCli} omci ont-lineprofile-id 1 ont-srvprofile-id 1`);
     if (name) cmds.push(`ont name ${port} ${onuId} "${name}"`);
     cmds.push('quit');
     if (vlan) cmds.push(`service-port vlan ${vlan} gpon 0/${board}/${port} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}`);
@@ -1513,7 +1575,7 @@ async function authorizeOnu(oltId, data) {
     throw new Error(`Fitur otorisasi otomatis belum didukung untuk brand ${brand}`);
   }
 
-  return await telnetLoginAndRun(olt.host, olt.web_user, olt.web_password, cmds);
+  return await telnetLoginAndRun(olt.host, olt.web_user, olt.web_password, cmds, telnetOptsFromOlt(olt));
 }
 
 /**
@@ -1597,6 +1659,106 @@ function getNestedValue(obj, path) {
   }, obj);
 }
 
+function parseZteOnuIndex(index) {
+  let board = 1;
+  let port = 1;
+  let onuId = 1;
+  const s = String(index || '');
+  if (s.includes('/')) {
+    const parts = s.split(/[/: ]+/).filter(Boolean);
+    if (parts.length >= 3) {
+      board = parts[parts.length - 3];
+      port = parts[parts.length - 2];
+      onuId = parts[parts.length - 1];
+    }
+  }
+  return { board: String(board), port: String(port), onuId: String(onuId) };
+}
+
+const telnetOptsFromOlt = (olt) => ({
+  port: Number(olt.telnet_port) > 0 ? Number(olt.telnet_port) : 23,
+  enablePassword: olt.enable_password != null && String(olt.enable_password).length > 0 ? String(olt.enable_password) : null
+});
+
+/**
+ * Delegasi VLAN / service-port ke [go-api-c320](https://github.com/s4lfanet/go-api-c320) — POST /api/v1/vlan/onu
+ * Format pon_port: rack/shelf/slot (contoh 1/2/7) dari indeks gpon-onu_1/2/7:5
+ */
+async function configureZteWanViaGoApi(oltId, data) {
+  const olt = getOltById(oltId);
+  if (!olt) throw new Error('OLT tidak ditemukan');
+
+  const base = String(olt.api_base_url || '').trim().replace(/\/+$/, '');
+  if (!base) {
+    throw new Error('Isi "API Base URL" pada data OLT (contoh http://10.0.0.5:8081) agar metode Go API dapat memanggil go-api-c320.');
+  }
+
+  const mode = String(data.mode || 'Bridge');
+  if (mode === 'PPPoE') {
+    throw new Error('Integrasi REST ini memetakan ke VLAN/service-port go-api-c320. Untuk PPPoE gunakan Telnet CLI (OMCI) atau TR069.');
+  }
+
+  const { board, port, onuId } = parseZteOnuIndex(data.index);
+  const ponPort = `1/${board}/${port}`;
+  if (!/^\d+\/\d+\/\d+$/.test(ponPort)) {
+    throw new Error('Indeks ONU tidak valid untuk Go API (butuh slot/port/onu, mis. gpon-onu_1/2/7:5 → pon_port 1/2/7).');
+  }
+
+  const onu_id = parseInt(String(onuId), 10);
+  if (!Number.isFinite(onu_id) || onu_id < 1 || onu_id > 128) {
+    throw new Error('ONU ID tidak valid (1–128).');
+  }
+
+  const svlan = parseInt(String(data.vlan != null ? data.vlan : data.svlan), 10);
+  const cvlanIn = data.cvlan != null && String(data.cvlan).trim() !== '' ? parseInt(String(data.cvlan), 10) : NaN;
+  const cvlan = Number.isFinite(cvlanIn) ? cvlanIn : svlan;
+
+  if (!Number.isFinite(svlan) || svlan < 1 || svlan > 4094) {
+    throw new Error('VLAN / SVLAN harus antara 1 dan 4094.');
+  }
+
+  const vlan_mode = String(data.vlan_mode || 'tag').toLowerCase();
+  const allowed = ['tag', 'translation', 'transparent'];
+  if (!allowed.includes(vlan_mode)) {
+    throw new Error('vlan_mode harus: tag, translation, atau transparent (sesuai go-api-c320).');
+  }
+
+  if (vlan_mode === 'translation' && (!Number.isFinite(cvlan) || cvlan < 1)) {
+    throw new Error('Mode translation membutuhkan CVLAN.');
+  }
+
+  const priority = Number.isFinite(parseInt(data.priority, 10)) ? parseInt(data.priority, 10) : 0;
+  if (priority < 0 || priority > 7) {
+    throw new Error('Priority harus 0–7.');
+  }
+
+  const url = `${base}/api/v1/vlan/onu`;
+  const body = {
+    pon_port: ponPort,
+    onu_id,
+    svlan,
+    cvlan: vlan_mode === 'translation' ? cvlan : (Number.isFinite(cvlan) ? cvlan : svlan),
+    vlan_mode,
+    priority
+  };
+
+  const res = await axios.post(url, body, {
+    timeout: 90000,
+    headers: { 'Content-Type': 'application/json' },
+    validateStatus: () => true
+  });
+
+  const payload = res.data;
+  const httpOk = res.status >= 200 && res.status < 300;
+  const apiCode = payload != null && payload.code != null ? Number(payload.code) : null;
+  if (!httpOk || (apiCode != null && apiCode >= 400)) {
+    const msg = payload?.message || payload?.status || payload?.error || `HTTP ${res.status}`;
+    throw new Error(`go-api-c320: ${msg}`);
+  }
+
+  return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+}
+
 /**
  * Konfigurasi WAN ONU via TR069 (GenieACS).
  */
@@ -1651,6 +1813,15 @@ async function configureWanViaAcs(sn, data) {
   if (!olt) throw new Error('OLT tidak ditemukan');
 
   const brand = (olt.brand || 'hioso').toLowerCase();
+  const method = String(data.method || 'telnet').toLowerCase();
+
+  if (method === 'go-api' && brand !== 'zte') {
+    throw new Error('Metode REST (go-api-c320) hanya untuk OLT brand ZTE.');
+  }
+  if (brand === 'zte' && method === 'go-api') {
+    return configureZteWanViaGoApi(oltId, data);
+  }
+
   const { index, mode, vlan, username, password, lans, ssids } = data;
 
   // Parsing index
@@ -1733,7 +1904,10 @@ async function configureWanViaAcs(sn, data) {
      throw new Error(`Fitur konfigurasi WAN belum didukung untuk brand ${brand}`);
    }
  
-   return await telnetLoginAndRun(olt.host, olt.web_user, olt.web_password, cmds);
+   return await telnetLoginAndRun(olt.host, olt.web_user, olt.web_password, cmds, telnetOptsFromOlt(olt));
  }
  
- module.exports = { getAllOlts, getActiveOlts, getOltById, createOlt, updateOlt, deleteOlt, getOltStats, rebootOnu, renameOnu, authorizeOnu, configureOnuWan, configureWanViaAcs };
+ module.exports = {
+  getAllOlts, getActiveOlts, getOltById, createOlt, updateOlt, deleteOlt, getOltStats, rebootOnu, renameOnu, authorizeOnu,
+  configureOnuWan, configureZteWanViaGoApi, configureWanViaAcs
+};

@@ -11,6 +11,8 @@ function getAllCustomers(search = '') {
 
   const base = `
     SELECT c.*, p.name as package_name, p.price as package_price,
+           p.promo_cycles as package_promo_cycles,
+           p.prorate_first_invoice as package_prorate_first_invoice,
            p.speed_down, p.speed_up, p.fup_limit_gb, p.use_fup,
            r.name as router_name,
            o.name as olt_name,
@@ -31,9 +33,18 @@ function getAllCustomers(search = '') {
   return db.prepare(base + ` ORDER BY c.name ASC`).all();
 }
 
+function resetPromoCyclesUsed(customerId) {
+  const id = Number(customerId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error('ID pelanggan tidak valid');
+  return db.prepare('UPDATE customers SET promo_cycles_used = 0 WHERE id=?').run(id);
+}
+
 function getCustomerById(id) {
   return db.prepare(`
-    SELECT c.*, p.name as package_name, p.price as package_price, r.name as router_name, o.name as olt_name, odp.name as odp_name
+    SELECT c.*, p.name as package_name, p.price as package_price,
+           p.promo_cycles as package_promo_cycles,
+           p.prorate_first_invoice as package_prorate_first_invoice,
+           r.name as router_name, o.name as olt_name, odp.name as odp_name
     FROM customers c 
     LEFT JOIN packages p ON c.package_id = p.id 
     LEFT JOIN routers r ON c.router_id = r.id
@@ -69,7 +80,11 @@ function createCustomer(data) {
 }
 
 function updateCustomer(id, data) {
-  return db.prepare(`
+  const prev = db.prepare('SELECT package_id FROM customers WHERE id=?').get(id);
+  const newPkgId = data.package_id ? parseInt(data.package_id, 10) : null;
+  const pkgChanged = prev && Number(prev.package_id || 0) !== Number(newPkgId || 0);
+
+  const result = db.prepare(`
     UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?
     WHERE id=?
   `).run(
@@ -93,6 +108,12 @@ function updateCustomer(id, data) {
     data.mac_address || '',
     id
   );
+
+  if (pkgChanged) {
+    db.prepare('UPDATE customers SET promo_cycles_used = 0 WHERE id=?').run(id);
+  }
+
+  return result;
 }
 
 function updateCustomerCablePath(id, path) {
@@ -142,20 +163,32 @@ function createPackage(data) {
   const f_down = Math.round(parseFloat(data.fup_speed_down || 0) * 1000);
   const f_limit = parseFloat(data.fup_limit_gb || 0);
 
+  const promoPrice = parsePromoPrice(data.promo_price);
+  const promoCycles = Math.max(0, parseInt(data.promo_cycles, 10) || 0);
+  const prorateFirst = data.prorate_first_invoice ? 1 : 0;
+
   return db.prepare(`
     INSERT INTO packages (
-      name, price, speed_down, speed_up, 
+      name, price, promo_price, promo_cycles, prorate_first_invoice,
+      speed_down, speed_up, 
       use_night_speed, night_profile_name, night_speed_down, night_speed_up, 
       use_fup, fup_profile_name, fup_limit_gb, fup_speed_down, 
       description
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    data.name, parseInt(data.price) || 0, down, up, 
+    data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
+    down, up,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || ''
   );
+}
+
+function parsePromoPrice(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 function updatePackage(id, data) {
@@ -165,16 +198,21 @@ function updatePackage(id, data) {
   const n_up = Math.round(parseFloat(data.night_speed_up || 0) * 1000);
   const f_down = Math.round(parseFloat(data.fup_speed_down || 0) * 1000);
   const f_limit = parseFloat(data.fup_limit_gb || 0);
+  const promoPrice = parsePromoPrice(data.promo_price);
+  const promoCycles = Math.max(0, parseInt(data.promo_cycles, 10) || 0);
+  const prorateFirst = data.prorate_first_invoice ? 1 : 0;
 
   return db.prepare(`
     UPDATE packages 
-    SET name=?, price=?, speed_down=?, speed_up=?, 
+    SET name=?, price=?, promo_price=?, promo_cycles=?, prorate_first_invoice=?,
+        speed_down=?, speed_up=?, 
         use_night_speed=?, night_profile_name=?, night_speed_down=?, night_speed_up=?, 
         use_fup=?, fup_profile_name=?, fup_limit_gb=?, fup_speed_down=?, 
         description=?, is_active=? 
     WHERE id=?
   `).run(
-    data.name, parseInt(data.price) || 0, down, up, 
+    data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
+    down, up,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || '', data.is_active == '1' ? 1 : 0, id
@@ -261,5 +299,6 @@ async function activateCustomer(id) {
 module.exports = {
   getAllCustomers, getCustomerById, createCustomer, updateCustomer, deleteCustomer, getCustomerStats,
   getAllPackages, getPackageById, createPackage, updatePackage, deletePackage,
-  suspendCustomer, activateCustomer, findCustomerByAny, updateCustomerCablePath
+  suspendCustomer, activateCustomer, findCustomerByAny, updateCustomerCablePath,
+  resetPromoCyclesUsed
 };

@@ -138,6 +138,18 @@
               <td>
                 <button class="btn btn-s btn-icon btn-sm" title="<%= t('admin.customers.actions.generate_invoice', 'Generate Tagihan') %>" data-idx="<%= i %>" onclick="openGenInvoice(+this.dataset.idx)"><i class="bi bi-lightning-charge"></i></button>
                 <button class="btn btn-p btn-icon btn-sm" title="<%= t('admin.customers.actions.pay_invoice', 'Bayar Tagihan') %>" data-idx="<%= i %>" onclick="openPayInvoice(+this.dataset.idx)"><i class="bi bi-cash-coin"></i></button>
+                <% if (typeof session !== 'undefined' && !session.isCashier) { %>
+                <% if (c.package_id && (c.package_promo_cycles || 0) > 0) { %>
+                <form method="POST" action="/admin/customers/<%= c.id %>/billing/reset-promo-cycles" style="display:inline" onsubmit="return confirm('Reset counter siklus promo untuk pelanggan ini? Tagihan berikutnya akan memakai harga promo lagi sesuai pengaturan paket.')">
+                  <button type="submit" class="btn btn-g btn-icon btn-sm" title="Reset siklus promo"><i class="bi bi-arrow-counterclockwise"></i></button>
+                </form>
+                <% } %>
+                <% if (c.package_id && c.install_date && c.package_prorate_first_invoice) { %>
+                <form method="POST" action="/admin/customers/<%= c.id %>/billing/install-prorata" style="display:inline" onsubmit="return confirm('Buat tagihan SUSULAN prorata untuk bulan tanggal pasang? Hanya jika belum ada tagihan periode itu. Dasar harga: reguler (bukan promo).')">
+                  <button type="submit" class="btn btn-g btn-icon btn-sm" title="Susulan prorata bulan pasang"><i class="bi bi-calendar2-check"></i></button>
+                </form>
+                <% } %>
+                <% } %>
                 <button class="btn btn-g btn-icon btn-sm" title="<%= t('common.edit', 'Edit') %>" data-idx="<%= i %>" onclick="editCust(+this.dataset.idx)"><i class="bi bi-pencil"></i></button>
                 <form method="POST" action="/admin/customers/<%= c.id %>/delete" style="display:inline" data-confirm-msg=<%- JSON.stringify(t('admin.customers.confirm_delete', 'Hapus pelanggan ini?')) %> onsubmit="return confirm(this.dataset.confirmMsg)">
                   <button class="btn btn-d btn-icon btn-sm" title="<%= t('common.delete', 'Hapus') %>"><i class="bi bi-trash"></i></button>

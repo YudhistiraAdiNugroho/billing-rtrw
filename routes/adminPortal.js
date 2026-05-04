@@ -1095,6 +1095,34 @@ router.post('/customers/:id/billing/generate', requireAdminSession, express.urle
   res.redirect('back');
 });
 
+router.post('/customers/:id/billing/reset-promo-cycles', requireAdminSession, restrictToAdmin, (req, res) => {
+  try {
+    const r = customerSvc.resetPromoCyclesUsed(req.params.id);
+    if (!r.changes) {
+      req.session._msg = { type: 'error', text: 'Pelanggan tidak ditemukan.' };
+    } else {
+      const c = customerSvc.getCustomerById(req.params.id);
+      req.session._msg = { type: 'success', text: `Counter promo untuk "${c ? c.name : req.params.id}" di-reset (siklus promo dihitung ulang dari awal).` };
+    }
+  } catch (e) {
+    req.session._msg = { type: 'error', text: e.message || String(e) };
+  }
+  res.redirect('back');
+});
+
+router.post('/customers/:id/billing/install-prorata', requireAdminSession, restrictToAdmin, (req, res) => {
+  try {
+    const out = billingSvc.createInstallProrataCatchUpInvoice(req.params.id);
+    req.session._msg = {
+      type: 'success',
+      text: `Tagihan susulan prorata untuk "${out.customerName}" periode ${String(out.periodMonth).padStart(2, '0')}/${out.periodYear} sebesar Rp ${Number(out.amount).toLocaleString('id-ID')} (${out.billableDays}/${out.daysInMonth} hari).`
+    };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: e.message || String(e) };
+  }
+  res.redirect('back');
+});
+
 router.post('/customers/:id/billing/pay', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const { month, months, year, paid_by_name, notes } = req.body;

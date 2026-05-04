@@ -36,6 +36,7 @@
               <th>#</th>
               <th><%= t('admin.packages.table.name', 'Nama Paket') %></th>
               <th><%= t('admin.packages.table.price_month', 'Harga / Bulan') %></th>
+              <th>Promo / Prorata</th>
               <th><%= t('admin.packages.table.speed', 'Kecepatan') %></th>
               <th><%= t('admin.packages.table.description', 'Deskripsi') %></th>
               <th><%= t('admin.packages.table.customers', 'Pelanggan') %></th>
@@ -45,13 +46,19 @@
           </thead>
           <tbody>
           <% if (packages.length===0) { %>
-            <tr><td colspan="8" class="text-center text-muted" style="padding:32px"><%= t('admin.packages.empty', 'Belum ada paket. Tambah paket pertama!') %></td></tr>
+            <tr><td colspan="9" class="text-center text-muted" style="padding:32px"><%= t('admin.packages.empty', 'Belum ada paket. Tambah paket pertama!') %></td></tr>
           <% } %>
           <% packages.forEach((p,i)=>{ %>
             <tr>
               <td class="text-muted"><%= i+1 %></td>
               <td class="fw6"><%= p.name %></td>
               <td class="fw6" style="color:var(--success)">Rp <%= p.price.toLocaleString('id-ID') %></td>
+              <td style="font-size:11px;max-width:160px">
+                <% if (p.promo_cycles > 0 && p.promo_price != null && p.promo_price !== '') { %>
+                  <span class="badge bp">Promo</span> Rp <%= Number(p.promo_price).toLocaleString('id-ID') %> × <%= p.promo_cycles %> bln
+                <% } else { %><span class="text-muted">—</span><% } %>
+                <% if (p.prorate_first_invoice) { %><br><span class="badge bs" style="margin-top:4px;display:inline-block">Prorata 1×</span><% } %>
+              </td>
               <td>
                 <% if (p.speed_down) { %>
                   <span class="badge bp">↓ <%= (p.speed_down/1000).toFixed(0) %> Mbps</span>
@@ -94,6 +101,17 @@
         <div class="form-row">
           <div class="fg"><label class="fl"><%= t('admin.packages.form.price_month', 'Harga / Bulan (Rp)') %> *</label><input class="fc" name="price" type="number" min="0" required placeholder="150000"></div>
           <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_down', 'Kecepatan Download (Mbps)') %></label><input class="fc" name="speed_down" type="number" step="any" min="0" placeholder="10"></div>
+        </div>
+        <div style="background: rgba(34,197,94,0.06); padding: 12px 14px; border-radius: 10px; margin-top: 10px;">
+          <div class="fw6" style="font-size:12px;margin-bottom:8px;color:var(--success)"><i class="bi bi-percent"></i> Promo & prorata tagihan</div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Harga promo (Rp / siklus)</label><input class="fc" name="promo_price" type="number" min="0" placeholder="Opsional, mis. 99000"></div>
+            <div class="fg"><label class="fl">Jumlah bulan promo</label><input class="fc" name="promo_cycles" type="number" min="0" value="0" placeholder="0 = tanpa promo"></div>
+          </div>
+          <div class="flex ai-c" style="gap:8px;margin-top:4px">
+            <input type="checkbox" name="prorate_first_invoice" id="add_prorate" value="1">
+            <label for="add_prorate" style="margin:0;font-size:12px">Prorata tagihan <strong>pertama</strong> jika pasang di tengah bulan (proporsi sisa hari, perlu tanggal pasang di data pelanggan)</label>
+          </div>
         </div>
         <div class="form-row">
           <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_up', 'Kecepatan Upload (Mbps)') %></label><input class="fc" name="speed_up" type="number" step="any" min="0" placeholder="5"></div>
@@ -176,6 +194,17 @@
           <div class="fg"><label class="fl"><%= t('admin.packages.form.price_month', 'Harga / Bulan (Rp)') %> *</label><input class="fc" name="price" id="e_price" type="number" min="0" required></div>
           <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_down', 'Kecepatan Download (Mbps)') %></label><input class="fc" name="speed_down" id="e_down" type="number" step="any" min="0"></div>
         </div>
+        <div style="background: rgba(34,197,94,0.06); padding: 12px 14px; border-radius: 10px; margin-top: 10px;">
+          <div class="fw6" style="font-size:12px;margin-bottom:8px;color:var(--success)"><i class="bi bi-percent"></i> Promo & prorata tagihan</div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Harga promo (Rp / siklus)</label><input class="fc" name="promo_price" id="e_promo_price" type="number" min="0" placeholder="Kosong = tanpa harga promo"></div>
+            <div class="fg"><label class="fl">Jumlah bulan promo</label><input class="fc" name="promo_cycles" id="e_promo_cycles" type="number" min="0" value="0"></div>
+          </div>
+          <div class="flex ai-c" style="gap:8px;margin-top:4px">
+            <input type="checkbox" name="prorate_first_invoice" id="e_prorate" value="1">
+            <label for="e_prorate" style="margin:0;font-size:12px">Prorata tagihan pertama (tanggal pasang = bulan tagihan)</label>
+          </div>
+        </div>
         <div class="form-row">
           <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_up', 'Kecepatan Upload (Mbps)') %></label><input class="fc" name="speed_up" id="e_up" type="number" step="any" min="0"></div>
           <div class="fg"><label class="fl"><%= t('admin.packages.form.status', 'Status') %></label>
@@ -249,6 +278,9 @@ function editPkg(idx) {
   document.getElementById('editForm').action='/admin/packages/'+p.id+'/update';
   document.getElementById('e_name').value=p.name||'';
   document.getElementById('e_price').value=p.price||0;
+  document.getElementById('e_promo_price').value = (p.promo_price != null && p.promo_price !== '') ? p.promo_price : '';
+  document.getElementById('e_promo_cycles').value = p.promo_cycles != null ? p.promo_cycles : 0;
+  document.getElementById('e_prorate').checked = !!p.prorate_first_invoice;
   document.getElementById('e_down').value=p.speed_down ? (p.speed_down/1000) : 0;
   document.getElementById('e_up').value=p.speed_up ? (p.speed_up/1000) : 0;
   document.getElementById('e_night_down').value=p.night_speed_down ? (p.night_speed_down/1000) : 0;
