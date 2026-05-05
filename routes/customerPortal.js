@@ -11,6 +11,37 @@ const ticketSvc = require('../services/ticketService');
 const crypto = require('crypto');
 const db = require('../config/database');
 
+/** Cocokkan session login (tag GenieACS / PPPoE / nomor) ke baris customers */
+function findCustomerProfileByLoginId(loginId) {
+  if (!loginId) return null;
+  const cleanLogin = String(loginId).replace(/\D/g, '');
+  return customerSvc.getAllCustomers().find((c) => {
+    const cleanDb = String(c.phone || '').replace(/\D/g, '');
+    return (
+      cleanDb === cleanLogin ||
+      c.phone === loginId ||
+      c.genieacs_tag === loginId ||
+      c.pppoe_username === loginId
+    );
+  }) || null;
+}
+
+/** Rute portal yang boleh diakses saat status suspended (bayar publik, logout, dll.) */
+function isSuspendedPortalExemptPath(reqPath) {
+  const p = String(reqPath || '');
+  if (
+    p === '/login' ||
+    p === '/register' ||
+    p === '/login-otp' ||
+    p === '/logout'
+  ) return true;
+  if (p.startsWith('/public/')) return true;
+  if (p.startsWith('/payment/')) return true;
+  const staticPages = ['/tos', '/privacy', '/about', '/contact', '/check-billing', '/voucher'];
+  if (staticPages.includes(p)) return true;
+  return false;
+}
+
 function dashboardNotif(message, type = 'success') {
   if (!message) return null;
   return { text: message, type };
@@ -659,6 +690,9 @@ router.post('/login', async (req, res) => {
   // --- DIRECT LOGIN ---
   logger.info('[Login] Login direct berhasil.');
   req.session.phone = effectiveTag;
+  if (customer && customer.status === 'suspended') {
+    return res.redirect('/isolated');
+  }
   return res.redirect('/customer/dashboard');
 });
 
@@ -684,10 +718,26 @@ router.post('/login-otp', (req, res) => {
     logger.info('[Login] OTP berhasil diverifikasi.');
     req.session.phone = pending.effectiveTag;
     delete req.session.pending_login;
+    const custAfterOtp = customerSvc.findCustomerByAny(pending.phone);
+    if (custAfterOtp && custAfterOtp.status === 'suspended') {
+      return res.redirect('/isolated');
+    }
     return res.redirect('/customer/dashboard');
   } else {
     return res.render('login_otp', { error: 'Kode OTP salah. Silakan coba lagi.', settings, phone: pending.phone });
   }
+});
+
+// Pelanggan terisolir: paksa halaman /isolated, kecuali cek tagihan / bayar / logout
+router.use((req, res, next) => {
+  if (isSuspendedPortalExemptPath(req.path)) return next();
+  const loginId = req.session && req.session.phone;
+  if (!loginId) return next();
+  const profile = findCustomerProfileByLoginId(loginId);
+  if (profile && profile.status === 'suspended') {
+    return res.redirect('/isolated');
+  }
+  next();
 });
 
 router.get('/dashboard', async (req, res) => {
@@ -1320,6 +1370,10 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
 /**
  * Webhook Callback (Multi-Gateway)
  */
+router.get('/payment/callback', (req, res) => {
+  res.json({ success: true, message: 'OK. Use POST for gateway notifications.' });
+});
+router.head('/payment/callback', (req, res) => res.status(200).end());
 router.post('/payment/callback', express.json(), async (req, res) => {
   const settings = getSettingsWithCache();
   const tripaySignature = req.headers['x-callback-signature'];

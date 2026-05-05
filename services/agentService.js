@@ -2,6 +2,161 @@ const db = require('../config/database');
 const billingSvc = require('./billingService');
 const customerSvc = require('./customerService');
 const mikrotikSvc = require('./mikrotikService');
+const axios = require('axios');
+const crypto = require('crypto');
+const { getSetting } = require('../config/settingsManager');
+
+const DIGIFLAZZ_URL = 'https://api.digiflazz.com/v1';
+const digiflazzApi = axios.create({
+  baseURL: DIGIFLAZZ_URL,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' }
+});
+
+function getDigiflazzCreds() {
+  const username = String(getSetting('digiflazz_username', '') || '').trim();
+  const apiKey = String(getSetting('digiflazz_api_key', '') || '').trim();
+  if (!username || !apiKey) {
+    throw new Error('Digiflazz belum dikonfigurasi. Isi digiflazz_username & digiflazz_api_key di settings.json');
+  }
+  return { username, apiKey };
+}
+
+function digiflazzSign(refId = '') {
+  const { username, apiKey } = getDigiflazzCreds();
+  return crypto.createHash('md5').update(username + apiKey + String(refId || '')).digest('hex');
+}
+
+async function digiflazzGetProductBySku(sku) {
+  const { username } = getDigiflazzCreds();
+  const safeSku = String(sku || '').trim();
+  if (!safeSku) throw new Error('SKU tidak valid');
+
+  const sign = digiflazzSign('pricelist');
+  const response = await digiflazzApi.post('/price-list', {
+    cmd: 'prepaid',
+    username,
+    sign,
+    code: safeSku
+  });
+
+  const data = response?.data?.data;
+  if (!Array.isArray(data)) {
+    const msg = response?.data?.data?.message || response?.data?.message || 'Gagal mengambil price list';
+    throw new Error(String(msg));
+  }
+
+  const prod = data.find(p => String(p?.buyer_sku_code || '').trim() === safeSku) || data[0];
+  if (!prod) throw new Error('SKU tidak ditemukan di Digiflazz');
+  return prod;
+}
+
+function normalizeDigiflazzStatus(vendorStatus) {
+  const s = String(vendorStatus || '').toLowerCase();
+  if (s === 'sukses' || s === 'success') return 'success';
+  if (s === 'gagal' || s === 'failed') return 'failed';
+  if (s === 'pending' || s === 'process' || s === 'processing') return 'pending';
+  return 'pending';
+}
+
+async function digiflazzCreateTransaction({ sku, target, refId }) {
+  const { username } = getDigiflazzCreds();
+  const sign = digiflazzSign(refId);
+
+  try {
+    const response = await digiflazzApi.post('/transaction', {
+      username,
+      buyer_sku_code: String(sku || '').trim(),
+      customer_no: String(target || '').trim(),
+      ref_id: String(refId || '').trim(),
+      sign
+    });
+
+    const data = response?.data?.data || {};
+    const rc = String(data?.rc || '').trim();
+    if (rc && !['00', '03'].includes(rc)) {
+      const msg = data?.message || `Error Vendor (RC: ${rc})`;
+      throw new Error(String(msg));
+    }
+
+    return data;
+  } catch (error) {
+    const isTimeout = error?.code === 'ECONNABORTED' || String(error?.message || '').toLowerCase().includes('timeout');
+    if (isTimeout) {
+      return {
+        status: 'Pending',
+        rc: '03',
+        message: 'Request timeout, cek status transaksi nanti.',
+        trx_id: '',
+        sn: '',
+        price: 0
+      };
+    }
+
+    const msg = error?.response?.data?.data?.message || error?.message || String(error);
+    throw new Error(String(msg));
+  }
+}
+
+function getDigiflazzProductLocalBySku(sku) {
+  const safeSku = String(sku || '').trim();
+  if (!safeSku) return null;
+  return db.prepare('SELECT * FROM digiflazz_products WHERE sku = ? AND status = 1').get(safeSku);
+}
+
+function listDigiflazzProducts({ q = '', category = '', brand = '', include_inactive = false, limit = 200 } = {}) {
+  const safeQ = String(q || '').trim();
+  const safeCat = String(category || '').trim();
+  const safeBrand = String(brand || '').trim();
+
+  const where = [];
+  const params = [];
+  if (!include_inactive) where.push('status = 1');
+  if (safeQ) {
+    where.push('(sku LIKE ? OR product_name LIKE ? OR brand LIKE ? OR category LIKE ?)');
+    const like = `%${safeQ}%`;
+    params.push(like, like, like, like);
+  }
+  if (safeCat) {
+    where.push('category = ?');
+    params.push(safeCat);
+  }
+  if (safeBrand) {
+    where.push('brand = ?');
+    params.push(safeBrand);
+  }
+
+  const lim = Math.max(20, Math.min(3000, Number(limit) || 200));
+  const sql = `
+    SELECT sku, product_name, category, brand, price_modal, price_sell, status, updated_at
+    FROM digiflazz_products
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+    ORDER BY category, brand, price_sell
+    LIMIT ?
+  `;
+  return db.prepare(sql).all(...params, lim);
+}
+
+function listDigiflazzCategories() {
+  return db
+    .prepare("SELECT category FROM digiflazz_products WHERE status = 1 AND category IS NOT NULL AND TRIM(category)<>'' GROUP BY category ORDER BY category")
+    .all()
+    .map(r => r.category);
+}
+
+function listDigiflazzBrands(category = '') {
+  const safeCat = String(category || '').trim();
+  if (safeCat) {
+    return db
+      .prepare("SELECT brand FROM digiflazz_products WHERE status = 1 AND category = ? AND brand IS NOT NULL AND TRIM(brand)<>'' GROUP BY brand ORDER BY brand")
+      .all(safeCat)
+      .map(r => r.brand);
+  }
+  return db
+    .prepare("SELECT brand FROM digiflazz_products WHERE status = 1 AND brand IS NOT NULL AND TRIM(brand)<>'' GROUP BY brand ORDER BY brand")
+    .all()
+    .map(r => r.brand);
+}
 
 function authenticate(username, password) {
   return db
@@ -15,6 +170,27 @@ function getAllAgents() {
 
 function getAgentById(id) {
   return db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
+}
+
+function normalizePhoneDigits(v) {
+  let digits = String(v || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+  return digits;
+}
+
+function getAgentByPhone(phone) {
+  const input = normalizePhoneDigits(phone);
+  if (!input) return null;
+  const agents = getAllAgents();
+  for (const a of (agents || [])) {
+    if (!a || !a.is_active) continue;
+    const ap = normalizePhoneDigits(a.phone);
+    if (!ap) continue;
+    if (ap === input) return a;
+    if (ap.endsWith(input) || input.endsWith(ap)) return a;
+  }
+  return null;
 }
 
 function createAgent(data) {
@@ -191,7 +367,7 @@ async function payInvoiceAsAgent(agentId, invoiceId, note = '') {
     const after = before - cost;
     db.prepare('UPDATE agents SET balance = ? WHERE id = ?').run(after, agentId);
 
-    db.prepare(
+    const ins = db.prepare(
       `
       INSERT INTO agent_transactions (
         agent_id, type, invoice_id, customer_id,
@@ -199,8 +375,7 @@ async function payInvoiceAsAgent(agentId, invoiceId, note = '') {
         balance_before, balance_after, note
       ) VALUES (?, 'invoice_payment', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
-    );
-    const ins = insertTx.run(
+    ).run(
       agentId,
       inv.id,
       inv.customer_id,
@@ -373,10 +548,219 @@ async function sellVoucherAsAgent(agentId, priceId, opts = {}) {
   };
 }
 
+function genDigiflazzRefId(agentId) {
+  const aId = Number(agentId || 0) || 0;
+  return `AG-${aId}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+}
+
+function refundAgentBalance(agentId, amount, note) {
+  const delta = Math.floor(Number(amount) || 0);
+  if (!Number.isFinite(delta) || delta <= 0) return null;
+
+  const run = db.transaction(() => {
+    const fresh = getAgentById(agentId);
+    if (!fresh) throw new Error('Agent tidak ditemukan');
+    const before = Number(fresh.balance || 0);
+    const after = before + delta;
+    db.prepare('UPDATE agents SET balance = ? WHERE id = ?').run(after, agentId);
+    const ins = db.prepare(
+      `
+      INSERT INTO agent_transactions (
+        agent_id, type, amount_buy, amount_sell, fee, balance_before, balance_after, note
+      ) VALUES (?, 'topup', ?, ?, 0, ?, ?, ?)
+    `
+    ).run(agentId, delta, delta, before, after, String(note || 'Refund'));
+    return { id: Number(ins.lastInsertRowid || 0), before, after };
+  });
+
+  return run();
+}
+
+async function buyPulsaAsAgent(agentId, sku, target, opts = {}) {
+  const agent = getAgentById(agentId);
+  if (!agent || !agent.is_active) throw new Error('Akun agent tidak aktif');
+
+  const safeSku = String(sku || '').trim();
+  const safeTarget = String(target || '').trim().replace(/\s+/g, '');
+  if (!safeSku) throw new Error('SKU wajib diisi');
+  if (!safeTarget) throw new Error('Nomor tujuan wajib diisi');
+
+  const local = getDigiflazzProductLocalBySku(safeSku);
+  const prod = local
+    ? {
+        buyer_sku_code: local.sku,
+        product_name: local.product_name,
+        category: local.category,
+        brand: local.brand,
+        price: Number(local.price_modal || 0)
+      }
+    : await digiflazzGetProductBySku(safeSku);
+
+  const buyPrice = Math.max(0, Math.floor(Number(prod?.price ?? prod?.buyer_price ?? 0) || 0));
+  if (buyPrice <= 0) throw new Error('Harga produk tidak valid');
+
+  const inputSell = Number(opts.sell_price ?? 0) || 0;
+  const sellPrice = inputSell > 0
+    ? Math.floor(inputSell)
+    : local
+      ? Math.max(0, Math.floor(Number(local.price_sell || 0) || 0))
+      : (buyPrice + Math.max(0, Math.floor(Number(getSetting('digiflazz_markup', 0) || 0))));
+  const fee = Math.max(0, sellPrice - buyPrice);
+  const refId = genDigiflazzRefId(agentId);
+
+  const run = db.transaction(() => {
+    const fresh = getAgentById(agentId);
+    const before = Number(fresh.balance || 0);
+    if (before < sellPrice) throw new Error('Saldo agent tidak cukup');
+
+    const after = before - sellPrice;
+    db.prepare('UPDATE agents SET balance = ? WHERE id = ?').run(after, agentId);
+
+    const insertTx = db.prepare(
+      `
+      INSERT INTO agent_transactions (
+        agent_id, type, provider,
+        digi_sku, digi_target, digi_ref_id, digi_status, digi_message, digi_price, digi_refunded,
+        amount_invoice, amount_buy, amount_sell, fee,
+        balance_before, balance_after, note
+      ) VALUES (
+        ?, 'pulsa', 'digiflazz',
+        ?, ?, ?, 'pending', ?, ?, 0,
+        0, ?, ?, ?,
+        ?, ?, ?
+      )
+    `
+    );
+
+    const ins = insertTx.run(
+      agentId,
+      safeSku,
+      safeTarget,
+      refId,
+      'Transaksi dibuat, menunggu konfirmasi provider.',
+      buyPrice,
+      buyPrice,
+      sellPrice,
+      fee,
+      before,
+      after,
+      `Digiflazz ${safeSku} ke ${safeTarget}`
+    );
+
+    return { id: Number(ins.lastInsertRowid || 0), before, after };
+  });
+
+  const localTx = run();
+
+  let vendor = null;
+  let finalStatus = 'pending';
+  let vendorMessage = '';
+  try {
+    vendor = await digiflazzCreateTransaction({ sku: safeSku, target: safeTarget, refId });
+    finalStatus = normalizeDigiflazzStatus(vendor?.status);
+    vendorMessage = String(vendor?.message || '').trim();
+    const vendorPrice = Math.max(0, Math.floor(Number(vendor?.price || 0) || 0));
+
+    db.prepare(
+      `
+      UPDATE agent_transactions
+      SET digi_trx_id = ?, digi_sn = ?, digi_status = ?, digi_message = ?, digi_price = CASE WHEN ? > 0 THEN ? ELSE digi_price END
+      WHERE id = ? AND agent_id = ?
+    `
+    ).run(
+      String(vendor?.trx_id || ''),
+      String(vendor?.sn || ''),
+      finalStatus,
+      vendorMessage,
+      vendorPrice,
+      vendorPrice,
+      localTx.id,
+      agentId
+    );
+
+    if (finalStatus === 'failed') {
+      const refundRun = db.transaction(() => {
+        const row = db.prepare('SELECT id, amount_sell, digi_refunded, digi_ref_id FROM agent_transactions WHERE id=? AND agent_id=?')
+          .get(localTx.id, agentId);
+        if (!row) return;
+        if (Number(row.digi_refunded || 0) === 1) return;
+        refundAgentBalance(agentId, Number(row.amount_sell || 0), `REFUND Digiflazz gagal (tx#${row.id} ref=${row.digi_ref_id || refId})`);
+        db.prepare('UPDATE agent_transactions SET digi_refunded = 1 WHERE id = ? AND agent_id = ?').run(localTx.id, agentId);
+      });
+      refundRun();
+    }
+  } catch (e) {
+    vendorMessage = String(e?.message || e || '').trim();
+    db.prepare(
+      `
+      UPDATE agent_transactions
+      SET digi_status = 'pending', digi_message = ?
+      WHERE id = ? AND agent_id = ?
+    `
+    ).run(
+      vendorMessage ? `Provider error: ${vendorMessage}` : 'Provider error',
+      localTx.id,
+      agentId
+    );
+  }
+
+  const tx = getAgentTransactionById(agentId, localTx.id);
+  return { agent: getAgentById(agentId), tx, product: prod, vendor };
+}
+
+async function checkPulsaStatusAsAgent(agentId, txId) {
+  const tx = getAgentTransactionById(agentId, txId);
+  if (!tx) throw new Error('Transaksi tidak ditemukan');
+  if (tx.type !== 'pulsa' || String(tx.provider || '').toLowerCase() !== 'digiflazz') {
+    throw new Error('Transaksi ini bukan transaksi Digiflazz');
+  }
+  const sku = String(tx.digi_sku || '').trim();
+  const target = String(tx.digi_target || '').trim();
+  const refId = String(tx.digi_ref_id || '').trim();
+  if (!sku || !target || !refId) throw new Error('Data transaksi tidak lengkap');
+
+  const vendor = await digiflazzCreateTransaction({ sku, target, refId });
+  const nextStatus = normalizeDigiflazzStatus(vendor?.status);
+  const nextMsg = String(vendor?.message || '').trim();
+  const vendorPrice = Math.max(0, Math.floor(Number(vendor?.price || 0) || 0));
+
+  db.prepare(
+    `
+    UPDATE agent_transactions
+    SET digi_trx_id = ?, digi_sn = ?, digi_status = ?, digi_message = ?, digi_price = CASE WHEN ? > 0 THEN ? ELSE digi_price END
+    WHERE id = ? AND agent_id = ?
+  `
+  ).run(
+    String(vendor?.trx_id || ''),
+    String(vendor?.sn || ''),
+    nextStatus,
+    nextMsg,
+    vendorPrice,
+    vendorPrice,
+    tx.id,
+    agentId
+  );
+
+  if (nextStatus === 'failed') {
+    const refundRun = db.transaction(() => {
+      const row = db.prepare('SELECT id, amount_sell, digi_refunded, digi_ref_id FROM agent_transactions WHERE id=? AND agent_id=?')
+        .get(tx.id, agentId);
+      if (!row) return;
+      if (Number(row.digi_refunded || 0) === 1) return;
+      refundAgentBalance(agentId, Number(row.amount_sell || 0), `REFUND Digiflazz gagal (tx#${row.id} ref=${row.digi_ref_id || refId})`);
+      db.prepare('UPDATE agent_transactions SET digi_refunded = 1 WHERE id = ? AND agent_id = ?').run(tx.id, agentId);
+    });
+    refundRun();
+  }
+
+  return { agent: getAgentById(agentId), tx: getAgentTransactionById(agentId, tx.id), vendor };
+}
+
 module.exports = {
   authenticate,
   getAllAgents,
   getAgentById,
+  getAgentByPhone,
   createAgent,
   updateAgent,
   deleteAgent,
@@ -387,5 +771,10 @@ module.exports = {
   listAgentTransactions,
   getAgentTransactionById,
   payInvoiceAsAgent,
-  sellVoucherAsAgent
+  sellVoucherAsAgent,
+  buyPulsaAsAgent,
+  checkPulsaStatusAsAgent,
+  listDigiflazzProducts,
+  listDigiflazzCategories,
+  listDigiflazzBrands
 };

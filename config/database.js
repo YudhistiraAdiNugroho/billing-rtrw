@@ -386,6 +386,19 @@ try { db.exec("ALTER TABLE voucher_batches ADD COLUMN charset TEXT DEFAULT 'numb
 // Relasi notifikasi webhook → invoice (untuk audit)
 try { db.exec("ALTER TABLE webhook_payment_notifs ADD COLUMN matched_invoice_id INTEGER"); } catch (e) {}
 
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN provider TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_sku TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_target TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_ref_id TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_trx_id TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_sn TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_status TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_message TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_price INTEGER NOT NULL DEFAULT 0"); } catch (e) {}
+try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_refunded INTEGER NOT NULL DEFAULT 0"); } catch (e) {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_agent_tx_digi_ref ON agent_transactions(digi_ref_id)"); } catch (e) {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_agent_tx_type ON agent_transactions(type)"); } catch (e) {}
+
 // Kolom untuk Dynamic Speed & FUP di tabel packages
 try { db.exec("ALTER TABLE packages ADD COLUMN night_speed_down INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN night_speed_up INTEGER DEFAULT 0"); } catch (e) {}
@@ -418,6 +431,51 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_usage_customer ON customer_usage(customer_id);
   CREATE INDEX IF NOT EXISTS idx_usage_period ON customer_usage(period_month, period_year);
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS digiflazz_products (
+    sku TEXT PRIMARY KEY,
+    product_name TEXT NOT NULL,
+    category TEXT DEFAULT '',
+    brand TEXT DEFAULT '',
+    price_modal INTEGER NOT NULL DEFAULT 0,
+    price_sell INTEGER NOT NULL DEFAULT 0,
+    status INTEGER NOT NULL DEFAULT 1,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS digiflazz_sync_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    total INTEGER NOT NULL DEFAULT 0,
+    inserted INTEGER NOT NULL DEFAULT 0,
+    updated INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 0,
+    inactive INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_digiflazz_products_cat ON digiflazz_products(category);
+  CREATE INDEX IF NOT EXISTS idx_digiflazz_products_brand ON digiflazz_products(brand);
+  CREATE INDEX IF NOT EXISTS idx_digiflazz_products_status ON digiflazz_products(status);
+  CREATE INDEX IF NOT EXISTS idx_digiflazz_sync_created ON digiflazz_sync_logs(created_at);
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS digiflazz_webhook_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ref_id TEXT DEFAULT '',
+    status TEXT DEFAULT '',
+    signature TEXT DEFAULT '',
+    signature_ok INTEGER NOT NULL DEFAULT 0,
+    matched_agent_tx_id INTEGER,
+    ip TEXT DEFAULT '',
+    payload TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_digiflazz_webhook_created ON digiflazz_webhook_logs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_digiflazz_webhook_ref ON digiflazz_webhook_logs(ref_id);
 `);
 
 module.exports = db;

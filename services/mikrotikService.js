@@ -1,3 +1,5 @@
+const dns = require('dns');
+const { URL } = require('url');
 const { RouterOSClient } = require('routeros-client');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
@@ -500,23 +502,185 @@ function deleteRouter(id) {
   return db.prepare('DELETE FROM routers WHERE id = ?').run(id);
 }
 
+/**
+ * RouterOS (.rsc) untuk mengarahkan pelanggan di address-list LIST_ISOLIR ke portal billing
+ * (HTTP/HTTPS ke IP server sesuai Pengaturan → app_url). Salin ke Terminal / Import.
+ * PPPoE: set profil isolir on-up agar IP masuk LIST_ISOLIR (sama seperti tombol Setup Firewall di panel).
+ */
+function generateIsolirPortalScript() {
+  const settings = getSettingsWithCache();
+  const raw = String(settings.app_url || '').trim();
+  const normalized = raw && /^https?:\/\//i.test(raw) ? raw : (raw ? `https://${raw}` : '');
+  let hostname = '';
+  let port = 443;
+  let isHttps = true;
+  try {
+    const u = new URL(normalized || 'http://127.0.0.1:4555');
+    hostname = u.hostname;
+    port = u.port ? parseInt(u.port, 10) : (u.protocol === 'https:' ? 443 : 80);
+    isHttps = u.protocol === 'https:';
+  } catch {
+    hostname = 'GANTI-host-portal-billing';
+    port = 4555;
+    isHttps = false;
+  }
+
+  let billingIp = hostname;
+  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
+    try {
+      billingIp = dns.lookupSync(hostname, { family: 4 });
+    } catch {
+      billingIp = 'GANTI_IP_SERVER_PORTAL';
+    }
+  }
+
+  const httpServicePort = isHttps ? 80 : port;
+  const httpsServicePort = isHttps ? port : 443;
+
+  const lines = [
+    '# ============================================================',
+    '# Script halaman isolir / portal penagihan (generate Billing)',
+    `# Sumber URL: ${normalized || '(atur app_url di Pengaturan)'}`,
+    `# Host: ${hostname}  →  IP NAT: ${billingIp}`,
+    '# Address-list: LIST_ISOLIR — saat isolir, billing memasang on-up di profil PPPoE (nama = isolir_profile pelanggan).',
+    '# Hapus rule lama dengan comment=BILLING_ISOLIR_* sebelum import ulang.',
+    '# ============================================================',
+    '',
+    '# --- DNS ---',
+    '/ip firewall filter add chain=forward src-address-list=LIST_ISOLIR protocol=udp dst-port=53 action=accept comment="BILLING_ISOLIR_DNS"',
+    '',
+    '# --- Izinkan akses ke server portal ---',
+    `/ip firewall filter add chain=forward src-address-list=LIST_ISOLIR dst-address=${billingIp} action=accept comment="BILLING_ISOLIR_ALLOW"`,
+    '',
+    '# --- NAT: HTTP menuju portal (untuk redirect ke /isolated, dll.) ---',
+    `/ip firewall nat add chain=dstnat protocol=tcp dst-port=80 src-address-list=LIST_ISOLIR action=dst-nat to-addresses=${billingIp} to-ports=${httpServicePort} comment="BILLING_ISOLIR_HTTP"`,
+    '',
+    '# --- NAT: HTTPS ke portal (jika portal pakai TLS) ---',
+    `/ip firewall nat add chain=dstnat protocol=tcp dst-port=443 src-address-list=LIST_ISOLIR action=dst-nat to-addresses=${billingIp} to-ports=${httpsServicePort} comment="BILLING_ISOLIR_HTTPS"`,
+    '',
+    '# --- Blokir sisa traffic forward dari pelanggan terisolir (opsional; sesuaikan urutan) ---',
+    '/ip firewall filter add chain=forward src-address-list=LIST_ISOLIR action=drop comment="BILLING_ISOLIR_BLOCK_REST" disabled=yes',
+    '',
+    '# --- PPPoE: contoh memasukkan IP ke LIST_ISOLIR saat login (nama profil = isolir) ---',
+    '# Jalankan sekali, atau salin ke on-up profil isolir di Winbox:',
+    '# /ppp profile set [find name=isolir] on-up="/ip firewall address-list add list=LIST_ISOLIR address=$remote-address comment=$user timeout=23h"',
+    '',
+  ];
+
+  return {
+    script: lines.join('\n'),
+    appUrl: normalized || raw,
+    billingHost: hostname,
+    billingIp,
+    httpNatPort: httpServicePort,
+    httpsNatPort: httpsServicePort,
+  };
+}
+
+const ISOLIR_ADDR_LIST = 'LIST_ISOLIR';
+
+/** Nama profil PPPoE isolir yang dipakai pelanggan di router ini (distinct dari DB). */
+function getDistinctIsolirProfilesForRouter(routerId) {
+  const rid = Number(routerId);
+  if (!Number.isFinite(rid) || rid <= 0) return ['isolir'];
+  const rows = db.prepare(`
+    SELECT DISTINCT TRIM(COALESCE(isolir_profile, '')) AS n
+    FROM customers
+    WHERE router_id = ? AND TRIM(COALESCE(pppoe_username, '')) != ''
+  `).all(rid);
+  const names = new Set();
+  for (const r of rows || []) {
+    const n = String(r.n || '').trim();
+    names.add(n || 'isolir');
+  }
+  if (names.size === 0) names.add('isolir');
+  return [...names];
+}
+
+/**
+ * Pasang on-up / on-down di profil PPPoE (mis. isolir) agar IP pelanggan masuk address-list LIST_ISOLIR
+ * saat login — supaya NAT/firewall "halaman isolir" berlaku untuk trafik internet mereka.
+ * @param {object|null} reuseConn - hasil getConnection() jika sudah terbuka (mis. dari setupIsolirFirewall).
+ */
+async function ensurePppProfileIsolirAddressListHook(profileName, routerId = null, reuseConn = null) {
+  const name = String(profileName || 'isolir').trim() || 'isolir';
+  let conn = reuseConn;
+  let ownConn = false;
+  try {
+    if (!conn) {
+      conn = await getConnection(routerId);
+      ownConn = true;
+    }
+    const menu = conn.client.menu('/ppp/profile');
+    const rows = await menu.get();
+    const list = Array.isArray(rows) ? rows : [];
+    const prof = list.find((r) => String(r.name || '') === name);
+    if (!prof) {
+      const msg = `Profil PPPoE "${name}" tidak ada di router (buat profil isolir di MikroTik atau samakan nama dengan isolir_profile pelanggan).`;
+      logger.warn(`[MikroTik] ${msg}`);
+      return { ok: false, profile: name, message: msg };
+    }
+    const id = prof['.id'] || prof.id;
+    if (!id) {
+      return { ok: false, profile: name, message: 'ID profil tidak ditemukan' };
+    }
+
+    let onUp = prof['on-up'] != null ? String(prof['on-up']) : (prof.onUp != null ? String(prof.onUp) : '');
+    let onDown = prof['on-down'] != null ? String(prof['on-down']) : (prof.onDown != null ? String(prof.onDown) : '');
+    onUp = onUp.trim();
+    onDown = onDown.trim();
+
+    const hookUp =
+      `/ip firewall address-list remove [find list=${ISOLIR_ADDR_LIST} address=$remote-address]; ` +
+      `/ip firewall address-list add list=${ISOLIR_ADDR_LIST} address=$remote-address comment=$user timeout=23h`;
+    const hookDown = `/ip firewall address-list remove [find list=${ISOLIR_ADDR_LIST} address=$remote-address]`;
+
+    const addSnip = `address-list add list=${ISOLIR_ADDR_LIST}`;
+    const remSnip = `remove [find list=${ISOLIR_ADDR_LIST}`;
+    if (!onUp.includes(addSnip)) {
+      onUp = onUp ? `${onUp}; ${hookUp}` : hookUp;
+    }
+    if (!onDown.includes(remSnip)) {
+      onDown = onDown ? `${onDown}; ${hookDown}` : hookDown;
+    }
+
+    await menu.set({ 'on-up': onUp, 'on-down': onDown }, id);
+    logger.info(`[MikroTik] Profil PPPoE "${name}": on-up/on-down diset untuk ${ISOLIR_ADDR_LIST} (isolir portal).`);
+    return { ok: true, profile: name, message: `Profil "${name}" memasukkan IP ke ${ISOLIR_ADDR_LIST} saat PPP login.` };
+  } catch (e) {
+    logger.error(`[MikroTik] ensurePppProfileIsolirAddressListHook(${name}):`, e);
+    return { ok: false, profile: name, message: e.message || String(e) };
+  } finally {
+    if (ownConn && conn && conn.api) conn.api.close();
+  }
+}
+
 // --- FIREWALL & ISOLIR STATIC IP ---
 async function setupIsolirFirewall(routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    
-    // 1. Ensure Address List exists (implicitly by adding or just checking)
-    // We'll add a dummy entry to ensure it's there or just proceed to rules
-    
-    // 2. Add NAT Rule for Redirect to Isolir Page (Port 80)
+    const settings = getSettingsWithCache();
+
+    /** IP portal (app_url) untuk rule allow — pelanggan isolir tetap bisa DNS + ke server billing saja */
+    let billingIp = '';
+    try {
+      const raw = String(settings.app_url || '').trim();
+      const normalized = raw && /^https?:\/\//i.test(raw) ? raw : (raw ? `https://${raw}` : '');
+      const u = new URL(normalized || 'http://127.0.0.1');
+      let host = u.hostname;
+      if (host && !/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
+        host = dns.lookupSync(host, { family: 4 });
+      }
+      billingIp = host || '';
+    } catch (e) {
+      logger.warn('[setupIsolirFirewall] app_url tidak valid / tidak bisa di-resolve:', e.message);
+    }
+
+    // 1. NAT HTTP (legacy: billing di mesin yang sama port 3002; sesuaikan jika portal remote)
     const natMenu = conn.client.menu('/ip/firewall/nat');
     const existingNat = await natMenu.where('comment', 'ISOLIR_REDIRECT').get();
-    
-    // Auto-detect server IP or use a setting
-    const settings = getSettingsWithCache();
-    const serverUrl = settings.app_url || 'http://192.168.1.1:3002'; // Fallback
-    
+
     if (existingNat.length === 0) {
       await natMenu.add({
         chain: 'dstnat',
@@ -524,24 +688,64 @@ async function setupIsolirFirewall(routerId = null) {
         protocol: 'tcp',
         'dst-port': '80',
         action: 'redirect',
-        'to-ports': '3002', // Port internal aplikasi billing
+        'to-ports': '3002',
         comment: 'ISOLIR_REDIRECT'
       });
     }
 
-    // 3. Add Filter Rule to block all other traffic for isolated users
     const filterMenu = conn.client.menu('/ip/firewall/filter');
-    const existingFilter = await filterMenu.where('comment', 'BLOCK_ISOLIR').get();
-    if (existingFilter.length === 0) {
+    let blockRows = await filterMenu.where('comment', 'BLOCK_ISOLIR').get();
+    let blockId = blockRows[0] ? (blockRows[0]['.id'] || blockRows[0].id) : null;
+
+    if (!blockId) {
       await filterMenu.add({
         chain: 'forward',
         'src-address-list': 'LIST_ISOLIR',
         action: 'drop',
-        comment: 'BLOCK_ISOLIR'
+        comment: 'BLOCK_ISOLIR',
+      });
+      blockRows = await filterMenu.where('comment', 'BLOCK_ISOLIR').get();
+      blockId = blockRows[0] ? (blockRows[0]['.id'] || blockRows[0].id) : null;
+    }
+
+    const insertBeforeBlock = async (comment, fields) => {
+      if (!blockId) return;
+      const ex = await filterMenu.where('comment', comment).get();
+      if (ex && ex.length > 0) return;
+      await filterMenu.add({ ...fields, comment, 'place-before': blockId });
+    };
+
+    await insertBeforeBlock('BILLING_API_ISOLIR_DNS', {
+      chain: 'forward',
+      'src-address-list': 'LIST_ISOLIR',
+      protocol: 'udp',
+      'dst-port': '53',
+      action: 'accept',
+    });
+    if (billingIp) {
+      await insertBeforeBlock('BILLING_API_ISOLIR_ALLOW', {
+        chain: 'forward',
+        'src-address-list': 'LIST_ISOLIR',
+        'dst-address': billingIp,
+        action: 'accept',
       });
     }
 
-    return { success: true, message: 'Firewall Isolir berhasil disiapkan di MikroTik' };
+    const hookResults = [];
+    for (const pname of getDistinctIsolirProfilesForRouter(routerId)) {
+      hookResults.push(await ensurePppProfileIsolirAddressListHook(pname, routerId, conn));
+    }
+    const okNames = hookResults.filter((h) => h.ok).map((h) => h.profile).join(', ');
+    const bad = hookResults.filter((h) => !h.ok);
+    const warn = bad.length
+      ? ` Perhatian: ${bad.map((h) => `${h.profile} (${h.message})`).join('; ')}`
+      : '';
+
+    return {
+      success: true,
+      message: `Firewall isolir + NAT siap. Profil PPPoE di-hook ke ${ISOLIR_ADDR_LIST}: ${okNames || '-'}.${warn}`,
+      hooks: hookResults,
+    };
   } catch (e) {
     logger.error('Error setupIsolirFirewall:', e);
     throw e;
@@ -654,6 +858,8 @@ module.exports = {
   updateRouter,
   deleteRouter,
   setupIsolirFirewall,
+  ensurePppProfileIsolirAddressListHook,
+  generateIsolirPortalScript,
   manageStaticIp,
   removeStaticIp
 };

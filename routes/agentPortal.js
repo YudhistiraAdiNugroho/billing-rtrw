@@ -73,6 +73,29 @@ router.get('/', requireAgentSession, (req, res) => {
     });
   const txs = agentSvc.listAgentTransactions({ agentId, limit: 40 });
 
+  const digiflazzMarkup = Number(getSetting('digiflazz_markup', 0) || 0);
+  const digiflazzConfigured = Boolean(
+    String(getSetting('digiflazz_username', '') || '').trim() &&
+    String(getSetting('digiflazz_api_key', '') || '').trim()
+  );
+
+  const digiflazzCatalogProducts = digiflazzConfigured
+    ? agentSvc.listDigiflazzProducts({ include_inactive: false, limit: 3000 })
+    : [];
+
+  const digiflazzBrandsMap = new Map();
+  for (const p of (digiflazzCatalogProducts || [])) {
+    const brandName = String(p.brand || '').trim() || '-';
+    const categoryName = String(p.category || '').trim() || '-';
+    const key = `${categoryName}__${brandName}`;
+    if (!digiflazzBrandsMap.has(key)) {
+      digiflazzBrandsMap.set(key, { key, name: brandName, category: categoryName, items: [] });
+    }
+    digiflazzBrandsMap.get(key).items.push(p);
+  }
+  const digiflazzBrandsData = Array.from(digiflazzBrandsMap.values());
+  const digiflazzCategories = Array.from(new Set((digiflazzCatalogProducts || []).map(p => String(p.category || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
   res.render('agent/dashboard', {
     title: 'Dashboard Agent',
     company: company(),
@@ -81,6 +104,10 @@ router.get('/', requireAgentSession, (req, res) => {
     invoices: unpaidInvoices,
     prices,
     txs,
+    digiflazzMarkup,
+    digiflazzConfigured,
+    digiflazzCategories,
+    digiflazzBrandsData,
     msg: flashMsg(req),
     receipt: popReceipt(req)
   });
@@ -180,6 +207,153 @@ router.post('/sell-voucher', requireAgentSession, express.urlencoded({ extended:
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
   }
+  res.redirect('/agent');
+});
+
+router.post('/pulsa', requireAgentSession, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const sku = String(req.body.sku || '').trim();
+    const target = String(req.body.target || '').trim();
+    const buyerPhone = String(req.body.buyer_phone || '').trim();
+    const sellPrice = req.body.sell_price !== undefined && String(req.body.sell_price).trim() !== ''
+      ? Number(req.body.sell_price)
+      : 0;
+
+    const result = await agentSvc.buyPulsaAsAgent(req.session.agentId, sku, target, { sell_price: sellPrice });
+
+    const status = String(result?.tx?.digi_status || 'pending').toLowerCase();
+    const isSuccess = status === 'success';
+    const isFailed = status === 'failed';
+
+    let waSent = false;
+    if (getSetting('whatsapp_enabled', false) && buyerPhone) {
+      try {
+        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+        if (whatsappStatus.connection === 'open') {
+          const msg =
+            `${isSuccess ? '✅' : isFailed ? '❌' : '⏳'} *TRANSAKSI PULSA*\n\n` +
+            `📦 *SKU:* ${sku}\n` +
+            `🎯 *Target:* ${target}\n` +
+            `🧾 *Ref ID:* ${result?.tx?.digi_ref_id || '-'}\n` +
+            `📡 *Status:* ${status.toUpperCase()}\n` +
+            `${result?.tx?.digi_sn ? `🔢 *SN:* ${result.tx.digi_sn}\n` : ''}` +
+            `${result?.tx?.digi_message ? `💬 *Pesan:* ${result.tx.digi_message}\n` : ''}` +
+            `\nTerima kasih.`;
+          await sendWA(buyerPhone, msg);
+          waSent = true;
+        }
+      } catch (e) {}
+    }
+
+    req.session._agentReceipt = {
+      type: 'pulsa',
+      tx_id: Number(result?.tx?.id || 0),
+      created_at: new Date().toISOString(),
+      sku,
+      target,
+      ref_id: result?.tx?.digi_ref_id || '',
+      trx_id: result?.tx?.digi_trx_id || '',
+      sn: result?.tx?.digi_sn || '',
+      status,
+      message: result?.tx?.digi_message || '',
+      buy_price: Number(result?.tx?.amount_buy || 0),
+      sell_price: Number(result?.tx?.amount_sell || 0),
+      waSent,
+      buyer_phone: buyerPhone
+    };
+
+    req.session._msg = { type: isFailed ? 'error' : isSuccess ? 'success' : 'warning', text: isFailed ? 'Transaksi gagal (saldo otomatis direfund jika gagal langsung).' : isSuccess ? 'Transaksi berhasil diproses.' : 'Transaksi dibuat (pending). Silakan cek status di riwayat.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/agent');
+});
+
+router.post('/api/pulsa/order', requireAgentSession, express.json({ limit: '50kb' }), async (req, res) => {
+  try {
+    const sku = String(req.body?.sku || '').trim();
+    const target = String(req.body?.target || '').trim();
+    const buyerPhone = String(req.body?.buyer_phone || '').trim();
+    const sellPrice = req.body?.sell_price !== undefined && String(req.body.sell_price).trim() !== ''
+      ? Number(req.body.sell_price)
+      : 0;
+
+    const result = await agentSvc.buyPulsaAsAgent(req.session.agentId, sku, target, { sell_price: sellPrice });
+    const status = String(result?.tx?.digi_status || 'pending').toLowerCase();
+    const agentNow = agentSvc.getAgentById(req.session.agentId);
+
+    const isSuccess = status === 'success';
+    const isFailed = status === 'failed';
+    let waSent = false;
+    if (getSetting('whatsapp_enabled', false) && buyerPhone) {
+      try {
+        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+        if (whatsappStatus.connection === 'open') {
+          const msg =
+            `${isSuccess ? '✅' : isFailed ? '❌' : '⏳'} *TRANSAKSI PULSA*\n\n` +
+            `📦 *SKU:* ${sku}\n` +
+            `🎯 *Target:* ${target}\n` +
+            `💰 *Harga:* Rp ${Number(result?.tx?.amount_sell || 0).toLocaleString('id-ID')}\n` +
+            `🧾 *Ref ID:* ${result?.tx?.digi_ref_id || '-'}\n` +
+            `📡 *Status:* ${status.toUpperCase()}\n` +
+            `${result?.tx?.digi_sn ? `🔢 *SN:* ${result.tx.digi_sn}\n` : ''}` +
+            `${result?.tx?.digi_message ? `💬 *Pesan:* ${result.tx.digi_message}\n` : ''}` +
+            `\nTerima kasih.`;
+          await sendWA(buyerPhone, msg);
+          waSent = true;
+        }
+      } catch (e) {}
+    }
+
+    req.session._agentReceipt = {
+      type: 'pulsa',
+      tx_id: Number(result?.tx?.id || 0),
+      created_at: new Date().toISOString(),
+      sku,
+      target,
+      ref_id: result?.tx?.digi_ref_id || '',
+      trx_id: result?.tx?.digi_trx_id || '',
+      sn: result?.tx?.digi_sn || '',
+      status,
+      message: result?.tx?.digi_message || '',
+      buy_price: Number(result?.tx?.amount_buy || 0),
+      sell_price: Number(result?.tx?.amount_sell || 0),
+      waSent,
+      buyer_phone: buyerPhone
+    };
+
+    return res.json({
+      success: true,
+      status,
+      message: result?.tx?.digi_message || '',
+      ref_id: result?.tx?.digi_ref_id || '',
+      sn: result?.tx?.digi_sn || '',
+      price: Number(result?.tx?.amount_sell || 0),
+      wa_sent: waSent,
+      balance_after: agentNow ? Number(agentNow.balance || 0) : null
+    });
+  } catch (e) {
+    return res.status(400).json({ success: false, message: e.message });
+  }
+});
+
+router.post('/pulsa/check', requireAgentSession, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const txId = Number(req.body.tx_id || 0);
+    if (!txId) throw new Error('ID transaksi tidak valid');
+    const result = await agentSvc.checkPulsaStatusAsAgent(req.session.agentId, txId);
+    const status = String(result?.tx?.digi_status || '').toLowerCase();
+    req.session._msg = { type: status === 'success' ? 'success' : status === 'failed' ? 'error' : 'warning', text: `Status transaksi #${txId}: ${status || '-'}` };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal cek status: ' + e.message };
+  }
+  res.redirect('/agent');
+});
+
+router.post('/receipt/clear', requireAgentSession, (req, res) => {
+  try {
+    delete req.session._agentReceipt;
+  } catch {}
   res.redirect('/agent');
 });
 

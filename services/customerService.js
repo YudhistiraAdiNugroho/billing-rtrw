@@ -2,6 +2,7 @@
  * Service: CRUD Pelanggan & Paket
  */
 const db = require('../config/database');
+const { logger } = require('../config/logger');
 
 // ─── CUSTOMERS ───────────────────────────────────────────────
 function getAllCustomers(search = '') {
@@ -268,6 +269,13 @@ async function suspendCustomer(id) {
   } else if (customer.pppoe_username) {
     const isolirProfile = customer.isolir_profile || 'isolir';
     await mikrotikSvc.setPppoeProfile(customer.pppoe_username, isolirProfile, customer.router_id);
+    if (customer.router_id) {
+      try {
+        await mikrotikSvc.ensurePppProfileIsolirAddressListHook(isolirProfile, customer.router_id);
+      } catch (e) {
+        logger.warn(`[suspendCustomer] Hook profil isolir "${isolirProfile}" di router ${customer.router_id}: ${e.message}`);
+      }
+    }
   }
   return true;
 }

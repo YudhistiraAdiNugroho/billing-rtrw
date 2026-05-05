@@ -26,6 +26,53 @@ const monitoringSvc = require('../services/monitoringService');
 const inventorySvc = require('../services/inventoryService');
 const auditSvc = require('../services/auditTrailService');
 const diagnosticsSvc = require('../services/diagnosticsService');
+const axios = require('axios');
+const crypto = require('crypto');
+
+const DIGIFLAZZ_URL = 'https://api.digiflazz.com/v1';
+const digiflazzApi = axios.create({
+  baseURL: DIGIFLAZZ_URL,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' }
+});
+
+function digiflazzCreds() {
+  const username = String(getSetting('digiflazz_username', '') || '').trim();
+  const apiKey = String(getSetting('digiflazz_api_key', '') || '').trim();
+  return { username, apiKey };
+}
+
+function digiflazzConfigured() {
+  const { username, apiKey } = digiflazzCreds();
+  return Boolean(username && apiKey);
+}
+
+function digiflazzSign(refId) {
+  const { username, apiKey } = digiflazzCreds();
+  if (!username || !apiKey) throw new Error('Digiflazz belum dikonfigurasi');
+  return crypto.createHash('md5').update(username + apiKey + String(refId || '')).digest('hex');
+}
+
+async function digiflazzCekSaldo() {
+  const { username } = digiflazzCreds();
+  const sign = digiflazzSign('depo');
+  const response = await digiflazzApi.post('/cek-saldo', { cmd: 'deposit', username, sign });
+  const data = response?.data?.data;
+  if (data?.rc) throw new Error(String(data?.message || 'Gagal cek saldo Digiflazz'));
+  return data;
+}
+
+async function digiflazzPriceListAll() {
+  const { username } = digiflazzCreds();
+  const sign = digiflazzSign('pricelist');
+  const response = await digiflazzApi.post('/price-list', { cmd: 'prepaid', username, sign });
+  const data = response?.data?.data;
+  if (!Array.isArray(data)) {
+    const msg = response?.data?.data?.message || response?.data?.message || 'Gagal mengambil price list Digiflazz';
+    throw new Error(String(msg));
+  }
+  return data;
+}
 
 const pppoeTrafficSamples = new Map();
 function prunePppoeTrafficSamples(now) {
@@ -1612,10 +1659,196 @@ router.get('/reports', requireAdminSession, (req, res) => {
 
 // ─── SETTINGS ──────────────────────────────────────────────────────────────
 router.get('/settings', requireAdminSession, (req, res) => {
+  const settings = getSettings();
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  const baseUrl = (settings && settings.app_url ? String(settings.app_url) : `${protocol}://${host}`).replace(/\/+$/, '');
+  const digiflazzWebhookUrl = `${baseUrl}/webhook/digiflazz`;
+  const paymentWebhookUrl = `${baseUrl}/customer/payment/callback`;
   res.render('admin/settings', {
     title: 'Pengaturan Sistem', company: company(), activePage: 'settings',
-    settings: getSettings(), msg: flashMsg(req)
+    settings, msg: flashMsg(req),
+    digiflazzWebhookUrl,
+    paymentWebhookUrl
   });
+});
+
+router.get('/digiflazz', requireAdminSession, restrictToAdmin, async (req, res) => {
+  const settings = getSettings();
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  const baseUrl = (settings && settings.app_url ? String(settings.app_url) : `${protocol}://${host}`).replace(/\/+$/, '');
+  const digiflazzWebhookUrl = `${baseUrl}/webhook/digiflazz`;
+  let digi = { configured: digiflazzConfigured(), deposit: null, error: null };
+  if (digi.configured) {
+    try {
+      const data = await digiflazzCekSaldo();
+      digi.deposit = Number(data?.deposit || 0);
+    } catch (e) {
+      digi.error = String(e?.message || e || '');
+    }
+  }
+
+  const q = String(req.query.q || '').trim();
+  const category = String(req.query.category || '').trim();
+  const status = String(req.query.status || '').trim();
+
+  const where = [];
+  const params = [];
+  if (q) {
+    where.push('(sku LIKE ? OR product_name LIKE ? OR brand LIKE ? OR category LIKE ?)');
+    const like = `%${q}%`;
+    params.push(like, like, like, like);
+  }
+  if (category) {
+    where.push('category = ?');
+    params.push(category);
+  }
+  if (status === 'active') where.push('status = 1');
+  if (status === 'inactive') where.push('status = 0');
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const products = db.prepare(`SELECT * FROM digiflazz_products ${whereSql} ORDER BY category, brand, price_sell LIMIT 300`).all(...params);
+  const categories = db.prepare("SELECT category FROM digiflazz_products WHERE category IS NOT NULL AND TRIM(category)<>'' GROUP BY category ORDER BY category").all().map(r => r.category);
+  const stats = db.prepare('SELECT COUNT(1) AS total, SUM(CASE WHEN status=1 THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) AS inactive FROM digiflazz_products').get();
+  const lastSync = db.prepare('SELECT * FROM digiflazz_sync_logs ORDER BY id DESC LIMIT 1').get();
+  const webhookLogs = db.prepare(
+    `
+    SELECT id, created_at, ref_id, status, signature_ok, matched_agent_tx_id, ip
+    FROM digiflazz_webhook_logs
+    ORDER BY id DESC
+    LIMIT 80
+  `
+  ).all();
+
+  const recentPulsaTx = db.prepare(
+    `
+    SELECT t.*, a.name AS agent_name, a.username AS agent_username
+    FROM agent_transactions t
+    JOIN agents a ON a.id = t.agent_id
+    WHERE t.type = 'pulsa'
+    ORDER BY t.id DESC
+    LIMIT 60
+  `
+  ).all();
+
+  res.render('admin/digiflazz', {
+    title: 'Digiflazz',
+    company: company(),
+    activePage: 'digiflazz',
+    msg: flashMsg(req),
+    settings,
+    digi,
+    digiflazzWebhookUrl,
+    q,
+    category,
+    status,
+    products,
+    categories,
+    stats,
+    lastSync,
+    recentPulsaTx,
+    webhookLogs
+  });
+});
+
+router.post('/digiflazz/check-balance', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const data = await digiflazzCekSaldo();
+    const depo = Number(data?.deposit || 0);
+    req.session._msg = { type: 'success', text: `Saldo Digiflazz: Rp ${depo.toLocaleString('id-ID')}` };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal cek saldo Digiflazz: ' + (e?.message || e) };
+  }
+  res.redirect('/admin/digiflazz');
+});
+
+router.post('/digiflazz/sync-products', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const markup = Math.max(0, Math.floor(Number(getSetting('digiflazz_markup', 0) || 0)));
+    const list = await digiflazzPriceListAll();
+
+    const selectOne = db.prepare('SELECT sku, product_name, category, brand, price_modal, price_sell, status FROM digiflazz_products WHERE sku = ?');
+    const upsert = db.prepare(
+      `
+      INSERT INTO digiflazz_products (sku, product_name, category, brand, price_modal, price_sell, status, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(sku) DO UPDATE SET
+        product_name=excluded.product_name,
+        category=excluded.category,
+        brand=excluded.brand,
+        price_modal=excluded.price_modal,
+        price_sell=excluded.price_sell,
+        status=excluded.status,
+        updated_at=CURRENT_TIMESTAMP
+    `
+    );
+
+    const run = db.transaction(() => {
+      const summary = { total: 0, inserted: 0, updated: 0, active: 0, inactive: 0, skippedNoPrice: 0 };
+      for (const p of list) {
+        summary.total++;
+        const sku = String(p?.buyer_sku_code || '').trim();
+        if (!sku) continue;
+
+        const priceModal = Number(p?.price ?? p?.buyer_price ?? 0) || 0;
+        if (priceModal <= 0) {
+          summary.skippedNoPrice++;
+          continue;
+        }
+
+        const status = p?.buyer_product_status ? 1 : 0;
+        if (status === 1) summary.active++;
+        else summary.inactive++;
+
+        const existing = selectOne.get(sku);
+        const name = String(p?.product_name || sku).trim();
+        const cat = String(p?.category || '').trim();
+        const brand = String(p?.brand || '').trim();
+        const priceSell = Math.floor(priceModal + markup);
+
+        if (!existing) summary.inserted++;
+        else {
+          const changed =
+            String(existing.product_name || '') !== name ||
+            String(existing.category || '') !== cat ||
+            String(existing.brand || '') !== brand ||
+            Number(existing.price_modal || 0) !== Math.floor(priceModal) ||
+            Number(existing.price_sell || 0) !== priceSell ||
+            Number(existing.status || 0) !== status;
+          if (changed) summary.updated++;
+        }
+
+        upsert.run(sku, name, cat, brand, Math.floor(priceModal), priceSell, status);
+      }
+
+      db.prepare(
+        'INSERT INTO digiflazz_sync_logs (total, inserted, updated, active, inactive) VALUES (?, ?, ?, ?, ?)'
+      ).run(summary.total, summary.inserted, summary.updated, summary.active, summary.inactive);
+
+      return summary;
+    });
+
+    const s = run();
+    req.session._msg = { type: 'success', text: `Sync Digiflazz OK | Total: ${s.total} | Baru: ${s.inserted} | Update: ${s.updated} | Aktif: ${s.active} | Nonaktif: ${s.inactive} | SkipNoPrice: ${s.skippedNoPrice}` };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal sync produk Digiflazz: ' + (e?.message || e) };
+  }
+  res.redirect('/admin/digiflazz');
+});
+
+router.post('/digiflazz/products/update-price', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    const sku = String(req.body.sku || '').trim();
+    const priceSell = Math.max(0, Math.floor(Number(req.body.price_sell || 0) || 0));
+    if (!sku) throw new Error('SKU wajib');
+    const info = db.prepare('UPDATE digiflazz_products SET price_sell=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?').run(priceSell, sku);
+    if (info.changes === 0) throw new Error('SKU tidak ditemukan');
+    req.session._msg = { type: 'success', text: `Harga jual diperbarui: ${sku}` };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal update harga: ' + (e?.message || e) };
+  }
+  res.redirect('/admin/digiflazz');
 });
 
 router.get('/update', requireAdminSession, restrictToAdmin, (req, res) => {
@@ -1763,6 +1996,7 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     if (newSettings.server_port) newSettings.server_port = parseInt(newSettings.server_port);
     if (newSettings.mikrotik_port) newSettings.mikrotik_port = parseInt(newSettings.mikrotik_port);
     if (newSettings.whatsapp_broadcast_delay) newSettings.whatsapp_broadcast_delay = parseInt(newSettings.whatsapp_broadcast_delay);
+    if (newSettings.digiflazz_markup !== undefined) newSettings.digiflazz_markup = parseInt(newSettings.digiflazz_markup) || 0;
     
     newSettings.login_otp_enabled = (newSettings.login_otp_enabled === 'true');
     newSettings.telegram_enabled = (newSettings.telegram_enabled === 'true');
@@ -3282,6 +3516,15 @@ router.post('/api/routers/:id/setup-firewall', requireAdmin, async (req, res) =>
     res.json(result);
   } catch (e) {
     res.json({ success: false, error: e.message });
+  }
+});
+
+router.get('/api/isolir-portal-script', requireAdmin, (req, res) => {
+  try {
+    const data = mikrotikService.generateIsolirPortalScript();
+    res.json({ success: true, ...data });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
