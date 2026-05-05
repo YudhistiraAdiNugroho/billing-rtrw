@@ -68,6 +68,31 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS collectors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    name TEXT NOT NULL,
+    phone TEXT DEFAULT '',
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS collector_payment_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collector_id INTEGER NOT NULL REFERENCES collectors(id) ON DELETE CASCADE,
+    invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL DEFAULT 0,
+    note TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending', -- pending, approved, rejected
+    decided_by_role TEXT DEFAULT '', -- admin, cashier
+    decided_by_name TEXT DEFAULT '',
+    decided_note TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    decided_at DATETIME
+  );
+
   CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
@@ -233,6 +258,22 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS digiflazz_staff_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role TEXT NOT NULL DEFAULT 'admin', -- admin, cashier
+    actor_phone TEXT DEFAULT '',
+    actor_name TEXT DEFAULT '',
+    sku TEXT NOT NULL,
+    target TEXT NOT NULL,
+    ref_id TEXT NOT NULL UNIQUE,
+    trx_id TEXT DEFAULT '',
+    sn TEXT DEFAULT '',
+    status TEXT DEFAULT '',
+    message TEXT DEFAULT '',
+    price INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS webhook_payment_notifs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     service TEXT DEFAULT '',
@@ -255,6 +296,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_agent_prices_router_profile ON agent_hotspot_prices(router_id, profile_name);
   CREATE INDEX IF NOT EXISTS idx_agent_tx_agent ON agent_transactions(agent_id);
   CREATE INDEX IF NOT EXISTS idx_agent_tx_created ON agent_transactions(created_at);
+  CREATE INDEX IF NOT EXISTS idx_digi_staff_tx_created ON digiflazz_staff_transactions(created_at);
+  CREATE INDEX IF NOT EXISTS idx_digi_staff_tx_role ON digiflazz_staff_transactions(role);
+  CREATE INDEX IF NOT EXISTS idx_digi_staff_tx_ref ON digiflazz_staff_transactions(ref_id);
+
+  CREATE INDEX IF NOT EXISTS idx_collectors_username ON collectors(username);
+  CREATE INDEX IF NOT EXISTS idx_collector_pay_req_status ON collector_payment_requests(status);
+  CREATE INDEX IF NOT EXISTS idx_collector_pay_req_invoice ON collector_payment_requests(invoice_id);
+  CREATE INDEX IF NOT EXISTS idx_collector_pay_req_collector ON collector_payment_requests(collector_id);
+  CREATE INDEX IF NOT EXISTS idx_collector_pay_req_created ON collector_payment_requests(created_at);
 
   CREATE INDEX IF NOT EXISTS idx_webhook_payment_notifs_created ON webhook_payment_notifs(created_at);
   CREATE INDEX IF NOT EXISTS idx_webhook_payment_notifs_service ON webhook_payment_notifs(service);

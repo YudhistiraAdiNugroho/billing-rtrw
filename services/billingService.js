@@ -403,10 +403,26 @@ function getInvoicesByAny(val) {
 
   if (customer) {
     return db.prepare(`
-      SELECT i.*, p.name as package_name
+      SELECT i.*,
+             c.name as customer_name,
+             c.phone as customer_phone,
+             c.address as customer_address,
+             c.pppoe_username,
+             c.genieacs_tag,
+             c.connection_type,
+             c.static_ip,
+             c.status as customer_status,
+             c.router_id,
+             c.install_date,
+             c.isolate_day,
+             c.isolir_profile,
+             p.name as package_name,
+             p.price as package_price,
+             r.name as router_name
       FROM invoices i
       JOIN customers c ON i.customer_id = c.id
       LEFT JOIN packages p ON c.package_id = p.id
+      LEFT JOIN routers r ON c.router_id = r.id
       WHERE i.customer_id = ?
       ORDER BY i.period_year DESC, i.period_month DESC
     `).all(customer.id);
@@ -416,10 +432,26 @@ function getInvoicesByAny(val) {
   if (keyword.length < 3) return [];
   
   return db.prepare(`
-    SELECT i.*, p.name as package_name, c.name as customer_name, c.phone as customer_phone
+    SELECT i.*,
+           c.name as customer_name,
+           c.phone as customer_phone,
+           c.address as customer_address,
+           c.pppoe_username,
+           c.genieacs_tag,
+           c.connection_type,
+           c.static_ip,
+           c.status as customer_status,
+           c.router_id,
+           c.install_date,
+           c.isolate_day,
+           c.isolir_profile,
+           p.name as package_name,
+           p.price as package_price,
+           r.name as router_name
     FROM invoices i
     JOIN customers c ON i.customer_id = c.id
     LEFT JOIN packages p ON c.package_id = p.id
+    LEFT JOIN routers r ON c.router_id = r.id
     WHERE lower(c.name) LIKE ?
        OR lower(c.phone) LIKE ?
        OR lower(c.genieacs_tag) LIKE ?

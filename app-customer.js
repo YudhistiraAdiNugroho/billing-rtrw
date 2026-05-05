@@ -473,6 +473,10 @@ app.use('/tech', techPortal);
 const agentPortal = require('./routes/agentPortal');
 app.use('/agent', agentPortal);
 
+// Mount collector portal
+const collectorPortal = require('./routes/collectorPortal');
+app.use('/collector', collectorPortal);
+
 // Fungsi untuk memulai server dengan penanganan port yang sudah digunakan
 function startServer(portToUse) {
     logger.info(`Mencoba memulai server pada port ${portToUse}...`);

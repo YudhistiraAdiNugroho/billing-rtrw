@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Approval Pembayaran Kolektor | <%= company %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+<%- include('partials/sidebar', { activePage: 'collector_payments', company }) %>
+
+<div class="mw">
+  <div class="topbar">
+    <div class="tb-title">
+      <button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+      <i class="bi bi-check2-square"></i>
+      <span>Approval Pembayaran Kolektor</span>
+    </div>
+    <div class="tb-right">
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
+      <a href="/admin/collector-payments?status=pending" class="btn btn-g btn-sm <%= status==='pending'?'btn-p':'' %>">Pending</a>
+      <a href="/admin/collector-payments?status=approved" class="btn btn-g btn-sm <%= status==='approved'?'btn-p':'' %>">Approved</a>
+      <a href="/admin/collector-payments?status=rejected" class="btn btn-g btn-sm <%= status==='rejected'?'btn-p':'' %>">Rejected</a>
+    </div>
+  </div>
+
+  <div class="page">
+    <% if (msg) { %>
+      <div class="alert alert-<%= msg.type==='error'?'d':'s' %>"><%= msg.text %></div>
+    <% } %>
+
+    <div class="card">
+      <div class="card-hd">
+        <h6><i class="bi bi-list-ul"></i> Daftar Request (<%= (rows || []).length %>)</h6>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th>Waktu</th>
+              <th>Kolektor</th>
+              <th>Pelanggan</th>
+              <th>Tagihan</th>
+              <th class="num">Nominal</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!rows || rows.length === 0) { %>
+              <tr><td colspan="7" class="text-center text-muted" style="padding:24px">Tidak ada request.</td></tr>
+            <% } else { %>
+              <% rows.forEach(r => { %>
+                <tr>
+                  <td style="font-size:11px;color:var(--muted)"><%= r.created_at ? new Date(r.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-' %></td>
+                  <td class="fw6"><%= r.collector_name %> <span class="text-muted" style="font-size:11px"><%= r.collector_username ? '(@'+r.collector_username+')' : '' %></span></td>
+                  <td>
+                    <div class="fw6"><%= r.customer_name %></div>
+                    <div style="font-size:11px;color:var(--muted)"><%= r.customer_phone || '' %></div>
+                  </td>
+                  <td style="font-size:12px">
+                    <div>Invoice <code>#<%= r.invoice_id %></code> • <span class="badge bm"><%= r.period_month %>/<%= r.period_year %></span></div>
+                    <div style="font-size:11px;color:var(--muted)"><%= r.invoice_status %> • Rp <%= Number(r.invoice_amount||0).toLocaleString('id-ID') %></div>
+                    <% if (r.customer_address) { %><div style="font-size:11px;color:var(--muted)"><%= r.customer_address %></div><% } %>
+                    <% if (r.lat && r.lng) { %><div><a target="_blank" href="https://www.google.com/maps?q=<%= encodeURIComponent(r.lat + ',' + r.lng) %>">Map</a></div><% } %>
+                  </td>
+                  <td class="num fw6">Rp <%= Number(r.amount||0).toLocaleString('id-ID') %></td>
+                  <td>
+                    <span class="badge <%= r.status==='approved'?'bs':(r.status==='rejected'?'bd':'bm') %>"><%= String(r.status||'').toUpperCase() %></span>
+                    <% if (r.note) { %><div style="font-size:10px;color:var(--muted)"><%= r.note %></div><% } %>
+                    <% if (r.decided_by_name) { %><div style="font-size:10px;color:var(--muted)">Diproses: <%= r.decided_by_name %></div><% } %>
+                    <% if (r.decided_note) { %><div style="font-size:10px;color:var(--muted)"><%= r.decided_note %></div><% } %>
+                  </td>
+                  <td>
+                    <% if (status === 'pending') { %>
+                      <div style="display:flex;flex-direction:column;gap:6px;min-width:180px">
+                        <form method="POST" action="/admin/collector-payments/<%= r.id %>/approve" style="display:flex;gap:6px">
+                          <input class="fc" name="decided_note" placeholder="Catatan (opsional)">
+                          <button class="btn btn-s btn-sm" type="submit" title="Approve"><i class="bi bi-check-lg"></i></button>
+                        </form>
+                        <form method="POST" action="/admin/collector-payments/<%= r.id %>/reject" style="display:flex;gap:6px">
+                          <input class="fc" name="decided_note" placeholder="Alasan (opsional)">
+                          <button class="btn btn-d btn-sm" type="submit" title="Reject"><i class="bi bi-x-lg"></i></button>
+                        </form>
+                      </div>
+                    <% } else { %>
+                      <code>#<%= r.id %></code>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

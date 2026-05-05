@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title><%= title %> | <%= company %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    :root{--bg:#0f172a;--panel:rgba(30,41,59,.92);--panel2:rgba(15,23,42,.55);--muted:#94a3b8;--text:#e2e8f0;--border:rgba(148,163,184,.18)}
+    body{background:var(--bg);color:var(--text)}
+    .cardx{background:var(--panel);border:1px solid var(--border);border-radius:16px}
+    .form-control{background:var(--panel2);border:1px solid var(--border);color:var(--text)}
+    .form-control:focus{box-shadow:none;border-color:rgba(99,102,241,.75)}
+    .muted{color:var(--muted)}
+    .badgey{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid var(--border);background:var(--panel2)}
+    .badgey.s{color:#bbf7d0;border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.1)}
+    .badgey.d{color:#fecaca;border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.1)}
+    .badgey.w{color:#fde68a;border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.1)}
+    .tbl td{border-top:1px solid rgba(148,163,184,.12);padding:8px 0;font-size:12px;vertical-align:top}
+    .tbl td:first-child{color:var(--muted);width:120px;padding-right:12px}
+  </style>
+</head>
+<body>
+  <div class="container" style="max-width:980px;padding-top:14px;padding-bottom:40px">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <div style="font-weight:900;letter-spacing:-.02em">Kolektor</div>
+        <div class="muted" style="font-size:12px"><%= company %></div>
+      </div>
+      <a class="btn btn-outline-light btn-sm" href="/collector/logout"><i class="bi bi-box-arrow-left"></i></a>
+    </div>
+
+    <% if (msg) { %>
+      <div class="alert alert-<%= msg.type==='error'?'danger':'success' %>"><%= msg.text %></div>
+    <% } %>
+
+    <div class="cardx p-3 mb-3">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <div style="font-weight:800"><i class="bi bi-search"></i> Cek Pembayaran</div>
+        <span class="badgey"><i class="bi bi-shield-check"></i>Read Only</span>
+      </div>
+      <form method="GET" action="/collector" class="d-flex gap-2">
+        <input class="form-control" name="q" value="<%= q || '' %>" placeholder="Cari: Nama / No HP / PPPoE / Tag / ID">
+        <button class="btn btn-primary" type="submit" style="min-width:90px"><i class="bi bi-search"></i></button>
+      </form>
+      <% if (q && (!invoices || invoices.length === 0)) { %>
+        <div class="muted mt-2" style="font-size:12px">Tidak ditemukan data untuk pencarian: <span style="font-weight:800"><%= q %></span></div>
+      <% } %>
+    </div>
+
+    <% if (invoices && invoices.length > 0) { %>
+      <div class="cardx p-3 mb-3">
+        <div style="font-weight:800" class="mb-2"><i class="bi bi-receipt"></i> Tagihan</div>
+        <div class="d-flex flex-column gap-2">
+          <% invoices.forEach(inv => { 
+               const isPaid = String(inv.status||'').toLowerCase()==='paid';
+               const reqRow = pendingMap && pendingMap.get ? pendingMap.get(Number(inv.id)) : null;
+               const reqStatus = reqRow ? String(reqRow.status||'') : '';
+               const isPending = reqStatus === 'pending';
+          %>
+            <div style="background:var(--panel2);border:1px solid rgba(148,163,184,.14);border-radius:14px;padding:12px">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div style="min-width:0">
+                  <div style="font-weight:900"><%= inv.customer_name || '-' %> <span class="muted" style="font-size:12px"><%= inv.customer_phone ? '('+inv.customer_phone+')' : '' %></span></div>
+                  <div class="muted" style="font-size:12px"><%= inv.package_name || 'Internet' %> • <%= inv.period_month %>/<%= inv.period_year %> • Invoice #<%= inv.id %></div>
+                </div>
+                <div class="text-end">
+                  <div style="font-weight:900">Rp <%= Number(inv.amount||0).toLocaleString('id-ID') %></div>
+                  <% if (isPaid) { %>
+                    <span class="badgey s"><i class="bi bi-check-circle"></i> LUNAS</span>
+                  <% } else if (isPending) { %>
+                    <span class="badgey w"><i class="bi bi-hourglass"></i> MENUNGGU APPROVAL</span>
+                  <% } else { %>
+                    <span class="badgey d"><i class="bi bi-exclamation-circle"></i> BELUM BAYAR</span>
+                  <% } %>
+                </div>
+              </div>
+
+              <table class="tbl mt-2" style="width:100%;border-collapse:collapse">
+                <tr><td>ID Pelanggan</td><td>#<%= inv.customer_id %></td></tr>
+                <tr><td>PPPoE</td><td><%= inv.pppoe_username ? inv.pppoe_username : '-' %></td></tr>
+                <tr><td>Tag</td><td><%= inv.genieacs_tag ? inv.genieacs_tag : '-' %></td></tr>
+                <tr><td>Alamat</td><td><%= inv.customer_address ? inv.customer_address : '-' %></td></tr>
+              </table>
+
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                <% if (inv.lat && inv.lng) { %>
+                  <a class="btn btn-outline-light btn-sm" target="_blank" href="https://www.google.com/maps?q=<%= encodeURIComponent(inv.lat + ',' + inv.lng) %>"><i class="bi bi-geo-alt"></i> Map</a>
+                <% } %>
+                <% if (!isPaid && !isPending) { %>
+                  <form method="POST" action="/collector/payment-request" class="d-flex gap-2" style="flex:1;min-width:260px">
+                    <input type="hidden" name="invoice_id" value="<%= inv.id %>">
+                    <input type="hidden" name="q" value="<%= q || '' %>">
+                    <input class="form-control form-control-sm" name="note" placeholder="Catatan (opsional)">
+                    <button class="btn btn-warning btn-sm" type="submit"><i class="bi bi-send-check"></i> Ajukan</button>
+                  </form>
+                <% } %>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+
+    <div class="cardx p-3">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <div style="font-weight:800"><i class="bi bi-list-ul"></i> Riwayat Pengajuan Saya</div>
+        <span class="badgey"><%= (myReqs || []).length %></span>
+      </div>
+      <% if (!myReqs || myReqs.length === 0) { %>
+        <div class="muted" style="font-size:12px">Belum ada pengajuan.</div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-dark table-sm align-middle" style="margin:0">
+            <thead>
+              <tr>
+                <th>Waktu</th>
+                <th>Pelanggan</th>
+                <th>Periode</th>
+                <th class="text-end">Nominal</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% myReqs.forEach(r => { %>
+                <% const st = String(r.status||''); %>
+                <tr>
+                  <td style="font-size:12px"><%= r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : '-' %></td>
+                  <td style="font-size:12px"><%= r.customer_name || '-' %> <span class="muted"><%= r.customer_phone ? '('+r.customer_phone+')' : '' %></span></td>
+                  <td style="font-size:12px"><%= r.period_month %>/<%= r.period_year %></td>
+                  <td class="text-end" style="font-size:12px">Rp <%= Number(r.amount||0).toLocaleString('id-ID') %></td>
+                  <td style="font-size:12px">
+                    <% if (st === 'approved') { %>
+                      <span class="badgey s">APPROVED</span>
+                    <% } else if (st === 'rejected') { %>
+                      <span class="badgey d">REJECTED</span>
+                    <% } else { %>
+                      <span class="badgey w">PENDING</span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>
+

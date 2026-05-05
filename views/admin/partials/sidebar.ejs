@@ -50,6 +50,12 @@
     <a href="/admin/reports" class="sb-item <%= activePage==='reports' ? 'active' : '' %>">
       <i class="bi bi-bar-chart-line"></i><span><%= t('admin.nav.finance_report', 'Laporan Keuangan') %></span>
     </a>
+    <a href="/admin/cashiers/reports" class="sb-item <%= activePage==='cashiers_reports' ? 'active' : '' %>">
+      <i class="bi bi-journal-text"></i><span>Laporan Kasir</span>
+    </a>
+    <a href="/admin/collector-payments" class="sb-item <%= activePage==='collector_payments' ? 'active' : '' %>">
+      <i class="bi bi-check2-square"></i><span>Approval Kolektor</span>
+    </a>
     <div class="sb-section"><%= t('admin.section.service', 'LAYANAN') %></div>
     <a href="/admin/tickets" class="sb-item <%= activePage==='tickets' ? 'active' : '' %>">
       <i class="bi bi-headset"></i><span><%= t('admin.nav.customer_tickets', 'Keluhan Pelanggan') %></span>
@@ -58,21 +64,28 @@
       <i class="bi bi-boxes"></i><span>Inventaris (Stok)</span>
     </a>
 
-    <% if (typeof session !=='undefined' && session.isAdmin) { %>
+    <% if (typeof session !=='undefined' && (session.isAdmin || session.isCashier)) { %>
       <div class="sb-section"><%= t('admin.section.user_management', 'MANAJEMEN USER') %></div>
+      <% if (session.isAdmin) { %>
       <a href="/admin/technicians" class="sb-item <%= activePage==='technicians' ? 'active' : '' %>">
         <i class="bi bi-person-gear"></i><span><%= t('admin.nav.technicians', 'Teknisi') %></span>
       </a>
       <a href="/admin/cashiers" class="sb-item <%= activePage==='cashiers' ? 'active' : '' %>">
         <i class="bi bi-person-vcard"></i><span><%= t('admin.nav.cashiers', 'Kasir') %></span>
       </a>
+      <a href="/admin/collectors" class="sb-item <%= activePage==='collectors' ? 'active' : '' %>">
+        <i class="bi bi-person-badge"></i><span>Kolektor</span>
+      </a>
+      <% } %>
       <a href="/admin/agents" class="sb-item <%= activePage==='agents' ? 'active' : '' %>">
         <i class="bi bi-person-badge"></i><span><%= t('admin.nav.agents', 'Agent') %></span>
       </a>
-      <a href="/admin/agents/reports" class="sb-item <%= activePage==='agents_reports' ? 'active' : '' %>">
-        <i class="bi bi-journal-text"></i><span><%= t('admin.nav.agent_reports', 'Laporan Agent') %></span>
-      </a>
+      <% if (session.isAdmin) { %>
+        <a href="/admin/agents/reports" class="sb-item <%= activePage==='agents_reports' ? 'active' : '' %>">
+          <i class="bi bi-journal-text"></i><span><%= t('admin.nav.agent_reports', 'Laporan Agent') %></span>
+        </a>
       <% } %>
+    <% } %>
 
         <div class="sb-section"><%= t('admin.section.system', 'SISTEM') %></div>
         <% if (typeof session !=='undefined' && session.isAdmin) { %>

@@ -548,7 +548,10 @@
         <div class="form-row">
           <div class="fg">
             <label class="fl"><%= t('admin.billing.received_by', 'Diterima Oleh') %></label>
-            <input class="fc" name="paid_by_name" value="Admin" placeholder="<%= t('admin.billing.received_by_placeholder', 'Nama petugas / teknisi') %>">
+            <% const payByDefault = (typeof session !== 'undefined' && session.isCashier)
+              ? (`Kasir ${(session.cashierName || '').trim()}` + ((session.cashierUsername || '').trim() ? ` (@${String(session.cashierUsername).trim()})` : '')).trim()
+              : 'Admin'; %>
+            <input class="fc" name="paid_by_name" value="<%= payByDefault || 'Admin' %>" placeholder="<%= t('admin.billing.received_by_placeholder', 'Nama petugas / teknisi') %>">
           </div>
         </div>
         <div class="fg">

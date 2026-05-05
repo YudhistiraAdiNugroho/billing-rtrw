@@ -27,6 +27,20 @@ function digiflazzSign(refId = '') {
   return crypto.createHash('md5').update(username + apiKey + String(refId || '')).digest('hex');
 }
 
+async function digiflazzCheckBalance() {
+  const { username, apiKey } = getDigiflazzCreds();
+  const sign = crypto.createHash('md5').update(username + apiKey + 'depo').digest('hex');
+  const response = await digiflazzApi.post('/cek-saldo', {
+    cmd: 'deposit',
+    username,
+    sign
+  });
+  const data = response?.data?.data || {};
+  const deposit = Number(data?.deposit || 0);
+  if (!Number.isFinite(deposit)) throw new Error('Gagal parsing saldo Digiflazz');
+  return { deposit };
+}
+
 async function digiflazzGetProductBySku(sku) {
   const { username } = getDigiflazzCreds();
   const safeSku = String(sku || '').trim();
@@ -756,6 +770,97 @@ async function checkPulsaStatusAsAgent(agentId, txId) {
   return { agent: getAgentById(agentId), tx: getAgentTransactionById(agentId, tx.id), vendor };
 }
 
+function makeStaffRefId(prefix = 'ADM') {
+  const p = String(prefix || 'ADM').replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 6) || 'ADM';
+  return `${p}${Date.now()}${Math.floor(100 + Math.random() * 900)}`;
+}
+
+function getDigiflazzStaffTransactionById(id) {
+  const txId = Number(id || 0);
+  if (!Number.isFinite(txId) || txId <= 0) return null;
+  return db.prepare('SELECT * FROM digiflazz_staff_transactions WHERE id = ?').get(txId);
+}
+
+async function buyPulsaAsAdmin({ sku, target, actorPhone = '', actorName = '' } = {}) {
+  const safeSku = String(sku || '').trim();
+  const safeTarget = String(target || '').trim();
+  if (!safeSku) throw new Error('SKU tidak valid');
+  if (!safeTarget) throw new Error('Target tidak valid');
+
+  const prod = getDigiflazzProductLocalBySku(safeSku) || await digiflazzGetProductBySku(safeSku);
+  const refId = makeStaffRefId('ADM');
+
+  let vendor = null;
+  let status = 'pending';
+  let vendorMessage = '';
+  let trxId = '';
+  let sn = '';
+  let vendorPrice = Math.max(0, Math.floor(Number(prod?.price || prod?.buyer_price || 0) || 0));
+  try {
+    vendor = await digiflazzCreateTransaction({ sku: safeSku, target: safeTarget, refId });
+    status = normalizeDigiflazzStatus(vendor?.status);
+    vendorMessage = String(vendor?.message || '').trim();
+    trxId = String(vendor?.trx_id || '').trim();
+    sn = String(vendor?.sn || '').trim();
+    vendorPrice = Math.max(0, Math.floor(Number(vendor?.price || 0) || 0)) || vendorPrice;
+  } catch (e) {
+    vendorMessage = String(e?.message || e || '').trim();
+    status = 'pending';
+  }
+
+  const ins = db.prepare(`
+    INSERT INTO digiflazz_staff_transactions
+    (role, actor_phone, actor_name, sku, target, ref_id, trx_id, sn, status, message, price)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    'admin',
+    String(actorPhone || '').trim(),
+    String(actorName || '').trim(),
+    safeSku,
+    safeTarget,
+    refId,
+    trxId,
+    sn,
+    status,
+    vendorMessage ? vendorMessage : (status === 'pending' ? 'Pending' : ''),
+    vendorPrice
+  );
+
+  const tx = getDigiflazzStaffTransactionById(Number(ins.lastInsertRowid || 0));
+  return { tx, product: prod, vendor };
+}
+
+async function checkPulsaStatusAsAdmin(txId) {
+  const tx = getDigiflazzStaffTransactionById(txId);
+  if (!tx) throw new Error('Transaksi tidak ditemukan');
+  if (String(tx.role || '').toLowerCase() !== 'admin') throw new Error('Transaksi ini bukan transaksi admin');
+  const sku = String(tx.sku || '').trim();
+  const target = String(tx.target || '').trim();
+  const refId = String(tx.ref_id || '').trim();
+  if (!sku || !target || !refId) throw new Error('Data transaksi tidak lengkap');
+
+  const vendor = await digiflazzCreateTransaction({ sku, target, refId });
+  const nextStatus = normalizeDigiflazzStatus(vendor?.status);
+  const nextMsg = String(vendor?.message || '').trim();
+  const vendorPrice = Math.max(0, Math.floor(Number(vendor?.price || 0) || 0));
+
+  db.prepare(`
+    UPDATE digiflazz_staff_transactions
+    SET trx_id = ?, sn = ?, status = ?, message = ?, price = CASE WHEN ? > 0 THEN ? ELSE price END
+    WHERE id = ?
+  `).run(
+    String(vendor?.trx_id || '').trim(),
+    String(vendor?.sn || '').trim(),
+    nextStatus,
+    nextMsg,
+    vendorPrice,
+    vendorPrice,
+    Number(tx.id)
+  );
+
+  return { tx: getDigiflazzStaffTransactionById(tx.id), vendor };
+}
+
 module.exports = {
   authenticate,
   getAllAgents,
@@ -774,6 +879,9 @@ module.exports = {
   sellVoucherAsAgent,
   buyPulsaAsAgent,
   checkPulsaStatusAsAgent,
+  buyPulsaAsAdmin,
+  checkPulsaStatusAsAdmin,
+  digiflazzCheckBalance,
   listDigiflazzProducts,
   listDigiflazzCategories,
   listDigiflazzBrands

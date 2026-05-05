@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title><%= title %> | <%= company %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body{background:#0f172a;color:#e2e8f0}
+    .card{background:rgba(30,41,59,.92);border:1px solid rgba(148,163,184,.18)}
+    .form-control{background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.18);color:#e2e8f0}
+    .form-control:focus{box-shadow:none;border-color:rgba(99,102,241,.75)}
+  </style>
+</head>
+<body>
+  <div class="container" style="max-width:420px;padding-top:60px">
+    <div class="mb-3 text-center">
+      <div style="font-weight:800;letter-spacing:-.02em"><%= company %></div>
+      <div class="text-secondary" style="font-size:12px">Portal Kolektor</div>
+    </div>
+    <% if (error) { %>
+      <div class="alert alert-danger"><%= error %></div>
+    <% } %>
+    <div class="card p-3">
+      <form method="POST" action="/collector/login">
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <input class="form-control" name="username" autocomplete="username" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-control" name="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary w-100" type="submit">Masuk</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
+
