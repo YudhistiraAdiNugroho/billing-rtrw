@@ -55,7 +55,7 @@ router.get('/', requireAgentSession, (req, res) => {
   const q = String(req.query.q || '').trim();
 
   const invoices = q ? billingSvc.getInvoicesByAny(q) : [];
-  const unpaidInvoices = (Array.isArray(invoices) ? invoices : []).filter(i => i && i.status !== 'paid');
+  const visibleInvoices = Array.isArray(invoices) ? invoices : [];
 
   const prices = agentSvc
     .getAgentPrices(agentId)
@@ -101,7 +101,7 @@ router.get('/', requireAgentSession, (req, res) => {
     company: company(),
     agent,
     q,
-    invoices: unpaidInvoices,
+    invoices: visibleInvoices,
     prices,
     txs,
     digiflazzMarkup,

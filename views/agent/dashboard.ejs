@@ -522,12 +522,13 @@
         </form>
 
         <% if (q && (!invoices || invoices.length === 0)) { %>
-          <div class="mt-3 text-muted" style="color:var(--muted)!important;font-size:12px"><%= t('agent.no_unpaid_prefix', 'Tidak ada tagihan belum bayar untuk pencarian:') %> <span class="fw-bold"><%= q %></span></div>
+          <div class="mt-3 text-muted" style="color:var(--muted)!important;font-size:12px">Tidak ditemukan data untuk pencarian: <span class="fw-bold"><%= q %></span></div>
         <% } %>
 
         <% if (invoices && invoices.length > 0) { %>
           <div class="listx mt-3">
             <% invoices.forEach(inv => { %>
+              <% const isPaid = String(inv.status || '').toLowerCase() === 'paid'; %>
               <div class="itemx">
                 <div class="top">
                   <div style="min-width:0">
@@ -536,15 +537,31 @@
                   </div>
                   <div class="text-end">
                     <div class="fw-bold">Rp <%= Number(inv.amount||0).toLocaleString('id-ID') %></div>
-                    <span class="badgey d"><i class="bi bi-exclamation-circle"></i> <%= t('agent.unpaid_badge', 'BELUM BAYAR') %></span>
+                    <% if (isPaid) { %>
+                      <span class="badgey s"><i class="bi bi-check-circle"></i> <%= t('agent.paid_badge', 'LUNAS') %></span>
+                    <% } else { %>
+                      <span class="badgey d"><i class="bi bi-exclamation-circle"></i> <%= t('agent.unpaid_badge', 'BELUM BAYAR') %></span>
+                    <% } %>
                   </div>
                 </div>
+
+                <table class="tbl mt-2">
+                  <tr><td>ID Pelanggan</td><td>#<%= inv.customer_id %></td></tr>
+                  <tr><td>PPPoE</td><td><%= inv.pppoe_username ? inv.pppoe_username : '-' %></td></tr>
+                  <tr><td>Tag</td><td><%= inv.genieacs_tag ? inv.genieacs_tag : '-' %></td></tr>
+                  <tr><td>IP Static</td><td><%= inv.static_ip ? inv.static_ip : '-' %></td></tr>
+                  <tr><td>Router</td><td><%= inv.router_name ? inv.router_name : (inv.router_id ? ('#' + inv.router_id) : '-') %></td></tr>
+                  <tr><td>Status</td><td><%= inv.customer_status ? inv.customer_status : '-' %><%= inv.isolate_day ? (' • Tgl ' + inv.isolate_day) : '' %></td></tr>
+                  <tr><td>Alamat</td><td><%= inv.customer_address ? inv.customer_address : '-' %></td></tr>
+                </table>
 
                 <form method="POST" action="/agent/pay-invoice" class="mt-3">
                   <input type="hidden" name="invoice_id" value="<%= inv.id %>">
                   <div class="d-grid gap-2">
-                    <input type="text" name="note" class="form-control" placeholder="<%= t('agent.note_optional', 'Catatan (opsional)') %>">
-                    <button type="submit" class="btn-action"><i class="bi bi-wallet2 me-2"></i><%= t('agent.process_pay_prefix', 'Proses Bayar') %> (Invoice #<%= inv.id %>)</button>
+                    <input type="text" name="note" class="form-control" placeholder="<%= t('agent.note_optional', 'Catatan (opsional)') %>" <%= isPaid ? 'disabled' : '' %>>
+                    <button type="submit" class="btn-action" <%= isPaid ? 'disabled style="opacity:.65"' : '' %>>
+                      <i class="bi bi-wallet2 me-2"></i><%= isPaid ? t('agent.already_paid', 'Sudah Lunas') : t('agent.process_pay_prefix', 'Proses Bayar') %> (Invoice #<%= inv.id %>)
+                    </button>
                   </div>
                 </form>
               </div>
