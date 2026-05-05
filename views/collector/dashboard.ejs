@@ -37,21 +37,39 @@
 
     <div class="cardx p-3 mb-3">
       <div class="d-flex align-items-center justify-content-between mb-2">
-        <div style="font-weight:800"><i class="bi bi-search"></i> Cek Pembayaran</div>
+        <div style="font-weight:800"><i class="bi bi-receipt"></i> Daftar Tagihan</div>
         <span class="badgey"><i class="bi bi-shield-check"></i>Read Only</span>
       </div>
-      <form method="GET" action="/collector" class="d-flex gap-2">
-        <input class="form-control" name="q" value="<%= q || '' %>" placeholder="Cari: Nama / No HP / PPPoE / Tag / ID">
-        <button class="btn btn-primary" type="submit" style="min-width:90px"><i class="bi bi-search"></i></button>
+      <form method="GET" action="/collector" class="d-flex gap-2 flex-wrap">
+        <select class="form-control" name="month" style="max-width:110px">
+          <% for (let m=1; m<=12; m++) { %>
+            <option value="<%= m %>" <%= Number(month)===m ? 'selected' : '' %>><%= String(m).padStart(2,'0') %></option>
+          <% } %>
+        </select>
+        <select class="form-control" name="year" style="max-width:120px">
+          <% const baseY = Number(year) || new Date().getFullYear(); %>
+          <% for (let y=baseY-2; y<=baseY+1; y++) { %>
+            <option value="<%= y %>" <%= Number(year)===y ? 'selected' : '' %>><%= y %></option>
+          <% } %>
+        </select>
+        <select class="form-control" name="status" style="max-width:170px">
+          <option value="unpaid" <%= String(status)==='unpaid' ? 'selected' : '' %>>Belum Bayar</option>
+          <option value="paid" <%= String(status)==='paid' ? 'selected' : '' %>>Lunas</option>
+          <option value="all" <%= String(status)==='all' ? 'selected' : '' %>>Semua</option>
+        </select>
+        <input class="form-control" name="search" value="<%= search || '' %>" placeholder="Cari (opsional): nama / HP / PPPoE / TAG">
+        <button class="btn btn-primary" type="submit" style="min-width:90px"><i class="bi bi-funnel"></i></button>
       </form>
-      <% if (q && (!invoices || invoices.length === 0)) { %>
-        <div class="muted mt-2" style="font-size:12px">Tidak ditemukan data untuk pencarian: <span style="font-weight:800"><%= q %></span></div>
-      <% } %>
+      <div class="muted mt-2" style="font-size:12px">
+        Menampilkan maks 500 tagihan periode <span style="font-weight:900"><%= String(month).padStart(2,'0') %>/<%= year %></span>.
+      </div>
     </div>
 
-    <% if (invoices && invoices.length > 0) { %>
-      <div class="cardx p-3 mb-3">
-        <div style="font-weight:800" class="mb-2"><i class="bi bi-receipt"></i> Tagihan</div>
+    <div class="cardx p-3 mb-3">
+      <div style="font-weight:800" class="mb-2"><i class="bi bi-list-ul"></i> Data Tagihan (<%= (invoices || []).length %>)</div>
+      <% if (!invoices || invoices.length === 0) { %>
+        <div class="muted" style="font-size:12px">Tidak ada data tagihan untuk filter ini.</div>
+      <% } else { %>
         <div class="d-flex flex-column gap-2">
           <% invoices.forEach(inv => { 
                const isPaid = String(inv.status||'').toLowerCase()==='paid';
@@ -63,7 +81,7 @@
               <div class="d-flex justify-content-between align-items-start gap-2">
                 <div style="min-width:0">
                   <div style="font-weight:900"><%= inv.customer_name || '-' %> <span class="muted" style="font-size:12px"><%= inv.customer_phone ? '('+inv.customer_phone+')' : '' %></span></div>
-                  <div class="muted" style="font-size:12px"><%= inv.package_name || 'Internet' %> • <%= inv.period_month %>/<%= inv.period_year %> • Invoice #<%= inv.id %></div>
+                  <div class="muted" style="font-size:12px"><%= inv.package_name || 'Internet' %> • Invoice #<%= inv.id %></div>
                 </div>
                 <div class="text-end">
                   <div style="font-weight:900">Rp <%= Number(inv.amount||0).toLocaleString('id-ID') %></div>
@@ -78,6 +96,7 @@
               </div>
 
               <table class="tbl mt-2" style="width:100%;border-collapse:collapse">
+                <tr><td>Periode</td><td><%= inv.period_month %>/<%= inv.period_year %></td></tr>
                 <tr><td>ID Pelanggan</td><td>#<%= inv.customer_id %></td></tr>
                 <tr><td>PPPoE</td><td><%= inv.pppoe_username ? inv.pppoe_username : '-' %></td></tr>
                 <tr><td>Tag</td><td><%= inv.genieacs_tag ? inv.genieacs_tag : '-' %></td></tr>
@@ -91,7 +110,10 @@
                 <% if (!isPaid && !isPending) { %>
                   <form method="POST" action="/collector/payment-request" class="d-flex gap-2" style="flex:1;min-width:260px">
                     <input type="hidden" name="invoice_id" value="<%= inv.id %>">
-                    <input type="hidden" name="q" value="<%= q || '' %>">
+                    <input type="hidden" name="month" value="<%= month %>">
+                    <input type="hidden" name="year" value="<%= year %>">
+                    <input type="hidden" name="status" value="<%= status %>">
+                    <input type="hidden" name="search" value="<%= search || '' %>">
                     <input class="form-control form-control-sm" name="note" placeholder="Catatan (opsional)">
                     <button class="btn btn-warning btn-sm" type="submit"><i class="bi bi-send-check"></i> Ajukan</button>
                   </form>
@@ -100,8 +122,8 @@
             </div>
           <% }) %>
         </div>
-      </div>
-    <% } %>
+      <% } %>
+    </div>
 
     <div class="cardx p-3">
       <div class="d-flex align-items-center justify-content-between mb-2">
@@ -149,4 +171,3 @@
   </div>
 </body>
 </html>
-

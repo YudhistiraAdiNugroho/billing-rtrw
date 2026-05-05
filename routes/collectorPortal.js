@@ -47,9 +47,45 @@ router.get('/logout', (req, res) => {
 });
 
 router.get('/', requireCollectorSession, (req, res) => {
-  const q = String(req.query.q || '').trim();
-  const invoices = q ? billingSvc.getInvoicesByAny(q) : [];
-  const list = Array.isArray(invoices) ? invoices : [];
+  const now = new Date();
+  const month = Math.max(1, Math.min(12, parseInt(req.query.month || (now.getMonth() + 1), 10) || (now.getMonth() + 1)));
+  const year = parseInt(req.query.year || now.getFullYear(), 10) || now.getFullYear();
+  const status = String(req.query.status || 'unpaid').trim() || 'unpaid'; // unpaid, paid, all
+  const search = String(req.query.search || '').trim();
+
+  let q = `
+    SELECT i.*,
+           c.name as customer_name,
+           c.phone as customer_phone,
+           c.address as customer_address,
+           c.pppoe_username,
+           c.genieacs_tag,
+           c.connection_type,
+           c.static_ip,
+           c.status as customer_status,
+           c.install_date,
+           c.isolate_day,
+           c.lat, c.lng,
+           p.name as package_name,
+           r.name as router_name
+    FROM invoices i
+    JOIN customers c ON i.customer_id = c.id
+    LEFT JOIN packages p ON c.package_id = p.id
+    LEFT JOIN routers r ON c.router_id = r.id
+    WHERE i.period_month=? AND i.period_year=?
+  `;
+  const params = [month, year];
+  if (status !== 'all') {
+    q += ' AND i.status=?';
+    params.push(status);
+  }
+  if (search) {
+    q += ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.genieacs_tag LIKE ? OR c.pppoe_username LIKE ?)';
+    const like = `%${search}%`;
+    params.push(like, like, like, like);
+  }
+  q += ' ORDER BY c.name ASC, i.id DESC LIMIT 500';
+  const list = db.prepare(q).all(...params);
 
   const invoiceIds = list.map(i => Number(i?.id || 0)).filter(n => Number.isFinite(n) && n > 0);
   const pendingMap = new Map();
@@ -81,7 +117,10 @@ router.get('/', requireCollectorSession, (req, res) => {
   res.render('collector/dashboard', {
     title: 'Dashboard Kolektor',
     company: company(),
-    q,
+    month,
+    year,
+    status,
+    search,
     invoices: list,
     pendingMap,
     myReqs,
@@ -119,8 +158,13 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal: ' + (e.message || String(e)) };
   }
-  res.redirect('/collector' + (req.body.q ? ('?q=' + encodeURIComponent(String(req.body.q))) : ''));
+  const qs = new URLSearchParams();
+  if (req.body.month) qs.set('month', String(req.body.month));
+  if (req.body.year) qs.set('year', String(req.body.year));
+  if (req.body.status) qs.set('status', String(req.body.status));
+  if (req.body.search) qs.set('search', String(req.body.search));
+  const suffix = qs.toString() ? ('?' + qs.toString()) : '';
+  res.redirect('/collector' + suffix);
 });
 
 module.exports = router;
-
