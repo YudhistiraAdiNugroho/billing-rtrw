@@ -209,6 +209,46 @@
               <input class="fc" type="password" name="mikrotik_password" value="<%= settings.mikrotik_password || '' %>">
             </div>
           </div>
+
+          <div class="form-row" style="margin-top:20px">
+            <div class="fg">
+              <label class="fl">Digiflazz Username</label>
+              <input class="fc" name="digiflazz_username" value="<%= settings.digiflazz_username || '' %>" placeholder="username digiflazz">
+            </div>
+            <div class="fg">
+              <label class="fl">Digiflazz API Key</label>
+              <input class="fc" type="password" name="digiflazz_api_key" value="<%= settings.digiflazz_api_key || '' %>" placeholder="api key digiflazz">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Digiflazz Webhook Secret</label>
+              <input class="fc" name="digiflazz_webhook_secret" value="<%= settings.digiflazz_webhook_secret || '' %>" placeholder="secret untuk verifikasi webhook">
+              <div style="font-size:10px; color:var(--muted); margin-top:4px">Header yang dicek: <span class="mono">X-Hub-Signature</span> (HMAC-SHA1) dan event di <span class="mono">X-Digiflazz-Event</span>.</div>
+            </div>
+            <div class="fg">
+              <label class="fl">Digiflazz Webhook ID (Opsional)</label>
+              <input class="fc" name="digiflazz_webhook_id" value="<%= settings.digiflazz_webhook_id || '' %>" placeholder="contoh: ABC123">
+              <div style="font-size:10px; color:var(--muted); margin-top:4px">Dipakai untuk validasi ping event (hook_id). Tidak wajib untuk transaksi.</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Webhook URL</label>
+              <div class="hint"><span class="mono"><%= (typeof digiflazzWebhookUrl !== 'undefined' && digiflazzWebhookUrl) ? digiflazzWebhookUrl : ('http://' + (settings.server_host || 'localhost') + ':' + (settings.server_port || 3001) + '/webhook/digiflazz') %></span></div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Digiflazz Markup (Rp)</label>
+              <input class="fc" type="number" name="digiflazz_markup" value="<%= settings.digiflazz_markup || 0 %>" min="0">
+              <div style="font-size:10px; color:var(--muted); margin-top:4px">Dipakai saat Sync Produk: harga jual = modal + markup.</div>
+            </div>
+            <div class="fg">
+              <label class="fl">Halaman Admin Digiflazz</label>
+              <div class="hint"><a href="/admin/digiflazz" style="color:var(--brand);font-weight:700;text-decoration:none">Buka Dashboard Digiflazz</a></div>
+            </div>
+          </div>
         </div>
 
         <!-- Admin Auth -->
@@ -398,7 +438,7 @@
           <div class="fg" style="margin-top: 15px;">
             <label class="fl">Link Webhook (Copy ke Dashboard Gateway)</label>
             <div style="display:flex;gap:8px">
-              <input class="fc" id="webhook_url" readonly value="">
+              <input class="fc" id="webhook_url" readonly value="<%= (typeof paymentWebhookUrl !== 'undefined' && paymentWebhookUrl) ? paymentWebhookUrl : ('http://' + (settings.server_host || 'localhost') + ':' + (settings.server_port || 3001) + '/customer/payment/callback') %>">
               <button type="button" class="btn btn-g" onclick="copyWebhook()"><i class="bi bi-copy"></i></button>
             </div>
             <div style="font-size: 10px; color: var(--muted); margin-top: 4px;">Gunakan link ini untuk kolom Webhook URL di Tripay atau Midtrans Notification URL.</div>
@@ -416,7 +456,6 @@
 </div>
 
 <script>
-document.getElementById('webhook_url').value = window.location.origin + '/customer/payment/callback';
 function copyWebhook() {
   const el = document.getElementById('webhook_url');
   el.select();

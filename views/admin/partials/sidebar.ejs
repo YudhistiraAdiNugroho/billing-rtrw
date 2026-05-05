@@ -42,6 +42,11 @@
     <a href="/admin/billing" class="sb-item <%= activePage==='billing' ? 'active' : '' %>">
       <i class="bi bi-receipt"></i><span><%= t('admin.nav.invoices', 'Tagihan') %></span>
     </a>
+    <% if (typeof session !=='undefined' && session.isAdmin) { %>
+    <a href="/admin/digiflazz" class="sb-item <%= activePage==='digiflazz' ? 'active' : '' %>">
+      <i class="bi bi-phone"></i><span>Digiflazz</span>
+    </a>
+    <% } %>
     <a href="/admin/reports" class="sb-item <%= activePage==='reports' ? 'active' : '' %>">
       <i class="bi bi-bar-chart-line"></i><span><%= t('admin.nav.finance_report', 'Laporan Keuangan') %></span>
     </a>

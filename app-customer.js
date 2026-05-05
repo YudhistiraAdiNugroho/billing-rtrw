@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const dns = require('dns');
 require('dotenv').config();
+const crypto = require('crypto');
 const { logger } = require('./config/logger');
 const db = require('./config/database');
 const customerSvc = require('./services/customerService');
@@ -35,8 +36,13 @@ if (trustProxy) {
 }
 
 // Middleware dasar
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf?.toString('utf8') || '';
+  }
+}));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(session({
   secret: getSetting('session_secret', 'rahasia-portal-pelanggan-default-ganti-ini'),
   resave: false,
@@ -109,6 +115,51 @@ const markInvoicePaidAppendNote = db.prepare(`
 `);
 
 const countUnpaidInvoicesForCustomer = db.prepare(`SELECT COUNT(1) as c FROM invoices WHERE customer_id=? AND status='unpaid'`);
+
+const insertDigiflazzWebhookLog = db.prepare(`
+  INSERT INTO digiflazz_webhook_logs (ref_id, status, signature, signature_ok, matched_agent_tx_id, ip, payload)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
+
+const selectAgentPulsaTxByRefId = db.prepare(`
+  SELECT id, agent_id, amount_buy, amount_sell, digi_refunded, digi_status
+  FROM agent_transactions
+  WHERE type = 'pulsa' AND digi_ref_id = ?
+  ORDER BY id DESC
+  LIMIT 1
+`);
+
+const updateAgentPulsaTxFromWebhook = db.prepare(`
+  UPDATE agent_transactions
+  SET digi_status = ?,
+      digi_trx_id = ?,
+      digi_sn = ?,
+      digi_message = ?,
+      digi_price = ?
+  WHERE id = ?
+`);
+
+const markAgentPulsaRefunded = db.prepare(`UPDATE agent_transactions SET digi_refunded = 1 WHERE id = ?`);
+
+const getAgentByIdForWebhook = db.prepare(`SELECT id, balance FROM agents WHERE id = ?`);
+const updateAgentBalanceForWebhook = db.prepare(`UPDATE agents SET balance = ? WHERE id = ?`);
+const insertAgentTxRefund = db.prepare(`
+  INSERT INTO agent_transactions (
+    agent_id, type, amount_buy, amount_sell, fee, balance_before, balance_after, note
+  ) VALUES (?, 'topup', ?, ?, 0, ?, ?, ?)
+`);
+
+function normalizeDigiflazzStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'sukses' || s === 'success') return 'success';
+  if (s === 'gagal' || s === 'failed') return 'failed';
+  if (s === 'pending' || s === 'process' || s === 'processing') return 'pending';
+  return 'pending';
+}
+
+function getIp(req) {
+  return String((req.headers['x-forwarded-for'] || '').toString().split(',')[0].trim() || req.ip || '');
+}
 
 function parseRupiahAmountFromNotification(content) {
   const text = String(content || '').replace(/\u00A0/g, ' ').trim();
@@ -223,6 +274,114 @@ app.post('/api/webhook/v1/payment-notif', async (req, res) => {
     logger.error(`[WEBHOOK][payment-notif] ERROR ${err && err.stack ? err.stack : String(err)}`);
     return res.status(200).json({ status: 'processed', parsed: false, amount: null });
   }
+});
+
+app.get('/webhook/digiflazz', (req, res) => {
+  res.json({ success: true, message: 'OK. Use POST for Digiflazz webhook.' });
+});
+app.head('/webhook/digiflazz', (req, res) => res.status(200).end());
+app.post('/webhook/digiflazz', async (req, res) => {
+  const payload = req.body || {};
+  const signature = req.headers['x-hub-signature'] || req.headers['x-digiflazz-delivery'];
+  const eventName = String(req.headers['x-digiflazz-event'] || '').trim();
+  const userAgent = String(req.headers['user-agent'] || '').trim();
+  const secret = String(getSetting('digiflazz_webhook_secret', '') || '').trim();
+  const expectedHookId = String(getSetting('digiflazz_webhook_id', '') || '').trim();
+
+  if (!secret) return res.status(503).send('Webhook secret belum dikonfigurasi');
+  if (!signature || typeof signature !== 'string') return res.status(401).send('Unauthorized');
+
+  const raw = req.rawBody || JSON.stringify(payload);
+  const selfSignature = 'sha1=' + crypto.createHmac('sha1', secret).update(raw).digest('hex');
+
+  let sigOk = 0;
+  try {
+    const a = Buffer.from(String(signature));
+    const b = Buffer.from(String(selfSignature));
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) sigOk = 1;
+  } catch (e) {
+    sigOk = 0;
+  }
+
+  const data = payload?.data || {};
+  const refId = String(data?.ref_id || '').trim();
+  const vendorStatus = String(data?.status || '').trim();
+  const vendorMessage = String(data?.message || '').trim();
+  const vendorSn = String(data?.sn || '').trim();
+  const vendorTrxId = String(data?.trx_id || '').trim();
+  const vendorPrice = Math.max(0, Math.floor(Number(data?.price || 0) || 0));
+
+  const ip = getIp(req);
+
+  const pingHookId = String(payload?.hook_id || '').trim();
+  if (!refId && payload && payload.sed && pingHookId) {
+    try { insertDigiflazzWebhookLog.run('', eventName || 'ping', String(signature || ''), sigOk, null, ip, raw); } catch {}
+    if (!sigOk) return res.status(401).send('Unauthorized');
+    const hookIdOk = !expectedHookId || expectedHookId === pingHookId;
+    logger.info(`[WEBHOOK][digiflazz] ping hook_id=${pingHookId} expected=${expectedHookId || '-'} ok=${hookIdOk ? 1 : 0} event=${eventName || '-'} ua=${userAgent || '-'} ip=${ip}`);
+    return res.json({ success: true, type: 'ping', hook_id: pingHookId, hook_id_ok: hookIdOk });
+  }
+
+  if (!refId) {
+    try { insertDigiflazzWebhookLog.run('', vendorStatus, String(signature || ''), sigOk, null, ip, raw); } catch {}
+    return res.status(400).send('Invalid payload');
+  }
+
+  if (!sigOk) {
+    try { insertDigiflazzWebhookLog.run(refId, vendorStatus, String(signature || ''), sigOk, null, ip, raw); } catch {}
+    return res.status(401).send('Unauthorized');
+  }
+
+  let matchedTxId = null;
+  try {
+    const tx = selectAgentPulsaTxByRefId.get(refId);
+    matchedTxId = tx?.id || null;
+
+    const nextStatus = normalizeDigiflazzStatus(vendorStatus);
+    if (tx && tx.id) {
+      updateAgentPulsaTxFromWebhook.run(
+        nextStatus,
+        vendorTrxId,
+        vendorSn,
+        vendorMessage,
+        vendorPrice,
+        tx.id
+      );
+
+      if (nextStatus === 'failed' && Number(tx.digi_refunded || 0) !== 1) {
+        const runRefund = db.transaction(() => {
+          const fresh = selectAgentPulsaTxByRefId.get(refId);
+          if (!fresh || !fresh.id) return;
+          if (Number(fresh.digi_refunded || 0) === 1) return;
+
+          const agent = getAgentByIdForWebhook.get(fresh.agent_id);
+          if (!agent) return;
+
+          const amount = Math.max(0, Math.floor(Number(fresh.amount_sell || 0) || 0));
+          const before = Number(agent.balance || 0);
+          const after = before + amount;
+          updateAgentBalanceForWebhook.run(after, fresh.agent_id);
+          insertAgentTxRefund.run(
+            fresh.agent_id,
+            amount,
+            amount,
+            before,
+            after,
+            `REFUND Digiflazz webhook (tx#${fresh.id} ref=${refId})`
+          );
+          markAgentPulsaRefunded.run(fresh.id);
+        });
+        runRefund();
+      }
+    }
+  } catch (e) {
+    try { insertDigiflazzWebhookLog.run(refId, vendorStatus, String(signature || ''), sigOk, matchedTxId, ip, raw); } catch {}
+    return res.status(500).send('Internal Server Error');
+  }
+
+  try { insertDigiflazzWebhookLog.run(refId, vendorStatus, String(signature || ''), sigOk, matchedTxId, ip, raw); } catch {}
+  logger.info(`[WEBHOOK][digiflazz] event=${eventName || '-'} ua=${userAgent || '-'} ref=${refId} status=${vendorStatus} ok=${sigOk} match=${matchedTxId || '-'}`);
+  return res.json({ success: true, ref_id: refId, matched_agent_tx_id: matchedTxId });
 });
 
 // Inisialisasi database billing

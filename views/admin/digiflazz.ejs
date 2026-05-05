@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Digiflazz | <%= company %></title>
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="/admin/manifest.webmanifest">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+<%- include('partials/sidebar', { activePage: 'digiflazz', company }) %>
+<div class="mw">
+  <div class="topbar">
+    <div class="tb-title">
+      <button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+      <i class="bi bi-phone"></i> Digiflazz
+    </div>
+    <div class="tb-right">
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
+      <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i> <%= t('common.logout', 'Logout') %></a>
+    </div>
+  </div>
+  <div class="page">
+
+    <% if (msg) { %>
+      <div class="alert alert-<%= msg.type==='success'?'s':'d' %>">
+        <i class="bi bi-<%= msg.type==='success'?'check-circle':'exclamation-circle' %>"></i> <%= msg.text %>
+      </div>
+    <% } %>
+
+    <div class="card mb16">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h6 style="margin:0"><i class="bi bi-shield-lock"></i> Konfigurasi</h6>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <form method="POST" action="/admin/digiflazz/check-balance" style="margin:0">
+            <button class="btn btn-g btn-sm" type="submit"><i class="bi bi-arrow-clockwise"></i> Cek Saldo</button>
+          </form>
+          <form method="POST" action="/admin/digiflazz/sync-products" style="margin:0">
+            <button class="btn btn-p btn-sm" type="submit" <%= !digi?.configured ? 'disabled' : '' %>><i class="bi bi-cloud-download"></i> Sync Produk</button>
+          </form>
+        </div>
+      </div>
+      <div class="card-bd">
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">Status</label>
+            <div class="hint"><%= digi?.configured ? 'Terkonfigurasi' : 'Belum dikonfigurasi' %></div>
+          </div>
+          <div class="fg">
+            <label class="fl">Saldo (Deposit)</label>
+            <div class="hint">
+              <% if (!digi?.configured) { %>
+                -
+              <% } else if (digi?.error) { %>
+                <span style="color:var(--danger)"><%= digi.error %></span>
+              <% } else { %>
+                Rp <%= Number(digi.deposit || 0).toLocaleString('id-ID') %>
+              <% } %>
+            </div>
+          </div>
+          <div class="fg">
+            <label class="fl">Markup Global</label>
+            <div class="hint">Rp <%= Number(settings?.digiflazz_markup || 0).toLocaleString('id-ID') %> (ubah di menu Pengaturan)</div>
+          </div>
+          <div class="fg">
+            <label class="fl">Sync Terakhir</label>
+            <div class="hint"><%= lastSync?.created_at ? new Date(lastSync.created_at).toLocaleString('id-ID') : '-' %></div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+
+    <div class="card mb16">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h6 style="margin:0"><i class="bi bi-box-seam"></i> Produk Digiflazz</h6>
+        <div class="hint">Total: <%= Number(stats?.total || 0) %> • Aktif: <%= Number(stats?.active || 0) %> • Nonaktif: <%= Number(stats?.inactive || 0) %></div>
+      </div>
+      <div class="card-bd">
+        <form method="GET" action="/admin/digiflazz" class="form-row" style="align-items:flex-end">
+          <div class="fg" style="flex:2">
+            <label class="fl">Cari</label>
+            <input class="fc" name="q" value="<%= q || '' %>" placeholder="SKU / nama / brand / kategori">
+          </div>
+          <div class="fg">
+            <label class="fl">Kategori</label>
+            <select class="fs" name="category">
+              <option value="">Semua</option>
+              <% (categories || []).forEach(c => { %>
+                <option value="<%= c %>" <%= (category===c) ? 'selected' : '' %>><%= c %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="fg w160">
+            <label class="fl">Status</label>
+            <select class="fs" name="status">
+              <option value="" <%= !status ? 'selected' : '' %>>Semua</option>
+              <option value="active" <%= status==='active' ? 'selected' : '' %>>Aktif</option>
+              <option value="inactive" <%= status==='inactive' ? 'selected' : '' %>>Nonaktif</option>
+            </select>
+          </div>
+          <div class="fg w160">
+            <button class="btn btn-g" type="submit"><i class="bi bi-search"></i> Cari</button>
+          </div>
+        </form>
+
+        <div class="tbl-wrap" style="margin-top:10px;max-height:520px;overflow:auto">
+          <table class="dtbl">
+            <thead>
+              <tr>
+                <th style="width:150px">SKU</th>
+                <th>Nama</th>
+                <th style="width:140px">Kategori</th>
+                <th style="width:120px">Brand</th>
+                <th style="width:120px">Modal</th>
+                <th style="width:160px">Jual</th>
+                <th style="width:90px">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (!products || products.length === 0) { %>
+                <tr><td colspan="7" class="text-center text-muted">Belum ada data. Klik Sync Produk.</td></tr>
+              <% } else { %>
+                <% products.forEach(p => { %>
+                  <tr>
+                    <td class="mono"><%= p.sku %></td>
+                    <td><%= p.product_name %></td>
+                    <td><%= p.category || '-' %></td>
+                    <td><%= p.brand || '-' %></td>
+                    <td>Rp <%= Number(p.price_modal||0).toLocaleString('id-ID') %></td>
+                    <td>
+                      <form method="POST" action="/admin/digiflazz/products/update-price" style="display:flex;gap:8px;align-items:center;margin:0">
+                        <input type="hidden" name="sku" value="<%= p.sku %>">
+                        <input class="fc" type="number" name="price_sell" value="<%= Number(p.price_sell||0) %>" style="max-width:140px">
+                        <button class="btn btn-g btn-sm" type="submit"><i class="bi bi-save"></i></button>
+                      </form>
+                    </td>
+                    <td>
+                      <span class="badge <%= Number(p.status||0)===1 ? 'b-s' : 'b-d' %>"><%= Number(p.status||0)===1 ? 'AKTIF' : 'OFF' %></span>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb16">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h6 style="margin:0"><i class="bi bi-broadcast"></i> Webhook Digiflazz</h6>
+        <div class="hint">Endpoint: <span class="mono">/webhook/digiflazz</span></div>
+      </div>
+      <div class="card-bd">
+        <div class="tbl-wrap" style="max-height:420px;overflow:auto">
+          <table class="dtbl">
+            <thead>
+              <tr>
+                <th style="width:90px">ID</th>
+                <th style="width:170px">Waktu</th>
+                <th style="width:180px">Ref ID</th>
+                <th style="width:110px">Status</th>
+                <th style="width:80px">OK</th>
+                <th style="width:120px">Match TX</th>
+                <th style="width:140px">IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (!webhookLogs || webhookLogs.length === 0) { %>
+                <tr><td colspan="7" class="text-center text-muted">Belum ada webhook masuk.</td></tr>
+              <% } else { %>
+                <% webhookLogs.forEach(w => { %>
+                  <tr>
+                    <td class="mono">#<%= w.id %></td>
+                    <td><%= w.created_at ? new Date(w.created_at).toLocaleString('id-ID') : '-' %></td>
+                    <td class="mono"><%= w.ref_id || '-' %></td>
+                    <td><%= (w.status || '-').toString() %></td>
+                    <td><span class="badge <%= Number(w.signature_ok||0)===1 ? 'b-s' : 'b-d' %>"><%= Number(w.signature_ok||0)===1 ? 'YES' : 'NO' %></span></td>
+                    <td class="mono"><%= w.matched_agent_tx_id ? ('#' + w.matched_agent_tx_id) : '-' %></td>
+                    <td class="mono"><%= w.ip || '-' %></td>
+                  </tr>
+                <% }) %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb16">
+      <div class="card-hd"><h6 style="margin:0"><i class="bi bi-clock-history"></i> Transaksi Pulsa (Agent)</h6></div>
+      <div class="card-bd">
+        <div class="tbl-wrap" style="max-height:520px;overflow:auto">
+          <table class="dtbl">
+            <thead>
+              <tr>
+                <th style="width:90px">ID</th>
+                <th style="width:160px">Waktu</th>
+                <th style="width:160px">Agent</th>
+                <th style="width:130px">SKU</th>
+                <th style="width:140px">Target</th>
+                <th style="width:110px">Status</th>
+                <th>Pesan</th>
+                <th style="width:130px">Potong</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (!recentPulsaTx || recentPulsaTx.length === 0) { %>
+                <tr><td colspan="8" class="text-center text-muted">Belum ada transaksi.</td></tr>
+              <% } else { %>
+                <% recentPulsaTx.forEach(tx => { %>
+                  <tr>
+                    <td class="mono">#<%= tx.id %></td>
+                    <td><%= tx.created_at ? new Date(tx.created_at).toLocaleString('id-ID') : '-' %></td>
+                    <td><%= tx.agent_name %> <span class="mono">@<%= tx.agent_username %></span></td>
+                    <td class="mono"><%= tx.digi_sku || '-' %></td>
+                    <td class="mono"><%= tx.digi_target || '-' %></td>
+                    <td><span class="badge <%= String(tx.digi_status||'').toLowerCase()==='success' ? 'b-s' : String(tx.digi_status||'').toLowerCase()==='failed' ? 'b-d' : 'b-w' %>"><%= String(tx.digi_status || 'pending').toUpperCase() %></span></td>
+                    <td><%= tx.digi_message || tx.note || '-' %></td>
+                    <td>Rp <%= Number((tx.amount_sell || tx.amount_buy) || 0).toLocaleString('id-ID') %></td>
+                  </tr>
+                <% }) %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

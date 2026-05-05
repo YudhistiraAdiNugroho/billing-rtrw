@@ -369,6 +369,14 @@
     .chip.r{ border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.10); color:#fecaca; }
     .chip.b{ border-color: rgba(99,102,241,0.35); background: rgba(99,102,241,0.10); color:#c7d2fe; }
 
+    .df-tone-pulsa{ background: rgba(99,102,241,0.15); }
+    .df-tone-data{ background: rgba(34,197,94,0.12); }
+    .df-tone-pln{ background: rgba(245,158,11,0.12); }
+    .df-tone-game{ background: rgba(236,72,153,0.12); }
+    .df-tone-wifi{ background: rgba(59,130,246,0.12); }
+    .df-tone-ewallet{ background: rgba(16,185,129,0.12); }
+    .df-tone-voucher{ background: rgba(168,85,247,0.12); }
+
     @media (min-width: 900px){
       .kpi{ grid-template-columns: 1fr 1fr 1fr 1fr; }
     }
@@ -390,7 +398,7 @@
 
   <div class="wrap" id="section-top">
     <% if (msg) { %>
-      <div class="alert alert-<%= msg.type==='error' ? 'danger' : 'success' %> py-2 rounded-4" style="background: rgba(15,23,42,0.55); border:1px solid rgba(148,163,184,0.14); color: var(--text)">
+      <div class="alert alert-<%= msg.type==='error' ? 'danger' : msg.type==='warning' ? 'warning' : msg.type==='info' ? 'info' : 'success' %> py-2 rounded-4" style="background: rgba(15,23,42,0.55); border:1px solid rgba(148,163,184,0.14); color: var(--text)">
         <%= msg.text %>
       </div>
     <% } %>
@@ -399,7 +407,14 @@
       <div class="cardx">
         <div class="hd">
           <h6><i class="bi bi-receipt"></i> <%= t('agent.receipt_last', 'Struk Terakhir') %></h6>
-          <span class="pill"><i class="bi bi-clock"></i> <%= t('agent.new', 'Baru') %></span>
+          <div class="d-flex gap-2" style="align-items:center">
+            <span class="pill"><i class="bi bi-clock"></i> <%= t('agent.new', 'Baru') %></span>
+            <form method="POST" action="/agent/receipt/clear" style="margin:0">
+              <button type="submit" class="btn-mini" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px">
+                <i class="bi bi-x-lg"></i> Keluar
+              </button>
+            </form>
+          </div>
         </div>
         <div class="bd">
           <% if (receipt.type === 'invoice') { %>
@@ -441,6 +456,25 @@
                 </a>
               <% } %>
               <button type="button" class="btn-mini" data-copy="VOUCHER HOTSPOT\nWaktu: <%= receipt.created_at ? new Date(receipt.created_at).toLocaleString('id-ID') : '' %>\nPaket: <%= receipt.profile %><%= receipt.validity ? ' (' + receipt.validity + ')' : '' %>\nUser: <%= receipt.code %>\nPass: <%= receipt.password %>\nHarga: Rp <%= Number(receipt.sell_price||0).toLocaleString('id-ID') %>">
+                <i class="bi bi-clipboard"></i> <%= t('agent.copy_all', 'Copy Semua') %>
+              </button>
+            </div>
+          <% } else if (receipt.type === 'pulsa') { %>
+            <table class="tbl">
+              <tr><td><%= t('agent.time', 'Waktu') %></td><td class="fw-bold"><%= receipt.created_at ? new Date(receipt.created_at).toLocaleString('id-ID') : '-' %></td></tr>
+              <tr><td>SKU</td><td class="fw-bold"><%= receipt.sku || '-' %></td></tr>
+              <tr><td>Target</td><td class="fw-bold"><%= receipt.target || '-' %></td></tr>
+              <tr><td>Ref ID</td><td><code><%= receipt.ref_id || '-' %></code></td></tr>
+              <tr><td>Status</td><td class="fw-bold"><%= String(receipt.status || '-').toUpperCase() %></td></tr>
+              <tr><td>SN</td><td><code><%= receipt.sn || '-' %></code></td></tr>
+              <tr><td>Harga Jual</td><td class="fw-bold">Rp <%= Number(receipt.sell_price||0).toLocaleString('id-ID') %></td></tr>
+              <tr><td><%= t('agent.cut_balance', 'Potong Saldo') %></td><td class="fw-bold" style="color:var(--danger)">Rp <%= Number(receipt.buy_price||0).toLocaleString('id-ID') %></td></tr>
+              <tr><td><%= t('agent.profit', 'Profit') %></td><td class="fw-bold" style="color:var(--success)">Rp <%= Math.max(0, Number(receipt.sell_price||0) - Number(receipt.buy_price||0)).toLocaleString('id-ID') %></td></tr>
+              <tr><td>Pesan</td><td><%= receipt.message || '-' %></td></tr>
+              <tr><td><%= t('agent.whatsapp', 'WhatsApp') %></td><td><span class="badgey <%= receipt.waSent ? 's' : 'w' %>"><i class="bi bi-whatsapp"></i> <%= receipt.waSent ? t('agent.wa_sent','Terkirim') : t('agent.wa_not_sent','Tidak terkirim') %></span></td></tr>
+            </table>
+            <div class="d-flex gap-2 mt-3" style="flex-wrap:wrap">
+              <button type="button" class="btn-mini" data-copy="TRANSAKSI PULSA\nWaktu: <%= receipt.created_at ? new Date(receipt.created_at).toLocaleString('id-ID') : '' %>\nSKU: <%= receipt.sku || '-' %>\nTarget: <%= receipt.target || '-' %>\nRef ID: <%= receipt.ref_id || '-' %>\nStatus: <%= String(receipt.status || '-').toUpperCase() %>\nSN: <%= receipt.sn || '-' %>\nPesan: <%= receipt.message || '-' %>">
                 <i class="bi bi-clipboard"></i> <%= t('agent.copy_all', 'Copy Semua') %>
               </button>
             </div>
@@ -565,6 +599,233 @@
       </div>
     </div>
 
+    <div class="cardx" id="section-pulsa">
+      <div class="hd">
+        <h6><i class="bi bi-phone"></i> Pulsa / Produk Digital</h6>
+        <span class="pill"><i class="bi bi-link-45deg"></i> Digiflazz</span>
+      </div>
+      <div class="bd">
+        <% if (!digiflazzConfigured) { %>
+          <div class="text-muted" style="color:var(--muted)!important;font-size:12px">
+            Digiflazz belum diset. Isi <span class="fw-bold">digiflazz_username</span> dan <span class="fw-bold">digiflazz_api_key</span> di settings.json.
+          </div>
+        <% } else { %>
+          <% if (!digiflazzBrandsData || digiflazzBrandsData.length === 0) { %>
+            <div class="text-muted" style="color:var(--muted)!important;font-size:12px">
+              Produk Digiflazz belum ada. Minta admin melakukan Sync Produk di menu Admin → Digiflazz.
+            </div>
+          <% } else { %>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn-mini" id="df_btnBackCategory" style="display:none" onclick="df_showCategories()">
+                  <i class="bi bi-arrow-left"></i>
+                </button>
+                <div>
+                  <div class="fw-bold" id="df_pageTitle">Layanan Cepat</div>
+                  <div class="t2" id="df_pageSubtitle" style="display:none"></div>
+                </div>
+              </div>
+              <div class="dropdown">
+                <button class="btn-mini" type="button" data-bs-toggle="dropdown">
+                  <i class="bi bi-funnel"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" id="df_categoryMenu" style="background: rgba(15,23,42,0.95); border: 1px solid rgba(148,163,184,0.18);">
+                  <li><a class="dropdown-item" href="#" data-category="" style="color:var(--text)">Semua Kategori</a></li>
+                  <% (digiflazzCategories || []).forEach(cat => { %>
+                    <li><a class="dropdown-item" href="#" data-category="<%= encodeURIComponent(cat) %>" style="color:var(--text)"><%= cat %></a></li>
+                  <% }) %>
+                </ul>
+              </div>
+            </div>
+
+            <div id="df_categorySection" class="row g-2 mb-3">
+              <%
+                const groupKeyOf = (cat) => {
+                  const c = String(cat || '').toLowerCase();
+                  if (c.includes('wifi') || c.includes('hotspot')) return 'wifi';
+                  if (c.includes('wallet') || c.includes('e-wallet') || c.includes('e wallet') || c.includes('e-money') || c.includes('emoney') || c.includes('uang elektronik') || c.includes('uang')) return 'ewallet';
+                  if (c.includes('voucher') || c.includes('gosok') || c.includes('fisik')) return 'voucher';
+                  if (c.includes('pln')) return 'pln';
+                  if (c.includes('game')) return 'game';
+                  if (c.includes('data')) return 'data';
+                  if (c.includes('pulsa')) return 'pulsa';
+                  return 'other';
+                };
+                const groupMeta = {
+                  pulsa: { title: 'Pulsa', icon: 'bi-phone', tone: 'rgba(99,102,241,0.15)' },
+                  data: { title: 'Data', icon: 'bi-wifi', tone: 'rgba(34,197,94,0.12)' },
+                  pln: { title: 'PLN', icon: 'bi-lightning-charge', tone: 'rgba(245,158,11,0.12)' },
+                  game: { title: 'Game', icon: 'bi-controller', tone: 'rgba(236,72,153,0.12)' },
+                  wifi: { title: 'WiFi', icon: 'bi-router', tone: 'rgba(59,130,246,0.12)' },
+                  ewallet: { title: 'E-Wallet', icon: 'bi-wallet2', tone: 'rgba(16,185,129,0.12)' },
+                  voucher: { title: 'Voucher', icon: 'bi-ticket-perforated', tone: 'rgba(168,85,247,0.12)' }
+                };
+                const calcGroup = (groupKey) => {
+                  const brandsInGroup = (digiflazzBrandsData || []).filter(b => groupKeyOf(b.category) === groupKey);
+                  const brandCount = brandsInGroup.length;
+                  const productCount = brandsInGroup.reduce((sum, b) => sum + (b.items?.length || 0), 0);
+                  const minPrice = brandsInGroup.reduce((min, b) => {
+                    const p = (b.items || []).reduce((m, i) => Math.min(m, Number(i.price_sell || 0)), Number.POSITIVE_INFINITY);
+                    return Math.min(min, p);
+                  }, Number.POSITIVE_INFINITY);
+                  return { brandCount, productCount, minPrice };
+                };
+              %>
+              <% ['pulsa','data','pln','game','wifi','ewallet','voucher'].forEach(key => { %>
+                <% const meta = groupMeta[key]; const info = calcGroup(key); %>
+                <div class="col-6 col-md-4">
+                  <div class="itemx" role="button" tabindex="0" data-group="<%= key %>" style="cursor:pointer">
+                    <div class="top">
+                      <div class="d-flex align-items-center gap-2" style="min-width:0">
+                        <div class="df-tone-<%= key %>" style="width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(148,163,184,0.14);flex:0 0 auto">
+                          <i class="bi <%= meta.icon %>"></i>
+                        </div>
+                        <div style="min-width:0">
+                          <div class="t1"><%= meta.title %></div>
+                          <div class="t2"><%= info.brandCount %> Brand • <%= info.productCount %> Produk</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+
+            <div class="d-flex align-items-center justify-content-between mb-2" id="df_brandHeader" style="display:none">
+              <div>
+                <div class="fw-bold" id="df_selectedCategoryName"></div>
+                <div class="t2">Pilih provider/brand</div>
+              </div>
+              <button type="button" class="btn-mini" onclick="df_showCategories()">Ganti Kategori</button>
+            </div>
+
+            <div class="mb-3" id="df_searchBox" style="display:none">
+              <div class="d-flex gap-2" style="align-items:stretch">
+                <input type="text" id="df_brandSearch" class="form-control" placeholder="Cari Provider atau Brand...">
+                <button class="btn-ghost" type="button" onclick="df_applyFilters()" style="min-width:84px"><i class="bi bi-search"></i></button>
+              </div>
+            </div>
+
+            <div id="df_brandGrid" class="row g-2 mb-3" style="display:none">
+              <% digiflazzBrandsData.forEach(brand => { %>
+                <% const minPrice = (brand.items || []).length ? brand.items.reduce((m, i) => Math.min(m, Number(i.price_sell||0)), Number.POSITIVE_INFINITY) : 0; %>
+                <div class="col-4 col-md-3 col-lg-2 df-brand-card-container" data-category="<%= brand.category %>" data-name="<%= String(brand.name || '').toLowerCase() %>">
+                  <div class="itemx df-brand-card" role="button" tabindex="0" data-brand="<%= encodeURIComponent(brand.key) %>" style="cursor:pointer">
+                    <div class="t1 text-truncate"><%= brand.name %></div>
+                    <div class="t2 text-truncate"><%= brand.category %></div>
+                    <div class="t2"><%= (brand.items || []).length %> Produk</div>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+
+            <div id="df_nominalSection" style="display:none">
+              <div class="d-flex align-items-center mb-3">
+                <button class="btn-mini me-2" type="button" onclick="df_hideNominals()"><i class="bi bi-arrow-left"></i></button>
+                <div>
+                  <div class="fw-bold" id="df_selectedBrandName">Brand</div>
+                  <div class="t2">Pilih nominal produk</div>
+                </div>
+              </div>
+              <div id="df_nominalGrid" class="row g-2 mb-2"></div>
+            </div>
+
+            <div style="color:var(--muted);font-size:12px">
+              Status transaksi akan otomatis update via webhook (jika diset). Jika masih pending, bisa cek ulang dari Riwayat.
+            </div>
+
+            <div class="modal fade" id="df_orderModal" tabindex="-1">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 rounded-4" style="background: rgba(15,23,42,0.95); border: 1px solid rgba(148,163,184,0.18); color: var(--text);">
+                  <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold">Konfirmasi Pembelian</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <form id="df_orderForm">
+                    <div class="modal-body p-4">
+                      <input type="hidden" name="sku" id="df_modal_sku">
+                      <input type="hidden" name="sell_price" id="df_modal_sell_price">
+
+                      <div class="mb-3">
+                        <div class="t2">PRODUK</div>
+                        <div class="fw-bold" id="df_modal_name"></div>
+                        <div class="fw-bold" id="df_modal_price"></div>
+                        <div class="t2">Harga sudah mengikuti harga jual dari admin (sync Digiflazz).</div>
+                      </div>
+
+                      <div class="mb-3">
+                        <label class="t2" id="df_modal_target_label">NOMOR TARGET / ID</label>
+                        <input type="text" name="target" id="df_modal_target" class="form-control" placeholder="08xxxxxxxxxx" required>
+                        <div class="t2" id="df_modal_target_help" style="margin-top:4px"></div>
+                      </div>
+
+                      <div class="mb-3">
+                        <label class="t2">NO WHATSAPP PEMBELI (OPSIONAL)</label>
+                        <input type="text" name="buyer_phone" id="df_modal_buyer_phone" class="form-control" placeholder="62812xxxxxxx">
+                        <div class="t2" style="margin-top:4px">Jika diisi, struk transaksi akan dikirim via WhatsApp.</div>
+                      </div>
+
+                      <div class="itemx" style="border-radius:14px">
+                        <div class="t2"><i class="bi bi-info-circle"></i> Pastikan target sudah benar sebelum memproses.</div>
+                      </div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0 p-4">
+                      <button type="submit" class="btn-action w-100" id="df_btnSubmit">PROSES SEKARANG</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal fade" id="df_resultModal" tabindex="-1">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 rounded-4" style="background: rgba(15,23,42,0.95); border: 1px solid rgba(148,163,184,0.18); color: var(--text);">
+                  <div class="modal-body p-4">
+                    <div class="text-center mb-3">
+                      <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center" id="df_resultIconWrap" style="width:72px;height:72px;background:rgba(34,197,94,0.12)">
+                        <i class="bi bi-check2" id="df_resultIcon" style="font-size:32px"></i>
+                      </div>
+                      <h5 class="fw-bold mt-3 mb-1" id="df_resultTitle"></h5>
+                      <div class="t2" id="df_resultSubtitle"></div>
+                    </div>
+
+                    <div class="itemx mb-2">
+                      <div class="d-flex justify-content-between"><div class="t2">Produk</div><div class="fw-bold text-end" id="df_resultProduct"></div></div>
+                      <div class="d-flex justify-content-between mt-2"><div class="t2">Target</div><div class="fw-bold text-end" id="df_resultTarget"></div></div>
+                      <div class="d-flex justify-content-between mt-2"><div class="t2">Harga</div><div class="fw-bold text-end" id="df_resultPrice"></div></div>
+                      <div class="d-flex justify-content-between mt-2"><div class="t2">Ref ID</div><div class="fw-bold text-end" id="df_resultRefId"></div></div>
+                    </div>
+
+                    <div class="itemx mb-2" id="df_resultSnBox" style="display:none">
+                      <div class="t2 mb-1">Kode Voucher / SN</div>
+                      <div class="d-flex align-items-start justify-content-between gap-2">
+                        <div class="fw-bold text-break" id="df_resultSn" style="line-height:1.2"></div>
+                        <button type="button" class="btn-mini" id="df_btnCopySn"><i class="bi bi-copy"></i></button>
+                      </div>
+                    </div>
+
+                    <div class="itemx mb-3" id="df_resultBalanceBox" style="display:none">
+                      <div class="d-flex justify-content-between">
+                        <div class="t2">Sisa Saldo</div>
+                        <div class="fw-bold text-end" id="df_resultBalance"></div>
+                      </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                      <button type="button" class="btn-ghost w-100" data-bs-dismiss="modal">TUTUP</button>
+                      <a href="#section-history" class="btn-action w-100" data-bs-dismiss="modal">LIHAT RIWAYAT</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <script type="application/json" id="df_brandsDataJson"><%- JSON.stringify(digiflazzBrandsData) %></script>
+          <% } %>
+        <% } %>
+      </div>
+    </div>
+
     <div class="cardx" id="section-history">
       <div class="hd">
         <h6><i class="bi bi-clock-history"></i> <%= t('agent.history_title', 'Riwayat Singkat') %></h6>
@@ -586,6 +847,8 @@
                         <%= t('agent.tx_type.invoice', 'TAGIHAN') %>
                       <% } else if (tx.type === 'voucher_sale') { %>
                         <%= t('agent.tx_type.voucher', 'VOUCHER') %>
+                      <% } else if (tx.type === 'pulsa') { %>
+                        PULSA
                       <% } else { %>
                         <%= t('agent.tx_type.generic', 'TRANSAKSI') %>
                       <% } %>
@@ -596,6 +859,8 @@
                         Invoice #<%= tx.invoice_id %> • Rp <%= Number(tx.amount_invoice||0).toLocaleString('id-ID') %>
                       <% } else if (tx.type === 'voucher_sale') { %>
                         <%= tx.profile_name %> • <code><%= tx.voucher_code %></code>
+                      <% } else if (tx.type === 'pulsa') { %>
+                        <%= tx.digi_sku || '-' %> • <%= tx.digi_target || '-' %> • <%= (tx.digi_status || '-').toString().toUpperCase() %>
                       <% } else { %>
                         <%= tx.note || '-' %>
                       <% } %>
@@ -605,16 +870,28 @@
                     <div class="fw-bold">Rp <%= Number(tx.balance_after||0).toLocaleString('id-ID') %></div>
                     <% if (tx.type === 'topup') { %>
                       <span class="badgey s"><i class="bi bi-plus-circle"></i> +Rp <%= Number(tx.amount_buy||0).toLocaleString('id-ID') %></span>
+                    <% } else if (tx.type === 'pulsa') { %>
+                      <span class="badgey d"><i class="bi bi-dash-circle"></i> -Rp <%= Number(tx.amount_sell||0).toLocaleString('id-ID') %></span>
                     <% } else { %>
                       <span class="badgey d"><i class="bi bi-dash-circle"></i> -Rp <%= Number(tx.amount_buy||0).toLocaleString('id-ID') %></span>
                     <% } %>
                   </div>
                 </div>
-                <% if (tx.type === 'voucher_sale' || tx.type === 'invoice_payment') { %>
+                <% if (tx.type === 'voucher_sale' || tx.type === 'invoice_payment' || tx.type === 'pulsa') { %>
                   <div class="tx-actions">
-                    <a class="btn-mini" href="/agent/print/tx/<%= tx.id %>" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px">
-                      <i class="bi bi-printer"></i> <%= t('agent.print_thermal', 'Print Thermal') %>
-                    </a>
+                    <% if (tx.type === 'voucher_sale' || tx.type === 'invoice_payment') { %>
+                      <a class="btn-mini" href="/agent/print/tx/<%= tx.id %>" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px">
+                        <i class="bi bi-printer"></i> <%= t('agent.print_thermal', 'Print Thermal') %>
+                      </a>
+                    <% } %>
+                    <% if (tx.type === 'pulsa' && String(tx.digi_status || '').toLowerCase() === 'pending') { %>
+                      <form method="POST" action="/agent/pulsa/check" style="margin:0">
+                        <input type="hidden" name="tx_id" value="<%= tx.id %>">
+                        <button type="submit" class="btn-mini" style="display:inline-flex;align-items:center;gap:8px">
+                          <i class="bi bi-arrow-repeat"></i> Cek Status
+                        </button>
+                      </form>
+                    <% } %>
                   </div>
                 <% } %>
               </div>
@@ -630,6 +907,7 @@
       <a href="#section-top" class="bn-item active" data-scroll="top"><i class="bi bi-house"></i><%= t('agent.nav.home', 'Beranda') %></a>
       <a href="#section-bill" class="bn-item" data-scroll="bill"><i class="bi bi-receipt"></i><%= t('agent.nav.billing', 'Tagihan') %></a>
       <a href="#section-voucher" class="bn-item" data-scroll="voucher"><i class="bi bi-ticket-perforated"></i><%= t('agent.nav.voucher', 'Voucher') %></a>
+      <a href="#section-pulsa" class="bn-item" data-scroll="pulsa"><i class="bi bi-phone"></i>Pulsa</a>
       <a href="#section-history" class="bn-item" data-scroll="history"><i class="bi bi-clock-history"></i><%= t('agent.nav.history', 'Riwayat') %></a>
     </div>
   </nav>
@@ -697,10 +975,483 @@
   </script>
   <script>
     (function () {
+      const brandsData = JSON.parse(document.getElementById('df_brandsDataJson')?.textContent || '[]');
+      if (!Array.isArray(brandsData) || brandsData.length === 0) return;
+
+      let orderModal = null;
+      let resultModal = null;
+      const ensureOrderModal = () => {
+        if (orderModal) return orderModal;
+        const el = document.getElementById('df_orderModal');
+        if (window.bootstrap && el) orderModal = new window.bootstrap.Modal(el);
+        return orderModal;
+      };
+      const ensureResultModal = () => {
+        if (resultModal) return resultModal;
+        const el = document.getElementById('df_resultModal');
+        if (window.bootstrap && el) resultModal = new window.bootstrap.Modal(el);
+        return resultModal;
+      };
+
+      let currentSearch = '';
+      let currentCategoryGroup = '';
+      let currentCategoryExact = '';
+      let lastOrderContext = { sku: '', name: '', price: 0, category: '', target: '' };
+
+      const elTitle = document.getElementById('df_pageTitle');
+      const elSubtitle = document.getElementById('df_pageSubtitle');
+      const btnBack = document.getElementById('df_btnBackCategory');
+
+      const categorySection = document.getElementById('df_categorySection');
+      const brandHeader = document.getElementById('df_brandHeader');
+      const searchBox = document.getElementById('df_searchBox');
+      const brandGrid = document.getElementById('df_brandGrid');
+      const nominalSection = document.getElementById('df_nominalSection');
+      const nominalGrid = document.getElementById('df_nominalGrid');
+      const selectedCategoryName = document.getElementById('df_selectedCategoryName');
+      const selectedBrandName = document.getElementById('df_selectedBrandName');
+      const brandSearch = document.getElementById('df_brandSearch');
+
+      const categoryToGroupKey = (cat) => {
+        const c = String(cat || '').toLowerCase();
+        if (c.includes('wifi') || c.includes('hotspot')) return 'wifi';
+        if (c.includes('wallet') || c.includes('e-wallet') || c.includes('e wallet') || c.includes('e-money') || c.includes('emoney') || c.includes('uang elektronik') || c.includes('uang')) return 'ewallet';
+        if (c.includes('voucher') || c.includes('gosok') || c.includes('fisik')) return 'voucher';
+        if (c.includes('pln')) return 'pln';
+        if (c.includes('game')) return 'game';
+        if (c.includes('data')) return 'data';
+        if (c.includes('pulsa')) return 'pulsa';
+        return 'other';
+      };
+
+      const setHeader = (title, subtitle, showBack) => {
+        if (elTitle) elTitle.textContent = title;
+        if (elSubtitle) {
+          if (subtitle) {
+            elSubtitle.style.display = '';
+            elSubtitle.textContent = subtitle;
+          } else {
+            elSubtitle.style.display = 'none';
+            elSubtitle.textContent = '';
+          }
+        }
+        if (btnBack) btnBack.style.display = showBack ? '' : 'none';
+      };
+
+      const df_showCategories = () => {
+        currentCategoryGroup = '';
+        currentCategoryExact = '';
+        currentSearch = '';
+        if (brandSearch) brandSearch.value = '';
+
+        if (categorySection) categorySection.style.display = '';
+        if (brandHeader) brandHeader.style.display = 'none';
+        if (searchBox) searchBox.style.display = 'none';
+        if (brandGrid) brandGrid.style.display = 'none';
+        if (nominalSection) nominalSection.style.display = 'none';
+
+        setHeader('Layanan Cepat', '', false);
+      };
+      window.df_showCategories = df_showCategories;
+
+      const df_applyFilters = () => {
+        if (!brandGrid) return;
+        const containers = brandGrid.querySelectorAll('.df-brand-card-container');
+        let visibleCount = 0;
+
+        containers.forEach(el => {
+          const cat = el.getAttribute('data-category') || '';
+          const name = el.getAttribute('data-name') || '';
+          const matchesCategory =
+            (currentCategoryExact && cat === currentCategoryExact) ||
+            (currentCategoryGroup && categoryToGroupKey(cat) === currentCategoryGroup) ||
+            (!currentCategoryExact && !currentCategoryGroup);
+          const matchesSearch = !currentSearch || name.includes(currentSearch);
+          const ok = matchesCategory && matchesSearch;
+          el.style.display = ok ? '' : 'none';
+          if (ok) visibleCount++;
+        });
+
+        let emptyState = document.getElementById('df_emptyState');
+        if (visibleCount === 0) {
+          if (!emptyState) {
+            emptyState = document.createElement('div');
+            emptyState.id = 'df_emptyState';
+            emptyState.className = 'col-12 text-center';
+            emptyState.style.padding = '24px 0';
+            emptyState.innerHTML = '<div style="color:var(--muted);font-size:12px">Produk atau brand tidak ditemukan.</div>';
+            brandGrid.appendChild(emptyState);
+          }
+        } else if (emptyState) {
+          emptyState.remove();
+        }
+      };
+      window.df_applyFilters = df_applyFilters;
+
+      const df_showBrandsGroup = (groupKey) => {
+        currentCategoryGroup = groupKey || '';
+        currentCategoryExact = '';
+        if (categorySection) categorySection.style.display = 'none';
+        if (brandHeader) brandHeader.style.display = '';
+        if (searchBox) searchBox.style.display = '';
+        if (brandGrid) brandGrid.style.display = '';
+        if (nominalSection) nominalSection.style.display = 'none';
+
+        const titleMap = { pulsa: 'Pulsa', data: 'Data', pln: 'PLN', game: 'Game', wifi: 'WiFi', ewallet: 'E-Wallet', voucher: 'Voucher' };
+        if (selectedCategoryName) selectedCategoryName.textContent = titleMap[currentCategoryGroup] || 'Semua Kategori';
+        setHeader('Pilih Brand', currentCategoryGroup ? `Kategori: ${titleMap[currentCategoryGroup] || currentCategoryGroup}` : '', true);
+        df_applyFilters();
+      };
+
+      const df_showBrandsCategory = (cat) => {
+        currentCategoryExact = cat || '';
+        currentCategoryGroup = '';
+        if (categorySection) categorySection.style.display = 'none';
+        if (brandHeader) brandHeader.style.display = '';
+        if (searchBox) searchBox.style.display = '';
+        if (brandGrid) brandGrid.style.display = '';
+        if (nominalSection) nominalSection.style.display = 'none';
+
+        if (selectedCategoryName) selectedCategoryName.textContent = currentCategoryExact || 'Semua Kategori';
+        setHeader('Pilih Brand', currentCategoryExact ? `Kategori: ${currentCategoryExact}` : '', true);
+        df_applyFilters();
+      };
+
+      const df_hideNominals = () => {
+        if (nominalSection) nominalSection.style.display = 'none';
+        if (brandHeader) brandHeader.style.display = '';
+        if (searchBox) searchBox.style.display = '';
+        if (brandGrid) brandGrid.style.display = '';
+      };
+      window.df_hideNominals = df_hideNominals;
+
+      const setTargetUI = (category, productName) => {
+        const label = document.getElementById('df_modal_target_label');
+        const help = document.getElementById('df_modal_target_help');
+        const input = document.getElementById('df_modal_target');
+        if (!label || !help || !input) return;
+
+        const cat = String(category || '').toLowerCase();
+        input.removeAttribute('pattern');
+        input.removeAttribute('inputmode');
+        input.removeAttribute('maxlength');
+        input.required = true;
+
+        if (cat.includes('pln')) {
+          label.textContent = 'ID Pelanggan / No Meter PLN';
+          input.placeholder = 'Contoh: 123456789012';
+          input.setAttribute('inputmode', 'numeric');
+          input.setAttribute('pattern', '\\d{8,16}');
+          input.setAttribute('maxlength', '16');
+          help.textContent = 'Masukkan angka saja (tanpa spasi).';
+          return;
+        }
+
+        if (cat.includes('game')) {
+          label.textContent = 'User ID / Server / Zone';
+          input.placeholder = 'Contoh: 12345678 (sesuai game)';
+          help.textContent = `Ikuti format yang diminta untuk produk: ${productName}`;
+          return;
+        }
+
+        if (cat.includes('voucher') || cat.includes('gosok') || cat.includes('fisik')) {
+          label.textContent = 'Nomor HP (Opsional)';
+          input.placeholder = 'Kosongkan jika tidak perlu';
+          input.required = false;
+          help.textContent = 'Kode voucher akan dikirim sebagai SN setelah transaksi sukses.';
+          return;
+        }
+
+        if (cat.includes('wifi') || cat.includes('hotspot')) {
+          label.textContent = 'Nomor HP (Opsional)';
+          input.placeholder = 'Kosongkan jika tidak perlu';
+          input.required = false;
+          help.textContent = 'Kode voucher akan dikirim sebagai SN setelah transaksi sukses.';
+          return;
+        }
+
+        if (cat.includes('wallet') || cat.includes('uang') || cat.includes('e-money') || cat.includes('emoney')) {
+          label.textContent = 'Nomor HP (E-Wallet)';
+          input.placeholder = 'Contoh: 08xxxxxxxxxx / 62xxxxxxxxxxx';
+          input.setAttribute('inputmode', 'numeric');
+          input.setAttribute('pattern', '\\d{9,15}');
+          input.setAttribute('maxlength', '15');
+          help.textContent = 'Masukkan nomor tanpa spasi. Awali 08… atau 62….';
+          return;
+        }
+
+        label.textContent = 'Nomor HP / ID Tujuan';
+        input.placeholder = 'Contoh: 08xxxxxxxxxx / 62xxxxxxxxxxx';
+        input.setAttribute('inputmode', 'numeric');
+        input.setAttribute('pattern', '\\d{9,15}');
+        input.setAttribute('maxlength', '15');
+        help.textContent = 'Masukkan nomor tanpa spasi. Awali 08… atau 62….';
+      };
+
+      const df_openOrderModal = (item) => {
+        const m = ensureOrderModal();
+        if (!m) return;
+        lastOrderContext = {
+          sku: String(item?.sku || ''),
+          name: String(item?.product_name || item?.sku || ''),
+          price: Number(item?.price_sell || 0),
+          category: String(item?.category || ''),
+          target: ''
+        };
+        const skuEl = document.getElementById('df_modal_sku');
+        const nameEl = document.getElementById('df_modal_name');
+        const priceEl = document.getElementById('df_modal_price');
+        const sellEl = document.getElementById('df_modal_sell_price');
+        const targetEl = document.getElementById('df_modal_target');
+        if (skuEl) skuEl.value = lastOrderContext.sku;
+        if (sellEl) sellEl.value = String(Math.max(0, Math.floor(lastOrderContext.price || 0)));
+        if (nameEl) nameEl.textContent = lastOrderContext.name;
+        if (priceEl) priceEl.textContent = 'Rp ' + Number(lastOrderContext.price || 0).toLocaleString('id-ID');
+        if (targetEl) targetEl.value = '';
+        setTargetUI(lastOrderContext.category, lastOrderContext.name);
+        m.show();
+      };
+
+      const df_showNominals = (brandKey) => {
+        const brand = brandsData.find(b => b.key === brandKey);
+        if (!brand) return;
+        if (brandGrid) brandGrid.style.display = 'none';
+        if (brandHeader) brandHeader.style.display = 'none';
+        if (searchBox) searchBox.style.display = 'none';
+        if (nominalSection) nominalSection.style.display = '';
+        if (selectedBrandName) selectedBrandName.textContent = String(brand.name || '');
+
+        if (nominalGrid) {
+          nominalGrid.innerHTML = '';
+          const items = Array.isArray(brand.items) ? brand.items : [];
+          if (items.length === 0) {
+            const col = document.createElement('div');
+            col.className = 'col-12 text-center';
+            col.style.padding = '24px 0';
+            col.innerHTML = '<div style="color:var(--muted);font-size:12px">Produk belum tersedia untuk brand ini.</div>';
+            nominalGrid.appendChild(col);
+            return;
+          }
+
+          items.forEach(item => {
+            const col = document.createElement('div');
+            col.className = 'col-6 col-md-4 col-lg-3';
+            const card = document.createElement('div');
+            card.className = 'itemx';
+            card.style.cursor = 'pointer';
+
+            const price = Number(item?.price_sell || 0);
+            const sku = String(item?.sku || '');
+            const name = String(item?.product_name || sku);
+            card.innerHTML = `
+              <div class="top">
+                <div style="min-width:0">
+                  <div class="t1">${name}</div>
+                  <div class="t2"><span class="mono">${sku}</span></div>
+                </div>
+                <div class="text-end">
+                  <div class="fw-bold">Rp ${price.toLocaleString('id-ID')}</div>
+                  <div class="t2"><i class="bi bi-chevron-right"></i></div>
+                </div>
+              </div>
+            `;
+
+            card.addEventListener('click', () => df_openOrderModal(item));
+            col.appendChild(card);
+            nominalGrid.appendChild(col);
+          });
+        }
+      };
+
+      const toRupiah = (val) => 'Rp ' + Number(val || 0).toLocaleString('id-ID');
+
+      const setResultVisual = (status) => {
+        const wrap = document.getElementById('df_resultIconWrap');
+        const icon = document.getElementById('df_resultIcon');
+        if (!wrap || !icon) return;
+        const s = String(status || '').toLowerCase();
+        if (s === 'success') {
+          wrap.style.background = 'rgba(34,197,94,0.12)';
+          icon.className = 'bi bi-check2';
+          icon.style.color = '#22c55e';
+          return;
+        }
+        if (s === 'pending') {
+          wrap.style.background = 'rgba(245,158,11,0.12)';
+          icon.className = 'bi bi-clock';
+          icon.style.color = '#f59e0b';
+          return;
+        }
+        wrap.style.background = 'rgba(239,68,68,0.12)';
+        icon.className = 'bi bi-x-lg';
+        icon.style.color = '#ef4444';
+      };
+
+      const df_showResultModal = async (result) => {
+        const m = ensureResultModal();
+        if (!m) throw new Error('modal not ready');
+        const status = String(result?.status || '').toLowerCase();
+        setResultVisual(status);
+
+        const titleEl = document.getElementById('df_resultTitle');
+        const subEl = document.getElementById('df_resultSubtitle');
+        if (titleEl && subEl) {
+          if (status === 'success') {
+            titleEl.textContent = 'Transaksi Berhasil';
+            subEl.textContent = 'Detail transaksi sudah tersimpan di riwayat.';
+          } else if (status === 'pending') {
+            titleEl.textContent = 'Transaksi Diproses';
+            subEl.textContent = 'Status akan berubah otomatis, cek riwayat secara berkala.';
+          } else {
+            titleEl.textContent = 'Transaksi Gagal';
+            subEl.textContent = String(result?.message || 'Gagal diproses');
+          }
+        }
+
+        const prodEl = document.getElementById('df_resultProduct');
+        const tgtEl = document.getElementById('df_resultTarget');
+        const priceEl = document.getElementById('df_resultPrice');
+        const refEl = document.getElementById('df_resultRefId');
+        if (prodEl) prodEl.textContent = lastOrderContext.name || lastOrderContext.sku || '-';
+        if (tgtEl) tgtEl.textContent = lastOrderContext.target || '-';
+        if (priceEl) priceEl.textContent = toRupiah(lastOrderContext.price);
+        if (refEl) refEl.textContent = String(result?.ref_id || '-');
+
+        const snBox = document.getElementById('df_resultSnBox');
+        const snEl = document.getElementById('df_resultSn');
+        const btnCopy = document.getElementById('df_btnCopySn');
+        const sn = String(result?.sn || '').trim();
+        if (snBox && snEl && btnCopy && status === 'success' && sn) {
+          snBox.style.display = '';
+          snEl.textContent = sn;
+          btnCopy.onclick = async () => {
+            try {
+              if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(sn);
+              else {
+                const ta = document.createElement('textarea');
+                ta.value = sn;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                ta.remove();
+              }
+            } catch (e) {}
+          };
+        } else if (snBox) {
+          snBox.style.display = 'none';
+          if (snEl) snEl.textContent = '';
+          if (btnCopy) btnCopy.onclick = null;
+        }
+
+        const balBox = document.getElementById('df_resultBalanceBox');
+        const balEl = document.getElementById('df_resultBalance');
+        if (balBox && balEl && result?.balance_after !== undefined && result?.balance_after !== null) {
+          balBox.style.display = '';
+          balEl.textContent = toRupiah(result.balance_after);
+        } else if (balBox) {
+          balBox.style.display = 'none';
+          if (balEl) balEl.textContent = '';
+        }
+
+        ensureOrderModal()?.hide();
+        m.show();
+      };
+
+      const orderForm = document.getElementById('df_orderForm');
+      if (orderForm) {
+        orderForm.onsubmit = async (e) => {
+          e.preventDefault();
+          const btn = document.getElementById('df_btnSubmit');
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'MEMPROSES...';
+          }
+
+          const sku = String(document.getElementById('df_modal_sku')?.value || '').trim();
+          const sellPrice = Number(document.getElementById('df_modal_sell_price')?.value || 0) || 0;
+          const target = String(document.getElementById('df_modal_target')?.value || '').trim().replace(/\s+/g, '');
+          const buyerPhone = String(document.getElementById('df_modal_buyer_phone')?.value || '').trim();
+          lastOrderContext.target = target;
+
+          try {
+            const res = await fetch('/agent/api/pulsa/order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sku, target, sell_price: sellPrice, buyer_phone: buyerPhone })
+            });
+            const out = await res.json();
+            if (out && out.success) {
+              await df_showResultModal(out);
+            } else {
+              const msg = String(out?.message || 'Gagal');
+              alert('Gagal: ' + msg);
+            }
+          } catch (err) {
+            alert('Terjadi kesalahan koneksi');
+          } finally {
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = 'PROSES SEKARANG';
+            }
+          }
+        };
+      }
+
+      if (categorySection) {
+        categorySection.addEventListener('click', (e) => {
+          const card = e.target.closest('[data-group]');
+          if (!card) return;
+          const group = card.getAttribute('data-group') || '';
+          df_showBrandsGroup(group);
+        });
+      }
+
+      const categoryMenu = document.getElementById('df_categoryMenu');
+      if (categoryMenu) {
+        categoryMenu.addEventListener('click', (e) => {
+          const a = e.target.closest('a[data-category]');
+          if (!a) return;
+          e.preventDefault();
+          const raw = a.getAttribute('data-category') || '';
+          const cat = raw ? decodeURIComponent(raw) : '';
+          if (!cat) df_showBrandsCategory('');
+          else df_showBrandsCategory(cat);
+        });
+      }
+
+      if (brandGrid) {
+        brandGrid.addEventListener('click', (e) => {
+          const card = e.target.closest('.df-brand-card');
+          if (!card) return;
+          const raw = card.getAttribute('data-brand') || '';
+          const brandKey = raw ? decodeURIComponent(raw) : '';
+          if (!brandKey) return;
+          df_showNominals(brandKey);
+        });
+      }
+
+      if (brandSearch) {
+        brandSearch.addEventListener('keyup', () => {
+          currentSearch = String(brandSearch.value || '').toLowerCase();
+          df_applyFilters();
+        });
+      }
+
+      df_showCategories();
+      try {
+        const params = new URLSearchParams(window.location.search || '');
+        const group = String(params.get('group') || '').trim().toLowerCase();
+        if (group) df_showBrandsGroup(group);
+      } catch (e) {}
+    })();
+  </script>
+  <script>
+    (function () {
       const sections = {
         top: document.getElementById('section-top'),
         bill: document.getElementById('section-bill'),
         voucher: document.getElementById('section-voucher'),
+        pulsa: document.getElementById('section-pulsa'),
         history: document.getElementById('section-history')
       };
 
