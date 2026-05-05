@@ -1,9 +1,132 @@
 const dns = require('dns');
 const { URL } = require('url');
-const { RouterOSClient } = require('routeros-client');
+const RosClient = require('ros-client');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
+
+function toKebabCase(key) {
+  const s = String(key || '').trim();
+  if (!s) return s;
+  if (s.includes('-') || s.startsWith('.') || s.startsWith('=') || s.startsWith('?')) return s;
+  return s.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
+}
+
+function toCamelCaseKey(key) {
+  return String(key || '').replace(/-([a-z0-9])/g, (_, c) => String(c).toUpperCase());
+}
+
+function augmentRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  for (const [k, v] of Object.entries(row)) {
+    if (!k || k.startsWith('.') || k.includes('-') === false) continue;
+    const camel = toCamelCaseKey(k);
+    if (camel && row[camel] === undefined) row[camel] = v;
+  }
+  return row;
+}
+
+class MenuAdapter {
+  constructor(api, basePath, filters = []) {
+    this.api = api;
+    this.basePath = basePath;
+    this.filters = filters;
+  }
+
+  where(keyOrObj, value) {
+    const next = [...this.filters];
+    if (keyOrObj && typeof keyOrObj === 'object') {
+      for (const [k, v] of Object.entries(keyOrObj)) next.push(this.#toQueryWord(k, v));
+    } else {
+      next.push(this.#toQueryWord(keyOrObj, value));
+    }
+    return new MenuAdapter(this.api, this.basePath, next);
+  }
+
+  async get() {
+    const words = [`${this.basePath}/print`, ...this.filters];
+    const res = await this.api.send(words);
+    return Array.isArray(res) ? res.map(augmentRow) : [];
+  }
+
+  async getOnly() {
+    const rows = await this.get();
+    return rows && rows.length ? rows[0] : null;
+  }
+
+  async add(data) {
+    const words = [`${this.basePath}/add`, ...this.#toSetWords(data)];
+    const res = await this.api.send(words);
+    return res;
+  }
+
+  async set(data, id) {
+    const rid = String(id || '').trim();
+    const words = [`${this.basePath}/set`, `=.id=${rid}`, ...this.#toSetWords(data)];
+    const res = await this.api.send(words);
+    return res;
+  }
+
+  async remove(id) {
+    const rid = String(id || '').trim();
+    const words = [`${this.basePath}/remove`, `=.id=${rid}`];
+    const res = await this.api.send(words);
+    return res;
+  }
+
+  async update(data) {
+    const rows = await this.get();
+    for (const r of rows) {
+      const rid = String(r?.['.id'] || '').trim();
+      if (!rid) continue;
+      await this.set(data, rid);
+    }
+    return [];
+  }
+
+  async exec(command, params) {
+    const cmd = String(command || '').trim();
+    if (!cmd) throw new Error('Command is required');
+    const path = this.basePath === '/' ? `/${cmd}` : `${this.basePath}/${cmd}`;
+    const words = [path, ...this.#toSetWords(params)];
+    return await this.api.send(words);
+  }
+
+  #toQueryWord(key, value) {
+    const k = String(key || '').trim();
+    const v = value === undefined || value === null ? '' : String(value);
+    const kk = k === 'id' ? '.id' : toKebabCase(k);
+    return `?${kk}=${v}`;
+  }
+
+  #toSetWords(data) {
+    const out = [];
+    if (!data || typeof data !== 'object') return out;
+    for (const [kRaw, vRaw] of Object.entries(data)) {
+      if (vRaw === undefined) continue;
+      const k = String(kRaw || '').trim();
+      if (!k) continue;
+      const kk = k === 'id' ? '.id' : toKebabCase(k);
+      const v = vRaw === null ? '' : String(vRaw);
+      out.push(`=${kk}=${v}`);
+    }
+    return out;
+  }
+}
+
+class ClientAdapter {
+  constructor(api) {
+    this.api = api;
+  }
+
+  menu(path) {
+    const raw = String(path || '').trim();
+    const normalized = raw
+      ? ('/' + raw.replace(/^\/+/, '').replace(/\s+/g, '/').replace(/\/+$/g, ''))
+      : '/';
+    return new MenuAdapter(this.api, normalized);
+  }
+}
 
 async function getConnection(routerId = null) {
   let host, port, user, password;
@@ -27,20 +150,47 @@ async function getConnection(routerId = null) {
     throw new Error('MikroTik settings not configured');
   }
 
-  const api = new RouterOSClient({
-    host,
-    port,
-    user,
-    password,
-    timeout: 5000
-  });
-
   try {
-    const client = await api.connect();
+    const useTls = Number(port) === 8729 || getSettingsWithCache().mikrotik_tls === true;
+    const api = new RosClient({
+      host,
+      username: user,
+      password,
+      port: Number(port) || 8728,
+      tls: Boolean(useTls),
+      timeout: 10000
+    });
+    await api.connect();
+    const originalClose = typeof api.close === 'function' ? api.close.bind(api) : null;
+    const originalDisconnect = typeof api.disconnect === 'function' ? api.disconnect.bind(api) : null;
+    api.close = async () => {
+      try {
+        if (originalClose) return await originalClose();
+        if (originalDisconnect) return await originalDisconnect();
+      } catch {}
+      return undefined;
+    };
+    if (typeof api.disconnect !== 'function') api.disconnect = api.close;
+    const client = new ClientAdapter(api);
     return { client, api };
   } catch (err) {
     logger.error(`Failed to connect to MikroTik (${host}):`, err);
     throw err;
+  }
+}
+
+async function checkConnection(routerId = null) {
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const identity = await conn.client.menu('/system/identity').getOnly();
+    return Boolean(identity && (identity.name || identity['name']));
+  } catch (e) {
+    const msg = String(e?.message || '');
+    if (msg.includes('not found')) throw e;
+    return false;
+  } finally {
+    if (conn && conn.api) conn.api.close();
   }
 }
 
@@ -825,6 +975,7 @@ async function removeStaticIp(ip, routerId = null) {
 }
 
 module.exports = {
+  checkConnection,
   getConnection,
   getPppoeProfiles,
   getPppoeUsers,
