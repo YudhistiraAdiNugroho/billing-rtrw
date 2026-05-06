@@ -14,7 +14,7 @@
 <div class="mb-3">
   <div class="input-group">
     <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-search"></i></span>
-    <input type="text" id="search-input" class="form-control bg-dark border-secondary text-white shadow-none" placeholder="Cari Pelanggan / SN / Tag..." oninput="filterDevices()">
+    <input type="text" id="search-input" class="form-control bg-dark border-secondary text-white shadow-none" placeholder="Cari: Nama / No HP / PPPoE / SN / Tag..." oninput="filterDevices()">
   </div>
 </div>
 
@@ -85,12 +85,15 @@ function renderDevices(devices) {
 
   container.innerHTML = devices.map(d => {
     const isOn = d.status === 'online';
+    const title = d.customerName ? d.customerName : (d.tags.join(', ') || 'Tanpa Tag');
+    const sub = d.customerName ? `${d.tags.join(', ') || 'Tanpa Tag'} | SN: ${d.serialNumber}` : `${d.model || 'ONU'} | SN: ${d.serialNumber}`;
     return `
       <div class="t-card mb-3 p-3" style="border-left: 4px solid ${isOn ? '#10b981' : '#ef4444'}">
         <div class="d-flex justify-content-between align-items-start mb-2">
           <div>
-            <div class="fw-bold" style="font-size: 15px;">${d.tags.join(', ') || 'Tanpa Tag'}</div>
-            <div class="text-secondary small">${d.model || 'ONU'} | SN: ${d.serialNumber}</div>
+            <div class="fw-bold" style="font-size: 15px;">${title}</div>
+            <div class="text-secondary small">${sub}</div>
+            ${d.customerPhone ? `<div class="text-secondary small">📞 ${d.customerPhone}</div>` : ``}
           </div>
           <span class="badge-status badge-${isOn ? 'resolved' : 'open'}">
             ${isOn ? 'Online' : 'Offline'}
@@ -137,7 +140,10 @@ function filterDevices() {
   const filtered = allDevices.filter(d => 
     d.tags.some(t => t.toLowerCase().includes(q)) || 
     d.serialNumber.toLowerCase().includes(q) ||
-    (d.customer_name && d.customer_name.toLowerCase().includes(q))
+    (d.pppoeUsername && d.pppoeUsername !== 'N/A' && String(d.pppoeUsername).toLowerCase().includes(q)) ||
+    (d.customerName && String(d.customerName).toLowerCase().includes(q)) ||
+    (d.customerPhone && String(d.customerPhone).toLowerCase().includes(q)) ||
+    (d.id && String(d.id).toLowerCase().includes(q))
   );
   renderDevices(filtered);
 }

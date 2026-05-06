@@ -334,11 +334,30 @@ router.get('/api/odps/:id/ports', requireTechSession, (req, res) => {
 router.get('/api/devices', requireTechSession, async (req, res) => {
   try {
     const { search, status, limit = 100, offset = 0 } = req.query;
+    const customers = db.prepare('SELECT id, name, phone, pppoe_username, genieacs_tag FROM customers').all();
+    const byPppoe = new Map();
+    const byTag = new Map();
+    for (const c of customers) {
+      const pu = String(c.pppoe_username || '').trim().toLowerCase();
+      const tg = String(c.genieacs_tag || '').trim();
+      if (pu) byPppoe.set(pu, c);
+      if (tg) byTag.set(tg, c);
+    }
+
     const result = await customerDevice.listAllDevices(1000);
     if (!result.ok) return res.json({ error: result.message });
     
     let devices = result.devices.map(d => {
       const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id);
+      const pu = String(mapped.pppoeUsername || '').trim();
+      const puKey = pu && pu !== 'N/A' ? pu.toLowerCase() : '';
+      let customer = puKey ? byPppoe.get(puKey) : null;
+      if (!customer && Array.isArray(d._tags)) {
+        for (const t of d._tags) {
+          const hit = byTag.get(String(t || '').trim());
+          if (hit) { customer = hit; break; }
+        }
+      }
       return {
         id: d._id, 
         tags: d._tags || [],
@@ -352,7 +371,10 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
         model: mapped.model,
         softwareVersion: mapped.softwareVersion,
         userConnected: mapped.totalAssociations,
-        ssid: mapped.ssid
+        ssid: mapped.ssid,
+        customerId: customer ? customer.id : null,
+        customerName: customer ? customer.name : '',
+        customerPhone: customer ? customer.phone : ''
       };
     });
 
@@ -362,7 +384,9 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
         d.id.toLowerCase().includes(s) ||
         d.tags.some(t => t.toLowerCase().includes(s)) || 
         d.serialNumber.toLowerCase().includes(s) || 
-        (d.pppoeUsername && d.pppoeUsername !== 'N/A' && d.pppoeUsername.toLowerCase().includes(s))
+        (d.pppoeUsername && d.pppoeUsername !== 'N/A' && d.pppoeUsername.toLowerCase().includes(s)) ||
+        (d.customerName && d.customerName.toLowerCase().includes(s)) ||
+        (d.customerPhone && d.customerPhone.toLowerCase().includes(s))
       );
     }
 
