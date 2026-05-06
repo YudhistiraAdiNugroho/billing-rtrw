@@ -156,8 +156,14 @@ router.post('/tickets/:id/update', requireTechSession, express.urlencoded({ exte
                                `🛠️ *Teknisi:* ${req.session.techName}\n` +
                                `📝 *Subjek:* ${ticket.subject}\n` +
                                `💬 *Pesan:* ${ticket.message}`;
+              const seen = new Set();
               for (const adminPhone of settings.whatsapp_admin_numbers) {
-                await sendWA(adminPhone, adminMsg);
+                let digits = String(adminPhone || '').replace(/\D/g, '');
+                if (!digits) continue;
+                if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+                if (seen.has(digits)) continue;
+                seen.add(digits);
+                await sendWA(digits, adminMsg);
               }
             }
           }

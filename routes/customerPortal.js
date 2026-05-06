@@ -570,8 +570,14 @@ router.post('/register', async (req, res) => {
       const mapLine = (latStr && lngStr) ? `\n🗺️ *Lokasi:* https://maps.google.com/?q=${encodeURIComponent(latStr)},${encodeURIComponent(lngStr)}` : '';
       const finalAdminMsg = adminMsg + mapLine;
       
+      const seen = new Set();
       for (const adminPhone of settings.whatsapp_admin_numbers) {
-        try { await sendWA(adminPhone, finalAdminMsg); } catch(e) { /* ignore */ }
+        let digits = String(adminPhone || '').replace(/\D/g, '');
+        if (!digits) continue;
+        if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+        if (seen.has(digits)) continue;
+        seen.add(digits);
+        try { await sendWA(digits, finalAdminMsg); } catch(e) { /* ignore */ }
       }
     }
 
@@ -1252,17 +1258,29 @@ router.post('/tickets/create', async (req, res) => {
 
         // Kirim ke Admin
         if (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) {
+          const seen = new Set();
           for (const adminPhone of settings.whatsapp_admin_numbers) {
-            await sendWA(adminPhone, waMsg);
+            let digits = String(adminPhone || '').replace(/\D/g, '');
+            if (!digits) continue;
+            if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+            if (seen.has(digits)) continue;
+            seen.add(digits);
+            await sendWA(digits, waMsg);
           }
         }
 
         // Kirim ke semua Teknisi Aktif
         const techSvc = require('../services/techService');
         const technicians = techSvc.getAllTechnicians().filter(t => t.is_active === 1);
+        const seenTech = new Set();
         for (const tech of technicians) {
           if (tech.phone) {
-            await sendWA(tech.phone, waMsg);
+            let digits = String(tech.phone || '').replace(/\D/g, '');
+            if (!digits) continue;
+            if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+            if (seenTech.has(digits)) continue;
+            seenTech.add(digits);
+            await sendWA(digits, waMsg);
           }
         }
       }
