@@ -19,10 +19,17 @@
     .badgey.w{color:#fde68a;border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.1)}
     .tbl td{border-top:1px solid rgba(148,163,184,.12);padding:8px 0;font-size:12px;vertical-align:top}
     .tbl td:first-child{color:var(--muted);width:120px;padding-right:12px}
+    .bn{position:fixed;left:0;right:0;bottom:0;z-index:2000;padding:10px 12px;background:rgba(15,23,42,.92);border-top:1px solid rgba(148,163,184,.14);backdrop-filter:blur(8px)}
+    .bnw{max-width:980px;margin:0 auto;display:flex;gap:8px;justify-content:space-between}
+    .bni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 6px;border-radius:14px;text-decoration:none;color:var(--muted);border:1px solid rgba(148,163,184,.08);background:rgba(30,41,59,.35)}
+    .bni i{font-size:18px;line-height:1}
+    .bni span{font-size:10px;font-weight:800;letter-spacing:.02em}
+    .bni.active{color:#e0e7ff;border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.12)}
+    .bni.active i{color:#a5b4fc}
   </style>
 </head>
 <body>
-  <div class="container" style="max-width:980px;padding-top:14px;padding-bottom:40px">
+  <div class="container" style="max-width:980px;padding-top:14px;padding-bottom:96px">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <div>
         <div style="font-weight:900;letter-spacing:-.02em">Kolektor</div>
@@ -34,6 +41,37 @@
     <% if (msg) { %>
       <div class="alert alert-<%= msg.type==='error'?'danger':'success' %>"><%= msg.text %></div>
     <% } %>
+
+    <div class="row g-2 mb-3">
+      <div class="col-6 col-md-3">
+        <a class="cardx p-3 d-block text-decoration-none" href="/collector?<%= new URLSearchParams({ month: String(month), year: String(year), status: 'unpaid', scope: 'today', search: String(search||''), jump: 'data' }).toString() %>#data-tagihan">
+          <div class="muted" style="font-size:12px">Tagihan Hari Ini (tgl <%= todayDay %>)</div>
+          <div style="font-weight:900;font-size:20px"><%= Number(summary?.today_count || 0) %></div>
+          <div class="muted" style="font-size:12px">Rp <%= Number(summary?.today_total || 0).toLocaleString('id-ID') %></div>
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a class="cardx p-3 d-block text-decoration-none" href="/collector?<%= new URLSearchParams({ month: String(month), year: String(year), status: 'unpaid', scope: 'unpaid', search: String(search||''), jump: 'data' }).toString() %>#data-tagihan">
+          <div class="muted" style="font-size:12px">Tagihan Belum Bayar</div>
+          <div style="font-weight:900;font-size:20px"><%= Number(summary?.unpaid_count || 0) %></div>
+          <div class="muted" style="font-size:12px">Rp <%= Number(summary?.unpaid_total || 0).toLocaleString('id-ID') %></div>
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a class="cardx p-3 d-block text-decoration-none" href="/collector?<%= new URLSearchParams({ month: String(month), year: String(year), status: 'unpaid', scope: 'isolir', search: String(search||''), jump: 'data' }).toString() %>#data-tagihan">
+          <div class="muted" style="font-size:12px">Tagihan Isolir</div>
+          <div style="font-weight:900;font-size:20px"><%= Number(summary?.isolir_count || 0) %></div>
+          <div class="muted" style="font-size:12px">Rp <%= Number(summary?.isolir_total || 0).toLocaleString('id-ID') %></div>
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a class="cardx p-3 d-block text-decoration-none" href="/collector?<%= new URLSearchParams({ month: String(month), year: String(year), status: 'unpaid', scope: 'multi', search: String(search||''), jump: 'data' }).toString() %>#data-tagihan">
+          <div class="muted" style="font-size:12px">Menunggak &gt; 1 Bulan</div>
+          <div style="font-weight:900;font-size:20px"><%= Number(summary?.multi_customer_count || 0) %></div>
+          <div class="muted" style="font-size:12px">Rp <%= Number(summary?.multi_total || 0).toLocaleString('id-ID') %></div>
+        </a>
+      </div>
+    </div>
 
     <div class="cardx p-3 mb-3">
       <div class="d-flex align-items-center justify-content-between mb-2">
@@ -57,6 +95,13 @@
           <option value="paid" <%= String(status)==='paid' ? 'selected' : '' %>>Lunas</option>
           <option value="all" <%= String(status)==='all' ? 'selected' : '' %>>Semua</option>
         </select>
+        <select class="form-control" name="scope" style="max-width:200px">
+          <option value="" <%= !scope ? 'selected' : '' %>>Semua Pelanggan</option>
+          <option value="today" <%= String(scope)==='today' ? 'selected' : '' %>>Tagihan Hari Ini</option>
+          <option value="unpaid" <%= String(scope)==='unpaid' ? 'selected' : '' %>>Belum Bayar (Filter)</option>
+          <option value="isolir" <%= String(scope)==='isolir' ? 'selected' : '' %>>Isolir</option>
+          <option value="multi" <%= String(scope)==='multi' ? 'selected' : '' %>>Menunggak &gt; 1 Bulan</option>
+        </select>
         <input class="form-control" name="search" value="<%= search || '' %>" placeholder="Cari (opsional): nama / HP / PPPoE / TAG">
         <button class="btn btn-primary" type="submit" style="min-width:90px"><i class="bi bi-funnel"></i></button>
       </form>
@@ -65,7 +110,7 @@
       </div>
     </div>
 
-    <div class="cardx p-3 mb-3">
+    <div class="cardx p-3 mb-3" id="data-tagihan">
       <div style="font-weight:800" class="mb-2"><i class="bi bi-list-ul"></i> Data Tagihan (<%= (invoices || []).length %>)</div>
       <% if (!invoices || invoices.length === 0) { %>
         <div class="muted" style="font-size:12px">Tidak ada data tagihan untuk filter ini.</div>
@@ -97,6 +142,7 @@
 
               <table class="tbl mt-2" style="width:100%;border-collapse:collapse">
                 <tr><td>Periode</td><td><%= inv.period_month %>/<%= inv.period_year %></td></tr>
+                <tr><td>Jatuh Tempo</td><td><%= inv.isolate_day ? ('Tgl ' + inv.isolate_day) : '-' %></td></tr>
                 <tr><td>ID Pelanggan</td><td>#<%= inv.customer_id %></td></tr>
                 <tr><td>PPPoE</td><td><%= inv.pppoe_username ? inv.pppoe_username : '-' %></td></tr>
                 <tr><td>Tag</td><td><%= inv.genieacs_tag ? inv.genieacs_tag : '-' %></td></tr>
@@ -169,5 +215,47 @@
       <% } %>
     </div>
   </div>
+
+  <%
+    const qsBase = { month: String(month), year: String(year), search: String(search || '') };
+    const qsAll = new URLSearchParams({ ...qsBase, status: String(status || 'all'), scope: '' }).toString();
+    const qsToday = new URLSearchParams({ ...qsBase, status: 'unpaid', scope: 'today' }).toString();
+    const qsUnpaid = new URLSearchParams({ ...qsBase, status: 'unpaid', scope: 'unpaid' }).toString();
+    const qsIsolir = new URLSearchParams({ ...qsBase, status: 'unpaid', scope: 'isolir' }).toString();
+    const qsMulti = new URLSearchParams({ ...qsBase, status: 'unpaid', scope: 'multi' }).toString();
+    const activeScope = String(scope || '');
+    const activeStatus = String(status || '');
+  %>
+  <div class="bn">
+    <div class="bnw">
+      <a class="bni <%= (!activeScope && (activeStatus === 'all' || activeStatus === 'paid' || activeStatus === 'unpaid')) ? 'active' : '' %>" href="/collector?<%= qsAll %>#data-tagihan">
+        <i class="bi bi-grid-3x3-gap"></i><span>Semua</span>
+      </a>
+      <a class="bni <%= activeScope === 'today' ? 'active' : '' %>" href="/collector?<%= qsToday %>#data-tagihan">
+        <i class="bi bi-calendar-check"></i><span>Hari Ini</span>
+      </a>
+      <a class="bni <%= activeScope === 'unpaid' ? 'active' : '' %>" href="/collector?<%= qsUnpaid %>#data-tagihan">
+        <i class="bi bi-exclamation-circle"></i><span>Belum</span>
+      </a>
+      <a class="bni <%= activeScope === 'isolir' ? 'active' : '' %>" href="/collector?<%= qsIsolir %>#data-tagihan">
+        <i class="bi bi-shield-exclamation"></i><span>Isolir</span>
+      </a>
+      <a class="bni <%= activeScope === 'multi' ? 'active' : '' %>" href="/collector?<%= qsMulti %>#data-tagihan">
+        <i class="bi bi-layers"></i><span>&gt;1 Bln</span>
+      </a>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      try {
+        const u = new URL(window.location.href);
+        if (u.hash === '#data-tagihan') {
+          const el = document.getElementById('data-tagihan');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } catch (e) {}
+    })();
+  </script>
 </body>
 </html>

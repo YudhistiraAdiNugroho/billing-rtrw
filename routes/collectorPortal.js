@@ -52,6 +52,8 @@ router.get('/', requireCollectorSession, (req, res) => {
   const year = parseInt(req.query.year || now.getFullYear(), 10) || now.getFullYear();
   const status = String(req.query.status || 'unpaid').trim() || 'unpaid'; // unpaid, paid, all
   const search = String(req.query.search || '').trim();
+  const scope = String(req.query.scope || '').trim(); // today, unpaid, isolir
+  const todayDay = now.getDate();
 
   let q = `
     SELECT i.*,
@@ -72,9 +74,29 @@ router.get('/', requireCollectorSession, (req, res) => {
     JOIN customers c ON i.customer_id = c.id
     LEFT JOIN packages p ON c.package_id = p.id
     LEFT JOIN routers r ON c.router_id = r.id
-    WHERE i.period_month=? AND i.period_year=?
+    WHERE 1=1
   `;
-  const params = [month, year];
+  const params = [];
+  if (scope !== 'multi') {
+    q += ' AND i.period_month=? AND i.period_year=?';
+    params.push(month, year);
+  }
+  if (scope === 'today') {
+    q += ' AND c.isolate_day = ?';
+    params.push(todayDay);
+  } else if (scope === 'isolir') {
+    q += " AND c.status = 'suspended'";
+  } else if (scope === 'multi') {
+    q += `
+      AND i.status='unpaid'
+      AND i.customer_id IN (
+        SELECT customer_id FROM invoices
+        WHERE status='unpaid'
+        GROUP BY customer_id
+        HAVING COUNT(1) > 1
+      )
+    `;
+  }
   if (status !== 'all') {
     q += ' AND i.status=?';
     params.push(status);
@@ -86,6 +108,35 @@ router.get('/', requireCollectorSession, (req, res) => {
   }
   q += ' ORDER BY c.name ASC, i.id DESC LIMIT 500';
   const list = db.prepare(q).all(...params);
+
+  const summaryPeriod = db.prepare(`
+    SELECT
+      SUM(CASE WHEN i.status='unpaid' THEN 1 ELSE 0 END) as unpaid_count,
+      SUM(CASE WHEN i.status='unpaid' THEN i.amount ELSE 0 END) as unpaid_total,
+      SUM(CASE WHEN i.status='unpaid' AND c.isolate_day=? THEN 1 ELSE 0 END) as today_count,
+      SUM(CASE WHEN i.status='unpaid' AND c.isolate_day=? THEN i.amount ELSE 0 END) as today_total,
+      SUM(CASE WHEN i.status='unpaid' AND c.status='suspended' THEN 1 ELSE 0 END) as isolir_count,
+      SUM(CASE WHEN i.status='unpaid' AND c.status='suspended' THEN i.amount ELSE 0 END) as isolir_total
+    FROM invoices i
+    JOIN customers c ON i.customer_id = c.id
+    WHERE i.period_month=? AND i.period_year=?
+  `).get(todayDay, todayDay, month, year) || {};
+
+  const summaryMulti = db.prepare(`
+    SELECT
+      COUNT(1) as multi_customer_count,
+      SUM(x.cnt) as multi_invoice_count,
+      SUM(x.total_amount) as multi_total
+    FROM (
+      SELECT customer_id, COUNT(1) as cnt, SUM(amount) as total_amount
+      FROM invoices
+      WHERE status='unpaid'
+      GROUP BY customer_id
+      HAVING COUNT(1) > 1
+    ) x
+  `).get() || {};
+
+  const summary = { ...summaryPeriod, ...summaryMulti };
 
   const invoiceIds = list.map(i => Number(i?.id || 0)).filter(n => Number.isFinite(n) && n > 0);
   const pendingMap = new Map();
@@ -121,6 +172,9 @@ router.get('/', requireCollectorSession, (req, res) => {
     year,
     status,
     search,
+    scope,
+    todayDay,
+    summary,
     invoices: list,
     pendingMap,
     myReqs,
