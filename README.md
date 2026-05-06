@@ -182,6 +182,7 @@ Port mengikuti **`server_port`** di `settings.json` (default **3001**). Ganti `[
 | Admin | `http://[IP-SERVER]:3001/admin/login` |
 | Teknisi | `http://[IP-SERVER]:3001/tech/login` |
 | Agen | `http://[IP-SERVER]:3001/agent/login` |
+| Kolektor | `http://[IP-SERVER]:3001/collector/login` |
 | Health check | `http://[IP-SERVER]:3001/health` |
 
 Kredensial admin **awal** biasanya sesuai `admin_username` / `admin_password` di `settings.json` (contoh bawaan sering `admin` / `admin123`) — **wajib diganti** sebelum dipakai publik.
