@@ -266,7 +266,8 @@ const {
 
 router.get('/login', (req, res) => {
   const settings = getSettingsWithCache();
-  res.render('login', { error: null, settings });
+  const packages = customerSvc.getAllPackages().filter(p => p.is_active !== 0);
+  res.render('login', { error: null, settings, packages });
 });
 
 router.get('/check-billing', async (req, res) => {
@@ -642,9 +643,11 @@ router.post('/login', async (req, res) => {
   // 3. Tahap 3: Verifikasi Akhir
   if (!device && !customer) {
     logger.warn('[Login] Gagal: pelanggan tidak ditemukan.');
+    const packages = customerSvc.getAllPackages().filter(p => p.is_active !== 0);
     return res.render('login', { 
       error: 'Data pelanggan tidak ditemukan. Pastikan nomor WhatsApp sudah benar.', 
-      settings 
+      settings,
+      packages
     });
   }
 
@@ -686,7 +689,8 @@ router.post('/login', async (req, res) => {
         logger.info('[Login] OTP dikirim via WhatsApp.');
       } catch (e) {
         logger.error(`[Login] Gagal kirim OTP via WhatsApp: ${e.message}`);
-        return res.render('login', { error: e.message, settings });
+        const packages = customerSvc.getAllPackages().filter(p => p.is_active !== 0);
+        return res.render('login', { error: e.message, settings, packages });
       }
     }
 
@@ -717,7 +721,8 @@ router.post('/login-otp', (req, res) => {
 
   if (Date.now() > pending.expiry) {
     delete req.session.pending_login;
-    return res.render('login', { error: 'Kode OTP telah kadaluarsa. Silakan login kembali.', settings });
+    const packages = customerSvc.getAllPackages().filter(p => p.is_active !== 0);
+    return res.render('login', { error: 'Kode OTP telah kadaluarsa. Silakan login kembali.', settings, packages });
   }
 
   if (otp === pending.otp) {

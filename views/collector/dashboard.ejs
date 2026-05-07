@@ -210,6 +210,13 @@
                 </tr>
               <% }) %>
             </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3" class="muted" style="font-size:12px">Total pengajuan (halaman ini)</td>
+                <td class="text-end" style="font-size:12px;font-weight:900">Rp <%= (myReqs || []).reduce((s, r) => s + (Number(r.amount||0) || 0), 0).toLocaleString('id-ID') %></td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       <% } %>

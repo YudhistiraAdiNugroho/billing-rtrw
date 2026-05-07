@@ -275,9 +275,39 @@
           <% if (settings.company_phone) { %>
             <div class="info-box">
               <div class="info-title"><i class="bi bi-headset"></i> Bantuan</div>
-              <p class="info-text">Admin: <a href="https://wa.me/<%= String(settings.company_phone).replace(/\\D/g,'') %>" target="_blank" rel="noopener" style="color:#a5b4fc;text-decoration:none;font-weight:700"><%= settings.company_phone %></a></p>
+              <p class="info-text">
+                WhatsApp: <a href="https://wa.me/<%= String(settings.company_phone).replace(/\\D/g,'') %>" target="_blank" rel="noopener" style="color:#a5b4fc;text-decoration:none;font-weight:700"><%= settings.company_phone %></a>
+                <% if (settings.company_email) { %>
+                  <br>Email: <a href="mailto:<%= settings.company_email %>" style="color:#a5b4fc;text-decoration:none;font-weight:700"><%= settings.company_email %></a>
+                <% } %>
+              </p>
             </div>
           <% } %>
+          <div class="info-box">
+            <div class="info-title"><i class="bi bi-wifi"></i> Paket & Harga</div>
+            <% const pkgs = (typeof packages !== 'undefined' && Array.isArray(packages)) ? packages : []; %>
+            <% if (pkgs.length === 0) { %>
+              <p class="info-text">Belum ada paket yang aktif.</p>
+            <% } else { %>
+              <% const list = pkgs.slice().sort((a,b) => Number(a.price||0) - Number(b.price||0)); %>
+              <div style="max-height:160px;overflow:auto;padding-right:4px">
+                <% list.forEach(p => { %>
+                  <div style="padding:8px 0;border-top:1px solid rgba(148,163,184,.12)">
+                    <div style="font-weight:900;font-size:12px">
+                      <%= p.name %> — Rp <%= Number(p.price||0).toLocaleString('id-ID') %>/bulan
+                    </div>
+                    <div class="info-text" style="margin-top:2px">
+                      <% if (Number(p.speed_down||0) > 0 || Number(p.speed_up||0) > 0) { %>
+                        <span><%= Number(p.speed_down||0) > 0 ? (Math.round(Number(p.speed_down||0)/1000) + ' Mbps') : '-' %> / <%= Number(p.speed_up||0) > 0 ? (Math.round(Number(p.speed_up||0)/1000) + ' Mbps') : '-' %></span>
+                        <span> • </span>
+                      <% } %>
+                      <span><%= p.description ? String(p.description) : '-' %></span>
+                    </div>
+                  </div>
+                <% }) %>
+              </div>
+            <% } %>
+          </div>
         </div>
 
         <div class="text-center footer-text mt-4">
