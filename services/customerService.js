@@ -259,7 +259,14 @@ async function suspendCustomer(id) {
 
   if (customer.connection_type === 'static' && customer.static_ip) {
     const pkg = getPackageById(customer.package_id);
-    const limit = pkg ? `${Math.round(pkg.speed_up/1000)}M/${Math.round(pkg.speed_down/1000)}M` : '5M/5M';
+    let limit = '5M/5M';
+    if (pkg) {
+      const up = Number(pkg.speed_up || 0) || 0;
+      const down = Number(pkg.speed_down || 0) || 0;
+      const upMbps = up > 0 ? Math.max(1, Math.round(up / 1000)) : 5;
+      const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
+      limit = `${upMbps}M/${downMbps}M`;
+    }
     await mikrotikSvc.manageStaticIp({
       ip: customer.static_ip,
       name: customer.name,
@@ -289,7 +296,14 @@ async function activateCustomer(id) {
 
   if (customer.connection_type === 'static' && customer.static_ip) {
     const pkg = getPackageById(customer.package_id);
-    const limit = pkg ? `${Math.round(pkg.speed_up/1000)}M/${Math.round(pkg.speed_down/1000)}M` : '5M/5M';
+    let limit = '5M/5M';
+    if (pkg) {
+      const up = Number(pkg.speed_up || 0) || 0;
+      const down = Number(pkg.speed_down || 0) || 0;
+      const upMbps = up > 0 ? Math.max(1, Math.round(up / 1000)) : 5;
+      const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
+      limit = `${upMbps}M/${downMbps}M`;
+    }
     await mikrotikSvc.manageStaticIp({
       ip: customer.static_ip,
       name: customer.name,

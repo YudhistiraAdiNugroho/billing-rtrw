@@ -812,36 +812,59 @@ async function setupIsolirFirewall(routerId = null) {
     conn = await getConnection(routerId);
     const settings = getSettingsWithCache();
 
-    /** IP portal (app_url) untuk rule allow — pelanggan isolir tetap bisa DNS + ke server billing saja */
+    /** IP portal (app_url) untuk rule allow/NAT — pelanggan isolir tetap bisa DNS + ke server billing saja */
     let billingIp = '';
+    let httpNatPort = 80;
+    let httpsNatPort = 443;
     try {
       const raw = String(settings.app_url || '').trim();
       const normalized = raw && /^https?:\/\//i.test(raw) ? raw : (raw ? `https://${raw}` : '');
-      const u = new URL(normalized || 'http://127.0.0.1');
+      const u = new URL(normalized || 'http://127.0.0.1:4555');
+      const isHttps = u.protocol === 'https:';
+      const port = u.port ? parseInt(u.port, 10) : (isHttps ? 443 : 80);
+      httpNatPort = isHttps ? 80 : port;
+      httpsNatPort = isHttps ? port : 443;
       let host = u.hostname;
-      if (host && !/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
-        host = dns.lookupSync(host, { family: 4 });
-      }
+      if (host && !/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) host = dns.lookupSync(host, { family: 4 });
       billingIp = host || '';
     } catch (e) {
       logger.warn('[setupIsolirFirewall] app_url tidak valid / tidak bisa di-resolve:', e.message);
     }
 
-    // 1. NAT HTTP (legacy: billing di mesin yang sama port 3002; sesuaikan jika portal remote)
+    // 1. NAT HTTP/HTTPS untuk mengarahkan pelanggan isolir ke portal billing
     const natMenu = conn.client.menu('/ip/firewall/nat');
-    const existingNat = await natMenu.where('comment', 'ISOLIR_REDIRECT').get();
-
-    if (existingNat.length === 0) {
-      await natMenu.add({
+    const ensureNat = async (comment, dstPort, toPort) => {
+      if (!billingIp) return;
+      const desired = {
         chain: 'dstnat',
         'src-address-list': 'LIST_ISOLIR',
         protocol: 'tcp',
-        'dst-port': '80',
-        action: 'redirect',
-        'to-ports': '3002',
-        comment: 'ISOLIR_REDIRECT'
-      });
-    }
+        'dst-port': String(dstPort),
+        action: 'dst-nat',
+        'to-addresses': billingIp,
+        'to-ports': String(toPort),
+        comment,
+      };
+
+      const ex = await natMenu.where('comment', comment).get();
+      if (ex && ex.length > 0) {
+        const id = ex[0]['.id'] || ex[0].id;
+        await natMenu.set(desired, id);
+        return;
+      }
+      if (comment === 'BILLING_API_ISOLIR_HTTP') {
+        const legacy = await natMenu.where('comment', 'ISOLIR_REDIRECT').get();
+        if (legacy && legacy.length > 0) {
+          const id = legacy[0]['.id'] || legacy[0].id;
+          await natMenu.set(desired, id);
+          return;
+        }
+      }
+      await natMenu.add(desired);
+    };
+
+    await ensureNat('BILLING_API_ISOLIR_HTTP', 80, httpNatPort);
+    await ensureNat('BILLING_API_ISOLIR_HTTPS', 443, httpsNatPort);
 
     const filterMenu = conn.client.menu('/ip/firewall/filter');
     let blockRows = await filterMenu.where('comment', 'BLOCK_ISOLIR').get();
@@ -913,12 +936,13 @@ async function manageStaticIp(data, routerId = null) {
     // 1. Manage Simple Queue for Bandwidth
     const queueMenu = conn.client.menu('/queue/simple');
     const existingQueue = await queueMenu.where('target', `${ip}/32`).get();
+    const safeName = String(name || '').trim().replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 40) || String(ip || '').trim();
     
     const queueData = {
-      name: `CUST-${name}`,
+      name: `CUST-${safeName}`,
       target: `${ip}/32`,
       'max-limit': limit || '5M/5M',
-      comment: `Managed by Billing - ${name}`
+      comment: `Managed by Billing - ${String(name || '').trim()}`
     };
 
     if (existingQueue.length > 0) {
