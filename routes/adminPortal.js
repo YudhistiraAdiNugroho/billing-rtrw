@@ -27,6 +27,7 @@ const inventorySvc = require('../services/inventoryService');
 const auditSvc = require('../services/auditTrailService');
 const diagnosticsSvc = require('../services/diagnosticsService');
 const attendanceSvc = require('../services/attendanceService');
+const payrollSvc = require('../services/payrollService');
 const axios = require('axios');
 const crypto = require('crypto');
 
@@ -4274,5 +4275,185 @@ router.get('/attendance/export', requireAdminSession, (req, res) => {
   }
 });
 
+
+// ─── PAYROLL / GAJI KARYAWAN ───────────────────────────────────────────────
+
+router.get('/payroll', requireAdmin, (req, res) => {
+  const now = new Date();
+  const month = parseInt(req.query.month) || (now.getMonth() + 1);
+  const year = parseInt(req.query.year) || now.getFullYear();
+
+  const employees = payrollSvc.getAllEmployees();
+  const slips = payrollSvc.getSlipsByPeriod(month, year);
+  const summary = payrollSvc.getPayrollSummary(month, year);
+
+  const { getSettingsWithCache } = require('../config/settingsManager');
+  res.render('admin/payroll', {
+    title: 'Gaji Karyawan',
+    company: getSettingsWithCache().company_header || 'My ISP',
+    employees,
+    slips,
+    summary,
+    selectedMonth: month,
+    selectedYear: year,
+    msg: req.session._msg || null
+  });
+  req.session._msg = null;
+});
+
+router.post('/payroll/settings', requireAdmin, (req, res) => {
+  try {
+    payrollSvc.upsertPayrollSetting(req.body);
+    req.session._msg = { type: 'success', text: 'Pengaturan gaji berhasil disimpan.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/payroll');
+});
+
+router.post('/payroll/generate', requireAdmin, (req, res) => {
+  const month = parseInt(req.body.month);
+  const year = parseInt(req.body.year);
+  if (!month || !year) {
+    req.session._msg = { type: 'error', text: 'Bulan dan tahun diperlukan' };
+    return res.redirect('/admin/payroll');
+  }
+
+  const result = payrollSvc.generateAllSlips(month, year);
+  req.session._msg = { 
+    type: 'success', 
+    text: `Generate selesai: ${result.generated} berhasil, ${result.skipped} dilewati, ${result.errors.length} error.` 
+  };
+  res.redirect(`/admin/payroll?month=${month}&year=${year}`);
+});
+
+router.post('/payroll/slip/:id/deduction', requireAdmin, express.json(), (req, res) => {
+  try {
+    const { other_deduction, other_deduction_note } = req.body;
+    payrollSvc.updateSlipDeductions(req.params.id, other_deduction, other_deduction_note);
+    res.json({ success: true, message: 'Potongan diperbarui' });
+  } catch (e) {
+    res.json({ success: false, message: e.message });
+  }
+});
+
+router.post('/payroll/slip/:id/approve', requireAdmin, (req, res) => {
+  try {
+    payrollSvc.approveSlip(req.params.id);
+    req.session._msg = { type: 'success', text: 'Slip berhasil di-approve.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: e.message };
+  }
+  res.redirect('back');
+});
+
+router.post('/payroll/slip/:id/paid', requireAdmin, (req, res) => {
+  try {
+    payrollSvc.markSlipPaid(req.params.id);
+    req.session._msg = { type: 'success', text: 'Slip ditandai lunas (paid).' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: e.message };
+  }
+  res.redirect('back');
+});
+
+router.post('/payroll/slip/:id/delete', requireAdmin, (req, res) => {
+  try {
+    payrollSvc.deleteSlip(req.params.id);
+    req.session._msg = { type: 'success', text: 'Slip berhasil dihapus.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: e.message };
+  }
+  res.redirect('back');
+});
+
+router.post('/payroll/bulk-approve', requireAdmin, (req, res) => {
+  try {
+    payrollSvc.bulkApprove(parseInt(req.body.month), parseInt(req.body.year));
+    req.session._msg = { type: 'success', text: 'Semua slip draft berhasil di-approve.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: e.message };
+  }
+  res.redirect('back');
+});
+
+router.post('/payroll/bulk-paid', requireAdmin, (req, res) => {
+  try {
+    payrollSvc.bulkMarkPaid(parseInt(req.body.month), parseInt(req.body.year));
+    req.session._msg = { type: 'success', text: 'Semua slip approved ditandai lunas.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: e.message };
+  }
+  res.redirect('back');
+});
+
+router.post('/payroll/delete-drafts', requireAdmin, (req, res) => {
+  try {
+    payrollSvc.deleteSlipsByPeriod(parseInt(req.body.month), parseInt(req.body.year));
+    req.session._msg = { type: 'success', text: 'Semua slip draft dihapus.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: e.message };
+  }
+  res.redirect('back');
+});
+
+router.get('/payroll/slip/:id/print', requireAdmin, (req, res) => {
+  const slip = payrollSvc.getSlipById(req.params.id);
+  if (!slip) return res.status(404).send('Slip tidak ditemukan');
+  
+  const { getSettingsWithCache } = require('../config/settingsManager');
+  res.render('admin/print_payslip', {
+    company: getSettingsWithCache().company_header || 'My ISP',
+    slip
+  });
+});
+
+router.post('/payroll/slip/:id/send-wa', requireAdmin, async (req, res) => {
+  try {
+    const slip = payrollSvc.getSlipById(req.params.id);
+    if (!slip) throw new Error('Slip tidak ditemukan');
+    
+    const phone = payrollSvc.getEmployeePhone(slip.employee_type, slip.employee_id);
+    if (!phone) throw new Error('Nomor HP karyawan tidak diset');
+
+    const { getSettingsWithCache } = require('../config/settingsManager');
+    const settings = getSettingsWithCache();
+    if (!settings.whatsapp_enabled) throw new Error('WhatsApp bot tidak aktif');
+
+    const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+    if (!whatsappStatus || whatsappStatus.connection !== 'open') {
+      throw new Error('WhatsApp bot tidak terkoneksi');
+    }
+
+    const monthNames = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    
+    const msg = `🧾 *SLIP GAJI KARYAWAN*\n\n` +
+      `👤 *Nama:* ${slip.employee_name}\n` +
+      `📅 *Periode:* ${monthNames[slip.period_month]} ${slip.period_year}\n` +
+      `🏢 *Status:* ${slip.status.toUpperCase()}\n\n` +
+      `*PENDAPATAN:*\n` +
+      `- Gaji Pokok: Rp ${slip.base_salary.toLocaleString('id-ID')}\n` +
+      (slip.transport_allowance ? `- Tunj. Transport: Rp ${slip.transport_allowance.toLocaleString('id-ID')}\n` : '') +
+      (slip.meal_allowance ? `- Tunj. Makan: Rp ${slip.meal_allowance.toLocaleString('id-ID')}\n` : '') +
+      (slip.phone_allowance ? `- Tunj. Pulsa: Rp ${slip.phone_allowance.toLocaleString('id-ID')}\n` : '') +
+      (slip.other_allowance ? `- Tunj. Lain: Rp ${slip.other_allowance.toLocaleString('id-ID')}\n` : '') +
+      (slip.ticket_bonus ? `- Bonus Tiket: +Rp ${slip.ticket_bonus.toLocaleString('id-ID')}\n` : '') +
+      (slip.collection_commission ? `- Komisi Tagihan: +Rp ${slip.collection_commission.toLocaleString('id-ID')}\n` : '') +
+      (slip.overtime_bonus ? `- Lembur: +Rp ${slip.overtime_bonus.toLocaleString('id-ID')}\n` : '') +
+      `*Total Pendapatan: Rp ${slip.gross_salary.toLocaleString('id-ID')}*\n\n` +
+      `*POTONGAN:*\n` +
+      (slip.absence_deduction ? `- Potongan Absen: -Rp ${slip.absence_deduction.toLocaleString('id-ID')}\n` : '') +
+      (slip.late_deduction ? `- Potongan Terlambat: -Rp ${slip.late_deduction.toLocaleString('id-ID')}\n` : '') +
+      (slip.other_deduction ? `- Potongan Lain: -Rp ${slip.other_deduction.toLocaleString('id-ID')}\n` : '') +
+      `*Total Potongan: Rp ${slip.total_deductions.toLocaleString('id-ID')}*\n\n` +
+      `💰 *GAJI BERSIH: Rp ${slip.net_salary.toLocaleString('id-ID')}*\n\n` +
+      `Terima kasih atas kerja keras Anda! 🙏`;
+
+    await sendWA(phone, msg);
+    res.json({ success: true, message: 'Terkirim' });
+  } catch (e) {
+    res.json({ success: false, message: e.message });
+  }
+});
 
 module.exports = router;

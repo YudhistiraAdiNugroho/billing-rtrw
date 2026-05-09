@@ -20,6 +20,14 @@ process.on('unhandledRejection', (reason, promise) => {
   logger.error(`Unhandled Rejection: ${errorMsg}`);
 });
 
+// Handle uncaught exceptions to prevent server crashes from external service failures
+// (e.g. ros-client throws uncaught errors when MikroTik router is unreachable)
+process.on('uncaughtException', (err) => {
+  const errorMsg = err instanceof Error ? err.stack : String(err);
+  logger.error(`uncaughtException: ${errorMsg}`);
+  // Don't exit process — keep server running despite transient connection errors
+});
+
 // Settings Management
 const session = require('express-session');
 const { getSetting } = require('./config/settingsManager');
