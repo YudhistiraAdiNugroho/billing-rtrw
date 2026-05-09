@@ -9,6 +9,27 @@ const db = require('../config/database');
 const oltSvc = require('../services/oltService');
 const attendanceSvc = require('../services/attendanceService');
 
+const waSendDedup = new Map();
+function normalizeWaDigits(input) {
+  let digits = String(input || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+  if (digits.length < 8) return '';
+  return digits;
+}
+function shouldSendWa(key, ttlMs = 15000) {
+  const now = Date.now();
+  const last = waSendDedup.get(key);
+  if (last && (now - last) < ttlMs) return false;
+  waSendDedup.set(key, now);
+  if (waSendDedup.size > 5000) {
+    for (const [k, t] of waSendDedup.entries()) {
+      if ((now - t) > 10 * 60 * 1000) waSendDedup.delete(k);
+    }
+  }
+  return true;
+}
+
 function requireTechSession(req, res, next) {
   if (req.session && req.session.isTechnician && req.session.techId) {
     return next();
@@ -146,7 +167,11 @@ router.post('/tickets/:id/update', requireTechSession, express.urlencoded({ exte
 
             // Kirim ke Pelanggan
             if (ticket.customer_phone) {
-              await sendWA(ticket.customer_phone, waMsg);
+              const digits = normalizeWaDigits(ticket.customer_phone);
+              if (digits) {
+                const key = `ticket:resolved:customer:${ticketId}:${digits}`;
+                if (shouldSendWa(key)) await sendWA(digits, waMsg);
+              }
             }
 
             // Kirim ke Admin
@@ -157,13 +182,14 @@ router.post('/tickets/:id/update', requireTechSession, express.urlencoded({ exte
                                `🛠️ *Teknisi:* ${req.session.techName}\n` +
                                `📝 *Subjek:* ${ticket.subject}\n` +
                                `💬 *Pesan:* ${ticket.message}`;
-              const seen = new Set();
+              const recipients = new Set();
               for (const adminPhone of settings.whatsapp_admin_numbers) {
-                let digits = String(adminPhone || '').replace(/\D/g, '');
-                if (!digits) continue;
-                if (digits.startsWith('0')) digits = '62' + digits.slice(1);
-                if (seen.has(digits)) continue;
-                seen.add(digits);
+                const digits = normalizeWaDigits(adminPhone);
+                if (digits) recipients.add(digits);
+              }
+              for (const digits of recipients) {
+                const key = `ticket:resolved:admin:${ticketId}:${digits}`;
+                if (!shouldSendWa(key)) continue;
                 await sendWA(digits, adminMsg);
               }
             }
