@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title><%= title %> | <%= company %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+  <style>
+    .attendance-card {
+      background: var(--bg2);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .status-checked-in {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+    }
+    .status-checked-out {
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+    }
+    .status-not-checked-in {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .info-value {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .note-input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-top: 12px;
+      font-size: 14px;
+      background: var(--bg3);
+      color: var(--text);
+    }
+    .location-info {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+      padding: 8px;
+      background: var(--bg3);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+<%- include('partials/sidebar', { activePage: 'cashier_attendance', company }) %>
+
+<div class="mw">
+  <div class="topbar">
+    <div class="tb-title">
+      <button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+      <i class="bi bi-calendar-check"></i> <%= title %>
+    </div>
+    <div class="tb-right">
+      <span class="adm-badge">
+        <i class="bi bi-person-fill"></i> Kasir
+      </span>
+      <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
+    </div>
+  </div>
+
+  <div class="page">
+    <% if (msg) { %>
+    <div class="alert alert-<%= msg.type === 'success' ? 's' : 'd' %>">
+      <i class="bi bi-<%= msg.type === 'success' ? 'check-circle' : 'exclamation-circle' %>"></i> <%= msg.text %>
+    </div>
+    <% } %>
+
+    <!-- Today's Status -->
+    <div class="card">
+      <div class="card-hd">
+        <h6><i class="bi bi-calendar-day"></i> Status Hari Ini</h6>
+      </div>
+      <div class="card-bd">
+        <% if (todayAttendance) { %>
+          <% if (todayAttendance.status === 'checked_in') { %>
+            <span class="status-badge status-checked-in">✓ Sudah Check-in</span>
+          <% } else { %>
+            <span class="status-badge status-checked-out">✓ Sudah Check-out</span>
+          <% } %>
+
+          <div class="info-row">
+            <span class="info-label">Check-in</span>
+            <span class="info-value"><%= new Date(todayAttendance.check_in_time).toLocaleString('id-ID') %></span>
+          </div>
+
+          <% if (todayAttendance.check_out_time) { %>
+            <div class="info-row">
+              <span class="info-label">Check-out</span>
+              <span class="info-value"><%= new Date(todayAttendance.check_out_time).toLocaleString('id-ID') %></span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Durasi Kerja</span>
+              <span class="info-value">
+                <%= Math.floor(todayAttendance.work_duration_minutes / 60) %> jam 
+                <%= todayAttendance.work_duration_minutes % 60 %> menit
+              </span>
+            </div>
+          <% } %>
+
+          <% if (todayAttendance.check_in_note) { %>
+            <div class="info-row">
+              <span class="info-label">Catatan Check-in</span>
+              <span class="info-value"><%= todayAttendance.check_in_note %></span>
+            </div>
+          <% } %>
+
+          <% if (todayAttendance.check_out_note) { %>
+            <div class="info-row">
+              <span class="info-label">Catatan Check-out</span>
+              <span class="info-value"><%= todayAttendance.check_out_note %></span>
+            </div>
+          <% } %>
+
+          <% if (todayAttendance.status === 'checked_in') { %>
+            <textarea id="checkoutNote" class="note-input" placeholder="Catatan check-out (opsional)"></textarea>
+            <button class="btn btn-d btn-sm" style="width:100%;margin-top:12px" onclick="checkout()">
+              <i class="bi bi-door-open"></i> Check-out Sekarang
+            </button>
+          <% } %>
+
+        <% } else { %>
+          <span class="status-badge status-not-checked-in">✗ Belum Check-in</span>
+          <p style="color: var(--muted); margin: 16px 0;">Silakan lakukan check-in untuk memulai hari kerja Anda.</p>
+          
+          <textarea id="checkinNote" class="note-input" placeholder="Catatan check-in (opsional)"></textarea>
+          <button class="btn btn-s btn-sm" style="width:100%;margin-top:12px" onclick="checkin()">
+            <i class="bi bi-check-circle"></i> Check-in Sekarang
+          </button>
+        <% } %>
+
+        <div id="locationInfo" class="location-info" style="display: none;">
+          📍 Mengambil lokasi GPS...
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly Summary -->
+    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="sc p">
+        <i class="bi bi-calendar-month sc-icon"></i>
+        <div class="sc-label">Total Hari</div>
+        <div class="sc-val"><%= summary.total_days || 0 %></div>
+        <div class="sc-sub">Bulan ini</div>
+      </div>
+      <div class="sc s">
+        <i class="bi bi-check-circle sc-icon"></i>
+        <div class="sc-label">Hari Lengkap</div>
+        <div class="sc-val"><%= summary.completed_days || 0 %></div>
+        <div class="sc-sub">Check-in & out</div>
+      </div>
+      <div class="sc p">
+        <i class="bi bi-clock sc-icon"></i>
+        <div class="sc-label">Total Jam</div>
+        <div class="sc-val">
+          <%= summary.total_minutes ? Math.floor(summary.total_minutes / 60) : 0 %>
+        </div>
+        <div class="sc-sub">Jam kerja</div>
+      </div>
+      <div class="sc s">
+        <i class="bi bi-graph-up sc-icon"></i>
+        <div class="sc-label">Rata-rata</div>
+        <div class="sc-val">
+          <%= summary.avg_minutes ? Math.floor(summary.avg_minutes / 60) : 0 %>
+        </div>
+        <div class="sc-sub">Jam/hari</div>
+      </div>
+    </div>
+
+    <!-- Recent History -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-hd">
+        <h6><i class="bi bi-clock-history"></i> Riwayat Terakhir</h6>
+      </div>
+      <% if (history && history.length > 0) { %>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>Check-in</th>
+              <th>Check-out</th>
+              <th>Durasi</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% history.forEach(item => { %>
+              <tr>
+                <td class="fw6">
+                  <%= new Date(item.check_in_time).toLocaleDateString('id-ID', { 
+                    weekday: 'short', 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                  }) %>
+                </td>
+                <td><%= new Date(item.check_in_time).toLocaleTimeString('id-ID') %></td>
+                <td>
+                  <% if (item.check_out_time) { %>
+                    <%= new Date(item.check_out_time).toLocaleTimeString('id-ID') %>
+                  <% } else { %>
+                    <span class="text-muted">-</span>
+                  <% } %>
+                </td>
+                <td>
+                  <% if (item.work_duration_minutes > 0) { %>
+                    <%= Math.floor(item.work_duration_minutes / 60) %>j <%= item.work_duration_minutes % 60 %>m
+                  <% } else { %>
+                    <span class="text-muted">-</span>
+                  <% } %>
+                </td>
+                <td>
+                  <% if (item.status === 'checked_in') { %>
+                    <span class="badge badge-w">Belum selesai</span>
+                  <% } else { %>
+                    <span class="badge badge-s">Selesai</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } else { %>
+      <div class="card-bd" style="text-align:center;padding:40px 20px">
+        <p style="color:var(--muted)">Belum ada riwayat absensi</p>
+      </div>
+      <% } %>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let currentLocation = null;
+
+  function getLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation tidak didukung browser Anda'));
+        return;
+      }
+
+      const locationInfo = document.getElementById('locationInfo');
+      locationInfo.style.display = 'block';
+      locationInfo.textContent = '📍 Mengambil lokasi GPS...';
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          currentLocation = {
+            lat: position.coords.latitude.toString(),
+            lng: position.coords.longitude.toString()
+          };
+          locationInfo.textContent = `📍 Lokasi: ${currentLocation.lat}, ${currentLocation.lng}`;
+          resolve(currentLocation);
+        },
+        (error) => {
+          locationInfo.textContent = '⚠️ Gagal mendapatkan lokasi GPS';
+          locationInfo.style.color = '#ef4444';
+          reject(error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    });
+  }
+
+  async function checkin() {
+    try {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Memproses...';
+
+      const location = await getLocation();
+      const note = document.getElementById('checkinNote').value.trim();
+
+      const response = await fetch('/admin/cashiers/attendance/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: location.lat,
+          lng: location.lng,
+          note: note
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert('✓ ' + result.message);
+        window.location.reload();
+      } else {
+        alert('✗ ' + result.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> Check-in Sekarang';
+      }
+    } catch (error) {
+      alert('Gagal check-in: ' + error.message);
+      event.target.disabled = false;
+      event.target.innerHTML = '<i class="bi bi-check-circle"></i> Check-in Sekarang';
+    }
+  }
+
+  async function checkout() {
+    try {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Memproses...';
+
+      const location = await getLocation();
+      const note = document.getElementById('checkoutNote').value.trim();
+
+      const response = await fetch('/admin/cashiers/attendance/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: location.lat,
+          lng: location.lng,
+          note: note
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert('✓ ' + result.message);
+        window.location.reload();
+      } else {
+        alert('✗ ' + result.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-door-open"></i> Check-out Sekarang';
+      }
+    } catch (error) {
+      alert('Gagal check-out: ' + error.message);
+      event.target.disabled = false;
+      event.target.innerHTML = '<i class="bi bi-door-open"></i> Check-out Sekarang';
+    }
+  }
+
+  window.addEventListener('load', () => {
+    getLocation().catch(() => {});
+  });
+</script>
+</body>
+</html>

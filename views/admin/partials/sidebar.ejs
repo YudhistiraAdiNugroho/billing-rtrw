@@ -63,6 +63,19 @@
     <a href="/admin/inventory" class="sb-item <%= activePage==='inventory' ? 'active' : '' %>">
       <i class="bi bi-boxes"></i><span>Inventaris (Stok)</span>
     </a>
+    <a href="/admin/attendance" class="sb-item <%= activePage==='attendance' ? 'active' : '' %>">
+      <i class="bi bi-calendar-check"></i><span>Absensi Karyawan</span>
+    </a>
+    <a href="/admin/payroll" class="sb-item <%= activePage==='payroll' ? 'active' : '' %>">
+      <i class="bi bi-wallet2"></i><span>Gaji Karyawan</span>
+    </a>
+
+    <% if (typeof session !=='undefined' && session.isCashier) { %>
+      <div class="sb-section">KASIR</div>
+      <a href="/admin/cashiers/attendance" class="sb-item <%= activePage==='cashier_attendance' ? 'active' : '' %>">
+        <i class="bi bi-calendar-check"></i><span>Absensi Saya</span>
+      </a>
+    <% } %>
 
     <% if (typeof session !=='undefined' && (session.isAdmin || session.isCashier)) { %>
       <div class="sb-section"><%= t('admin.section.user_management', 'MANAJEMEN USER') %></div>

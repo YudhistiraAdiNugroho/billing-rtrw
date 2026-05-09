@@ -151,6 +151,29 @@
               <label class="fl"><%= t('admin.settings.office_lng', 'Longitude Kantor') %></label>
               <input class="fc" name="office_lng" value="<%= settings.office_lng || '' %>" placeholder="106.xxx">
             </div>
+          <div class="hint" style="margin-top:6px;color:var(--muted)">
+            <i class="bi bi-info-circle"></i> Koordinat kantor digunakan untuk validasi lokasi absensi karyawan (geofencing)
+          </div>
+          <div class="form-row" style="margin-top:12px">
+            <div class="fg">
+              <label class="fl">
+                <i class="bi bi-shield-check"></i> Geofencing Absensi
+              </label>
+              <select class="fs" name="attendance_geofencing">
+                <option value="true" <%= settings.attendance_geofencing === 'true' || settings.attendance_geofencing === true ? 'selected' : '' %>>Aktif (Validasi Lokasi)</option>
+                <option value="false" <%= settings.attendance_geofencing === 'false' || settings.attendance_geofencing === false ? 'selected' : '' %>>Nonaktif (Bebas)</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">
+                <i class="bi bi-geo-alt"></i> Radius Absensi (meter)
+              </label>
+              <input type="number" class="fc" name="attendance_radius" value="<%= settings.attendance_radius || '100' %>" placeholder="100" min="10" max="1000">
+            </div>
+          </div>
+          <div class="hint" style="margin-top:6px;color:var(--warning)">
+            <i class="bi bi-exclamation-triangle"></i> <strong>Geofencing:</strong> Karyawan hanya bisa absen jika berada dalam radius yang ditentukan dari koordinat kantor. Nonaktifkan jika karyawan bekerja remote/lapangan.
+          </div>
           </div>
           <div class="fg">
             <label class="fl"><%= t('admin.settings.operational_hours', 'Jam Operasional') %></label>
