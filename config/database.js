@@ -528,4 +528,93 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_digiflazz_webhook_ref ON digiflazz_webhook_logs(ref_id);
 `);
 
+// ─── ATTENDANCE / ABSENSI KARYAWAN ───────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_type TEXT NOT NULL, -- technician, admin, cashier, collector
+    employee_id INTEGER NOT NULL,
+    employee_name TEXT NOT NULL,
+    check_in_time DATETIME NOT NULL,
+    check_in_lat TEXT DEFAULT '',
+    check_in_lng TEXT DEFAULT '',
+    check_in_note TEXT DEFAULT '',
+    check_out_time DATETIME,
+    check_out_lat TEXT DEFAULT '',
+    check_out_lng TEXT DEFAULT '',
+    check_out_note TEXT DEFAULT '',
+    work_duration_minutes INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'checked_in', -- checked_in, checked_out
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_attendance_employee ON attendance(employee_type, employee_id);
+  CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date(check_in_time));
+  CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance(status);
+`);
+
 module.exports = db;
+
+// ─── PAYROLL / GAJI KARYAWAN ─────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS payroll_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_type TEXT NOT NULL,
+    employee_id INTEGER NOT NULL,
+    base_salary INTEGER DEFAULT 0,
+    transport_allowance INTEGER DEFAULT 0,
+    meal_allowance INTEGER DEFAULT 0,
+    phone_allowance INTEGER DEFAULT 0,
+    other_allowance INTEGER DEFAULT 0,
+    other_allowance_note TEXT DEFAULT '',
+    absence_deduction_per_day INTEGER DEFAULT 0,
+    bonus_per_ticket INTEGER DEFAULT 0,
+    commission_percentage REAL DEFAULT 0,
+    working_days_per_month INTEGER DEFAULT 26,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(employee_type, employee_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS payroll_slips (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_type TEXT NOT NULL,
+    employee_id INTEGER NOT NULL,
+    employee_name TEXT NOT NULL,
+    period_month INTEGER NOT NULL,
+    period_year INTEGER NOT NULL,
+    base_salary INTEGER DEFAULT 0,
+    transport_allowance INTEGER DEFAULT 0,
+    meal_allowance INTEGER DEFAULT 0,
+    phone_allowance INTEGER DEFAULT 0,
+    other_allowance INTEGER DEFAULT 0,
+    other_allowance_note TEXT DEFAULT '',
+    working_days INTEGER DEFAULT 0,
+    absent_days INTEGER DEFAULT 0,
+    late_days INTEGER DEFAULT 0,
+    overtime_hours REAL DEFAULT 0,
+    total_tickets_resolved INTEGER DEFAULT 0,
+    total_collection_amount INTEGER DEFAULT 0,
+    ticket_bonus INTEGER DEFAULT 0,
+    collection_commission INTEGER DEFAULT 0,
+    overtime_bonus INTEGER DEFAULT 0,
+    absence_deduction INTEGER DEFAULT 0,
+    late_deduction INTEGER DEFAULT 0,
+    other_deduction INTEGER DEFAULT 0,
+    other_deduction_note TEXT DEFAULT '',
+    gross_salary INTEGER DEFAULT 0,
+    total_deductions INTEGER DEFAULT 0,
+    net_salary INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    approved_at DATETIME,
+    paid_at DATETIME,
+    notes TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(employee_type, employee_id, period_month, period_year)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_payroll_settings_emp ON payroll_settings(employee_type, employee_id);
+  CREATE INDEX IF NOT EXISTS idx_payroll_slips_emp ON payroll_slips(employee_type, employee_id);
+  CREATE INDEX IF NOT EXISTS idx_payroll_slips_period ON payroll_slips(period_month, period_year);
+  CREATE INDEX IF NOT EXISTS idx_payroll_slips_status ON payroll_slips(status);
+`);
