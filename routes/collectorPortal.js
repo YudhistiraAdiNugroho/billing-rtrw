@@ -44,6 +44,92 @@ router.post('/login', express.urlencoded({ extended: true }), (req, res) => {
 router.get('/logout', (req, res) => {
   req.session.destroy();
   res.redirect('/collector/login');
+
+const attendanceSvc = require('../services/attendanceService');
+
+// ─── COLLECTOR ATTENDANCE ────────────────────────────────────────────────────
+router.get('/attendance', requireCollectorSession, (req, res) => {
+  try {
+    const collectorId = req.session.collectorId;
+    const collectorName = req.session.collectorName;
+    
+    const todayAttendance = attendanceSvc.getTodayAttendance('collector', collectorId);
+    const history = attendanceSvc.getAttendanceHistory('collector', collectorId, 10);
+    
+    const now = new Date();
+    const summary = attendanceSvc.getMonthlyAttendanceSummary(
+      'collector', 
+      collectorId, 
+      now.getFullYear(), 
+      now.getMonth() + 1
+    );
+    
+    res.render('collector/attendance', {
+      title: 'Absensi',
+      company: company(),
+      activePage: 'attendance',
+      collectorName,
+      todayAttendance,
+      history,
+      summary,
+      msg: flashMsg(req)
+    });
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal memuat absensi: ' + e.message };
+    res.redirect('/collector');
+  }
+});
+
+router.post('/attendance/checkin', requireCollectorSession, express.json(), (req, res) => {
+  try {
+    const collectorId = req.session.collectorId;
+    const collectorName = req.session.collectorName;
+    
+    const today = attendanceSvc.getTodayAttendance('collector', collectorId);
+    if (today) {
+      return res.json({ success: false, message: 'Anda sudah melakukan check-in hari ini' });
+    }
+    
+    const result = attendanceSvc.checkIn({
+      employee_type: 'collector',
+      employee_id: collectorId,
+      employee_name: collectorName,
+      lat: req.body.lat || '',
+      lng: req.body.lng || '',
+      note: req.body.note || ''
+    });
+    
+    res.json({ success: true, message: 'Check-in berhasil!', id: result.lastInsertRowid });
+  } catch (e) {
+    res.json({ success: false, message: 'Gagal check-in: ' + e.message });
+  }
+});
+
+router.post('/attendance/checkout', requireCollectorSession, express.json(), (req, res) => {
+  try {
+    const collectorId = req.session.collectorId;
+    
+    const today = attendanceSvc.getTodayAttendance('collector', collectorId);
+    if (!today) {
+      return res.json({ success: false, message: 'Anda belum check-in hari ini' });
+    }
+    
+    if (today.status === 'checked_out') {
+      return res.json({ success: false, message: 'Anda sudah check-out hari ini' });
+    }
+    
+    attendanceSvc.checkOut(today.id, {
+      lat: req.body.lat || '',
+      lng: req.body.lng || '',
+      note: req.body.note || ''
+    });
+    
+    res.json({ success: true, message: 'Check-out berhasil!' });
+  } catch (e) {
+    res.json({ success: false, message: 'Gagal check-out: ' + e.message });
+  }
+});
+
 });
 
 router.get('/', requireCollectorSession, (req, res) => {

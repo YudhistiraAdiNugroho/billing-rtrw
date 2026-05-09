@@ -1330,7 +1330,27 @@ export async function startWhatsAppBot() {
             continue;
           }
           const ok = await customerDevice.updateSSID(ctx.deviceKey, parsed.rest);
-          await reply(ok ? `✅ SSID berhasil diubah menjadi:\n\n📶 *${parsed.rest}*` : '❌ Gagal mengubah SSID. Coba lagi atau hubungi admin.');
+          if (ok) {
+            await reply(`✅ SSID berhasil diubah menjadi:\n\n📶 *${parsed.rest}*`);
+            // Kirim notifikasi konfirmasi ke pelanggan via WA
+            try {
+              const cust = customerSvc.findCustomerByAny(ctx.billingKey || ctx.deviceKey);
+              if (cust && cust.phone) {
+                const now = new Date().toLocaleString('id-ID');
+                const notifMsg =
+                  `📶 *PERUBAHAN SSID WIFI*\n\n` +
+                  `👤 *Pelanggan:* ${cust.name}\n` +
+                  `🕒 *Waktu:* ${now}\n\n` +
+                  `SSID WiFi Anda sudah diperbarui menjadi:\n` +
+                  `📡 *${parsed.rest}*\n\n` +
+                  `Silakan pilih SSID baru di perangkat Anda untuk terhubung.\n` +
+                  `⚠️ Jangan bagikan info ini ke orang lain.`;
+                await notifyCustomer(sock, lidStore, ctx.deviceKey, notifMsg);
+              }
+            } catch (e) { /* ignore notification errors */ }
+          } else {
+            await reply('❌ Gagal mengubah SSID. Coba lagi atau hubungi admin.');
+          }
           continue;
         }
 
@@ -1340,7 +1360,27 @@ export async function startWhatsAppBot() {
             continue;
           }
           const ok = await customerDevice.updatePassword(ctx.deviceKey, parsed.rest);
-          await reply(ok ? '✅ Password WiFi berhasil diubah.' : '❌ Gagal mengubah password.');
+          if (ok) {
+            await reply('✅ Password WiFi berhasil diubah.');
+            // Kirim notifikasi konfirmasi ke pelanggan via WA
+            try {
+              const cust = customerSvc.findCustomerByAny(ctx.billingKey || ctx.deviceKey);
+              if (cust && cust.phone) {
+                const now = new Date().toLocaleString('id-ID');
+                const notifMsg =
+                  `🔑 *PERUBAHAN PASSWORD WIFI*\n\n` +
+                  `👤 *Pelanggan:* ${cust.name}\n` +
+                  `🕒 *Waktu:* ${now}\n\n` +
+                  `Password WiFi Anda sudah diperbarui menjadi:\n` +
+                  `🔐 *${parsed.rest}*\n\n` +
+                  `Silakan gunakan password baru untuk terhubung.\n` +
+                  `⚠️ Jangan bagikan password ini ke orang lain.`;
+                await notifyCustomer(sock, lidStore, ctx.deviceKey, notifMsg);
+              }
+            } catch (e) { /* ignore notification errors */ }
+          } else {
+            await reply('❌ Gagal mengubah password.');
+          }
           continue;
         }
 

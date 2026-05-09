@@ -5,6 +5,24 @@ const { getSettingsWithCache } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 
+async function resolveIpv4(hostname) {
+  const host = String(hostname || '').trim();
+  if (!host) return '';
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) return host;
+
+  if (dns.promises && typeof dns.promises.lookup === 'function') {
+    const res = await dns.promises.lookup(host, { family: 4 });
+    return res && res.address ? String(res.address) : '';
+  }
+
+  return await new Promise((resolve, reject) => {
+    dns.lookup(host, { family: 4 }, (err, address) => {
+      if (err) return reject(err);
+      resolve(String(address || ''));
+    });
+  });
+}
+
 function toKebabCase(key) {
   const s = String(key || '').trim();
   if (!s) return s;
@@ -160,6 +178,15 @@ async function getConnection(routerId = null) {
       tls: Boolean(useTls),
       timeout: 10000
     });
+
+    // Attach defensive error listener to prevent unhandled 'error' events
+    // from crashing the process when connection is refused or drops
+    if (typeof api.on === 'function') {
+      api.on('error', (err) => {
+        logger.error(`[MikroTik] Connection error event (${host}): ${err?.message || err}`);
+      });
+    }
+
     await api.connect();
     const originalClose = typeof api.close === 'function' ? api.close.bind(api) : null;
     const originalDisconnect = typeof api.disconnect === 'function' ? api.disconnect.bind(api) : null;
@@ -174,7 +201,7 @@ async function getConnection(routerId = null) {
     const client = new ClientAdapter(api);
     return { client, api };
   } catch (err) {
-    logger.error(`Failed to connect to MikroTik (${host}):`, err);
+    logger.error(`Failed to connect to MikroTik (${host}): ${err?.message || err}`);
     throw err;
   }
 }
@@ -657,7 +684,7 @@ function deleteRouter(id) {
  * (HTTP/HTTPS ke IP server sesuai Pengaturan → app_url). Salin ke Terminal / Import.
  * PPPoE: set profil isolir on-up agar IP masuk LIST_ISOLIR (sama seperti tombol Setup Firewall di panel).
  */
-function generateIsolirPortalScript() {
+async function generateIsolirPortalScript() {
   const settings = getSettingsWithCache();
   const raw = String(settings.app_url || '').trim();
   const normalized = raw && /^https?:\/\//i.test(raw) ? raw : (raw ? `https://${raw}` : '');
@@ -678,7 +705,7 @@ function generateIsolirPortalScript() {
   let billingIp = hostname;
   if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
     try {
-      billingIp = dns.lookupSync(hostname, { family: 4 });
+      billingIp = await resolveIpv4(hostname);
     } catch {
       billingIp = 'GANTI_IP_SERVER_PORTAL';
     }
@@ -825,7 +852,7 @@ async function setupIsolirFirewall(routerId = null) {
       httpNatPort = isHttps ? 80 : port;
       httpsNatPort = isHttps ? port : 443;
       let host = u.hostname;
-      if (host && !/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) host = dns.lookupSync(host, { family: 4 });
+      if (host && !/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) host = await resolveIpv4(host);
       billingIp = host || '';
     } catch (e) {
       logger.warn('[setupIsolirFirewall] app_url tidak valid / tidak bisa di-resolve:', e.message);

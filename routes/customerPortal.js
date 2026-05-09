@@ -999,7 +999,31 @@ router.post('/change-ssid', async (req, res) => {
   req.session._msg = ok 
     ? { type: 'success', text: 'Nama WiFi (SSID) berhasil diubah.' }
     : { type: 'danger', text: 'Gagal mengubah SSID.' };
-    
+
+  // Kirim notifikasi WhatsApp ke pelanggan
+  if (ok) {
+    try {
+      const settings = getSettingsWithCache();
+      if (settings.whatsapp_enabled) {
+        const profile = findCustomerProfileByLoginId(phone);
+        if (profile && profile.phone) {
+          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+          if (whatsappStatus && whatsappStatus.connection === 'open') {
+            const now = new Date().toLocaleString('id-ID');
+            const msg = `\ud83d\udcf6 *PERUBAHAN SSID WIFI*\n\n` +
+              `\ud83d\udc64 *Pelanggan:* ${profile.name}\n` +
+              `\ud83d\udd52 *Waktu:* ${now}\n\n` +
+              `SSID WiFi Anda sudah diperbarui menjadi:\n` +
+              `\ud83d\udce1 *${ssid}*\n\n` +
+              `Silakan pilih SSID baru di perangkat Anda untuk terhubung.\n` +
+              `\u26a0\ufe0f Jangan bagikan info ini ke orang lain.`;
+            await sendWA(profile.phone, msg);
+          }
+        }
+      }
+    } catch (e) { /* ignore WA notification errors */ }
+  }
+
   res.redirect('/customer/dashboard');
 });
 
@@ -1012,6 +1036,30 @@ router.post('/change-password', async (req, res) => {
   req.session._msg = ok
     ? { type: 'success', text: 'Password WiFi berhasil diubah.' }
     : { type: 'danger', text: 'Gagal mengubah password. Pastikan minimal 8 karakter.' };
+
+  // Kirim notifikasi WhatsApp ke pelanggan
+  if (ok) {
+    try {
+      const settings = getSettingsWithCache();
+      if (settings.whatsapp_enabled) {
+        const profile = findCustomerProfileByLoginId(phone);
+        if (profile && profile.phone) {
+          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+          if (whatsappStatus && whatsappStatus.connection === 'open') {
+            const now = new Date().toLocaleString('id-ID');
+            const msg = `\ud83d\udd11 *PERUBAHAN PASSWORD WIFI*\n\n` +
+              `\ud83d\udc64 *Pelanggan:* ${profile.name}\n` +
+              `\ud83d\udd52 *Waktu:* ${now}\n\n` +
+              `Password WiFi Anda sudah diperbarui menjadi:\n` +
+              `\ud83d\udd10 *${password}*\n\n` +
+              `Silakan gunakan password baru untuk terhubung.\n` +
+              `\u26a0\ufe0f Jangan bagikan password ini ke orang lain.`;
+            await sendWA(profile.phone, msg);
+          }
+        }
+      }
+    } catch (e) { /* ignore WA notification errors */ }
+  }
 
   res.redirect('/customer/dashboard');
 });
