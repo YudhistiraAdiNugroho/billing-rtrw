@@ -1773,16 +1773,20 @@ router.post('/billing/pay-bulk', requireAdminSession, express.urlencoded({ exten
     
     if (!ids || ids.length === 0) throw new Error('Tidak ada tagihan yang dipilih');
 
-    let customerId = null;
-    const paidInvoices = [];
+    const paidByCustomer = new Map();
+    const touchedCustomerIds = new Set();
+    let processed = 0;
     for (const id of ids) {
       const inv = billingSvc.getInvoiceById(id);
       if (inv) {
-        customerId = inv.customer_id;
+        processed++;
+        const customerId = Number(inv.customer_id || 0);
+        if (Number.isFinite(customerId) && customerId > 0) touchedCustomerIds.add(customerId);
         const wasPaid = String(inv.status || '').toLowerCase() === 'paid';
         billingSvc.markAsPaid(id, paidBy, notes);
         if (!wasPaid) {
-          paidInvoices.push({
+          if (!paidByCustomer.has(customerId)) paidByCustomer.set(customerId, []);
+          paidByCustomer.get(customerId).push({
             id: inv.id,
             amount: Number(inv.amount || 0),
             period_month: inv.period_month,
@@ -1792,15 +1796,16 @@ router.post('/billing/pay-bulk', requireAdminSession, express.urlencoded({ exten
       }
     }
 
-    // Un-isolate logic
-    if (customerId) {
-      const freshCustomer = customerSvc.getAllCustomers().find(c => c.id === customerId);
-      if (freshCustomer && freshCustomer.status === 'suspended' && freshCustomer.unpaid_count === 0) {
+    const customersSnapshot = customerSvc.getAllCustomers();
+    for (const customerId of touchedCustomerIds) {
+      const freshCustomer = customersSnapshot.find(c => Number(c.id) === Number(customerId));
+      if (freshCustomer && freshCustomer.status === 'suspended' && Number(freshCustomer.unpaid_count || 0) === 0) {
         await customerSvc.activateCustomer(customerId);
       }
     }
 
-    if (customerId && paidInvoices.length > 0) {
+    for (const [customerId, paidInvoices] of paidByCustomer.entries()) {
+      if (!paidInvoices || paidInvoices.length === 0) continue;
       const customer = customerSvc.getCustomerById(customerId);
       if (customer && customer.phone) {
         const total = paidInvoices.reduce((a, b) => a + Number(b.amount || 0), 0);
@@ -1820,9 +1825,33 @@ router.post('/billing/pay-bulk', requireAdminSession, express.urlencoded({ exten
       }
     }
 
-    req.session._msg = { type: 'success', text: `${ids.length} tagihan berhasil dilunasi.` };
+    req.session._msg = { type: 'success', text: `${processed} tagihan berhasil diproses.` };
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal bayar massal: ' + e.message };
+  }
+  res.redirect('back');
+});
+
+router.post('/billing/delete-bulk', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    const { invoice_ids } = req.body;
+    const ids = Array.isArray(invoice_ids) ? invoice_ids : [invoice_ids];
+    const clean = ids
+      .map(x => Number(x))
+      .filter(n => Number.isFinite(n) && n > 0);
+    if (!clean || clean.length === 0) throw new Error('Tidak ada tagihan yang dipilih');
+
+    let deleted = 0;
+    for (const id of clean) {
+      try {
+        billingSvc.deleteInvoice(id);
+        deleted++;
+      } catch {}
+    }
+
+    req.session._msg = { type: 'success', text: `${deleted} tagihan berhasil dihapus.` };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal hapus massal: ' + e.message };
   }
   res.redirect('back');
 });
