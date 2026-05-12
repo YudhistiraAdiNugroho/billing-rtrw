@@ -1,9 +1,67 @@
 const dns = require('dns');
+const net = require('net');
 const { URL } = require('url');
 const RosClient = require('ros-client');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
+
+const connectionProbeCache = new Map();
+const listCache = new Map();
+
+function cacheKey(routerId, name) {
+  const rid = routerId == null || String(routerId).trim() === '' ? 'default' : String(routerId).trim();
+  return `${name}:${rid}`;
+}
+
+function getCachedList(key, ttlMs) {
+  const hit = listCache.get(key);
+  if (!hit) return null;
+  const age = Date.now() - Number(hit.ts || 0);
+  if (age >= Math.max(0, Number(ttlMs) || 0)) return null;
+  return hit.data;
+}
+
+function setCachedList(key, data) {
+  listCache.set(key, { ts: Date.now(), data });
+}
+
+function clearCachedByPrefix(prefix) {
+  for (const k of listCache.keys()) {
+    if (String(k).startsWith(prefix)) listCache.delete(k);
+  }
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  const ms = Math.max(200, Number(timeoutMs) || 0);
+  if (!ms) return promise;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const t = setTimeout(() => {
+        clearTimeout(t);
+        reject(new Error(`Timeout ${ms}ms${label ? `: ${label}` : ''}`));
+      }, ms);
+    })
+  ]);
+}
+
+async function canConnectTcp(host, port, timeoutMs = 1200) {
+  const h = String(host || '').trim();
+  const p = Number(port) || 0;
+  if (!h || !p) return false;
+  return await new Promise((resolve) => {
+    const socket = net.connect({ host: h, port: p });
+    const done = (ok) => {
+      try { socket.destroy(); } catch {}
+      resolve(Boolean(ok));
+    };
+    socket.setTimeout(Math.max(200, Number(timeoutMs) || 1200));
+    socket.once('connect', () => done(true));
+    socket.once('timeout', () => done(false));
+    socket.once('error', () => done(false));
+  });
+}
 
 async function resolveIpv4(hostname) {
   const host = String(hostname || '').trim();
@@ -168,15 +226,45 @@ async function getConnection(routerId = null) {
     throw new Error('MikroTik settings not configured');
   }
 
+  const configuredPort = Number(port) || 8728;
+  const tlsSetting = getSettingsWithCache().mikrotik_tls === true;
+  const fallbackPort = configuredPort === 8728 ? 8729 : 8728;
+  const candidates = configuredPort === fallbackPort ? [configuredPort] : [configuredPort, fallbackPort];
+  const cacheKey = String(host);
+  const now = Date.now();
+  const cached = connectionProbeCache.get(cacheKey);
+  if (cached && cached.failUntil && now < cached.failUntil) {
+    const e = new Error(cached.failMessage || `Tidak bisa konek ke MikroTik ${host}:${configuredPort}.`);
+    e.code = 'ECONNREFUSED';
+    throw e;
+  }
+  let selectedPort = (cached && cached.okUntil && now < cached.okUntil && cached.port) ? Number(cached.port) : 0;
+  if (!selectedPort) {
+    for (const p of candidates) {
+      const ok = await canConnectTcp(host, p, 1200);
+      if (ok) {
+        selectedPort = p;
+        break;
+      }
+    }
+    if (!selectedPort) {
+      const failMessage = `Tidak bisa konek ke MikroTik ${host}:${configuredPort} (juga sudah coba ${fallbackPort}). Pastikan IP/port benar dan service API (8728) atau API-SSL (8729) aktif di MikroTik.`;
+      connectionProbeCache.set(cacheKey, { port: 0, okUntil: 0, failUntil: now + 5000, failMessage });
+      const e = new Error(failMessage);
+      e.code = 'ECONNREFUSED';
+      throw e;
+    }
+  }
+
   try {
-    const useTls = Number(port) === 8729 || getSettingsWithCache().mikrotik_tls === true;
+    const useTls = selectedPort === 8729 || tlsSetting === true;
     const api = new RosClient({
       host,
       username: user,
       password,
-      port: Number(port) || 8728,
+      port: selectedPort,
       tls: Boolean(useTls),
-      timeout: 10000
+      timeout: 5000
     });
 
     // Attach defensive error listener to prevent unhandled 'error' events
@@ -188,6 +276,7 @@ async function getConnection(routerId = null) {
     }
 
     await api.connect();
+    connectionProbeCache.set(cacheKey, { port: selectedPort, okUntil: Date.now() + 30000, failUntil: 0, failMessage: '' });
     const originalClose = typeof api.close === 'function' ? api.close.bind(api) : null;
     const originalDisconnect = typeof api.disconnect === 'function' ? api.disconnect.bind(api) : null;
     api.close = async () => {
@@ -201,6 +290,15 @@ async function getConnection(routerId = null) {
     const client = new ClientAdapter(api);
     return { client, api };
   } catch (err) {
+    const msg = String(err?.message || err || '');
+    if (msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('EHOSTUNREACH')) {
+      connectionProbeCache.set(cacheKey, {
+        port: 0,
+        okUntil: 0,
+        failUntil: Date.now() + 5000,
+        failMessage: `Tidak bisa konek ke MikroTik ${host}:${selectedPort}. ${msg}`
+      });
+    }
     logger.error(`Failed to connect to MikroTik (${host}): ${err?.message || err}`);
     throw err;
   }
@@ -222,20 +320,32 @@ async function checkConnection(routerId = null) {
 }
 
 async function getPppoeProfiles(routerId = null) {
+  const ck = cacheKey(routerId, 'pppoeProfiles');
+  const cached = getCachedList(ck, 15000);
+  if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    const results = await conn.client.menu('/ppp/profile').get();
-    return results.map(r => ({
-      id: r['.id'],
+    const start = Date.now();
+    const raw = await conn.api.send([
+      '/ppp/profile/print',
+      '=.proplist=.id,name,local-address,remote-address,rate-limit'
+    ]);
+    const ms = Date.now() - start;
+    if (ms > 1200) logger.warn(`[MikroTik] Slow /ppp/profile/print (${ms}ms)`);
+    const results = Array.isArray(raw) ? raw.map(augmentRow) : [];
+    const mapped = results.map(r => ({
+      id: r['.id'] || r.id,
       name: r.name,
       localAddress: r.localAddress || r['local-address'] || '-',
       remoteAddress: r.remoteAddress || r['remote-address'] || '-',
       rateLimit: r.rateLimit || r['rate-limit'] || '-'
     }));
+    setCachedList(ck, mapped);
+    return mapped;
   } catch (e) {
     logger.error('Error getting PPPoE profiles:', e);
-    return [];
+    throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -255,7 +365,7 @@ async function getPppoeUsers(routerId = null) {
     }));
   } catch (e) {
     logger.error('Error getting PPPoE users:', e);
-    return [];
+    throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -364,10 +474,15 @@ async function kickHotspotUser(username, routerId = null) {
 }
 
 async function getPppoeSecrets(routerId = null) {
+  const ck = cacheKey(routerId, 'pppoeSecrets');
+  const cached = getCachedList(ck, 8000);
+  if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ppp/secret').get();
+    const rows = await conn.client.menu('/ppp/secret').get();
+    setCachedList(ck, rows);
+    return rows;
   } catch (e) {
     logger.error('Error getting PPPoE secrets:', e);
     return [];
@@ -380,7 +495,10 @@ async function addPppoeSecret(data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ppp/secret').add(data);
+    const res = await conn.client.menu('/ppp/secret').add(data);
+    listCache.delete(cacheKey(routerId, 'pppoeSecrets'));
+    listCache.delete(cacheKey(routerId, 'pppoeActive'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -390,7 +508,10 @@ async function updatePppoeSecret(id, data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ppp/secret').set(data, id);
+    const res = await conn.client.menu('/ppp/secret').set(data, id);
+    listCache.delete(cacheKey(routerId, 'pppoeSecrets'));
+    listCache.delete(cacheKey(routerId, 'pppoeActive'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -400,53 +521,72 @@ async function deletePppoeSecret(id, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ppp/secret').remove(id);
+    const res = await conn.client.menu('/ppp/secret').remove(id);
+    listCache.delete(cacheKey(routerId, 'pppoeSecrets'));
+    listCache.delete(cacheKey(routerId, 'pppoeActive'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
 }
 
 async function getPppoeActive(routerId = null) {
+  const ck = cacheKey(routerId, 'pppoeActive');
+  const cached = getCachedList(ck, 3000);
+  if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ppp/active').get();
+    const rows = await conn.client.menu('/ppp/active').get();
+    setCachedList(ck, rows);
+    return rows;
   } catch (e) {
     logger.error('Error getting active PPPoE sessions:', e);
-    return [];
+    throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
 }
 
 async function getHotspotActive(routerId = null) {
+  const ck = cacheKey(routerId, 'hotspotActive');
+  const cached = getCachedList(ck, 3000);
+  if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/active').get();
+    const rows = await conn.client.menu('/ip/hotspot/active').get();
+    setCachedList(ck, rows);
+    return rows;
   } catch (e) {
     logger.error('Error getting active Hotspot sessions:', e);
-    return [];
+    throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
 }
 
 async function getIpPools(routerId = null) {
+  const ck = cacheKey(routerId, 'ipPools');
+  const cached = getCachedList(ck, 30000);
+  if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    const rows = await conn.client.menu('/ip/pool').get();
-    return (Array.isArray(rows) ? rows : [])
+    const rows = await conn.api.send(['/ip/pool/print', '=.proplist=.id,name,ranges']);
+    const mapped = (Array.isArray(rows) ? rows : [])
+      .map(augmentRow)
       .map((r) => ({
         id: r['.id'] || r.id,
         name: r.name,
         ranges: r.ranges || r['ranges'] || ''
       }))
       .filter((p) => p && p.name);
+    setCachedList(ck, mapped);
+    return mapped;
   } catch (e) {
     logger.error('Error getting IP pools:', e);
-    return [];
+    throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -457,7 +597,9 @@ async function addPppoeProfile(data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ppp/profile').add(data);
+    const res = await conn.client.menu('/ppp/profile').add(data);
+    listCache.delete(cacheKey(routerId, 'pppoeProfiles'));
+    return res;
   } catch (e) {
     logger.error('Error adding PPPoE profile:', e);
     throw e;
@@ -470,7 +612,9 @@ async function updatePppoeProfile(id, data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ppp/profile').set(data, id);
+    const res = await conn.client.menu('/ppp/profile').set(data, id);
+    listCache.delete(cacheKey(routerId, 'pppoeProfiles'));
+    return res;
   } catch (e) {
     logger.error('Error updating PPPoE profile:', e);
     throw e;
@@ -483,7 +627,9 @@ async function deletePppoeProfile(id, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ppp/profile').remove(id);
+    const res = await conn.client.menu('/ppp/profile').remove(id);
+    listCache.delete(cacheKey(routerId, 'pppoeProfiles'));
+    return res;
   } catch (e) {
     logger.error('Error deleting PPPoE profile:', e);
     throw e;
@@ -494,13 +640,43 @@ async function deletePppoeProfile(id, routerId = null) {
 
 // Hotspot Profiles CRUD (User Profiles)
 async function getHotspotUserProfiles(routerId = null) {
+  const ck = cacheKey(routerId, 'hotspotUserProfiles');
+  const cached = getCachedList(ck, 15000);
+  if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/user/profile').get();
+    const start = Date.now();
+    const raw = await conn.api.send([
+      '/ip/hotspot/user/profile/print',
+      '=.proplist=.id,name,rate-limit,shared-users,session-timeout'
+    ]);
+    const ms = Date.now() - start;
+    if (ms > 1200) logger.warn(`[MikroTik] Slow /ip/hotspot/user/profile/print (${ms}ms)`);
+    const rows = Array.isArray(raw) ? raw.map(augmentRow) : [];
+    setCachedList(ck, rows);
+    return rows;
   } catch (e) {
     logger.error('Error getting Hotspot user profiles:', e);
-    return [];
+    throw e;
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
+async function getHotspotUserProfileById(id, routerId = null) {
+  const rid = String(id || '').trim();
+  if (!rid) throw new Error('Hotspot profile id is required');
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const raw = await conn.api.send([
+      '/ip/hotspot/user/profile/print',
+      `?.id=${rid}`,
+      '=.proplist=.id,name,rate-limit,shared-users,session-timeout,on-login'
+    ]);
+    const rows = Array.isArray(raw) ? raw.map(augmentRow) : [];
+    return rows.length ? rows[0] : null;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -510,12 +686,50 @@ async function addHotspotUserProfile(data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/user/profile').add(data);
+    const name = String(data?.name || '').trim();
+    if (!name) throw new Error('Nama profile hotspot wajib diisi');
+    logger.info(`[MikroTik] add hotspot user profile start name="${name}" routerId=${routerId || ''}`);
+    const menu = conn.client.menu('/ip/hotspot/user/profile');
+
+    const payload = {
+      name,
+      'shared-users': data && data['shared-users'] != null ? data['shared-users'] : 1
+    };
+
+    if (data && data['rate-limit'] != null) {
+      const rl = String(data['rate-limit'] || '').trim();
+      const first = rl ? rl.split(/\\s+/)[0] : '';
+      if (first) payload['rate-limit'] = first;
+    }
+    if (data && data['session-timeout'] != null) {
+      const st = String(data['session-timeout'] || '').trim();
+      const first = st ? st.split(/\\s+/)[0] : '';
+      if (first) payload['session-timeout'] = first;
+    }
+
+    const op = menu.add(payload);
+    const res = await withTimeout(op, 8000, '/ip/hotspot/user/profile/add').catch(async (err) => {
+      const msg = String(err?.message || err || '');
+      if (msg.includes('Timeout')) {
+        try {
+          const found = await withTimeout(menu.where('name', name).get(), 4000, '/ip/hotspot/user/profile/print(find-after-timeout)');
+          if (Array.isArray(found) && found.length) return { timeoutRecovered: true };
+        } catch {}
+      }
+      try { await conn.api.close(); } catch {}
+      throw err;
+    });
+
+    logger.info(`[MikroTik] add hotspot user profile done name="${name}" routerId=${routerId || ''}`);
+    listCache.delete(cacheKey(routerId, 'hotspotUserProfiles'));
+    return res;
   } catch (e) {
     logger.error('Error adding Hotspot user profile:', e);
     throw e;
   } finally {
-    if (conn && conn.api) conn.api.close();
+    if (conn && conn.api) {
+      try { await conn.api.close(); } catch {}
+    }
   }
 }
 
@@ -523,12 +737,37 @@ async function updateHotspotUserProfile(id, data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/user/profile').set(data, id);
+    const safe = {};
+    if (data && data.name != null && String(data.name).trim()) safe.name = String(data.name).trim();
+    if (data && data['shared-users'] != null && String(data['shared-users']).trim()) safe['shared-users'] = String(data['shared-users']).trim();
+    if (data && data['rate-limit'] != null) {
+      const rl = String(data['rate-limit'] || '').trim();
+      const first = rl ? rl.split(/\\s+/)[0] : '';
+      if (first) safe['rate-limit'] = first;
+    }
+    if (data && data['session-timeout'] != null) {
+      const st = String(data['session-timeout'] || '').trim();
+      const first = st ? st.split(/\\s+/)[0] : '';
+      if (first) safe['session-timeout'] = first;
+    }
+
+    const name = String(safe?.name || '').trim();
+    logger.info(`[MikroTik] update hotspot user profile start id="${String(id || '')}" name="${name}" routerId=${routerId || ''}`);
+    const op = conn.client.menu('/ip/hotspot/user/profile').set(safe, id);
+    const res = await withTimeout(op, 8000, '/ip/hotspot/user/profile/set').catch(async (err) => {
+      try { await conn.api.close(); } catch {}
+      throw err;
+    });
+    logger.info(`[MikroTik] update hotspot user profile done id="${String(id || '')}" name="${name}" routerId=${routerId || ''}`);
+    listCache.delete(cacheKey(routerId, 'hotspotUserProfiles'));
+    return res;
   } catch (e) {
     logger.error('Error updating Hotspot user profile:', e);
     throw e;
   } finally {
-    if (conn && conn.api) conn.api.close();
+    if (conn && conn.api) {
+      try { await conn.api.close(); } catch {}
+    }
   }
 }
 
@@ -536,23 +775,38 @@ async function deleteHotspotUserProfile(id, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/user/profile').remove(id);
+    logger.info(`[MikroTik] delete hotspot user profile start id="${String(id || '')}" routerId=${routerId || ''}`);
+    const op = conn.client.menu('/ip/hotspot/user/profile').remove(id);
+    const res = await withTimeout(op, 8000, '/ip/hotspot/user/profile/remove').catch(async (err) => {
+      try { await conn.api.close(); } catch {}
+      throw err;
+    });
+    logger.info(`[MikroTik] delete hotspot user profile done id="${String(id || '')}" routerId=${routerId || ''}`);
+    listCache.delete(cacheKey(routerId, 'hotspotUserProfiles'));
+    return res;
   } catch (e) {
     logger.error('Error deleting Hotspot user profile:', e);
     throw e;
   } finally {
-    if (conn && conn.api) conn.api.close();
+    if (conn && conn.api) {
+      try { await conn.api.close(); } catch {}
+    }
   }
 }
 
 async function getHotspotUsers(routerId = null) {
+  const ck = cacheKey(routerId, 'hotspotUsers');
+  const cached = getCachedList(ck, 8000);
+  if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/user').get();
+    const rows = await conn.client.menu('/ip/hotspot/user').get();
+    setCachedList(ck, rows);
+    return rows;
   } catch (e) {
     logger.error('Error getting Hotspot users:', e);
-    return [];
+    throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -562,7 +816,10 @@ async function addHotspotUser(data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/user').add(data);
+    const res = await conn.client.menu('/ip/hotspot/user').add(data);
+    listCache.delete(cacheKey(routerId, 'hotspotUsers'));
+    listCache.delete(cacheKey(routerId, 'hotspotActive'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -572,7 +829,10 @@ async function updateHotspotUser(id, data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/user').set(data, id);
+    const res = await conn.client.menu('/ip/hotspot/user').set(data, id);
+    listCache.delete(cacheKey(routerId, 'hotspotUsers'));
+    listCache.delete(cacheKey(routerId, 'hotspotActive'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -582,7 +842,10 @@ async function deleteHotspotUser(id, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/user').remove(id);
+    const res = await conn.client.menu('/ip/hotspot/user').remove(id);
+    listCache.delete(cacheKey(routerId, 'hotspotUsers'));
+    listCache.delete(cacheKey(routerId, 'hotspotActive'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -630,13 +893,18 @@ async function getSystemResource(routerId = null) {
 }
 
 async function getHotspotProfiles(routerId = null) {
+  const ck = cacheKey(routerId, 'hotspotProfiles');
+  const cached = getCachedList(ck, 30000);
+  if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/profile').get();
+    const rows = await conn.client.menu('/ip/hotspot/profile').get();
+    setCachedList(ck, rows);
+    return rows;
   } catch (e) {
     logger.error('Error getting Hotspot profiles:', e);
-    return [];
+    throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -646,7 +914,9 @@ async function addHotspotProfile(data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/profile').add(data);
+    const res = await conn.client.menu('/ip/hotspot/profile').add(data);
+    listCache.delete(cacheKey(routerId, 'hotspotProfiles'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -656,7 +926,9 @@ async function updateHotspotProfile(id, data, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/profile').set(data, id);
+    const res = await conn.client.menu('/ip/hotspot/profile').set(data, id);
+    listCache.delete(cacheKey(routerId, 'hotspotProfiles'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -666,7 +938,9 @@ async function deleteHotspotProfile(id, routerId = null) {
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    return await conn.client.menu('/ip/hotspot/profile').remove(id);
+    const res = await conn.client.menu('/ip/hotspot/profile').remove(id);
+    listCache.delete(cacheKey(routerId, 'hotspotProfiles'));
+    return res;
   } finally {
     if (conn && conn.api) conn.api.close();
   }
@@ -1067,6 +1341,7 @@ module.exports = {
   updatePppoeProfile,
   deletePppoeProfile,
   getHotspotUserProfiles,
+  getHotspotUserProfileById,
   addHotspotUserProfile,
   updateHotspotUserProfile,
   deleteHotspotUserProfile,

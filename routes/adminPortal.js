@@ -3613,6 +3613,15 @@ router.get('/api/mikrotik/hotspot-user-profiles', requireAdmin, async (req, res)
     res.status(500).json({ error: e.message });
   }
 });
+router.get('/api/mikrotik/hotspot-user-profiles/:id', requireAdmin, async (req, res) => {
+  try {
+    const row = await mikrotikService.getHotspotUserProfileById(req.params.id, req.query.routerId);
+    if (!row) return res.status(404).json({ error: 'Profile tidak ditemukan' });
+    return res.json({ ok: true, row });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
 router.post('/api/mikrotik/hotspot-user-profiles', requireAdmin, express.json(), async (req, res) => {
   try { await mikrotikService.addHotspotUserProfile(req.body, req.query.routerId); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
