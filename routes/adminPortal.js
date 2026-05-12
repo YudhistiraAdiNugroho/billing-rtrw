@@ -3589,6 +3589,10 @@ router.get('/api/mikrotik/active-hotspot', requireAdmin, async (req, res) => {
   try { res.json(await mikrotikService.getHotspotActive(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.get('/api/mikrotik/ip-pools', requireAdmin, async (req, res) => {
+  try { res.json(await mikrotikService.getIpPools(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // PPPoE Profiles CRUD
 router.post('/api/mikrotik/pppoe-profiles', requireAdmin, express.json(), async (req, res) => {
   try { await mikrotikService.addPppoeProfile(req.body, req.query.routerId); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3602,7 +3606,12 @@ router.post('/api/mikrotik/pppoe-profiles/:id/delete', requireAdmin, async (req,
 
 // Hotspot User Profiles CRUD
 router.get('/api/mikrotik/hotspot-user-profiles', requireAdmin, async (req, res) => {
-  try { res.json(await mikrotikService.getHotspotUserProfiles(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const rows = await mikrotikService.getHotspotUserProfiles(req.query.routerId);
+    res.json((Array.isArray(rows) ? rows : []).map((r) => ({ ...r, id: r.id || r['.id'] })));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 router.post('/api/mikrotik/hotspot-user-profiles', requireAdmin, express.json(), async (req, res) => {
   try { await mikrotikService.addHotspotUserProfile(req.body, req.query.routerId); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }

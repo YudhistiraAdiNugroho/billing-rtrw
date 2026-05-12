@@ -432,6 +432,26 @@ async function getHotspotActive(routerId = null) {
   }
 }
 
+async function getIpPools(routerId = null) {
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const rows = await conn.client.menu('/ip/pool').get();
+    return (Array.isArray(rows) ? rows : [])
+      .map((r) => ({
+        id: r['.id'] || r.id,
+        name: r.name,
+        ranges: r.ranges || r['ranges'] || ''
+      }))
+      .filter((p) => p && p.name);
+  } catch (e) {
+    logger.error('Error getting IP pools:', e);
+    return [];
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
 // PPPoE Profiles CRUD
 async function addPppoeProfile(data, routerId = null) {
   let conn = null;
@@ -1042,6 +1062,7 @@ module.exports = {
   getHotspotProfiles,
   getPppoeActive,
   getHotspotActive,
+  getIpPools,
   addPppoeProfile,
   updatePppoeProfile,
   deletePppoeProfile,
