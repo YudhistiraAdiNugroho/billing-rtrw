@@ -227,7 +227,10 @@
         <div class="fg"><label class="fl">Name</label><input class="fc" id="pp_name" required></div>
         <div class="form-row">
           <div class="fg"><label class="fl">Local Address</label><input class="fc" id="pp_local"></div>
-          <div class="fg"><label class="fl">Remote Address</label><input class="fc" id="pp_remote"></div>
+          <div class="fg">
+            <label class="fl">Remote Address (Pool)</label>
+            <select class="fs" id="pp_remote"><option value="">-</option></select>
+          </div>
         </div>
         <div class="fg"><label class="fl">Rate Limit (Rx/Tx e.g. 5M/10M)</label><input class="fc" id="pp_rate"></div>
       </div>
@@ -324,6 +327,8 @@
   let hotspotData = [];
   let pppoeProfilesData = [];
   let hotspotProfilesData = [];
+  let ipPoolsData = [];
+  let ipPoolsRouterId = null;
 
   function getRouterId() {
     return document.getElementById('global-router-id').value;
@@ -341,6 +346,39 @@
     e.preventDefault();
     const routerId = getRouterId();
     window.location.href = `/admin/api/mikrotik/backup?routerId=${routerId}`;
+  }
+
+  function escapeHtmlAttr(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  async function ensureIpPoolsLoaded() {
+    const routerId = getRouterId() || '';
+    if (ipPoolsRouterId === routerId && Array.isArray(ipPoolsData) && ipPoolsData.length > 0) return;
+    ipPoolsRouterId = routerId;
+    try {
+      const res = await fetch(`/admin/api/mikrotik/ip-pools?routerId=${routerId}`);
+      const data = await res.json();
+      ipPoolsData = Array.isArray(data) ? data : [];
+    } catch (e) {
+      ipPoolsData = [];
+    }
+  }
+
+  function renderIpPoolsSelect(selectedValue) {
+    const sel = document.getElementById('pp_remote');
+    if (!sel) return;
+    const options = [
+      '<option value="">-</option>',
+      ...(ipPoolsData || []).map((p) => `<option value="${escapeHtmlAttr(p.name)}">${escapeHtmlAttr(p.name)}</option>`)
+    ];
+    sel.innerHTML = options.join('');
+    if (selectedValue) sel.value = selectedValue;
   }
 
   async function loadPppoeProfiles() {
@@ -382,7 +420,7 @@
           <td>${p.sessionTimeout || '-'}</td>
           <td>
             <button class="btn btn-g btn-icon btn-sm" onclick="editHotspotProfile(${i})"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-d btn-icon btn-sm" onclick="deleteHotspotProfile('${p.id || p.name}')"><i class="bi bi-trash"></i></button>
+            <button class="btn btn-d btn-icon btn-sm" onclick="deleteHotspotProfile('${p.id || ''}')"><i class="bi bi-trash"></i></button>
           </td>
         </tr>
       `;
@@ -590,18 +628,22 @@
   }
 
   // PPPoE Profile Handlers
-  function openAddPppoeProfile() {
+  async function openAddPppoeProfile() {
     document.getElementById('pppoeProfileForm').reset();
     document.getElementById('pp_id').value = '';
     document.getElementById('pppoeProfileModalTitle').innerText = I18N.addPppoeProfile;
+    await ensureIpPoolsLoaded();
+    renderIpPoolsSelect('');
     openModal('pppoeProfileModal');
   }
-  function editPppoeProfile(idx) {
+  async function editPppoeProfile(idx) {
     const p = pppoeProfilesData[idx];
-    document.getElementById('pp_id').value = p.id || p.name;
+    document.getElementById('pp_id').value = p.id || '';
     document.getElementById('pp_name').value = p.name;
     document.getElementById('pp_local').value = p.localAddress || '';
-    document.getElementById('pp_remote').value = p.remoteAddress || '';
+    const remote = (p.remoteAddress && p.remoteAddress !== '-') ? p.remoteAddress : '';
+    await ensureIpPoolsLoaded();
+    renderIpPoolsSelect(remote);
     document.getElementById('pp_rate').value = p.rateLimit || '';
     document.getElementById('pppoeProfileModalTitle').innerText = I18N.editPppoeProfile;
     openModal('pppoeProfileModal');
@@ -609,12 +651,14 @@
   document.getElementById('pppoeProfileForm').onsubmit = async (e) => {
     e.preventDefault();
     const id = document.getElementById('pp_id').value;
-    const data = {
-      name: document.getElementById('pp_name').value,
-      'local-address': document.getElementById('pp_local').value,
-      'remote-address': document.getElementById('pp_remote').value,
-      'rate-limit': document.getElementById('pp_rate').value
-    };
+    const name = document.getElementById('pp_name').value;
+    const local = String(document.getElementById('pp_local').value || '').trim();
+    const remote = String(document.getElementById('pp_remote').value || '').trim();
+    const rate = String(document.getElementById('pp_rate').value || '').trim();
+    const data = { name };
+    if (local) data['local-address'] = local;
+    if (remote) data['remote-address'] = remote;
+    if (rate) data['rate-limit'] = rate;
     const routerId = getRouterId();
     const url = id && id !== data.name ? `/admin/api/mikrotik/pppoe-profiles/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/pppoe-profiles?routerId=${routerId}`;
     const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
@@ -636,7 +680,7 @@
   }
   function editHotspotProfile(idx) {
     const p = hotspotProfilesData[idx];
-    document.getElementById('hp_id').value = p.id || p.name;
+    document.getElementById('hp_id').value = p.id || p['.id'] || '';
     document.getElementById('hp_name').value = p.name;
     document.getElementById('hp_rate').value = p.rateLimit || '';
     document.getElementById('hp_shared').value = p.sharedUsers || 1;
@@ -651,12 +695,13 @@
   document.getElementById('hotspotProfileForm').onsubmit = async (e) => {
     e.preventDefault();
     const id = document.getElementById('hp_id').value;
-    const data = {
-      name: document.getElementById('hp_name').value,
-      'rate-limit': document.getElementById('hp_rate').value,
-      'shared-users': document.getElementById('hp_shared').value,
-      'on-login': document.getElementById('hp_onlogin').value
-    };
+    const name = document.getElementById('hp_name').value;
+    const rate = String(document.getElementById('hp_rate').value || '').trim();
+    const shared = String(document.getElementById('hp_shared').value || '').trim() || '1';
+    const onLogin = String(document.getElementById('hp_onlogin').value || '').trim();
+    const data = { name, 'shared-users': shared };
+    if (rate) data['rate-limit'] = rate;
+    if (onLogin) data['on-login'] = onLogin;
     const routerId = getRouterId();
     const url = id && id !== data.name ? `/admin/api/mikrotik/hotspot-user-profiles/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/hotspot-user-profiles?routerId=${routerId}`;
     const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
