@@ -1315,7 +1315,18 @@ router.get('/customers', requireAdminSession, (req, res) => {
 
 router.post('/customers', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
-    if (req.body.pppoe_username) {
+    const connectionType = String(req.body.connection_type || 'pppoe').trim().toLowerCase() || 'pppoe';
+    req.body.connection_type = connectionType;
+
+    if (connectionType !== 'pppoe') req.body.pppoe_username = '';
+    if (connectionType !== 'static') req.body.static_ip = '';
+    if (connectionType !== 'hotspot') {
+      req.body.hotspot_username = '';
+      req.body.hotspot_password = '';
+      req.body.hotspot_profile = '';
+    }
+
+    if (connectionType === 'pppoe') {
       const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
       req.body.pppoe_username = username;
@@ -1336,10 +1347,34 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       }
     }
 
+    if (connectionType === 'hotspot') {
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
+      const username = String(req.body.hotspot_username || '').trim();
+      req.body.hotspot_username = username;
+      if (!username) throw new Error('Hotspot Username tidak boleh kosong');
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? LIMIT 1').get(routerId, username);
+      if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name}`);
+
+      const password = String(req.body.hotspot_password || '').trim() || username;
+      req.body.hotspot_password = password;
+
+      let profile = String(req.body.hotspot_profile || '').trim();
+      if (!profile && req.body.package_id) {
+        const pkg = customerSvc.getPackageById(req.body.package_id);
+        if (pkg) profile = String(pkg.name || '').trim();
+      }
+      req.body.hotspot_profile = profile;
+      if (!profile) throw new Error('Hotspot User Profile tidak boleh kosong');
+
+      const profs = await mikrotikService.getHotspotUserProfiles(routerId);
+      const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
+      if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik`);
+    }
+
     customerSvc.createCustomer(req.body);
     
     // Sync to MikroTik if username provided
-    if (req.body.pppoe_username) {
+    if (connectionType === 'pppoe' && req.body.pppoe_username) {
       let targetProfile = '';
       if (req.body.status === 'suspended') {
         targetProfile = req.body.isolir_profile || 'isolir';
@@ -1355,6 +1390,20 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
         }
       }
     }
+    if (connectionType === 'hotspot' && req.body.hotspot_username) {
+      const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
+      try {
+        await mikrotikService.upsertHotspotUser({
+          username: String(req.body.hotspot_username || '').trim(),
+          password: String(req.body.hotspot_password || '').trim(),
+          profile: String(req.body.hotspot_profile || '').trim(),
+          macAddress: String(req.body.mac_address || '').trim(),
+          disabled
+        }, req.body.router_id ? Number(req.body.router_id) : null);
+      } catch (mErr) {
+        console.error('Mikrotik sync error (create hotspot):', mErr);
+      }
+    }
 
     req.session._msg = { type: 'success', text: `Pelanggan "${req.body.name}" berhasil ditambahkan.` };
   } catch (e) {
@@ -1365,8 +1414,19 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
 
 router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
-    if (req.body.pppoe_username) {
-      const customerId = Number(req.params.id);
+    const customerId = Number(req.params.id);
+    const connectionType = String(req.body.connection_type || 'pppoe').trim().toLowerCase() || 'pppoe';
+    req.body.connection_type = connectionType;
+
+    if (connectionType !== 'pppoe') req.body.pppoe_username = '';
+    if (connectionType !== 'static') req.body.static_ip = '';
+    if (connectionType !== 'hotspot') {
+      req.body.hotspot_username = '';
+      req.body.hotspot_password = '';
+      req.body.hotspot_profile = '';
+    }
+
+    if (connectionType === 'pppoe') {
       const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
       req.body.pppoe_username = username;
@@ -1387,10 +1447,34 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       }
     }
 
+    if (connectionType === 'hotspot') {
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
+      const username = String(req.body.hotspot_username || '').trim();
+      req.body.hotspot_username = username;
+      if (!username) throw new Error('Hotspot Username tidak boleh kosong');
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? AND id != ? LIMIT 1').get(routerId, username, customerId);
+      if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name}`);
+
+      const password = String(req.body.hotspot_password || '').trim() || username;
+      req.body.hotspot_password = password;
+
+      let profile = String(req.body.hotspot_profile || '').trim();
+      if (!profile && req.body.package_id) {
+        const pkg = customerSvc.getPackageById(req.body.package_id);
+        if (pkg) profile = String(pkg.name || '').trim();
+      }
+      req.body.hotspot_profile = profile;
+      if (!profile) throw new Error('Hotspot User Profile tidak boleh kosong');
+
+      const profs = await mikrotikService.getHotspotUserProfiles(routerId);
+      const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
+      if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik`);
+    }
+
     customerSvc.updateCustomer(req.params.id, req.body);
     
     // Sync to MikroTik if username provided
-    if (req.body.pppoe_username) {
+    if (connectionType === 'pppoe' && req.body.pppoe_username) {
       let targetProfile = '';
       if (req.body.status === 'suspended') {
         targetProfile = req.body.isolir_profile || 'isolir';
@@ -1404,6 +1488,20 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
         } catch (mErr) {
           console.error('Mikrotik sync error (update):', mErr);
         }
+      }
+    }
+    if (connectionType === 'hotspot' && req.body.hotspot_username) {
+      const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
+      try {
+        await mikrotikService.upsertHotspotUser({
+          username: String(req.body.hotspot_username || '').trim(),
+          password: String(req.body.hotspot_password || '').trim(),
+          profile: String(req.body.hotspot_profile || '').trim(),
+          macAddress: String(req.body.mac_address || '').trim(),
+          disabled
+        }, req.body.router_id ? Number(req.body.router_id) : null);
+      } catch (mErr) {
+        console.error('Mikrotik sync error (update hotspot):', mErr);
       }
     }
 

@@ -191,7 +191,7 @@
         <div class="form-row">
           <div class="fg">
             <label class="fl">Router MikroTik</label>
-            <select class="fs" name="router_id" id="add_router_select" onchange="loadPppoeAdd(this.value)">
+            <select class="fs" name="router_id" id="add_router_select" onchange="loadRouterLists('add', this.value)">
               <option value="">-- Default (Pengaturan) --</option>
               <% if (typeof routers !== 'undefined') { %>
                 <% routers.forEach(r => { %>
@@ -205,6 +205,7 @@
             <select class="fs" name="connection_type" id="add_connection_type" onchange="toggleConnectionFields('add')">
               <option value="pppoe">PPPoE (MikroTik)</option>
               <option value="static">Static IP (MikroTik)</option>
+              <option value="hotspot">Hotspot (MikroTik)</option>
             </select>
           </div>
         </div>
@@ -218,6 +219,26 @@
           <div class="fg" id="add_static_field" style="display:none">
             <label class="fl">IP Address Pelanggan</label>
             <input class="fc" name="static_ip" placeholder="Contoh: 192.168.10.10">
+          </div>
+        </div>
+        <div id="add_hotspot_field" style="display:none">
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Hotspot Username</label>
+              <input class="fc" name="hotspot_username" placeholder="Contoh: user01">
+            </div>
+            <div class="fg">
+              <label class="fl">Hotspot Password</label>
+              <input class="fc" name="hotspot_password" placeholder="Kosong = sama dengan username">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Hotspot User Profile</label>
+              <input class="fc" name="hotspot_profile" list="add_hotspot_profile_list" placeholder="Pilih profile hotspot">
+              <datalist id="add_hotspot_profile_list"></datalist>
+              <div class="hint" id="add_hotspot_profile_hint"></div>
+            </div>
           </div>
         </div>
         <div class="form-row">
@@ -355,7 +376,7 @@
         <div class="form-row">
           <div class="fg">
             <label class="fl">Router MikroTik</label>
-            <select class="fs" name="router_id" id="e_router_id" onchange="loadPppoeEdit(this.value)">
+            <select class="fs" name="router_id" id="e_router_id" onchange="loadRouterLists('edit', this.value)">
               <option value="">-- Default (Pengaturan) --</option>
               <% if (typeof routers !== 'undefined') { %>
                 <% routers.forEach(r => { %>
@@ -369,6 +390,7 @@
             <select class="fs" name="connection_type" id="e_connection_type" onchange="toggleConnectionFields('edit')">
               <option value="pppoe">PPPoE (MikroTik)</option>
               <option value="static">Static IP (MikroTik)</option>
+              <option value="hotspot">Hotspot (MikroTik)</option>
             </select>
           </div>
           <div class="fg" id="e_pppoe_field">
@@ -380,6 +402,26 @@
           <div class="fg" id="e_static_field" style="display:none">
             <label class="fl">IP Address Pelanggan</label>
             <input class="fc" name="static_ip" id="e_static_ip" placeholder="Contoh: 192.168.10.10">
+          </div>
+        </div>
+        <div id="e_hotspot_field" style="display:none">
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Hotspot Username</label>
+              <input class="fc" name="hotspot_username" id="e_hotspot_username" placeholder="Contoh: user01">
+            </div>
+            <div class="fg">
+              <label class="fl">Hotspot Password</label>
+              <input class="fc" name="hotspot_password" id="e_hotspot_password" placeholder="Kosong = sama dengan username">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Hotspot User Profile</label>
+              <input class="fc" name="hotspot_profile" id="e_hotspot_profile" list="e_hotspot_profile_list" placeholder="Pilih profile hotspot">
+              <datalist id="e_hotspot_profile_list"></datalist>
+              <div class="hint" id="e_hotspot_profile_hint"></div>
+            </div>
           </div>
         </div>
         <div class="form-row">
@@ -669,23 +711,38 @@ function toggleConnectionFields(type) {
   const connType = document.getElementById(type === 'add' ? 'add_connection_type' : 'e_connection_type').value;
   const pppoeField = document.getElementById(type === 'add' ? 'add_pppoe_field' : 'e_pppoe_field');
   const staticField = document.getElementById(type === 'add' ? 'add_static_field' : 'e_static_field');
+  const hotspotField = document.getElementById(type === 'add' ? 'add_hotspot_field' : 'e_hotspot_field');
   const macField = document.getElementById(type === 'add' ? 'add_mac_field' : 'e_mac_field');
 
   if (connType === 'pppoe') {
     pppoeField.style.display = 'block';
     staticField.style.display = 'none';
+    hotspotField.style.display = 'none';
     macField.style.display = 'none';
-  } else {
+  } else if (connType === 'static') {
     pppoeField.style.display = 'none';
     staticField.style.display = 'block';
+    hotspotField.style.display = 'none';
     macField.style.display = 'block';
+  } else {
+    pppoeField.style.display = 'none';
+    staticField.style.display = 'none';
+    hotspotField.style.display = 'block';
+    macField.style.display = 'block';
+  }
+
+  if (connType === 'hotspot') {
+    const routerId = (type === 'add' ? document.getElementById('add_router_select') : document.getElementById('e_router_id'))?.value || '';
+    loadHotspotProfiles(type, routerId);
   }
 }
 
 document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show')}));
+let currentEditCustomerId = '';
 function editCust(idx) {
   const c = customersData[idx];
   if (!c) return;
+  currentEditCustomerId = c.id || '';
   document.getElementById('editForm').action='/admin/customers/'+c.id+'/update';
   document.getElementById('e_name').value=c.name||'';
   document.getElementById('e_phone').value=c.phone||'';
@@ -697,6 +754,9 @@ function editCust(idx) {
   document.getElementById('e_pppoe').value=c.pppoe_username||'';
   document.getElementById('e_static_ip').value=c.static_ip||'';
   document.getElementById('e_mac_address').value=c.mac_address||'';
+  document.getElementById('e_hotspot_username').value=c.hotspot_username||'';
+  document.getElementById('e_hotspot_password').value=c.hotspot_password||'';
+  document.getElementById('e_hotspot_profile').value=c.hotspot_profile||'';
   document.getElementById('e_tag').value=c.genieacs_tag||'';
   document.getElementById('e_olt_id').value=c.olt_id||'';
   document.getElementById('e_odp_id').value=c.odp_id||'';
@@ -711,7 +771,7 @@ function editCust(idx) {
   document.getElementById('e_isolate_day').value=(c.isolate_day || 10);
   toggleConnectionFields('edit');
   openModal('editModal');
-  loadPppoeEdit(c.router_id || '', c.id || '');
+  loadRouterLists('edit', c.router_id || '', c.id || '');
 }
 
 function openGenInvoice(idx) {
@@ -865,6 +925,51 @@ async function loadPppoeEdit(routerId = '', excludeCustomerId = '') {
   }
 }
 
+function buildHotspotProfileList(datalistEl, profiles) {
+  if (!datalistEl) return;
+  datalistEl.innerHTML = '';
+  for (const p of profiles) {
+    const name = p && p.name ? String(p.name).trim() : '';
+    if (!name) continue;
+    datalistEl.insertAdjacentHTML('beforeend', `<option value="${name.replace(/"/g, '&quot;')}"></option>`);
+  }
+}
+
+async function loadHotspotProfiles(type, routerId = '') {
+  try {
+    const url = routerId
+      ? `/admin/api/mikrotik/hotspot-user-profiles?routerId=${encodeURIComponent(routerId)}`
+      : '/admin/api/mikrotik/hotspot-user-profiles';
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const rows = await res.json();
+    const list = Array.isArray(rows) ? rows : [];
+    if (type === 'add') {
+      buildHotspotProfileList(document.getElementById('add_hotspot_profile_list'), list);
+      const hint = document.getElementById('add_hotspot_profile_hint');
+      if (hint) hint.innerText = list.length ? `Tersedia ${list.length} profile hotspot.` : 'Tidak ada profile hotspot.';
+    } else {
+      buildHotspotProfileList(document.getElementById('e_hotspot_profile_list'), list);
+      const hint = document.getElementById('e_hotspot_profile_hint');
+      if (hint) hint.innerText = list.length ? `Tersedia ${list.length} profile hotspot.` : 'Tidak ada profile hotspot.';
+    }
+  } catch (e) {
+    console.error('Failed to load MikroTik hotspot user profiles', e);
+  }
+}
+
+function loadRouterLists(type, routerId = '', excludeCustomerId = '') {
+  if (type === 'add') {
+    loadPppoeAdd(routerId);
+    loadMikrotikProfiles(routerId);
+    loadHotspotProfiles('add', routerId);
+  } else {
+    loadPppoeEdit(routerId, excludeCustomerId || currentEditCustomerId || '');
+    loadMikrotikProfiles(routerId);
+    loadHotspotProfiles('edit', routerId);
+  }
+}
+
 async function loadMikrotikProfiles(routerId = '') {
   try {
     const url = routerId ? `/admin/api/mikrotik/profiles/${routerId}` : '/admin/api/mikrotik/profiles';
@@ -888,9 +993,8 @@ async function loadMikrotikProfiles(routerId = '') {
     console.error('Failed to load MikroTik profiles', e);
   }
 }
-loadPppoeAdd();
-loadPppoeEdit();
-loadMikrotikProfiles();
+loadRouterLists('add');
+loadRouterLists('edit');
 
 setTimeout(()=>document.querySelectorAll('.alert').forEach(a=>a.style.display='none'),4000);
 </script>

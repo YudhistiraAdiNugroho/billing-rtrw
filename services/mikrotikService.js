@@ -851,6 +851,105 @@ async function deleteHotspotUser(id, routerId = null) {
   }
 }
 
+async function getHotspotUserByName(username, routerId = null) {
+  const normalizedUsername = String(username || '').trim();
+  if (!normalizedUsername) throw new Error('Hotspot username wajib diisi');
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const rows = await conn.client.menu('/ip/hotspot/user').where('name', normalizedUsername).get();
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    const row = rows[0] || null;
+    if (!row) return null;
+    return { ...row, id: row.id || row['.id'] };
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
+async function setHotspotUserDisabled(username, disabled, routerId = null) {
+  const normalizedUsername = String(username || '').trim();
+  if (!normalizedUsername) throw new Error('Hotspot username wajib diisi');
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const userMenu = conn.client.menu('/ip/hotspot/user');
+    const rows = await userMenu.where('name', normalizedUsername).get();
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error(`Hotspot user "${normalizedUsername}" tidak ditemukan di MikroTik`);
+    const row = rows[0] || null;
+    const id = row ? (row['.id'] || row.id) : null;
+    if (!id) throw new Error('ID hotspot user tidak ditemukan');
+    await userMenu.set({ disabled: disabled ? 'true' : 'false' }, id);
+    listCache.delete(cacheKey(routerId, 'hotspotUsers'));
+    if (disabled) {
+      try {
+        const sessions = await conn.client.menu('/ip/hotspot/active').where('user', normalizedUsername).get();
+        if (Array.isArray(sessions) && sessions.length) {
+          for (const s of sessions) {
+            const sid = s['.id'] || s.id;
+            if (sid) await conn.client.menu('/ip/hotspot/active').remove(sid);
+          }
+        }
+      } catch {}
+      listCache.delete(cacheKey(routerId, 'hotspotActive'));
+    }
+    return true;
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
+async function upsertHotspotUser(data, routerId = null) {
+  const username = String(data?.username || '').trim();
+  if (!username) throw new Error('Hotspot username wajib diisi');
+  const password = data?.password != null ? String(data.password) : '';
+  const profile = data?.profile != null ? String(data.profile).trim() : '';
+  const macAddress = data?.macAddress != null ? String(data.macAddress).trim() : '';
+  const disabled = data?.disabled != null ? !!data.disabled : false;
+
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const userMenu = conn.client.menu('/ip/hotspot/user');
+    const existing = await userMenu.where('name', username).get();
+    const row = Array.isArray(existing) && existing.length ? existing[0] : null;
+    const id = row ? (row['.id'] || row.id) : null;
+
+    const payload = {};
+    if (!id) payload.name = username;
+    if (password) payload.password = password;
+    if (profile) payload.profile = profile;
+    if (macAddress) payload['mac-address'] = macAddress;
+    payload.disabled = disabled ? 'true' : 'false';
+
+    if (id) {
+      await userMenu.set(payload, id);
+    } else {
+      const addPayload = { ...payload, name: username };
+      if (!addPayload.password) addPayload.password = username;
+      await userMenu.add(addPayload);
+    }
+
+    listCache.delete(cacheKey(routerId, 'hotspotUsers'));
+    if (disabled) {
+      try {
+        const sessions = await conn.client.menu('/ip/hotspot/active').where('user', username).get();
+        if (Array.isArray(sessions) && sessions.length) {
+          for (const s of sessions) {
+            const sid = s['.id'] || s.id;
+            if (sid) await conn.client.menu('/ip/hotspot/active').remove(sid);
+          }
+        }
+      } catch {}
+      listCache.delete(cacheKey(routerId, 'hotspotActive'));
+    }
+
+    return { ok: true, updated: !!id };
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
 async function getBackup(routerId = null) {
   let conn = null;
   try {
@@ -1333,6 +1432,9 @@ module.exports = {
   addHotspotUser,
   updateHotspotUser,
   deleteHotspotUser,
+  getHotspotUserByName,
+  setHotspotUserDisabled,
+  upsertHotspotUser,
   getHotspotProfiles,
   getPppoeActive,
   getHotspotActive,

@@ -57,8 +57,8 @@ function getCustomerById(id) {
 
 function createCustomer(data) {
   return db.prepare(`
-    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
     data.package_id ? parseInt(data.package_id) : null,
@@ -76,7 +76,10 @@ function createCustomer(data) {
     data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
     data.connection_type || 'pppoe',
     data.static_ip || '',
-    data.mac_address || ''
+    data.mac_address || '',
+    data.hotspot_username || '',
+    data.hotspot_password || '',
+    data.hotspot_profile || ''
   );
 }
 
@@ -86,7 +89,7 @@ function updateCustomer(id, data) {
   const pkgChanged = prev && Number(prev.package_id || 0) !== Number(newPkgId || 0);
 
   const result = db.prepare(`
-    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?
+    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?
     WHERE id=?
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
@@ -107,6 +110,9 @@ function updateCustomer(id, data) {
     data.connection_type || 'pppoe',
     data.static_ip || '',
     data.mac_address || '',
+    data.hotspot_username || '',
+    data.hotspot_password || '',
+    data.hotspot_profile || '',
     id
   );
 
@@ -237,8 +243,8 @@ function findCustomerByAny(val) {
     if (p1) return getCustomerById(p1.id);
   }
 
-  // 2. Try GenieACS Tag atau PPPoE Username (Exact Match)
-  const t = db.prepare('SELECT id FROM customers WHERE genieacs_tag = ? OR pppoe_username = ?').get(cleanVal, cleanVal);
+  // 2. Try GenieACS Tag atau PPPoE Username atau Hotspot Username (Exact Match)
+  const t = db.prepare('SELECT id FROM customers WHERE genieacs_tag = ? OR pppoe_username = ? OR hotspot_username = ?').get(cleanVal, cleanVal, cleanVal);
   if (t) return getCustomerById(t.id);
 
   // 3. Try ID if numeric
@@ -283,6 +289,8 @@ async function suspendCustomer(id) {
         logger.warn(`[suspendCustomer] Hook profil isolir "${isolirProfile}" di router ${customer.router_id}: ${e.message}`);
       }
     }
+  } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
+    await mikrotikSvc.setHotspotUserDisabled(customer.hotspot_username, true, customer.router_id);
   }
   return true;
 }
@@ -314,6 +322,16 @@ async function activateCustomer(id) {
     const pkg = getPackageById(customer.package_id);
     const targetProfile = pkg ? pkg.name : 'default';
     await mikrotikSvc.setPppoeProfile(customer.pppoe_username, targetProfile, customer.router_id);
+  } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
+    const pkg = getPackageById(customer.package_id);
+    const targetProfile = String(customer.hotspot_profile || '').trim() || (pkg ? pkg.name : '');
+    await mikrotikSvc.upsertHotspotUser({
+      username: String(customer.hotspot_username || '').trim(),
+      password: String(customer.hotspot_password || '').trim(),
+      profile: targetProfile,
+      macAddress: String(customer.mac_address || '').trim(),
+      disabled: false
+    }, customer.router_id);
   }
   return true;
 }
