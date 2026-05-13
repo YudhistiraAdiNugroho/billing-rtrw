@@ -465,6 +465,10 @@ app.get('/admin/manifest.webmanifest', (req, res) => {
   });
 });
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/broadcast', (req, res) => {
+  res.redirect('/admin/whatsapp/broadcast');
+});
 // Mount customer portal
 const customerPortal = require('./routes/customerPortal');
 app.use('/customer', customerPortal);

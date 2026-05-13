@@ -13,7 +13,7 @@
   </style>
 </head>
 <body>
-<%- include('partials/sidebar', { activePage: 'whatsapp', company }) %>
+<%- include('partials/sidebar', { activePage: activePage || 'broadcast', company }) %>
 <div class="mw">
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-megaphone"></i> <%= t('admin.broadcast.title', 'Broadcast WhatsApp') %></div>

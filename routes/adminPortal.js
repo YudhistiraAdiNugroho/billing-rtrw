@@ -3866,7 +3866,7 @@ router.get('/whatsapp', requireAdminSession, async (req, res) => {
 
 router.get('/whatsapp/broadcast', requireAdminSession, (req, res) => {
   res.render('admin/broadcast', {
-    title: 'Broadcast WhatsApp', company: company(), activePage: 'whatsapp', msg: flashMsg(req),
+    title: 'Broadcast WhatsApp', company: company(), activePage: 'broadcast', msg: flashMsg(req),
     broadcastStatus: global.broadcastStatus, getSetting
   });
 });
