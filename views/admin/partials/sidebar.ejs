@@ -23,9 +23,11 @@
     <a href="/admin/mikrotik" class="sb-item <%= activePage==='mikrotik' ? 'active' : '' %>">
       <i class="bi bi-router"></i><span><%= t('admin.nav.mikrotik', 'MikroTik') %></span>
     </a>
+    <% if (false) { %>
     <a href="/admin/olts" class="sb-item <%= activePage==='olts' ? 'active' : '' %>">
       <i class="bi bi-hdd-rack"></i><span><%= t('admin.nav.olt_management', 'Manajemen OLT') %></span>
     </a>
+    <% } %>
     <a href="/admin/map" class="sb-item <%= activePage==='map' ? 'active' : '' %>">
       <i class="bi bi-map"></i><span><%= t('admin.nav.network_map', 'Peta Jaringan') %></span>
     </a>
