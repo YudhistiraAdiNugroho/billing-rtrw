@@ -50,9 +50,22 @@ function initTelegram() {
   // Helper Mikhmon Parser
   const parseMikhmon = (script) => {
     if (!script) return null;
-    // Format: :put (",rem,COST,VALIDITY,PRICE,...)
-    // Support ROS6 dan ROS7
     const s = String(script).trim();
+    
+    // Cari pattern :put (",rem, ... , ... , ...
+    const putMatch = s.match(/:\s*put\s*\(\s*[",]rem[",]?\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/i);
+    if (putMatch) {
+      const cost = String(putMatch[1] || '').trim();
+      const validity = String(putMatch[2] || '').trim();
+      const priceStr = String(putMatch[3] || '').trim();
+      const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
+      
+      if (validity && price > 0) {
+        return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
+      }
+    }
+    
+    // Fallback: split by comma
     const parts = s.split(',').map(p => String(p).trim());
     let remIdx = -1;
     for (let i = 0; i < parts.length; i++) {
@@ -61,14 +74,18 @@ function initTelegram() {
         break;
       }
     }
-    if (remIdx < 0 || remIdx + 3 >= parts.length) return null;
-    const cost = String(parts[remIdx + 1] || '').trim();
-    const validity = String(parts[remIdx + 2] || '').trim();
-    const priceStr = String(parts[remIdx + 3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
+    
+    if (remIdx >= 0 && remIdx + 3 < parts.length) {
+      const cost = String(parts[remIdx + 1] || '').trim();
+      const validity = String(parts[remIdx + 2] || '').trim();
+      const priceStr = String(parts[remIdx + 3] || '').trim();
+      const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
+      
+      if (validity && price > 0) {
+        return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
+      }
     }
+    
     return null;
   };
     return null;

@@ -110,11 +110,24 @@ function parseMikhmonOnLogin(script) {
   const s = String(script).trim();
   
   // Format: :put (",rem,COST,VALIDITY,PRICE,...)
-  // Contoh: :put (",rem,2000,1d,3000,,Disable,");
+  // Support ROS6 dan ROS7 (script bisa berbeda struktur)
   
+  // Cari pattern :put (",rem, ... , ... , ...
+  // Bisa ada di mana saja dalam script
+  const putMatch = s.match(/:\s*put\s*\(\s*[",]rem[",]?\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/i);
+  if (putMatch) {
+    const cost = String(putMatch[1] || '').trim();
+    const validity = String(putMatch[2] || '').trim();
+    const priceStr = String(putMatch[3] || '').trim();
+    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
+    
+    if (validity && price > 0) {
+      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
+    }
+  }
+  
+  // Fallback: split by comma (untuk format lama)
   const parts = s.split(',').map(p => String(p).trim());
-  
-  // Cari index "rem"
   let remIdx = -1;
   for (let i = 0; i < parts.length; i++) {
     if (parts[i].includes('rem')) {
@@ -123,19 +136,18 @@ function parseMikhmonOnLogin(script) {
     }
   }
   
-  if (remIdx < 0 || remIdx + 3 >= parts.length) return null;
+  if (remIdx >= 0 && remIdx + 3 < parts.length) {
+    const cost = String(parts[remIdx + 1] || '').trim();
+    const validity = String(parts[remIdx + 2] || '').trim();
+    const priceStr = String(parts[remIdx + 3] || '').trim();
+    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
+    
+    if (validity && price > 0) {
+      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
+    }
+  }
   
-  // Field setelah "rem": COST, VALIDITY, PRICE
-  const cost = String(parts[remIdx + 1] || '').trim();
-  const validity = String(parts[remIdx + 2] || '').trim();
-  const priceStr = String(parts[remIdx + 3] || '').trim();
-  
-  const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-  
-  // Validasi: validity dan price harus ada dan valid
-  if (!validity || price <= 0) return null;
-  
-  return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
+  return null;
 }
 
 function normalizeBuyerPhone(input) {
