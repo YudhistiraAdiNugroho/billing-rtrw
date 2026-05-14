@@ -431,12 +431,29 @@ async function payInvoiceAsAgent(agentId, invoiceId, note = '') {
 
 function parseMikhmonOnLogin(script) {
   if (!script) return null;
-  const m = String(script).match(/",rem,.*?,(.*?),(.*?),.*?"/);
-  if (!m) return null;
-  const validity = String(m[1] || '').trim();
-  const priceStr = String(m[2] || '').trim();
-  const price = Number(String(priceStr).replace(/[^\d]/g, '')) || 0;
-  return { validity, price };
+  const s = String(script).trim();
+  
+  // Format: :put (",rem,COST,VALIDITY,PRICE,...)
+  // Contoh: :put (",rem,2000,1d,3000,,Disable,");
+  
+  const parts = s.split(',').map(p => String(p).trim());
+  let remIdx = -1;
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i].includes('rem')) {
+      remIdx = i;
+      break;
+    }
+  }
+  
+  if (remIdx < 0 || remIdx + 3 >= parts.length) return null;
+  
+  const cost = String(parts[remIdx + 1] || '').trim();
+  const validity = String(parts[remIdx + 2] || '').trim();
+  const priceStr = String(parts[remIdx + 3] || '').trim();
+  const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
+  
+  if (!validity || price <= 0) return null;
+  return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
 }
 
 function genCode(len, charset) {

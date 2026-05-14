@@ -107,11 +107,37 @@ function verifyPublicToken(token, secret) {
 
 function parseMikhmonOnLogin(script) {
   if (!script) return null;
-  const m = String(script).match(/\",rem,.*?,(.*?),(.*?),.*?\"/);
-  if (!m) return null;
-  const validity = String(m[1] || '').trim();
-  const price = Number(String(m[2] || '').replace(/[^\d]/g, '')) || 0;
-  return { validity, price };
+  const s = String(script).trim();
+  
+  // Format: :put (",rem,COST,VALIDITY,PRICE,...)
+  // Contoh: :put (",rem,2000,1d,3000,,Disable,");
+  // Struktur: ",rem, FIELD1, FIELD2, FIELD3, FIELD4, FIELD5, ...
+  // Maka: FIELD1=COST, FIELD2=VALIDITY, FIELD3=PRICE
+  
+  const parts = s.split(',').map(p => String(p).trim());
+  
+  // Cari index "rem"
+  let remIdx = -1;
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i].includes('rem')) {
+      remIdx = i;
+      break;
+    }
+  }
+  
+  if (remIdx < 0 || remIdx + 3 >= parts.length) return null;
+  
+  // Field setelah "rem": COST, VALIDITY, PRICE
+  const cost = String(parts[remIdx + 1] || '').trim();
+  const validity = String(parts[remIdx + 2] || '').trim();
+  const priceStr = String(parts[remIdx + 3] || '').trim();
+  
+  const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
+  
+  // Validasi: validity dan price harus ada dan valid
+  if (!validity || price <= 0) return null;
+  
+  return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
 }
 
 function normalizeBuyerPhone(input) {

@@ -50,14 +50,27 @@ function initTelegram() {
   // Helper Mikhmon Parser
   const parseMikhmon = (script) => {
     if (!script) return null;
-    // Format: :put (",rem,ID,VALIDITY,PRICE,MODE,")
-    const match = script.match(/",rem,.*?,(.*?),(.*?),.*?"/);
-    if (match) {
-      return {
-        validity: match[1],
-        price: match[2]
-      };
+    // Format: :put (",rem,COST,VALIDITY,PRICE,...)
+    // Contoh: :put (",rem,2000,1d,3000,,Disable,");
+    const s = String(script).trim();
+    const parts = s.split(',').map(p => String(p).trim());
+    let remIdx = -1;
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i].includes('rem')) {
+        remIdx = i;
+        break;
+      }
     }
+    if (remIdx < 0 || remIdx + 3 >= parts.length) return null;
+    const cost = String(parts[remIdx + 1] || '').trim();
+    const validity = String(parts[remIdx + 2] || '').trim();
+    const priceStr = String(parts[remIdx + 3] || '').trim();
+    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
+    if (validity && price > 0) {
+      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
+    }
+    return null;
+  };
     return null;
   };
 

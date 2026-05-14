@@ -649,7 +649,7 @@ async function getHotspotUserProfiles(routerId = null) {
     const start = Date.now();
     const raw = await conn.api.send([
       '/ip/hotspot/user/profile/print',
-      '=.proplist=.id,name,rate-limit,shared-users,session-timeout'
+      '=.proplist=.id,name,rate-limit,shared-users,session-timeout,on-login'
     ]);
     const ms = Date.now() - start;
     if (ms > 1200) logger.warn(`[MikroTik] Slow /ip/hotspot/user/profile/print (${ms}ms)`);
