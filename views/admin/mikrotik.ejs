@@ -531,13 +531,22 @@
   }
 
   async function loadHotspotUsers() {
+    const tbody = document.getElementById('hotspot-list');
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="bi bi-hourglass-split"></i> ' + I18N.loading + '</td></tr>';
+    
     try {
       const routerId = getRouterId();
-      const [uRes, aRes] = await Promise.all([
-        fetch(`/admin/api/mikrotik/hotspot-users?routerId=${routerId}`),
-        fetch(`/admin/api/mikrotik/active-hotspot?routerId=${routerId}`)
+      const startTime = Date.now();
+      
+      // Parallel fetch with timeout
+      const [uRes, aRes] = await Promise.race([
+        Promise.all([
+          fetch(`/admin/api/mikrotik/hotspot-users?routerId=${routerId}`),
+          fetch(`/admin/api/mikrotik/active-hotspot?routerId=${routerId}`)
+        ]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout (15s)')), 15000))
       ]);
-      const tbody = document.getElementById('hotspot-list');
+      
       if (!uRes.ok) {
         const msg = await readApiErrorMessage(uRes, I18N.loadFailed);
         hotspotData = [];
@@ -554,8 +563,12 @@
         tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
         return;
       }
+      
       hotspotData = await uRes.json();
       const activeSessions = await aRes.json();
+      
+      const loadTime = Date.now() - startTime;
+      console.log(`Hotspot users loaded in ${loadTime}ms`);
 
       document.getElementById('hotspot-online-count').innerText = activeSessions.length;
       document.getElementById('total-hotspot-count').innerText = hotspotData.length;
@@ -564,14 +577,25 @@
         tbody.innerHTML = '<tr><td colspan="8" class="text-center">' + I18N.emptyHotspotUsers + '</td></tr>';
         return;
       }
-      tbody.innerHTML = hotspotData.map((h, i) => {
-        const active = activeSessions.find(a => a.user === h.name);
+      
+      // Optimized rendering: Build active sessions map for O(1) lookup
+      const activeMap = new Map();
+      activeSessions.forEach(a => activeMap.set(a.user, a));
+      
+      // Batch rendering for better performance with large datasets
+      const batchSize = 100;
+      let html = '';
+      
+      for (let i = 0; i < hotspotData.length; i++) {
+        const h = hotspotData[i];
+        const active = activeMap.get(h.name);
         const statusHtml = active
           ? '<span class="badge bs">' + I18N.statusOnline + '</span>'
           : (h.disabled === true || h.disabled === 'true'
             ? '<span class="badge bd">' + I18N.statusDisabled + '</span>'
             : '<span class="badge bw">' + I18N.statusOffline + '</span>');
-        return `
+        
+        html += `
           <tr>
             <td class="fw6">${h.name}</td>
             <td><span class="badge bm">${h.profile}</span></td>
@@ -586,10 +610,18 @@
             </td>
           </tr>
         `;
-      }).join('');
+        
+        // Render in batches to prevent UI blocking
+        if ((i + 1) % batchSize === 0 || i === hotspotData.length - 1) {
+          tbody.innerHTML = html;
+          if (i < hotspotData.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 0)); // Yield to browser
+          }
+        }
+      }
     } catch (err) {
       console.error('Error loadHotspotUsers:', err);
-      document.getElementById('hotspot-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger">' + I18N.loadFailed + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">' + (err.message || I18N.loadFailed) + '</td></tr>';
     }
   }
 
@@ -997,7 +1029,32 @@
     ta.value = buildMikhmonOnLoginScript(price, validity, cost);
   }
 
+  // Load initial card summary stats on page load
+  async function loadInitialStats() {
+    try {
+      const routerId = getRouterId();
+      // Load hotspot stats for card summary
+      const [hsUsersRes, hsActiveRes] = await Promise.all([
+        fetch(`/admin/api/mikrotik/hotspot-users?routerId=${routerId}`).catch(() => null),
+        fetch(`/admin/api/mikrotik/active-hotspot?routerId=${routerId}`).catch(() => null)
+      ]);
+      
+      if (hsUsersRes && hsUsersRes.ok) {
+        const users = await hsUsersRes.json();
+        document.getElementById('total-hotspot-count').innerText = users.length;
+      }
+      
+      if (hsActiveRes && hsActiveRes.ok) {
+        const active = await hsActiveRes.json();
+        document.getElementById('hotspot-online-count').innerText = active.length;
+      }
+    } catch (err) {
+      console.error('Error loading initial hotspot stats:', err);
+    }
+  }
+
   loadSecrets();
+  loadInitialStats(); // Load hotspot card summary on page load
 </script>
 </body>
 </html>

@@ -550,16 +550,20 @@ async function getPppoeActive(routerId = null) {
 
 async function getHotspotActive(routerId = null) {
   const ck = cacheKey(routerId, 'hotspotActive');
-  const cached = getCachedList(ck, 3000);
+  const cached = getCachedList(ck, 5000); // Increased cache from 3s to 5s for better performance
   if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    const rows = await conn.client.menu('/ip/hotspot/active').get();
+    const rows = await withTimeout(
+      conn.client.menu('/ip/hotspot/active').get(),
+      5000, // 5 second timeout
+      'getHotspotActive'
+    );
     setCachedList(ck, rows);
     return rows;
   } catch (e) {
-    logger.error('Error getting active Hotspot sessions:', e);
+    logger.error('Error getting active Hotspot sessions:', e.message);
     throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
@@ -808,16 +812,20 @@ async function deleteHotspotUserProfile(id, routerId = null) {
 
 async function getHotspotUsers(routerId = null) {
   const ck = cacheKey(routerId, 'hotspotUsers');
-  const cached = getCachedList(ck, 8000);
+  const cached = getCachedList(ck, 15000); // Increased cache from 8s to 15s for better performance
   if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    const rows = await conn.client.menu('/ip/hotspot/user').get();
+    const rows = await withTimeout(
+      conn.client.menu('/ip/hotspot/user').get(),
+      10000, // 10 second timeout
+      'getHotspotUsers'
+    );
     setCachedList(ck, rows);
     return rows;
   } catch (e) {
-    logger.error('Error getting Hotspot users:', e);
+    logger.error('Error getting Hotspot users:', e.message);
     throw e;
   } finally {
     if (conn && conn.api) conn.api.close();
