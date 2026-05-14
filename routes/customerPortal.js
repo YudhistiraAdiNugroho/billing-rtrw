@@ -111,8 +111,6 @@ function parseMikhmonOnLogin(script) {
   
   // Format: :put (",rem,COST,VALIDITY,PRICE,...)
   // Contoh: :put (",rem,2000,1d,3000,,Disable,");
-  // Struktur: ",rem, FIELD1, FIELD2, FIELD3, FIELD4, FIELD5, ...
-  // Maka: FIELD1=COST, FIELD2=VALIDITY, FIELD3=PRICE
   
   const parts = s.split(',').map(p => String(p).trim());
   

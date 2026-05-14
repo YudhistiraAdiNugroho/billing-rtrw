@@ -51,7 +51,7 @@ function initTelegram() {
   const parseMikhmon = (script) => {
     if (!script) return null;
     // Format: :put (",rem,COST,VALIDITY,PRICE,...)
-    // Contoh: :put (",rem,2000,1d,3000,,Disable,");
+    // Support ROS6 dan ROS7
     const s = String(script).trim();
     const parts = s.split(',').map(p => String(p).trim());
     let remIdx = -1;

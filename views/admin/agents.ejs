@@ -281,7 +281,7 @@ function parseMikhmonOnLogin(script) {
   const s = String(script).trim();
   
   // Format: :put (",rem,COST,VALIDITY,PRICE,...)
-  // Contoh: :put (",rem,2000,1d,3000,,Disable,");
+  // Support ROS6 dan ROS7
   
   const parts = s.split(',').map(p => String(p).trim());
   let remIdx = -1;

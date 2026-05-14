@@ -922,7 +922,7 @@
     const s = String(script).trim();
     
     // Format: :put (",rem,COST,VALIDITY,PRICE,...)
-    // Contoh: :put (",rem,2000,1d,3000,,Disable,");
+    // Support ROS6 dan ROS7
     
     const parts = s.split(',').map(p => String(p).trim());
     let remIdx = -1;
@@ -950,6 +950,8 @@
     const c = String(cost == null ? '' : cost).trim() || '0';
     // Format: :put (",rem,COST,VALIDITY,PRICE,,Disable,");
     const meta = `:put (\",rem,${c},${v},${p},,Disable,\");`;
+    
+    // Script yang support ROS6 dan ROS7 (auto-detect format tanggal)
     const body =
       ` {:local c [ /ip hotspot user get [/ip hotspot user find where name=\\\"$user\\\"] comment];` +
       ` :local ucode [:pick $c 0 2];` +
@@ -960,7 +962,12 @@
       ` /system scheduler add name=$sch disabled=no start-date=$d start-time=$t interval=\\\"${v}\\\";` +
       ` :delay 2s;` +
       ` :local exp [ /system scheduler get [ /system scheduler find where name=$sch ] next-run ];` +
-      ` :if ([:len $exp] > 0) do={ /ip hotspot user set comment=$exp [find where name=\\\"$user\\\"]; }` +
+      ` :local explen [:len $exp];` +
+      ` :if ($explen > 0) do={` +
+      `   :if ($explen = 19) do={ :local comment ([:pick $exp 0 10] . \\\" \\\" . [:pick $exp 11 19]); /ip hotspot user set comment=$comment [find where name=\\\"$user\\\"]; }` +
+      `   :if ($explen = 15) do={ :local comment ([:pick $exp 0 6] . \\\"/\\\" . [:pick $exp 7 15]); /ip hotspot user set comment=$comment [find where name=\\\"$user\\\"]; }` +
+      `   :if ($explen = 8) do={ /ip hotspot user set comment=$d . \\\" \\\" . $exp [find where name=\\\"$user\\\"]; }` +
+      ` }` +
       ` :delay 1s;` +
       ` /system scheduler remove [find where name=$sch];` +
       ` } }`;
