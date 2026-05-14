@@ -88,8 +88,6 @@ function initTelegram() {
     
     return null;
   };
-    return null;
-  };
 
   // Main Menu (Inline Keyboard for better visibility)
   const mainMenu = {

@@ -18,8 +18,8 @@
     :root {
       --primary: #6366f1;
       --secondary: #3b82f6;
-      --text-main: #e2e8f0;
-      --text-muted: #94a3b8;
+      --text-main: #f1f5f9;
+      --text-muted: #cbd5e1;
       --bg: #0f172a;
       --panel: rgba(30, 41, 59, 0.92);
       --panel2: rgba(15, 23, 42, 0.55);
@@ -64,22 +64,49 @@
 
     h4 {
       margin-top: 30px;
-      color: var(--primary);
+      color: #818cf8;
       font-weight: 700;
       display: flex;
       align-items: center;
       gap: 10px;
+      font-size: 22px;
     }
 
     p {
       font-size: 16px;
       color: var(--text-main);
+      line-height: 1.8;
+    }
+
+    ul {
+      color: var(--text-main);
+      line-height: 1.9;
+    }
+
+    ul li {
+      margin-bottom: 10px;
+      color: var(--text-main);
+    }
+
+    .lead {
+      font-size: 18px;
+      color: var(--text-main);
+      line-height: 1.8;
+    }
+
+    strong {
+      color: #f1f5f9;
+      font-weight: 700;
+    }
+
+    .hero-section .lead {
+      color: #f1f5f9;
     }
 
     .footer {
       text-align: center;
       padding: 30px;
-      color: var(--text-muted);
+      color: #cbd5e1;
       font-size: 14px;
     }
 
@@ -95,9 +122,20 @@
 
     .stat-card i {
       font-size: 2rem;
-      color: var(--primary);
+      color: #818cf8;
       margin-bottom: 15px;
       display: block;
+    }
+
+    .stat-card h5 {
+      color: var(--text-main);
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .stat-card .small {
+      color: var(--text-muted);
+      font-size: 14px;
     }
 
     .btn-back {
@@ -138,7 +176,7 @@
     <div class="content-card">
       <div class="row mb-5">
         <div class="col-md-12">
-          <p class="lead"><%= String(t('customer.pages.about.p1', '<strong>{company}</strong> adalah penyedia layanan internet (ISP) yang berfokus pada penyediaan akses broadband berkualitas tinggi untuk perumahan dan bisnis kecil.')).replace('{company}', company) %></p>
+          <p class="lead"><%- String(t('customer.pages.about.p1', '<strong>{company}</strong> adalah penyedia layanan internet (ISP) yang berfokus pada penyediaan akses broadband berkualitas tinggi untuk perumahan dan bisnis kecil.')).replace('{company}', company) %></p>
           <p><%= t('customer.pages.about.p2', 'Kami percaya bahwa di era digital saat ini, akses internet yang stabil dan cepat bukan lagi kemewahan, melainkan kebutuhan dasar untuk mendukung pendidikan, ekonomi kreatif, dan komunikasi tanpa batas.') %></p>
         </div>
       </div>
@@ -148,29 +186,29 @@
           <div class="stat-card">
             <i class="bi bi-rocket-takeoff"></i>
             <h5><%= t('customer.pages.about.stats.speed_title', 'Kecepatan Tinggi') %></h5>
-            <p class="small text-muted"><%= t('customer.pages.about.stats.speed_desc', 'Jaringan serat optik untuk pengalaman internet tanpa hambatan.') %></p>
+            <p class="small"><%= t('customer.pages.about.stats.speed_desc', 'Jaringan serat optik untuk pengalaman internet tanpa hambatan.') %></p>
           </div>
         </div>
         <div class="col-md-4">
           <div class="stat-card">
             <i class="bi bi-shield-check"></i>
             <h5><%= t('customer.pages.about.stats.stable_title', 'Stabil & Aman') %></h5>
-            <p class="small text-muted"><%= t('customer.pages.about.stats.stable_desc', 'Infrastruktur yang dirancang untuk keandalan maksimal 24/7.') %></p>
+            <p class="small"><%= t('customer.pages.about.stats.stable_desc', 'Infrastruktur yang dirancang untuk keandalan maksimal 24/7.') %></p>
           </div>
         </div>
         <div class="col-md-4">
           <div class="stat-card">
             <i class="bi bi-headset"></i>
             <h5><%= t('customer.pages.about.stats.support_title', 'Dukungan Lokal') %></h5>
-            <p class="small text-muted"><%= t('customer.pages.about.stats.support_desc', 'Tim teknis yang siap membantu Anda kapan saja.') %></p>
+            <p class="small"><%= t('customer.pages.about.stats.support_desc', 'Tim teknis yang siap membantu Anda kapan saja.') %></p>
           </div>
         </div>
       </div>
 
-      <h4><%= t('customer.pages.about.vision_title', 'Visi Kami') %></h4>
+      <h4><i class="bi bi-eye"></i> <%= t('customer.pages.about.vision_title', 'Visi Kami') %></h4>
       <p><%= t('customer.pages.about.vision_body', 'Menjadi mitra konektivitas digital terpercaya yang mampu menjangkau hingga pelosok, memberikan dampak positif bagi perkembangan ekonomi dan sosial masyarakat.') %></p>
 
-      <h4><%= t('customer.pages.about.mission_title', 'Misi Kami') %></h4>
+      <h4><i class="bi bi-bullseye"></i> <%= t('customer.pages.about.mission_title', 'Misi Kami') %></h4>
       <ul>
         <li><%= t('customer.pages.about.mission_1', 'Menyediakan layanan internet dengan harga yang kompetitif namun berkualitas premium.') %></li>
         <li><%= t('customer.pages.about.mission_2', 'Terus berinovasi dalam infrastruktur jaringan untuk mengikuti perkembangan teknologi.') %></li>

@@ -18,8 +18,8 @@
     :root {
       --primary: #6366f1;
       --secondary: #3b82f6;
-      --text-main: #e2e8f0;
-      --text-muted: #94a3b8;
+      --text-main: #f1f5f9;
+      --text-muted: #cbd5e1;
       --bg: #0f172a;
       --panel: rgba(30, 41, 59, 0.92);
       --border: #334155;
@@ -63,27 +63,48 @@
 
     h4 {
       margin-top: 30px;
-      color: var(--primary);
+      color: #818cf8;
       font-weight: 700;
       display: flex;
       align-items: center;
       gap: 10px;
+      font-size: 20px;
     }
 
     h4 i {
       font-size: 1.2rem;
+      color: #818cf8;
     }
 
     p,
     li {
       font-size: 16px;
       color: var(--text-main);
+      line-height: 1.8;
+    }
+
+    ul {
+      color: var(--text-main);
+      line-height: 1.9;
+    }
+
+    ul li {
+      margin-bottom: 10px;
+    }
+
+    strong {
+      color: #f1f5f9;
+      font-weight: 700;
+    }
+
+    .lead {
+      color: #f1f5f9;
     }
 
     .footer {
       text-align: center;
       padding: 30px;
-      color: var(--text-muted);
+      color: #cbd5e1;
       font-size: 14px;
     }
 
@@ -123,7 +144,7 @@
 
   <div class="container">
     <div class="content-card">
-      <p><%= String(t('customer.pages.privacy.p1', 'Di <strong>{company}</strong>, privasi pelanggan kami adalah prioritas utama. Dokumen Kebijakan Privasi ini menjelaskan jenis informasi pribadi yang kami kumpulkan dan bagaimana kami menggunakannya.')).replace('{company}', company) %></p>
+      <p><%- String(t('customer.pages.privacy.p1', 'Di <strong>{company}</strong>, privasi pelanggan kami adalah prioritas utama. Dokumen Kebijakan Privasi ini menjelaskan jenis informasi pribadi yang kami kumpulkan dan bagaimana kami menggunakannya.')).replace('{company}', company) %></p>
 
       <h4><i class="bi bi-database-check"></i> 1. <%= t('customer.pages.privacy.s1_title', 'Informasi yang Kami Kumpulkan') %></h4>
       <p><%= t('customer.pages.privacy.s1_body', 'Kami mengumpulkan informasi terbatas yang diperlukan untuk penyediaan layanan, termasuk:') %></p>
