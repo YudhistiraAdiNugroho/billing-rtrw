@@ -652,6 +652,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { phone } = req.body;
   const settings = getSettingsWithCache();
+  const startTime = Date.now();
 
   let device = null;
   let effectiveTag = phone;
@@ -669,8 +670,8 @@ router.post('/login', async (req, res) => {
       customer.phone
     ].filter(Boolean);
 
-    // Cari secara paralel untuk mempercepat proses
-    const results = await Promise.all(searchTokens.map(async (token) => {
+    // Cari secara paralel dengan allSettled untuk tidak blocking jika ada error
+    const results = await Promise.allSettled(searchTokens.map(async (token) => {
       let d = await customerDevice.findDeviceByTag(token);
       if (!d) d = await customerDevice.findDeviceByPppoe(token);
       if (!d) {
@@ -680,7 +681,7 @@ router.post('/login', async (req, res) => {
       return d;
     }));
 
-    device = results.find(d => d !== null);
+    device = results.find(r => r.status === 'fulfilled' && r.value !== null)?.value;
     if (device) {
       logger.info('[Login] Perangkat terdeteksi di GenieACS (matched).');
       effectiveTag = device._id;
@@ -711,6 +712,9 @@ router.post('/login', async (req, res) => {
   if (!device) {
     logger.warn('[Login] Login dilanjutkan tanpa data ONU (device tidak ditemukan).');
   }
+
+  const loginTime = Date.now() - startTime;
+  logger.info(`[Login] Proses login selesai dalam ${loginTime}ms`);
 
   // --- OTP LOGIC --- (Hanya jika perangkat ditemukan)
   if (settings.login_otp_enabled) {

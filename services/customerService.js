@@ -243,8 +243,8 @@ function findCustomerByAny(val) {
     if (p1) return getCustomerById(p1.id);
   }
 
-  // 2. Try GenieACS Tag atau PPPoE Username atau Hotspot Username (Exact Match)
-  const t = db.prepare('SELECT id FROM customers WHERE genieacs_tag = ? OR pppoe_username = ? OR hotspot_username = ?').get(cleanVal, cleanVal, cleanVal);
+  // 2. Try GenieACS Tag, PPPoE Username, atau MAC Address (Exact Match)
+  const t = db.prepare('SELECT id FROM customers WHERE genieacs_tag = ? OR pppoe_username = ? OR mac_address = ?').get(cleanVal, cleanVal, cleanVal);
   if (t) return getCustomerById(t.id);
 
   // 3. Try ID if numeric

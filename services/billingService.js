@@ -398,7 +398,7 @@ function getInvoicesByAny(val) {
   }
   
   if (!customer) {
-    customer = db.prepare(`SELECT id FROM customers WHERE pppoe_username = ? OR genieacs_tag = ? OR hotspot_username = ?`).get(raw, raw, raw);
+    customer = db.prepare(`SELECT id FROM customers WHERE pppoe_username = ? OR genieacs_tag = ?`).get(raw, raw);
   }
 
   if (customer) {
@@ -408,7 +408,6 @@ function getInvoicesByAny(val) {
              c.phone as customer_phone,
              c.address as customer_address,
              c.pppoe_username,
-             c.hotspot_username,
              c.genieacs_tag,
              c.connection_type,
              c.static_ip,
@@ -438,10 +437,10 @@ function getInvoicesByAny(val) {
            c.phone as customer_phone,
            c.address as customer_address,
            c.pppoe_username,
-           c.hotspot_username,
            c.genieacs_tag,
            c.connection_type,
            c.static_ip,
+           c.mac_address,
            c.status as customer_status,
            c.router_id,
            c.install_date,
@@ -458,7 +457,7 @@ function getInvoicesByAny(val) {
        OR lower(c.phone) LIKE ?
        OR lower(c.genieacs_tag) LIKE ?
        OR lower(c.pppoe_username) LIKE ?
-       OR lower(c.hotspot_username) LIKE ?
+       OR lower(c.mac_address) LIKE ?
     ORDER BY i.period_year DESC, i.period_month DESC
     LIMIT 300
   `).all(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
