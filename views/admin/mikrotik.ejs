@@ -251,7 +251,8 @@
       <div class="mbody">
         <div class="fg"><label class="fl">Name</label><input class="fc" id="hp_name" required></div>
         <div class="form-row">
-          <div class="fg"><label class="fl">Harga (Rp)</label><input class="fc" id="hp_price" type="number" min="0" step="500" value="0" oninput="syncMikhmonOnLogin()"></div>
+          <div class="fg"><label class="fl">Harga Beli (Rp)</label><input class="fc" id="hp_cost" type="number" min="0" step="500" value="0" oninput="syncMikhmonOnLogin()"></div>
+          <div class="fg"><label class="fl">Harga Jual (Rp)</label><input class="fc" id="hp_price" type="number" min="0" step="500" value="0" oninput="syncMikhmonOnLogin()"></div>
           <div class="fg"><label class="fl">Durasi Voucher (mis. 1h / 1d / 7d)</label><input class="fc" id="hp_validity" value="1d" oninput="syncMikhmonOnLogin()"></div>
         </div>
         <div class="form-row">
@@ -818,6 +819,7 @@
     }
     document.getElementById('hp_onlogin').value = script;
     const meta = parseMikhmonOnLogin(script);
+    document.getElementById('hp_cost').value = meta ? (meta.cost || 0) : 0;
     document.getElementById('hp_price').value = meta ? (meta.price || 0) : 0;
     document.getElementById('hp_validity').value = meta ? (meta.validity || '1d') : '1d';
     document.getElementById('hotspotProfileModalTitle').innerText = I18N.editHotspotProfile;
@@ -842,6 +844,7 @@
       const nameEl = document.getElementById('hp_name');
       const rateEl = document.getElementById('hp_rate');
       const sharedEl = document.getElementById('hp_shared');
+      const onLoginEl = document.getElementById('hp_onlogin');
       if (!idEl || !nameEl || !rateEl || !sharedEl) {
         alert('Form hotspot profile tidak lengkap. Silakan refresh halaman.');
         return;
@@ -853,9 +856,11 @@
       const sharedRaw = String(sharedEl.value || '').trim() || '1';
       const sharedNum = Number(sharedRaw);
       const shared = Number.isFinite(sharedNum) && sharedNum > 0 ? sharedNum : 1;
+      const onLogin = onLoginEl ? String(onLoginEl.value || '').trim() : '';
 
       const data = { name, 'shared-users': shared };
       if (rate) data['rate-limit'] = rate;
+      if (onLogin) data['on-login'] = onLogin;
 
       const routerId = getRouterId();
       const url = id && id !== data.name
@@ -939,10 +944,12 @@
     return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
   }
 
-  function buildMikhmonOnLoginScript(price, validity) {
+  function buildMikhmonOnLoginScript(price, validity, cost) {
     const p = String(price == null ? '' : price).trim() || '0';
     const v = String(validity || '').trim() || '1d';
-    const meta = `:put (\",rem,1,${v},${p},,Disable,ros6/7,\");`;
+    const c = String(cost == null ? '' : cost).trim() || '0';
+    // Format: :put (",rem,COST,VALIDITY,PRICE,,Disable,");
+    const meta = `:put (\",rem,${c},${v},${p},,Disable,\");`;
     const body =
       ` {:local c [ /ip hotspot user get [/ip hotspot user find where name=\\\"$user\\\"] comment];` +
       ` :local ucode [:pick $c 0 2];` +
@@ -961,11 +968,12 @@
   }
 
   function syncMikhmonOnLogin() {
+    const cost = document.getElementById('hp_cost')?.value;
     const price = document.getElementById('hp_price')?.value;
     const validity = document.getElementById('hp_validity')?.value;
     const ta = document.getElementById('hp_onlogin');
     if (!ta) return;
-    ta.value = buildMikhmonOnLoginScript(price, validity);
+    ta.value = buildMikhmonOnLoginScript(price, validity, cost);
   }
 
   loadSecrets();

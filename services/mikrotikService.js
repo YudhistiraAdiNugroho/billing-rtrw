@@ -706,6 +706,12 @@ async function addHotspotUserProfile(data, routerId = null) {
       const first = st ? st.split(/\\s+/)[0] : '';
       if (first) payload['session-timeout'] = first;
     }
+    
+    // Handle on-login (Mikhmon metadata)
+    if (data && data['on-login'] != null) {
+      const onLogin = String(data['on-login'] || '').trim();
+      if (onLogin) payload['on-login'] = onLogin;
+    }
 
     const op = menu.add(payload);
     const res = await withTimeout(op, 8000, '/ip/hotspot/user/profile/add').catch(async (err) => {
@@ -749,6 +755,12 @@ async function updateHotspotUserProfile(id, data, routerId = null) {
       const st = String(data['session-timeout'] || '').trim();
       const first = st ? st.split(/\\s+/)[0] : '';
       if (first) safe['session-timeout'] = first;
+    }
+    
+    // Handle on-login (Mikhmon metadata)
+    if (data && data['on-login'] != null) {
+      const onLogin = String(data['on-login'] || '').trim();
+      if (onLogin) safe['on-login'] = onLogin;
     }
 
     const name = String(safe?.name || '').trim();
