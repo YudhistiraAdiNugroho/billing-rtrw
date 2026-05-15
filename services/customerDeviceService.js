@@ -590,21 +590,24 @@ async function listDevicesWithTags(limit = 250) {
 }
 
 /** Mengambil semua perangkat tanpa melihat tag. */
-async function listAllDevices(limit = 500) {
+async function listAllDevices(limit = 500, offset = 0) {
   const settings = getSettingsWithCache();
   const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
   const auth = { username: settings.genieacs_username || '', password: settings.genieacs_password || '' };
   try {
+    const safeLimit = Math.max(1, Math.min(parseInt(limit, 10) || 500, 1000));
+    const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
     const response = await axios.get(`${genieacsUrl}/devices`, {
       params: {
-        limit,
-        projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
+        limit: safeLimit,
+        skip: safeOffset,
+        projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,VirtualParameters.RXPower,VirtualParameters.redaman,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.XPON.RxPower,Device.XPON.Interface.1.RxPower,InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANOAM.RXPower,Device.Optical.Interface.1.OpticalSignalLevel,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
       },
       auth,
       timeout: 45000
     });
     const rows = Array.isArray(response.data) ? response.data : [];
-    return { ok: true, devices: rows.slice(0, limit) };
+    return { ok: true, devices: rows.slice(0, safeLimit) };
   } catch (e) {
     return { ok: false, devices: [], message: 'Gagal mengambil daftar dari GenieACS: ' + e.message };
   }

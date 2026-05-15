@@ -61,6 +61,159 @@ function initTelegram() {
     return null;
   };
 
+  const md = (v) => String(v ?? '').replace(/[`]/g, '\\`');
+
+  const deepGet = (obj, path) => {
+    if (!obj) return undefined;
+    const parts = String(path || '').split('.').filter(Boolean);
+    let cur = obj;
+    for (const p of parts) {
+      if (cur == null) return undefined;
+      cur = cur[p];
+    }
+    if (cur && typeof cur === 'object' && cur._value !== undefined) return cur._value;
+    return cur;
+  };
+
+  const firstValue = (obj, paths) => {
+    for (const p of (paths || [])) {
+      const v = deepGet(obj, p);
+      if (v === undefined || v === null) continue;
+      const s = typeof v === 'string' ? v.trim() : String(v);
+      if (s) return s;
+    }
+    return '';
+  };
+
+  const formatLastInform = (v) => {
+    if (v == null) return '';
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    try {
+      return new Date(n).toLocaleString('id-ID');
+    } catch {
+      return String(v);
+    }
+  };
+
+  const formatRxPower = (raw) => {
+    const s = String(raw ?? '').trim();
+    if (!s || s === 'N/A' || s === '-') return '-';
+    if (/dbm/i.test(s)) return s;
+    if (/^-?\d+(\.\d+)?$/.test(s)) return `${s} dBm`;
+    return s;
+  };
+
+  async function sendOnuList(chatId, messageId, page = 1) {
+    const customerDevice = require('./customerDeviceService');
+    const pageSize = 8;
+    const p = Math.max(1, parseInt(page, 10) || 1);
+    const offset = (p - 1) * pageSize;
+    let res = await customerDevice.listAllDevices(pageSize, offset);
+    if (!res.ok) {
+      const fallback = await customerDevice.listDevicesWithTags(pageSize);
+      if (!fallback.ok || !fallback.devices.length) {
+        const msg = '📭 Tidak ada perangkat ONU yang terdeteksi di GenieACS.';
+        if (messageId) {
+          try { return bot.editMessageText(msg, { chat_id: chatId, message_id: messageId }); } catch {}
+        }
+        return bot.sendMessage(chatId, msg);
+      }
+      res = { ok: true, devices: fallback.devices };
+    }
+
+    const devices = Array.isArray(res.devices) ? res.devices : [];
+    if (devices.length === 0) {
+      const txt = `*📡 DAFTAR ONU (GenieACS)*\n\nHalaman ${p} kosong.`;
+      const kb = {
+        inline_keyboard: [
+          ...(p > 1 ? [[{ text: '⬅️ Kembali', callback_data: `cust_listonu:${p - 1}` }]] : []),
+          [{ text: '⬅️ Menu Pelanggan', callback_data: 'menu_cust' }]
+        ]
+      };
+      if (messageId) {
+        try { return bot.editMessageText(txt, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: kb }); } catch {}
+      }
+      return bot.sendMessage(chatId, txt, { parse_mode: 'Markdown', reply_markup: kb });
+    }
+
+    let txt = `*📡 DAFTAR ONU (GenieACS)*\n`;
+    txt += `Halaman: ${p}\n`;
+    txt += `Menampilkan: ${devices.length}\n\n`;
+
+    devices.forEach((d, i) => {
+      const num = offset + i + 1;
+      const id = d?._id || 'Unknown ID';
+      const tags = Array.isArray(d?._tags) ? d._tags.join(', ') : (d?._tags || '-');
+      const pppoe = firstValue(d, [
+        'VirtualParameters.pppoeUsername',
+        'VirtualParameters.pppUsername',
+        'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username._value',
+        'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username',
+        'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username._value',
+        'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username',
+        'Device.PPP.Interface.1.Username._value',
+        'Device.PPP.Interface.1.Username'
+      ]) || '-';
+      const serial = firstValue(d, [
+        'DeviceID.SerialNumber._value',
+        'DeviceID.SerialNumber',
+        'InternetGatewayDevice.DeviceInfo.SerialNumber._value',
+        'InternetGatewayDevice.DeviceInfo.SerialNumber'
+      ]) || '-';
+      const rx = formatRxPower(firstValue(d, [
+        'VirtualParameters.RXPower',
+        'VirtualParameters.redaman',
+        'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.XPON.RxPower._value',
+        'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.XPON.RxPower',
+        'Device.XPON.Interface.1.RxPower._value',
+        'Device.XPON.Interface.1.RxPower',
+        'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower._value',
+        'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower',
+        'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANOAM.RXPower._value',
+        'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANOAM.RXPower',
+        'Device.Optical.Interface.1.OpticalSignalLevel._value',
+        'Device.Optical.Interface.1.OpticalSignalLevel'
+      ]));
+      const lastInform = formatLastInform(d?._lastInform) || '-';
+
+      txt += `${num}. \`${md(id)}\`\n`;
+      txt += `  ├ PPPoE: \`${md(pppoe)}\`\n`;
+      txt += `  ├ RX: ${md(rx)}\n`;
+      txt += `  ├ SN: ${md(serial)}\n`;
+      txt += `  ├ Last: ${md(lastInform)}\n`;
+      txt += `  └ Tag: ${md(tags)}\n\n`;
+    });
+
+    const hasNext = devices.length === pageSize;
+    const navRow = [];
+    if (p > 1) navRow.push({ text: '⬅️ Prev', callback_data: `cust_listonu:${p - 1}` });
+    if (hasNext) navRow.push({ text: 'Next ➡️', callback_data: `cust_listonu:${p + 1}` });
+
+    const startPage = Math.max(1, p - 2);
+    const pageRow = [];
+    for (let i = 0; i < 5; i++) {
+      const n = startPage + i;
+      const label = n === p ? `•${n}•` : String(n);
+      pageRow.push({ text: label, callback_data: `cust_listonu:${n}` });
+    }
+
+    const kb = {
+      inline_keyboard: [
+        ...(navRow.length ? [navRow] : []),
+        pageRow,
+        [{ text: '⬅️ Menu Pelanggan', callback_data: 'menu_cust' }]
+      ]
+    };
+
+    if (messageId) {
+      try {
+        return bot.editMessageText(txt.trim(), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: kb });
+      } catch {}
+    }
+    return bot.sendMessage(chatId, txt.trim(), { parse_mode: 'Markdown', reply_markup: kb });
+  }
+
   // Main Menu (Inline Keyboard for better visibility)
   const mainMenu = {
     reply_markup: {
@@ -271,25 +424,12 @@ function initTelegram() {
     }
 
     else if (data === 'cust_listonu') {
-      const customerDevice = require('./customerDeviceService');
-      let res = await customerDevice.listDevicesWithTags(30);
-      
-      // Jika kosong, coba ambil semua perangkat
-      if (!res.ok || res.devices.length === 0) {
-        res = await customerDevice.listAllDevices(30);
-      }
+      await sendOnuList(chatId, query.message.message_id, 1);
+    }
 
-      if (!res.ok || res.devices.length === 0) {
-        return bot.sendMessage(chatId, '📭 Tidak ada perangkat ONU yang terdeteksi di GenieACS.');
-      }
-
-      let txt = `*📡 DAFTAR ONU (GenieACS)*\n\n`;
-      res.devices.forEach(d => {
-        const id = d._id || 'Unknown ID';
-        const tags = Array.isArray(d._tags) ? d._tags.join(', ') : (d._tags || '-');
-        txt += `• \`${id}\`\n  └ Tag: ${tags}\n`;
-      });
-      bot.sendMessage(chatId, txt, { parse_mode: 'Markdown' });
+    else if (data && data.startsWith('cust_listonu:')) {
+      const page = data.split(':')[1];
+      await sendOnuList(chatId, query.message.message_id, page);
     }
 
     else if (data === 'cust_suspended') {
