@@ -7,28 +7,6 @@ const { getSetting } = require('../config/settingsManager');
 const mikrotikService = require('../services/mikrotikService');
 const db = require('../config/database');
 const oltSvc = require('../services/oltService');
-const attendanceSvc = require('../services/attendanceService');
-
-const waSendDedup = new Map();
-function normalizeWaDigits(input) {
-  let digits = String(input || '').replace(/\D/g, '');
-  if (!digits) return '';
-  if (digits.startsWith('0')) digits = '62' + digits.slice(1);
-  if (digits.length < 8) return '';
-  return digits;
-}
-function shouldSendWa(key, ttlMs = 15000) {
-  const now = Date.now();
-  const last = waSendDedup.get(key);
-  if (last && (now - last) < ttlMs) return false;
-  waSendDedup.set(key, now);
-  if (waSendDedup.size > 5000) {
-    for (const [k, t] of waSendDedup.entries()) {
-      if ((now - t) > 10 * 60 * 1000) waSendDedup.delete(k);
-    }
-  }
-  return true;
-}
 
 function requireTechSession(req, res, next) {
   if (req.session && req.session.isTechnician && req.session.techId) {
@@ -167,11 +145,7 @@ router.post('/tickets/:id/update', requireTechSession, express.urlencoded({ exte
 
             // Kirim ke Pelanggan
             if (ticket.customer_phone) {
-              const digits = normalizeWaDigits(ticket.customer_phone);
-              if (digits) {
-                const key = `ticket:resolved:customer:${ticketId}:${digits}`;
-                if (shouldSendWa(key)) await sendWA(digits, waMsg);
-              }
+              await sendWA(ticket.customer_phone, waMsg);
             }
 
             // Kirim ke Admin
@@ -182,15 +156,8 @@ router.post('/tickets/:id/update', requireTechSession, express.urlencoded({ exte
                                `🛠️ *Teknisi:* ${req.session.techName}\n` +
                                `📝 *Subjek:* ${ticket.subject}\n` +
                                `💬 *Pesan:* ${ticket.message}`;
-              const recipients = new Set();
               for (const adminPhone of settings.whatsapp_admin_numbers) {
-                const digits = normalizeWaDigits(adminPhone);
-                if (digits) recipients.add(digits);
-              }
-              for (const digits of recipients) {
-                const key = `ticket:resolved:admin:${ticketId}:${digits}`;
-                if (!shouldSendWa(key)) continue;
-                await sendWA(digits, adminMsg);
+                await sendWA(adminPhone, adminMsg);
               }
             }
           }
@@ -367,30 +334,11 @@ router.get('/api/odps/:id/ports', requireTechSession, (req, res) => {
 router.get('/api/devices', requireTechSession, async (req, res) => {
   try {
     const { search, status, limit = 100, offset = 0 } = req.query;
-    const customers = db.prepare('SELECT id, name, phone, pppoe_username, genieacs_tag FROM customers').all();
-    const byPppoe = new Map();
-    const byTag = new Map();
-    for (const c of customers) {
-      const pu = String(c.pppoe_username || '').trim().toLowerCase();
-      const tg = String(c.genieacs_tag || '').trim();
-      if (pu) byPppoe.set(pu, c);
-      if (tg) byTag.set(tg, c);
-    }
-
     const result = await customerDevice.listAllDevices(1000);
     if (!result.ok) return res.json({ error: result.message });
     
     let devices = result.devices.map(d => {
       const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id);
-      const pu = String(mapped.pppoeUsername || '').trim();
-      const puKey = pu && pu !== 'N/A' ? pu.toLowerCase() : '';
-      let customer = puKey ? byPppoe.get(puKey) : null;
-      if (!customer && Array.isArray(d._tags)) {
-        for (const t of d._tags) {
-          const hit = byTag.get(String(t || '').trim());
-          if (hit) { customer = hit; break; }
-        }
-      }
       return {
         id: d._id, 
         tags: d._tags || [],
@@ -404,10 +352,7 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
         model: mapped.model,
         softwareVersion: mapped.softwareVersion,
         userConnected: mapped.totalAssociations,
-        ssid: mapped.ssid,
-        customerId: customer ? customer.id : null,
-        customerName: customer ? customer.name : '',
-        customerPhone: customer ? customer.phone : ''
+        ssid: mapped.ssid
       };
     });
 
@@ -417,9 +362,7 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
         d.id.toLowerCase().includes(s) ||
         d.tags.some(t => t.toLowerCase().includes(s)) || 
         d.serialNumber.toLowerCase().includes(s) || 
-        (d.pppoeUsername && d.pppoeUsername !== 'N/A' && d.pppoeUsername.toLowerCase().includes(s)) ||
-        (d.customerName && d.customerName.toLowerCase().includes(s)) ||
-        (d.customerPhone && d.customerPhone.toLowerCase().includes(s))
+        (d.pppoeUsername && d.pppoeUsername !== 'N/A' && d.pppoeUsername.toLowerCase().includes(s))
       );
     }
 
@@ -445,31 +388,6 @@ router.post('/api/device/:tag/ssid', requireTechSession, express.json(), async (
   const { ssid } = req.body;
   if (!ssid) return res.status(400).json({ error: 'SSID required' });
   const ok = await customerDevice.updateSSID(req.params.tag, ssid);
-  // Kirim notifikasi WhatsApp ke pelanggan
-  if (ok) {
-    try {
-      const { getSettingsWithCache } = require('../config/settingsManager');
-      const settings = getSettingsWithCache();
-      if (settings.whatsapp_enabled) {
-        const tag = req.params.tag;
-        const cust = customerSvc.findCustomerByAny(tag);
-        if (cust && cust.phone) {
-          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
-          if (whatsappStatus && whatsappStatus.connection === 'open') {
-            const now = new Date().toLocaleString('id-ID');
-            const msg = `\ud83d\udcf6 *PERUBAHAN SSID WIFI*\n\n` +
-              `\ud83d\udc64 *Pelanggan:* ${cust.name}\n` +
-              `\ud83d\udd52 *Waktu:* ${now}\n\n` +
-              `SSID WiFi Anda sudah diperbarui menjadi:\n` +
-              `\ud83d\udce1 *${ssid}*\n\n` +
-              `Silakan pilih SSID baru di perangkat Anda untuk terhubung.\n` +
-              `\u26a0\ufe0f Jangan bagikan info ini ke orang lain.`;
-            await sendWA(cust.phone, msg);
-          }
-        }
-      }
-    } catch (e) { /* ignore WA notification errors */ }
-  }
   res.json({ success: ok });
 });
 
@@ -477,132 +395,12 @@ router.post('/api/device/:tag/password', requireTechSession, express.json(), asy
   const { password } = req.body;
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
   const ok = await customerDevice.updatePassword(req.params.tag, password);
-  // Kirim notifikasi WhatsApp ke pelanggan
-  if (ok) {
-    try {
-      const { getSettingsWithCache } = require('../config/settingsManager');
-      const settings = getSettingsWithCache();
-      if (settings.whatsapp_enabled) {
-        const tag = req.params.tag;
-        const cust = customerSvc.findCustomerByAny(tag);
-        if (cust && cust.phone) {
-          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
-          if (whatsappStatus && whatsappStatus.connection === 'open') {
-            const now = new Date().toLocaleString('id-ID');
-            const msg = `\ud83d\udd11 *PERUBAHAN PASSWORD WIFI*\n\n` +
-              `\ud83d\udc64 *Pelanggan:* ${cust.name}\n` +
-              `\ud83d\udd52 *Waktu:* ${now}\n\n` +
-              `Password WiFi Anda sudah diperbarui menjadi:\n` +
-              `\ud83d\udd10 *${password}*\n\n` +
-              `Silakan gunakan password baru untuk terhubung.\n` +
-              `\u26a0\ufe0f Jangan bagikan password ini ke orang lain.`;
-            await sendWA(cust.phone, msg);
-          }
-        }
-      }
-    } catch (e) { /* ignore WA notification errors */ }
-  }
   res.json({ success: ok });
 });
 
 router.post('/api/device/:tag/reboot', requireTechSession, async (req, res) => {
   const result = await customerDevice.requestReboot(req.params.tag);
   res.json(result);
-});
-
-// ─── ATTENDANCE ROUTES ───────────────────────────────────────────────────────
-
-// Get attendance page
-router.get('/attendance', requireTechSession, (req, res) => {
-  const techId = req.session.techId;
-  const todayAttendance = attendanceSvc.getTodayAttendance('technician', techId);
-  const history = attendanceSvc.getAttendanceHistory('technician', techId, 10);
-  
-  // Get monthly summary
-  const now = new Date();
-  const summary = attendanceSvc.getMonthlyAttendanceSummary(
-    'technician',
-    techId,
-    now.getFullYear(),
-    now.getMonth() + 1
-  );
-  
-  res.render('tech/attendance', {
-    title: 'Absensi',
-    company: company(),
-    activePage: 'attendance',
-    techName: req.session.techName,
-    todayAttendance,
-    history,
-    summary,
-    msg: flashMsg(req)
-  });
-});
-
-// Check-in
-router.post('/attendance/checkin', requireTechSession, express.json(), (req, res) => {
-  try {
-    const techId = req.session.techId;
-    const techName = req.session.techName;
-    
-    // Check if already checked in today
-    const today = attendanceSvc.getTodayAttendance('technician', techId);
-    if (today) {
-      return res.json({ success: false, message: 'Anda sudah melakukan check-in hari ini' });
-    }
-    
-    const result = attendanceSvc.checkIn({
-      employee_type: 'technician',
-      employee_id: techId,
-      employee_name: techName,
-      lat: req.body.lat || '',
-      lng: req.body.lng || '',
-      note: req.body.note || ''
-    });
-    
-    res.json({ success: true, message: 'Check-in berhasil!', id: result.lastInsertRowid });
-  } catch (e) {
-    res.json({ success: false, message: 'Gagal check-in: ' + e.message });
-  }
-});
-
-// Check-out
-router.post('/attendance/checkout', requireTechSession, express.json(), (req, res) => {
-  try {
-    const techId = req.session.techId;
-    
-    // Get today's attendance
-    const today = attendanceSvc.getTodayAttendance('technician', techId);
-    if (!today) {
-      return res.json({ success: false, message: 'Anda belum check-in hari ini' });
-    }
-    
-    if (today.status === 'checked_out') {
-      return res.json({ success: false, message: 'Anda sudah check-out hari ini' });
-    }
-    
-    attendanceSvc.checkOut(today.id, {
-      lat: req.body.lat || '',
-      lng: req.body.lng || '',
-      note: req.body.note || ''
-    });
-    
-    res.json({ success: true, message: 'Check-out berhasil!' });
-  } catch (e) {
-    res.json({ success: false, message: 'Gagal check-out: ' + e.message });
-  }
-});
-
-// Get attendance history (API)
-router.get('/api/attendance/history', requireTechSession, (req, res) => {
-  try {
-    const techId = req.session.techId;
-    const limit = req.query.limit ? parseInt(req.query.limit) : 30;
-    const history = attendanceSvc.getAttendanceHistory('technician', techId, limit);
-    res.json({ success: true, data: history });
-  } catch (e) {
-    res.json({ success: false, message: e.message });
-  }
 });
 
 module.exports = router;

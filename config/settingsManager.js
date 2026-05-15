@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const { logger } = require('./logger');
+const { decryptSettings, encryptSettings } = require('./settingsEncryption');
+const { validateSettings } = require('./settingsValidator');
+const { logSettingsChange } = require('./settingsAudit');
 
 // Cache untuk settings dengan timestamp
 let settingsCache = null;
@@ -14,7 +17,9 @@ let watcher = null;
 // Helper untuk baca settings.json secara dinamis
 function getSettings() {
   try {
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    const rawSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    // Decrypt sensitive fields
+    return decryptSettings(rawSettings);
   } catch (error) {
     logger.error(`[settings] Error reading settings.json: ${error.message}`);
     return {};
@@ -85,18 +90,59 @@ function startSettingsWatcher() {
 // Mulai watcher saat modul dimuat
 startSettingsWatcher();
 
-// Menyimpan pengaturan ke settings.json
-function saveSettings(newSettings) {
+// Menyimpan pengaturan ke settings.json dengan validation & encryption
+function saveSettings(newSettings, actor = 'system', metadata = {}) {
   try {
     const currentSettings = getSettings();
     const updatedSettings = { ...currentSettings, ...newSettings };
-    fs.writeFileSync(settingsPath, JSON.stringify(updatedSettings, null, 2), 'utf-8');
+
+    // Validate settings
+    const validation = validateSettings(updatedSettings);
+    if (!validation.valid) {
+      logger.warn(`[settings] Validation failed: ${validation.errors.join(', ')}`);
+      return {
+        success: false,
+        errors: validation.errors
+      };
+    }
+
+    // Track changes untuk audit trail
+    const changes = {};
+    Object.keys(newSettings).forEach(field => {
+      if (currentSettings[field] !== newSettings[field]) {
+        changes[field] = {
+          oldValue: currentSettings[field] || '',
+          newValue: newSettings[field] || ''
+        };
+      }
+    });
+
+    // Encrypt sensitive fields
+    const encryptedSettings = encryptSettings(updatedSettings);
+
+    // Save to file
+    fs.writeFileSync(settingsPath, JSON.stringify(encryptedSettings, null, 2), 'utf-8');
+
+    // Update cache
     settingsCache = updatedSettings;
     settingsCacheTime = Date.now();
-    return true;
+
+    // Log to audit trail
+    if (Object.keys(changes).length > 0) {
+      logSettingsChange(actor, changes, metadata);
+    }
+
+    logger.info(`[settings] Settings saved successfully by ${actor}`);
+    return {
+      success: true,
+      changes: Object.keys(changes)
+    };
   } catch (error) {
     logger.error(`[settings] Error saving settings.json: ${error.message}`);
-    return false;
+    return {
+      success: false,
+      errors: [error.message]
+    };
   }
 }
 
@@ -107,4 +153,4 @@ module.exports = {
   getSettingsByKeys,
   saveSettings,
   startSettingsWatcher
-}; 
+};

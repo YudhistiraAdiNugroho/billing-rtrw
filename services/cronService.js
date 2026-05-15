@@ -162,14 +162,9 @@ function startCronJobs() {
 
     // Filter pelanggan yang perlu diingatkan
     const targetCustomers = [];
-    const seenPhones = new Set();
     for (const c of customers) {
       const phone = c.phone ? String(c.phone).trim() : '';
       if (!phone || phone.length < 9) continue;
-      let digits = phone.replace(/\D/g, '');
-      if (!digits) continue;
-      if (digits.startsWith('0')) digits = '62' + digits.slice(1);
-      if (seenPhones.has(digits)) continue;
       const unpaidCount = Number(c.unpaid_count || 0) || 0;
       if (unpaidCount <= 0) continue;
 
@@ -178,7 +173,6 @@ function startCronJobs() {
       const shouldSend = remind1 >= 1 && day === remind1;
       if (!shouldSend) continue;
 
-      seenPhones.add(digits);
       targetCustomers.push(c);
     }
 

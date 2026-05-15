@@ -26,55 +26,6 @@ const monitoringSvc = require('../services/monitoringService');
 const inventorySvc = require('../services/inventoryService');
 const auditSvc = require('../services/auditTrailService');
 const diagnosticsSvc = require('../services/diagnosticsService');
-const attendanceSvc = require('../services/attendanceService');
-const payrollSvc = require('../services/payrollService');
-const axios = require('axios');
-const crypto = require('crypto');
-
-const DIGIFLAZZ_URL = 'https://api.digiflazz.com/v1';
-const digiflazzApi = axios.create({
-  baseURL: DIGIFLAZZ_URL,
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' }
-});
-
-function digiflazzCreds() {
-  const username = String(getSetting('digiflazz_username', '') || '').trim();
-  const apiKey = String(getSetting('digiflazz_api_key', '') || '').trim();
-  return { username, apiKey };
-}
-
-function digiflazzConfigured() {
-  const { username, apiKey } = digiflazzCreds();
-  return Boolean(username && apiKey);
-}
-
-function digiflazzSign(refId) {
-  const { username, apiKey } = digiflazzCreds();
-  if (!username || !apiKey) throw new Error('Digiflazz belum dikonfigurasi');
-  return crypto.createHash('md5').update(username + apiKey + String(refId || '')).digest('hex');
-}
-
-async function digiflazzCekSaldo() {
-  const { username } = digiflazzCreds();
-  const sign = digiflazzSign('depo');
-  const response = await digiflazzApi.post('/cek-saldo', { cmd: 'deposit', username, sign });
-  const data = response?.data?.data;
-  if (data?.rc) throw new Error(String(data?.message || 'Gagal cek saldo Digiflazz'));
-  return data;
-}
-
-async function digiflazzPriceListAll() {
-  const { username } = digiflazzCreds();
-  const sign = digiflazzSign('pricelist');
-  const response = await digiflazzApi.post('/price-list', { cmd: 'prepaid', username, sign });
-  const data = response?.data?.data;
-  if (!Array.isArray(data)) {
-    const msg = response?.data?.data?.message || response?.data?.message || 'Gagal mengambil price list Digiflazz';
-    throw new Error(String(msg));
-  }
-  return data;
-}
 
 const pppoeTrafficSamples = new Map();
 function prunePppoeTrafficSamples(now) {
@@ -127,33 +78,6 @@ function requireAdmin(req, res, next) {
 function requireAdminSession(req, res, next) {
   if (req.session?.isAdmin || req.session?.isCashier) return next();
   return res.redirect('/admin/login');
-}
-
-function resolvePaidByName(req, fallback) {
-  const fb = String(fallback || '').trim();
-  if (req.session?.isCashier) {
-    const nm = String(req.session.cashierName || '').trim();
-    const un = String(req.session.cashierUsername || '').trim();
-    if (nm && un) return `Kasir ${nm} (@${un})`;
-    if (nm) return `Kasir ${nm}`;
-    return 'Kasir';
-  }
-  if (req.session?.isAdmin) return fb || 'Admin';
-  return fb || 'Admin';
-}
-
-async function trySendWhatsappPayment(customerPhone, message) {
-  try {
-    if (!getSetting('whatsapp_enabled', false)) return false;
-    const to = String(customerPhone || '').trim();
-    if (!to) return false;
-    const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
-    if (!whatsappStatus || whatsappStatus.connection !== 'open') return false;
-    await sendWA(to, String(message || '').trim());
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // Middleware strictly for Admin
@@ -248,43 +172,12 @@ function getUpdateInfo(repoRoot) {
 
 function parseMikhmonOnLogin(script) {
   if (!script) return null;
-  const s = String(script).trim();
-  
-  // Cari pattern :put (",rem, ... , ... , ...
-  const putMatch = s.match(/:\s*put\s*\(\s*[",]rem[",]?\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/i);
-  if (putMatch) {
-    const cost = String(putMatch[1] || '').trim();
-    const validity = String(putMatch[2] || '').trim();
-    const priceStr = String(putMatch[3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-    }
-  }
-  
-  // Fallback: split by comma
-  const parts = s.split(',').map(p => String(p).trim());
-  let remIdx = -1;
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i].includes('rem')) {
-      remIdx = i;
-      break;
-    }
-  }
-  
-  if (remIdx >= 0 && remIdx + 3 < parts.length) {
-    const cost = String(parts[remIdx + 1] || '').trim();
-    const validity = String(parts[remIdx + 2] || '').trim();
-    const priceStr = String(parts[remIdx + 3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-    }
-  }
-  
-  return null;
+  const m = String(script).match(/",rem,.*?,(.*?),(.*?),.*?"/);
+  if (!m) return null;
+  const validity = String(m[1] || '').trim();
+  const priceStr = String(m[2] || '').trim();
+  const price = Number(String(priceStr).replace(/[^\d]/g, '')) || 0;
+  return { validity, price };
 }
 
 function genCode(len, charset) {
@@ -420,7 +313,6 @@ router.post('/login', express.urlencoded({ extended: true }), (req, res) => {
     req.session.isCashier = true;
     req.session.cashierId = cashier.id;
     req.session.cashierName = cashier.name;
-    req.session.cashierUsername = cashier.username;
     return res.redirect('/admin');
   }
 
@@ -800,404 +692,8 @@ router.post('/cashiers/:id/delete', requireAdminSession, restrictToAdmin, (req, 
   res.redirect('/admin/cashiers');
 });
 
-// --- COLLECTOR MANAGEMENT ---
-router.get('/collectors', requireAdminSession, restrictToAdmin, (req, res) => {
-  const collectors = adminSvc.getAllCollectors();
-  res.render('admin/collectors', { title: 'Manajemen Kolektor', company: company(), activePage: 'collectors', collectors, msg: flashMsg(req) });
-});
-
-router.post('/collectors', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
-  try {
-    adminSvc.createCollector(req.body);
-    req.session._msg = { type: 'success', text: 'Kolektor berhasil ditambahkan.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
-  }
-  res.redirect('/admin/collectors');
-});
-
-router.post('/collectors/:id/update', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
-  try {
-    adminSvc.updateCollector(req.params.id, req.body);
-    req.session._msg = { type: 'success', text: 'Data kolektor diperbarui.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
-  }
-  res.redirect('/admin/collectors');
-});
-
-router.post('/collectors/:id/delete', requireAdminSession, restrictToAdmin, (req, res) => {
-  adminSvc.deleteCollector(req.params.id);
-  req.session._msg = { type: 'success', text: 'Kolektor berhasil dihapus.' };
-  res.redirect('/admin/collectors');
-});
-
-router.get('/collector-payments', requireAdminSession, (req, res) => {
-  const status = String(req.query.status || 'pending').trim() || 'pending';
-  const rows = db.prepare(`
-    SELECT r.*,
-           col.name as collector_name, col.username as collector_username,
-           i.period_month, i.period_year, i.amount as invoice_amount, i.status as invoice_status,
-           c.name as customer_name, c.phone as customer_phone, c.address as customer_address, c.lat, c.lng
-    FROM collector_payment_requests r
-    JOIN collectors col ON col.id = r.collector_id
-    JOIN invoices i ON i.id = r.invoice_id
-    JOIN customers c ON c.id = r.customer_id
-    WHERE r.status = ?
-    ORDER BY r.id DESC
-    LIMIT 500
-  `).all(status);
-
-  res.render('admin/collector_payments', {
-    title: 'Approval Pembayaran Kolektor',
-    company: company(),
-    activePage: 'collector_payments',
-    status,
-    rows,
-    msg: flashMsg(req)
-  });
-});
-
-router.post('/collector-payments/:id/approve', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
-  try {
-    const id = Number(req.params.id || 0);
-    if (!Number.isFinite(id) || id <= 0) throw new Error('ID tidak valid');
-    const decidedNote = String(req.body.decided_note || '').trim();
-
-    const row = db.prepare(`
-      SELECT r.*, col.name as collector_name, col.username as collector_username
-      FROM collector_payment_requests r
-      JOIN collectors col ON col.id = r.collector_id
-      WHERE r.id = ?
-    `).get(id);
-    if (!row) throw new Error('Request tidak ditemukan');
-    if (String(row.status) !== 'pending') throw new Error('Request sudah diproses');
-
-    const inv = billingSvc.getInvoiceById(row.invoice_id);
-    if (!inv) throw new Error('Invoice tidak ditemukan');
-    if (String(inv.status) === 'paid') {
-      db.prepare(`
-        UPDATE collector_payment_requests
-        SET status='rejected', decided_by_role=?, decided_by_name=?, decided_note=?, decided_at=CURRENT_TIMESTAMP
-        WHERE id=?
-      `).run(req.session.isCashier ? 'cashier' : 'admin', resolvePaidByName(req, 'Admin'), 'Invoice sudah lunas', id);
-      req.session._msg = { type: 'error', text: 'Invoice sudah lunas, request ditolak.' };
-      return res.redirect('back');
-    }
-
-    const collectorLabel =
-      (`Kolektor ${(String(row.collector_name || '').trim())}` +
-        (String(row.collector_username || '').trim() ? ` (@${String(row.collector_username).trim()})` : '')).trim();
-
-    const approver = resolvePaidByName(req, 'Admin');
-    const notesParts = [
-      'Via Kolektor',
-      collectorLabel,
-      `Approved oleh ${approver}`,
-    ];
-    if (row.note) notesParts.push(String(row.note));
-    if (decidedNote) notesParts.push(`Approval: ${decidedNote}`);
-    const notes = notesParts.join(' | ');
-
-    billingSvc.markAsPaid(Number(row.invoice_id), collectorLabel, notes);
-
-    db.prepare(`
-      UPDATE collector_payment_requests
-      SET status='approved', decided_by_role=?, decided_by_name=?, decided_note=?, decided_at=CURRENT_TIMESTAMP
-      WHERE id=?
-    `).run(req.session.isCashier ? 'cashier' : 'admin', approver, decidedNote, id);
-
-    const customer = customerSvc.getCustomerById(inv.customer_id);
-    if (customer && customer.phone) {
-      const msg =
-        `✅ *PEMBAYARAN BERHASIL*\n\n` +
-        `👤 *Pelanggan:* ${customer.name}\n` +
-        `🧾 *Invoice:* #${inv.id}\n` +
-        `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
-        `💰 *Nominal Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n` +
-        `🏷️ *Dibayar Via:* ${collectorLabel}\n\n` +
-        `Terima kasih.`;
-      await trySendWhatsappPayment(customer.phone, msg);
-    }
-
-    const freshCustomer = customerSvc.getAllCustomers().find(c => Number(c.id) === Number(inv.customer_id));
-    if (freshCustomer && freshCustomer.status === 'suspended' && freshCustomer.unpaid_count === 0) {
-      await customerSvc.activateCustomer(inv.customer_id);
-    }
-
-    req.session._msg = { type: 'success', text: 'Request disetujui dan invoice dilunasi.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal: ' + (e.message || String(e)) };
-  }
-  res.redirect('back');
-});
-
-router.post('/collector-payments/:id/reject', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
-  try {
-    const id = Number(req.params.id || 0);
-    if (!Number.isFinite(id) || id <= 0) throw new Error('ID tidak valid');
-    const decidedNote = String(req.body.decided_note || '').trim();
-    const row = db.prepare(`SELECT * FROM collector_payment_requests WHERE id=?`).get(id);
-    if (!row) throw new Error('Request tidak ditemukan');
-    if (String(row.status) !== 'pending') throw new Error('Request sudah diproses');
-    const approver = resolvePaidByName(req, 'Admin');
-    db.prepare(`
-      UPDATE collector_payment_requests
-      SET status='rejected', decided_by_role=?, decided_by_name=?, decided_note=?, decided_at=CURRENT_TIMESTAMP
-      WHERE id=?
-    `).run(req.session.isCashier ? 'cashier' : 'admin', approver, decidedNote, id);
-    req.session._msg = { type: 'success', text: 'Request ditolak.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal: ' + (e.message || String(e)) };
-  }
-  res.redirect('back');
-});
-// ─── CASHIER ATTENDANCE ──────────────────────────────────────────────────────
-router.get('/cashiers/attendance', requireAdminSession, (req, res) => {
-  try {
-    const cashierId = req.session.cashierId || null;
-    const cashierName = req.session.cashierName || req.session.username || 'Kasir';
-    
-    if (!cashierId) {
-      req.session._msg = { type: 'error', text: 'Session kasir tidak valid' };
-      return res.redirect('/admin');
-    }
-
-    const todayAttendance = attendanceSvc.getTodayAttendance('cashier', cashierId);
-    const history = attendanceSvc.getAttendanceHistory('cashier', cashierId, 10);
-    
-    const now = new Date();
-    const summary = attendanceSvc.getMonthlyAttendanceSummary(
-      'cashier', 
-      cashierId, 
-      now.getFullYear(), 
-      now.getMonth() + 1
-    );
-    
-    res.render('admin/cashier_attendance', {
-      title: 'Absensi Saya',
-      company: company(),
-      activePage: 'cashier_attendance',
-      session: req.session,
-      cashierName,
-      todayAttendance,
-      history,
-      summary,
-      msg: flashMsg(req),
-      t: (key, defaultVal) => defaultVal || key
-    });
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal memuat absensi: ' + e.message };
-    res.redirect('/admin');
-  }
-});
-
-router.post('/cashiers/attendance/checkin', requireAdminSession, express.json(), (req, res) => {
-  try {
-    const cashierId = req.session.cashierId;
-    const cashierName = req.session.cashierName || req.session.username;
-    
-    if (!cashierId) {
-      return res.json({ success: false, message: 'Session kasir tidak valid' });
-    }
-    
-    const today = attendanceSvc.getTodayAttendance('cashier', cashierId);
-    if (today) {
-      return res.json({ success: false, message: 'Anda sudah melakukan check-in hari ini' });
-    }
-    
-    const result = attendanceSvc.checkIn({
-      employee_type: 'cashier',
-      employee_id: cashierId,
-      employee_name: cashierName,
-      lat: req.body.lat || '',
-      lng: req.body.lng || '',
-      note: req.body.note || ''
-    });
-    
-    res.json({ success: true, message: 'Check-in berhasil!', id: result.lastInsertRowid });
-  } catch (e) {
-    res.json({ success: false, message: 'Gagal check-in: ' + e.message });
-  }
-});
-
-router.post('/cashiers/attendance/checkout', requireAdminSession, express.json(), (req, res) => {
-  try {
-    const cashierId = req.session.cashierId;
-    
-    if (!cashierId) {
-      return res.json({ success: false, message: 'Session kasir tidak valid' });
-    }
-    
-    const today = attendanceSvc.getTodayAttendance('cashier', cashierId);
-    if (!today) {
-      return res.json({ success: false, message: 'Anda belum check-in hari ini' });
-    }
-    
-    if (today.status === 'checked_out') {
-      return res.json({ success: false, message: 'Anda sudah check-out hari ini' });
-    }
-    
-    attendanceSvc.checkOut(today.id, {
-      lat: req.body.lat || '',
-      lng: req.body.lng || '',
-      note: req.body.note || ''
-    });
-    
-    res.json({ success: true, message: 'Check-out berhasil!' });
-  } catch (e) {
-    res.json({ success: false, message: 'Gagal check-out: ' + e.message });
-  }
-});
-
-
-router.get('/cashiers/reports', requireAdminSession, (req, res) => {
-  const allCashiers = adminSvc.getAllCashiers();
-  const isAdmin = Boolean(req.session?.isAdmin);
-  const isCashier = Boolean(req.session?.isCashier);
-
-  const requested = req.query.cashierId != null && String(req.query.cashierId).trim() !== ''
-    ? Number(req.query.cashierId)
-    : null;
-
-  const cashierId =
-    isCashier && !isAdmin
-      ? Number(req.session.cashierId || 0) || null
-      : requested;
-
-  const selectedCashier = cashierId
-    ? (allCashiers || []).find(c => Number(c.id) === Number(cashierId)) || null
-    : null;
-
-  const paidByExact = selectedCashier
-    ? (`Kasir ${(String(selectedCashier.name || '').trim())}` + (String(selectedCashier.username || '').trim() ? ` (@${String(selectedCashier.username).trim()})` : '')).trim()
-    : null;
-
-  const invWhere = [];
-  const invParams = [];
-  invWhere.push(`i.status='paid'`);
-  invWhere.push(`i.paid_by_name LIKE 'Kasir %'`);
-  if (paidByExact) {
-    invWhere.push(`i.paid_by_name = ?`);
-    invParams.push(paidByExact);
-  }
-
-  const invoiceRows = db.prepare(`
-    SELECT i.id as ref_id,
-           i.paid_at as at,
-           i.paid_by_name as actor_name,
-           i.amount as amount,
-           i.notes as notes,
-           i.period_month,
-           i.period_year,
-           c.name as customer_name,
-           c.phone as customer_phone,
-           p.name as package_name
-    FROM invoices i
-    JOIN customers c ON i.customer_id = c.id
-    LEFT JOIN packages p ON c.package_id = p.id
-    WHERE ${invWhere.join(' AND ')}
-    ORDER BY datetime(i.paid_at) DESC, i.id DESC
-    LIMIT 500
-  `).all(...invParams).map(r => ({
-    kind: 'invoice',
-    at: r.at,
-    actor_name: r.actor_name,
-    amount: Number(r.amount || 0),
-    notes: r.notes || '',
-    ref_id: r.ref_id,
-    customer_name: r.customer_name || '',
-    customer_phone: r.customer_phone || '',
-    period_month: r.period_month,
-    period_year: r.period_year,
-    package_name: r.package_name || ''
-  }));
-
-  const topupWhere = [];
-  const topupParams = [];
-  topupWhere.push(`t.type='topup'`);
-  topupWhere.push(`t.note LIKE 'Kasir %:%'`);
-  if (paidByExact) {
-    topupWhere.push(`t.note LIKE ?`);
-    topupParams.push(`${paidByExact}:%`);
-  }
-
-  const topupRows = db.prepare(`
-    SELECT t.id as ref_id,
-           t.created_at as at,
-           t.amount_buy as amount,
-           t.note as notes,
-           a.name as agent_name,
-           a.username as agent_username
-    FROM agent_transactions t
-    JOIN agents a ON t.agent_id = a.id
-    WHERE ${topupWhere.join(' AND ')}
-    ORDER BY datetime(t.created_at) DESC, t.id DESC
-    LIMIT 500
-  `).all(...topupParams).map(r => {
-    const rawNote = String(r.notes || '');
-    const idx = rawNote.indexOf(':');
-    const actor = idx > 0 ? rawNote.slice(0, idx).trim() : '';
-    const rest = idx > 0 ? rawNote.slice(idx + 1).trim() : rawNote.trim();
-    return {
-      kind: 'agent_topup',
-      at: r.at,
-      actor_name: actor || 'Kasir',
-      amount: Number(r.amount || 0),
-      notes: rest,
-      ref_id: r.ref_id,
-      agent_name: r.agent_name || '',
-      agent_username: r.agent_username || ''
-    };
-  });
-
-  const rows = [...invoiceRows, ...topupRows].sort((a, b) => {
-    const atA = a && a.at ? String(a.at) : '';
-    const atB = b && b.at ? String(b.at) : '';
-    if (atA !== atB) return atB.localeCompare(atA);
-    return Number(b?.ref_id || 0) - Number(a?.ref_id || 0);
-  }).slice(0, 800);
-
-  const invSumRow = db.prepare(`
-    SELECT COUNT(1) as cnt, SUM(i.amount) as total
-    FROM invoices i
-    WHERE ${invWhere.join(' AND ')}
-  `).get(...invParams);
-
-  const topupSumRow = db.prepare(`
-    SELECT COUNT(1) as cnt, SUM(t.amount_buy) as total
-    FROM agent_transactions t
-    WHERE ${topupWhere.join(' AND ')}
-  `).get(...topupParams);
-
-  const safeCashiers = isAdmin
-    ? allCashiers
-    : selectedCashier
-      ? [selectedCashier]
-      : [];
-
-  res.render('admin/cashier_reports', {
-    title: 'Laporan Kasir',
-    company: company(),
-    activePage: 'cashiers_reports',
-    cashiers: safeCashiers,
-    cashierId: cashierId || '',
-    paidByExact: paidByExact || '',
-    rows,
-    summary: {
-      count: Number(invSumRow?.cnt || 0) + Number(topupSumRow?.cnt || 0),
-      total: Number(invSumRow?.total || 0) + Number(topupSumRow?.total || 0),
-      invoice_count: Number(invSumRow?.cnt || 0),
-      invoice_total: Number(invSumRow?.total || 0),
-      topup_count: Number(topupSumRow?.cnt || 0),
-      topup_total: Number(topupSumRow?.total || 0)
-    },
-    msg: flashMsg(req)
-  });
-});
-
 // --- AGENT MANAGEMENT ---
-router.get('/agents', requireAdminSession, (req, res) => {
+router.get('/agents', requireAdminSession, restrictToAdmin, (req, res) => {
   const agents = agentSvc.getAllAgents();
   const routers = mikrotikService.getAllRouters();
   res.render('admin/agents', {
@@ -1240,12 +736,11 @@ router.post('/agents/:id/delete', requireAdminSession, restrictToAdmin, (req, re
   res.redirect('/admin/agents');
 });
 
-router.post('/agents/:id/topup', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+router.post('/agents/:id/topup', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
   try {
     const amount = Number(req.body.amount || 0);
     const note = String(req.body.note || '').trim();
-    const actorName = req.session?.isCashier ? resolvePaidByName(req, 'Kasir') : (req.session.adminUser || 'Admin');
-    agentSvc.topupAgent(req.params.id, amount, note, actorName);
+    agentSvc.topupAgent(req.params.id, amount, note, req.session.adminUser || 'Admin');
     req.session._msg = { type: 'success', text: 'Topup saldo berhasil.' };
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal topup: ' + e.message };
@@ -1346,18 +841,7 @@ router.get('/customers', requireAdminSession, (req, res) => {
 
 router.post('/customers', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
-    const connectionType = String(req.body.connection_type || 'pppoe').trim().toLowerCase() || 'pppoe';
-    req.body.connection_type = connectionType;
-
-    if (connectionType !== 'pppoe') req.body.pppoe_username = '';
-    if (connectionType !== 'static') req.body.static_ip = '';
-    if (connectionType !== 'hotspot') {
-      req.body.hotspot_username = '';
-      req.body.hotspot_password = '';
-      req.body.hotspot_profile = '';
-    }
-
-    if (connectionType === 'pppoe') {
+    if (req.body.pppoe_username) {
       const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
       req.body.pppoe_username = username;
@@ -1378,34 +862,10 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       }
     }
 
-    if (connectionType === 'hotspot') {
-      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
-      const username = String(req.body.hotspot_username || '').trim();
-      req.body.hotspot_username = username;
-      if (!username) throw new Error('Hotspot Username tidak boleh kosong');
-      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? LIMIT 1').get(routerId, username);
-      if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name}`);
-
-      const password = String(req.body.hotspot_password || '').trim() || username;
-      req.body.hotspot_password = password;
-
-      let profile = String(req.body.hotspot_profile || '').trim();
-      if (!profile && req.body.package_id) {
-        const pkg = customerSvc.getPackageById(req.body.package_id);
-        if (pkg) profile = String(pkg.name || '').trim();
-      }
-      req.body.hotspot_profile = profile;
-      if (!profile) throw new Error('Hotspot User Profile tidak boleh kosong');
-
-      const profs = await mikrotikService.getHotspotUserProfiles(routerId);
-      const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
-      if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik`);
-    }
-
     customerSvc.createCustomer(req.body);
     
     // Sync to MikroTik if username provided
-    if (connectionType === 'pppoe' && req.body.pppoe_username) {
+    if (req.body.pppoe_username) {
       let targetProfile = '';
       if (req.body.status === 'suspended') {
         targetProfile = req.body.isolir_profile || 'isolir';
@@ -1421,20 +881,6 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
         }
       }
     }
-    if (connectionType === 'hotspot' && req.body.hotspot_username) {
-      const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
-      try {
-        await mikrotikService.upsertHotspotUser({
-          username: String(req.body.hotspot_username || '').trim(),
-          password: String(req.body.hotspot_password || '').trim(),
-          profile: String(req.body.hotspot_profile || '').trim(),
-          macAddress: String(req.body.mac_address || '').trim(),
-          disabled
-        }, req.body.router_id ? Number(req.body.router_id) : null);
-      } catch (mErr) {
-        console.error('Mikrotik sync error (create hotspot):', mErr);
-      }
-    }
 
     req.session._msg = { type: 'success', text: `Pelanggan "${req.body.name}" berhasil ditambahkan.` };
   } catch (e) {
@@ -1445,19 +891,8 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
 
 router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
-    const customerId = Number(req.params.id);
-    const connectionType = String(req.body.connection_type || 'pppoe').trim().toLowerCase() || 'pppoe';
-    req.body.connection_type = connectionType;
-
-    if (connectionType !== 'pppoe') req.body.pppoe_username = '';
-    if (connectionType !== 'static') req.body.static_ip = '';
-    if (connectionType !== 'hotspot') {
-      req.body.hotspot_username = '';
-      req.body.hotspot_password = '';
-      req.body.hotspot_profile = '';
-    }
-
-    if (connectionType === 'pppoe') {
+    if (req.body.pppoe_username) {
+      const customerId = Number(req.params.id);
       const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
       req.body.pppoe_username = username;
@@ -1478,34 +913,10 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       }
     }
 
-    if (connectionType === 'hotspot') {
-      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
-      const username = String(req.body.hotspot_username || '').trim();
-      req.body.hotspot_username = username;
-      if (!username) throw new Error('Hotspot Username tidak boleh kosong');
-      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? AND id != ? LIMIT 1').get(routerId, username, customerId);
-      if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name}`);
-
-      const password = String(req.body.hotspot_password || '').trim() || username;
-      req.body.hotspot_password = password;
-
-      let profile = String(req.body.hotspot_profile || '').trim();
-      if (!profile && req.body.package_id) {
-        const pkg = customerSvc.getPackageById(req.body.package_id);
-        if (pkg) profile = String(pkg.name || '').trim();
-      }
-      req.body.hotspot_profile = profile;
-      if (!profile) throw new Error('Hotspot User Profile tidak boleh kosong');
-
-      const profs = await mikrotikService.getHotspotUserProfiles(routerId);
-      const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
-      if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik`);
-    }
-
     customerSvc.updateCustomer(req.params.id, req.body);
     
     // Sync to MikroTik if username provided
-    if (connectionType === 'pppoe' && req.body.pppoe_username) {
+    if (req.body.pppoe_username) {
       let targetProfile = '';
       if (req.body.status === 'suspended') {
         targetProfile = req.body.isolir_profile || 'isolir';
@@ -1519,20 +930,6 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
         } catch (mErr) {
           console.error('Mikrotik sync error (update):', mErr);
         }
-      }
-    }
-    if (connectionType === 'hotspot' && req.body.hotspot_username) {
-      const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
-      try {
-        await mikrotikService.upsertHotspotUser({
-          username: String(req.body.hotspot_username || '').trim(),
-          password: String(req.body.hotspot_password || '').trim(),
-          profile: String(req.body.hotspot_profile || '').trim(),
-          macAddress: String(req.body.mac_address || '').trim(),
-          disabled
-        }, req.body.router_id ? Number(req.body.router_id) : null);
-      } catch (mErr) {
-        console.error('Mikrotik sync error (update hotspot):', mErr);
       }
     }
 
@@ -1698,84 +1095,26 @@ router.post('/customers/:id/billing/generate', requireAdminSession, express.urle
   res.redirect('back');
 });
 
-router.post('/customers/:id/billing/reset-promo-cycles', requireAdminSession, restrictToAdmin, (req, res) => {
-  try {
-    const r = customerSvc.resetPromoCyclesUsed(req.params.id);
-    if (!r.changes) {
-      req.session._msg = { type: 'error', text: 'Pelanggan tidak ditemukan.' };
-    } else {
-      const c = customerSvc.getCustomerById(req.params.id);
-      req.session._msg = { type: 'success', text: `Counter promo untuk "${c ? c.name : req.params.id}" di-reset (siklus promo dihitung ulang dari awal).` };
-    }
-  } catch (e) {
-    req.session._msg = { type: 'error', text: e.message || String(e) };
-  }
-  res.redirect('back');
-});
-
-router.post('/customers/:id/billing/install-prorata', requireAdminSession, restrictToAdmin, (req, res) => {
-  try {
-    const out = billingSvc.createInstallProrataCatchUpInvoice(req.params.id);
-    req.session._msg = {
-      type: 'success',
-      text: `Tagihan susulan prorata untuk "${out.customerName}" periode ${String(out.periodMonth).padStart(2, '0')}/${out.periodYear} sebesar Rp ${Number(out.amount).toLocaleString('id-ID')} (${out.billableDays}/${out.daysInMonth} hari).`
-    };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: e.message || String(e) };
-  }
-  res.redirect('back');
-});
-
 router.post('/customers/:id/billing/pay', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const { month, months, year, paid_by_name, notes } = req.body;
     const y = parseInt(year);
-    const paidBy = resolvePaidByName(req, paid_by_name);
-    const customer = customerSvc.getCustomerById(req.params.id);
 
     if (months != null) {
-      const sum = billingSvc.payInvoicesForCustomerMonths(req.params.id, y, months, paidBy, notes);
+      const sum = billingSvc.payInvoicesForCustomerMonths(req.params.id, y, months, paid_by_name, notes);
       const done = sum.paidMonths.length;
       const already = sum.alreadyPaidMonths.length;
       const created = sum.createdMonths.length;
       const total = Number(sum.totalAmount) || 0;
       req.session._msg = { type: 'success', text: `Pembayaran berhasil untuk "${sum.customerName}" tahun ${sum.year}. Total: Rp ${total.toLocaleString('id-ID')} (${sum.totalMonths || 0} bulan). Dibayar: ${done} bulan, dibuat: ${created}, sudah lunas: ${already}.` };
-
-      if (customer && customer.phone && done > 0) {
-        const monthsText = (sum.paidMonths || []).join(', ');
-        const msg =
-          `✅ *PEMBAYARAN BERHASIL*\n\n` +
-          `👤 *Pelanggan:* ${customer.name}\n` +
-          `📅 *Tahun:* ${sum.year}\n` +
-          `🧾 *Bulan Dibayar:* ${monthsText || '-'}\n` +
-          `💰 *Total:* Rp ${Number(total || 0).toLocaleString('id-ID')}\n` +
-          `🏷️ *Dibayar Via:* ${paidBy}\n\n` +
-          `Terima kasih.`;
-        await trySendWhatsappPayment(customer.phone, msg);
-      }
     } else {
       const m = parseInt(month);
-      const result = billingSvc.payInvoiceForCustomerPeriod(req.params.id, m, y, paidBy, notes);
+      const result = billingSvc.payInvoiceForCustomerPeriod(req.params.id, m, y, paid_by_name, notes);
       if (result.alreadyPaid) {
         req.session._msg = { type: 'success', text: `Tagihan periode ${m}/${y} untuk "${result.customerName}" sudah lunas.` };
       } else {
         const verb = result.created ? 'dibuat & dilunasi' : 'dilunasi';
         req.session._msg = { type: 'success', text: `Tagihan periode ${m}/${y} untuk "${result.customerName}" berhasil ${verb}.` };
-
-        if (customer && customer.phone) {
-          const invs = billingSvc.getInvoicesByAny(String(req.params.id)) || [];
-          const inv = (Array.isArray(invs) ? invs : []).find(i => Number(i?.period_month) === Number(m) && Number(i?.period_year) === Number(y)) || null;
-          const amount = inv ? Number(inv.amount || 0) : 0;
-          const msg =
-            `✅ *PEMBAYARAN BERHASIL*\n\n` +
-            `👤 *Pelanggan:* ${customer.name}\n` +
-            `📅 *Periode:* ${m}/${y}\n` +
-            `${inv ? `🧾 *Invoice:* #${inv.id}\n` : ''}` +
-            `💰 *Nominal Tagihan:* Rp ${amount.toLocaleString('id-ID')}\n` +
-            `🏷️ *Dibayar Via:* ${paidBy}\n\n` +
-            `Terima kasih.`;
-          await trySendWhatsappPayment(customer.phone, msg);
-        }
       }
     }
 
@@ -1898,89 +1237,29 @@ router.post('/billing/pay-bulk', requireAdminSession, express.urlencoded({ exten
   try {
     const { invoice_ids, paid_by_name, notes } = req.body;
     const ids = Array.isArray(invoice_ids) ? invoice_ids : [invoice_ids];
-    const paidBy = resolvePaidByName(req, paid_by_name);
     
     if (!ids || ids.length === 0) throw new Error('Tidak ada tagihan yang dipilih');
 
-    const paidByCustomer = new Map();
-    const touchedCustomerIds = new Set();
-    let processed = 0;
+    let customerId = null;
     for (const id of ids) {
       const inv = billingSvc.getInvoiceById(id);
       if (inv) {
-        processed++;
-        const customerId = Number(inv.customer_id || 0);
-        if (Number.isFinite(customerId) && customerId > 0) touchedCustomerIds.add(customerId);
-        const wasPaid = String(inv.status || '').toLowerCase() === 'paid';
-        billingSvc.markAsPaid(id, paidBy, notes);
-        if (!wasPaid) {
-          if (!paidByCustomer.has(customerId)) paidByCustomer.set(customerId, []);
-          paidByCustomer.get(customerId).push({
-            id: inv.id,
-            amount: Number(inv.amount || 0),
-            period_month: inv.period_month,
-            period_year: inv.period_year
-          });
-        }
+        customerId = inv.customer_id;
+        billingSvc.markAsPaid(id, paid_by_name, notes);
       }
     }
 
-    const customersSnapshot = customerSvc.getAllCustomers();
-    for (const customerId of touchedCustomerIds) {
-      const freshCustomer = customersSnapshot.find(c => Number(c.id) === Number(customerId));
-      if (freshCustomer && freshCustomer.status === 'suspended' && Number(freshCustomer.unpaid_count || 0) === 0) {
+    // Un-isolate logic
+    if (customerId) {
+      const freshCustomer = customerSvc.getAllCustomers().find(c => c.id === customerId);
+      if (freshCustomer && freshCustomer.status === 'suspended' && freshCustomer.unpaid_count === 0) {
         await customerSvc.activateCustomer(customerId);
       }
     }
 
-    for (const [customerId, paidInvoices] of paidByCustomer.entries()) {
-      if (!paidInvoices || paidInvoices.length === 0) continue;
-      const customer = customerSvc.getCustomerById(customerId);
-      if (customer && customer.phone) {
-        const total = paidInvoices.reduce((a, b) => a + Number(b.amount || 0), 0);
-        const periods = paidInvoices
-          .map(x => `${x.period_month}/${x.period_year}`)
-          .slice(0, 10)
-          .join(', ') + (paidInvoices.length > 10 ? `, +${paidInvoices.length - 10} lainnya` : '');
-        const msg =
-          `✅ *PEMBAYARAN BERHASIL*\n\n` +
-          `👤 *Pelanggan:* ${customer.name}\n` +
-          `🧾 *Tagihan Dibayar:* ${paidInvoices.length} invoice\n` +
-          `📅 *Periode:* ${periods}\n` +
-          `💰 *Total:* Rp ${Number(total || 0).toLocaleString('id-ID')}\n` +
-          `🏷️ *Dibayar Via:* ${paidBy}\n\n` +
-          `Terima kasih.`;
-        await trySendWhatsappPayment(customer.phone, msg);
-      }
-    }
-
-    req.session._msg = { type: 'success', text: `${processed} tagihan berhasil diproses.` };
+    req.session._msg = { type: 'success', text: `${ids.length} tagihan berhasil dilunasi.` };
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal bayar massal: ' + e.message };
-  }
-  res.redirect('back');
-});
-
-router.post('/billing/delete-bulk', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
-  try {
-    const { invoice_ids } = req.body;
-    const ids = Array.isArray(invoice_ids) ? invoice_ids : [invoice_ids];
-    const clean = ids
-      .map(x => Number(x))
-      .filter(n => Number.isFinite(n) && n > 0);
-    if (!clean || clean.length === 0) throw new Error('Tidak ada tagihan yang dipilih');
-
-    let deleted = 0;
-    for (const id of clean) {
-      try {
-        billingSvc.deleteInvoice(id);
-        deleted++;
-      } catch {}
-    }
-
-    req.session._msg = { type: 'success', text: `${deleted} tagihan berhasil dihapus.` };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal hapus massal: ' + e.message };
   }
   res.redirect('back');
 });
@@ -1990,23 +1269,10 @@ router.post('/billing/:id/pay', requireAdminSession, express.urlencoded({ extend
     const inv = billingSvc.getInvoiceById(req.params.id);
     if (!inv) throw new Error('Tagihan tidak ditemukan');
 
-    const paidBy = resolvePaidByName(req, req.body.paid_by_name);
-    const wasPaid = String(inv.status || '').toLowerCase() === 'paid';
-    billingSvc.markAsPaid(req.params.id, paidBy, req.body.notes);
+    billingSvc.markAsPaid(req.params.id, req.body.paid_by_name, req.body.notes);
     
     // Check if customer is currently suspended and has no more unpaid invoices
     const customer = customerSvc.getCustomerById(inv.customer_id);
-    if (!wasPaid && customer && customer.phone) {
-      const msg =
-        `✅ *PEMBAYARAN BERHASIL*\n\n` +
-        `👤 *Pelanggan:* ${customer.name}\n` +
-        `🧾 *Invoice:* #${inv.id}\n` +
-        `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
-        `💰 *Nominal Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n` +
-        `🏷️ *Dibayar Via:* ${paidBy}\n\n` +
-        `Terima kasih.`;
-      await trySendWhatsappPayment(customer.phone, msg);
-    }
     if (customer && customer.status === 'suspended') {
       const freshCustomer = customerSvc.getAllCustomers().find(c => c.id === inv.customer_id);
       if (freshCustomer && freshCustomer.unpaid_count === 0) {
@@ -2223,14 +1489,8 @@ router.post('/tickets/:id/update', requireAdminSession, express.urlencoded({ ext
                                `👤 *Pelanggan:* ${ticket.customer_name}\n` +
                                `📝 *Subjek:* ${ticket.subject}\n` +
                                `💬 *Pesan:* ${ticket.message}`;
-              const seen = new Set();
               for (const adminPhone of settings.whatsapp_admin_numbers) {
-                let digits = String(adminPhone || '').replace(/\D/g, '');
-                if (!digits) continue;
-                if (digits.startsWith('0')) digits = '62' + digits.slice(1);
-                if (seen.has(digits)) continue;
-                seen.add(digits);
-                await sendWA(digits, adminMsg);
+                await sendWA(adminPhone, adminMsg);
               }
             }
           }
@@ -2324,196 +1584,10 @@ router.get('/reports', requireAdminSession, (req, res) => {
 
 // ─── SETTINGS ──────────────────────────────────────────────────────────────
 router.get('/settings', requireAdminSession, (req, res) => {
-  const settings = getSettings();
-  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-  const host = req.get('host');
-  const baseUrl = (settings && settings.app_url ? String(settings.app_url) : `${protocol}://${host}`).replace(/\/+$/, '');
-  const digiflazzWebhookUrl = `${baseUrl}/webhook/digiflazz`;
-  const paymentWebhookUrl = `${baseUrl}/customer/payment/callback`;
   res.render('admin/settings', {
     title: 'Pengaturan Sistem', company: company(), activePage: 'settings',
-    settings, msg: flashMsg(req),
-    digiflazzWebhookUrl,
-    paymentWebhookUrl
+    settings: getSettings(), msg: flashMsg(req)
   });
-});
-
-router.get('/digiflazz', requireAdminSession, restrictToAdmin, async (req, res) => {
-  const settings = getSettings();
-  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-  const host = req.get('host');
-  const baseUrl = (settings && settings.app_url ? String(settings.app_url) : `${protocol}://${host}`).replace(/\/+$/, '');
-  const digiflazzWebhookUrl = `${baseUrl}/webhook/digiflazz`;
-  let digi = { configured: digiflazzConfigured(), deposit: null, error: null };
-  if (digi.configured) {
-    try {
-      const data = await digiflazzCekSaldo();
-      digi.deposit = Number(data?.deposit || 0);
-    } catch (e) {
-      digi.error = String(e?.message || e || '');
-    }
-  }
-
-  const q = String(req.query.q || '').trim();
-  const category = String(req.query.category || '').trim();
-  const status = String(req.query.status || '').trim();
-
-  const where = [];
-  const params = [];
-  if (q) {
-    where.push('(sku LIKE ? OR product_name LIKE ? OR brand LIKE ? OR category LIKE ?)');
-    const like = `%${q}%`;
-    params.push(like, like, like, like);
-  }
-  if (category) {
-    where.push('category = ?');
-    params.push(category);
-  }
-  if (status === 'active') where.push('status = 1');
-  if (status === 'inactive') where.push('status = 0');
-
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const products = db.prepare(`SELECT * FROM digiflazz_products ${whereSql} ORDER BY category, brand, price_sell LIMIT 300`).all(...params);
-  const categories = db.prepare("SELECT category FROM digiflazz_products WHERE category IS NOT NULL AND TRIM(category)<>'' GROUP BY category ORDER BY category").all().map(r => r.category);
-  const stats = db.prepare('SELECT COUNT(1) AS total, SUM(CASE WHEN status=1 THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) AS inactive FROM digiflazz_products').get();
-  const lastSync = db.prepare('SELECT * FROM digiflazz_sync_logs ORDER BY id DESC LIMIT 1').get();
-  const webhookLogs = db.prepare(
-    `
-    SELECT id, created_at, ref_id, status, signature_ok, matched_agent_tx_id, ip
-    FROM digiflazz_webhook_logs
-    ORDER BY id DESC
-    LIMIT 80
-  `
-  ).all();
-
-  const recentPulsaTx = db.prepare(
-    `
-    SELECT t.*, a.name AS agent_name, a.username AS agent_username
-    FROM agent_transactions t
-    JOIN agents a ON a.id = t.agent_id
-    WHERE t.type = 'pulsa'
-    ORDER BY t.id DESC
-    LIMIT 60
-  `
-  ).all();
-
-  res.render('admin/digiflazz', {
-    title: 'Digiflazz',
-    company: company(),
-    activePage: 'digiflazz',
-    msg: flashMsg(req),
-    settings,
-    digi,
-    digiflazzWebhookUrl,
-    q,
-    category,
-    status,
-    products,
-    categories,
-    stats,
-    lastSync,
-    recentPulsaTx,
-    webhookLogs
-  });
-});
-
-router.post('/digiflazz/check-balance', requireAdminSession, restrictToAdmin, async (req, res) => {
-  try {
-    const data = await digiflazzCekSaldo();
-    const depo = Number(data?.deposit || 0);
-    req.session._msg = { type: 'success', text: `Saldo Digiflazz: Rp ${depo.toLocaleString('id-ID')}` };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal cek saldo Digiflazz: ' + (e?.message || e) };
-  }
-  res.redirect('/admin/digiflazz');
-});
-
-router.post('/digiflazz/sync-products', requireAdminSession, restrictToAdmin, async (req, res) => {
-  try {
-    const markup = Math.max(0, Math.floor(Number(getSetting('digiflazz_markup', 0) || 0)));
-    const list = await digiflazzPriceListAll();
-
-    const selectOne = db.prepare('SELECT sku, product_name, category, brand, price_modal, price_sell, status FROM digiflazz_products WHERE sku = ?');
-    const upsert = db.prepare(
-      `
-      INSERT INTO digiflazz_products (sku, product_name, category, brand, price_modal, price_sell, status, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(sku) DO UPDATE SET
-        product_name=excluded.product_name,
-        category=excluded.category,
-        brand=excluded.brand,
-        price_modal=excluded.price_modal,
-        price_sell=excluded.price_sell,
-        status=excluded.status,
-        updated_at=CURRENT_TIMESTAMP
-    `
-    );
-
-    const run = db.transaction(() => {
-      const summary = { total: 0, inserted: 0, updated: 0, active: 0, inactive: 0, skippedNoPrice: 0 };
-      for (const p of list) {
-        summary.total++;
-        const sku = String(p?.buyer_sku_code || '').trim();
-        if (!sku) continue;
-
-        const priceModal = Number(p?.price ?? p?.buyer_price ?? 0) || 0;
-        if (priceModal <= 0) {
-          summary.skippedNoPrice++;
-          continue;
-        }
-
-        const status = p?.buyer_product_status ? 1 : 0;
-        if (status === 1) summary.active++;
-        else summary.inactive++;
-
-        const existing = selectOne.get(sku);
-        const name = String(p?.product_name || sku).trim();
-        const cat = String(p?.category || '').trim();
-        const brand = String(p?.brand || '').trim();
-        const priceSell = Math.floor(priceModal + markup);
-
-        if (!existing) summary.inserted++;
-        else {
-          const changed =
-            String(existing.product_name || '') !== name ||
-            String(existing.category || '') !== cat ||
-            String(existing.brand || '') !== brand ||
-            Number(existing.price_modal || 0) !== Math.floor(priceModal) ||
-            Number(existing.price_sell || 0) !== priceSell ||
-            Number(existing.status || 0) !== status;
-          if (changed) summary.updated++;
-        }
-
-        upsert.run(sku, name, cat, brand, Math.floor(priceModal), priceSell, status);
-      }
-
-      db.prepare(
-        'INSERT INTO digiflazz_sync_logs (total, inserted, updated, active, inactive) VALUES (?, ?, ?, ?, ?)'
-      ).run(summary.total, summary.inserted, summary.updated, summary.active, summary.inactive);
-
-      return summary;
-    });
-
-    const s = run();
-    req.session._msg = { type: 'success', text: `Sync Digiflazz OK | Total: ${s.total} | Baru: ${s.inserted} | Update: ${s.updated} | Aktif: ${s.active} | Nonaktif: ${s.inactive} | SkipNoPrice: ${s.skippedNoPrice}` };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal sync produk Digiflazz: ' + (e?.message || e) };
-  }
-  res.redirect('/admin/digiflazz');
-});
-
-router.post('/digiflazz/products/update-price', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
-  try {
-    const sku = String(req.body.sku || '').trim();
-    const priceSell = Math.max(0, Math.floor(Number(req.body.price_sell || 0) || 0));
-    if (!sku) throw new Error('SKU wajib');
-    const info = db.prepare('UPDATE digiflazz_products SET price_sell=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?').run(priceSell, sku);
-    if (info.changes === 0) throw new Error('SKU tidak ditemukan');
-    req.session._msg = { type: 'success', text: `Harga jual diperbarui: ${sku}` };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal update harga: ' + (e?.message || e) };
-  }
-  res.redirect('/admin/digiflazz');
 });
 
 router.get('/update', requireAdminSession, restrictToAdmin, (req, res) => {
@@ -2643,15 +1717,38 @@ router.post('/api/telegram/sync', requireAdminSession, async (req, res) => {
 
 router.post('/settings', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
   try {
-    const newSettings = { ...req.body };
-    if (newSettings.whatsapp_enabled === 'true') newSettings.whatsapp_enabled = true;
-    else if (newSettings.whatsapp_enabled === 'false') newSettings.whatsapp_enabled = false;
+    let newSettings = { ...req.body };
     
-    if (newSettings.tripay_enabled === 'true') newSettings.tripay_enabled = true;
-    else if (newSettings.tripay_enabled === 'false') newSettings.tripay_enabled = false;
-    
-    if (newSettings.midtrans_enabled === 'true') newSettings.midtrans_enabled = true;
-    else if (newSettings.midtrans_enabled === 'false') newSettings.midtrans_enabled = false;
+    // Normalize all boolean fields
+    const booleanFields = [
+      'whatsapp_enabled',
+      'telegram_enabled',
+      'tripay_enabled',
+      'midtrans_enabled',
+      'xendit_enabled',
+      'duitku_enabled',
+      'auto_backup_enabled',
+      'login_otp_enabled'
+    ];
+
+    booleanFields.forEach(field => {
+      if (field in newSettings) {
+        const value = newSettings[field];
+        if (typeof value === 'string') {
+          newSettings[field] = value === 'true' || value === '1' || value === 'on';
+        } else if (value === undefined || value === null) {
+          newSettings[field] = false;
+        }
+      }
+    });
+
+    // Trim string fields yang sensitive terhadap whitespace
+    const stringTrimFields = ['office_lat', 'office_lng', 'company_phone', 'company_email'];
+    stringTrimFields.forEach(field => {
+      if (field in newSettings && typeof newSettings[field] === 'string') {
+        newSettings[field] = newSettings[field].trim();
+      }
+    });
 
     if (newSettings.default_gateway) newSettings.default_gateway = newSettings.default_gateway.toLowerCase();
 
@@ -2661,25 +1758,39 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     if (newSettings.server_port) newSettings.server_port = parseInt(newSettings.server_port);
     if (newSettings.mikrotik_port) newSettings.mikrotik_port = parseInt(newSettings.mikrotik_port);
     if (newSettings.whatsapp_broadcast_delay) newSettings.whatsapp_broadcast_delay = parseInt(newSettings.whatsapp_broadcast_delay);
-    if (newSettings.digiflazz_markup !== undefined) newSettings.digiflazz_markup = parseInt(newSettings.digiflazz_markup) || 0;
-    
-    newSettings.login_otp_enabled = (newSettings.login_otp_enabled === 'true');
-    newSettings.telegram_enabled = (newSettings.telegram_enabled === 'true');
-    newSettings.auto_backup_enabled = (newSettings.auto_backup_enabled === 'true');
 
-    const success = saveSettings(newSettings);
-    if (success) {
+    const result = saveSettings(newSettings, req.session?.username || 'admin', {
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    });
+
+    if (result.success) {
       // Re-init services if needed
       if (newSettings.telegram_enabled) {
-        require('../services/telegramBot').initTelegram();
+        try {
+          require('../services/telegramBot').initTelegram();
+        } catch (e) {
+          logger.warn(`[admin] Gagal init Telegram: ${e.message}`);
+        }
       } else {
-        require('../services/telegramBot').initTelegram(); // This will stop it if it was running
+        try {
+          require('../services/telegramBot').initTelegram(); // This will stop it if it was running
+        } catch (e) {
+          logger.warn(`[admin] Gagal stop Telegram: ${e.message}`);
+        }
       }
-      req.session._msg = { type: 'success', text: 'Pengaturan berhasil disimpan.' };
+      const changedFields = result.changes && result.changes.length > 0 
+        ? ` (${result.changes.join(', ')})` 
+        : '';
+      req.session._msg = { type: 'success', text: `Pengaturan berhasil disimpan${changedFields}.` };
     } else {
-      req.session._msg = { type: 'error', text: 'Gagal menyimpan pengaturan' };
+      const errorMsg = result.errors && result.errors.length > 0 
+        ? result.errors.join(', ') 
+        : 'Gagal menyimpan pengaturan';
+      req.session._msg = { type: 'error', text: errorMsg };
     }
   } catch (e) {
+    logger.error(`[admin] Settings save error: ${e.message}`);
     req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
   }
   res.redirect('/admin/settings');
@@ -2988,24 +2099,6 @@ router.post('/api/device/:tag/ssid', requireAdmin, express.json(), async (req, r
   const { ssid } = req.body;
   if (!ssid) return res.status(400).json({ error: 'SSID required' });
   const ok = await customerDevice.updateSSID(req.params.tag, ssid);
-  // Kirim notifikasi WhatsApp ke pelanggan
-  if (ok) {
-    try {
-      const tag = req.params.tag;
-      const cust = customerSvc.findCustomerByAny(tag);
-      if (cust && cust.phone) {
-        const now = new Date().toLocaleString('id-ID');
-        const msg = `📶 *PERUBAHAN SSID WIFI*\n\n` +
-          `👤 *Pelanggan:* ${cust.name}\n` +
-          `🕒 *Waktu:* ${now}\n\n` +
-          `SSID WiFi Anda sudah diperbarui menjadi:\n` +
-          `📡 *${ssid}*\n\n` +
-          `Silakan pilih SSID baru di perangkat Anda untuk terhubung.\n` +
-          `⚠️ Jangan bagikan info ini ke orang lain.`;
-        await trySendWhatsappPayment(cust.phone, msg);
-      }
-    } catch (e) { logger.error('[Admin] Gagal kirim notif SSID via WA: ' + (e.message || e)); }
-  }
   res.json({ success: ok });
 });
 
@@ -3013,24 +2106,6 @@ router.post('/api/device/:tag/password', requireAdmin, express.json(), async (re
   const { password } = req.body;
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
   const ok = await customerDevice.updatePassword(req.params.tag, password);
-  // Kirim notifikasi WhatsApp ke pelanggan
-  if (ok) {
-    try {
-      const tag = req.params.tag;
-      const cust = customerSvc.findCustomerByAny(tag);
-      if (cust && cust.phone) {
-        const now = new Date().toLocaleString('id-ID');
-        const msg = `🔑 *PERUBAHAN PASSWORD WIFI*\n\n` +
-          `👤 *Pelanggan:* ${cust.name}\n` +
-          `🕒 *Waktu:* ${now}\n\n` +
-          `Password WiFi Anda sudah diperbarui menjadi:\n` +
-          `🔐 *${password}*\n\n` +
-          `Silakan gunakan password baru untuk terhubung.\n` +
-          `⚠️ Jangan bagikan password ini ke orang lain.`;
-        await trySendWhatsappPayment(cust.phone, msg);
-      }
-    } catch (e) { logger.error('[Admin] Gagal kirim notif Password via WA: ' + (e.message || e)); }
-  }
   res.json({ success: ok });
 });
 
@@ -3044,27 +2119,7 @@ router.post('/api/bulk/ssid', requireAdmin, express.json(), async (req, res) => 
   if (!Array.isArray(tags) || !ssid) return res.status(400).json({ error: 'Tags and SSID required' });
   const results = [];
   for (const tag of tags) {
-    try {
-      const success = await customerDevice.updateSSID(tag, ssid);
-      results.push({ tag, success });
-      // Kirim notifikasi WhatsApp ke pelanggan
-      if (success) {
-        try {
-          const cust = customerSvc.findCustomerByAny(tag);
-          if (cust && cust.phone) {
-            const now = new Date().toLocaleString('id-ID');
-            const msg = `📶 *PERUBAHAN SSID WIFI*\n\n` +
-              `👤 *Pelanggan:* ${cust.name}\n` +
-              `🕒 *Waktu:* ${now}\n\n` +
-              `SSID WiFi Anda sudah diperbarui menjadi:\n` +
-              `📡 *${ssid}*\n\n` +
-              `Silakan pilih SSID baru di perangkat Anda untuk terhubung.\n` +
-              `⚠️ Jangan bagikan info ini ke orang lain.`;
-            await trySendWhatsappPayment(cust.phone, msg);
-          }
-        } catch (e) { /* ignore per-customer WA notification errors */ }
-      }
-    }
+    try { results.push({ tag, success: await customerDevice.updateSSID(tag, ssid) }); }
     catch (e) { results.push({ tag, success: false, error: e.message }); }
   }
   res.json({ results, total: tags.length, success: results.filter(r => r.success).length });
@@ -3133,14 +2188,17 @@ router.post('/api/vouchers/template', requireAdminSession, restrictToAdmin, expr
     const header = String(req.body.header || '');
     const row = String(req.body.row || '');
     const footer = String(req.body.footer || '');
-    saveSettings({
+    const result = saveSettings({
       voucher_print_use_template: useTemplate,
       voucher_print_default_style: defaultStyle,
       voucher_print_template_header: header,
       voucher_print_template_row: row,
       voucher_print_template_footer: footer
+    }, req.session?.username || 'admin', {
+      ip: req.ip,
+      userAgent: req.get('user-agent')
     });
-    res.json({ success: true });
+    res.json({ success: result.success, errors: result.errors });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3718,10 +2776,6 @@ router.get('/api/mikrotik/active-hotspot', requireAdmin, async (req, res) => {
   try { res.json(await mikrotikService.getHotspotActive(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/api/mikrotik/ip-pools', requireAdmin, async (req, res) => {
-  try { res.json(await mikrotikService.getIpPools(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // PPPoE Profiles CRUD
 router.post('/api/mikrotik/pppoe-profiles', requireAdmin, express.json(), async (req, res) => {
   try { await mikrotikService.addPppoeProfile(req.body, req.query.routerId); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3735,21 +2789,7 @@ router.post('/api/mikrotik/pppoe-profiles/:id/delete', requireAdmin, async (req,
 
 // Hotspot User Profiles CRUD
 router.get('/api/mikrotik/hotspot-user-profiles', requireAdmin, async (req, res) => {
-  try {
-    const rows = await mikrotikService.getHotspotUserProfiles(req.query.routerId);
-    res.json((Array.isArray(rows) ? rows : []).map((r) => ({ ...r, id: r.id || r['.id'] })));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-router.get('/api/mikrotik/hotspot-user-profiles/:id', requireAdmin, async (req, res) => {
-  try {
-    const row = await mikrotikService.getHotspotUserProfileById(req.params.id, req.query.routerId);
-    if (!row) return res.status(404).json({ error: 'Profile tidak ditemukan' });
-    return res.json({ ok: true, row });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
+  try { res.json(await mikrotikService.getHotspotUserProfiles(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.post('/api/mikrotik/hotspot-user-profiles', requireAdmin, express.json(), async (req, res) => {
   try { await mikrotikService.addHotspotUserProfile(req.body, req.query.routerId); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3897,7 +2937,7 @@ router.get('/whatsapp', requireAdminSession, async (req, res) => {
 
 router.get('/whatsapp/broadcast', requireAdminSession, (req, res) => {
   res.render('admin/broadcast', {
-    title: 'Broadcast WhatsApp', company: company(), activePage: 'broadcast', msg: flashMsg(req),
+    title: 'Broadcast WhatsApp', company: company(), activePage: 'whatsapp', msg: flashMsg(req),
     broadcastStatus: global.broadcastStatus, getSetting
   });
 });
@@ -3951,7 +2991,13 @@ router.post('/whatsapp/broadcast', requireAdminSession, express.urlencoded({ ext
     if (customDelay) {
       const v = parseInt(customDelay);
       if (Number.isFinite(v) && v >= 1 && v <= 60) {
-        saveSettings({ whatsapp_broadcast_delay: v });
+        const result = saveSettings({ whatsapp_broadcast_delay: v }, req.session?.username || 'admin', {
+          ip: req.ip,
+          userAgent: req.get('user-agent')
+        });
+        if (!result.success) {
+          logger.warn(`[admin] Gagal menyimpan broadcast delay: ${result.errors?.join(', ')}`);
+        }
       }
     }
 
@@ -4135,9 +3181,18 @@ router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ 
     if (msg) {
       next.whatsapp_auto_billing_message = msg;
     }
-    saveSettings(next);
-    req.session._msg = { type: 'success', text: `Pengingat tagihan otomatis ${enabled ? 'diaktifkan' : 'dimatikan'}.` };
+    const result = saveSettings(next, req.session?.username || 'admin', {
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    });
+    
+    if (!result.success) {
+      req.session._msg = { type: 'error', text: `Gagal menyimpan: ${result.errors?.join(', ')}` };
+    } else {
+      req.session._msg = { type: 'success', text: `Pengingat tagihan otomatis ${enabled ? 'diaktifkan' : 'dimatikan'}.` };
+    }
   } catch (e) {
+    logger.error(`[admin] Auto billing error: ${e.message}`);
     req.session._msg = { type: 'error', text: 'Gagal menyimpan pengaturan: ' + e.message };
   }
   res.redirect('/admin/whatsapp/broadcast');
@@ -4258,15 +3313,6 @@ router.post('/api/routers/:id/setup-firewall', requireAdmin, async (req, res) =>
   }
 });
 
-router.get('/api/isolir-portal-script', requireAdmin, async (req, res) => {
-  try {
-    const data = await mikrotikService.generateIsolirPortalScript();
-    res.json({ success: true, ...data });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
 router.get('/api/mikrotik/profiles/:routerId', requireAdmin, async (req, res) => {
   try {
     const profiles = await mikrotikService.getPppoeProfiles(req.params.routerId);
@@ -4292,343 +3338,6 @@ router.get('/api/mikrotik/users/:routerId', requireAdmin, async (req, res) => {
     res.json(filtered);
   } catch (e) {
     res.status(500).json({ error: e.message });
-  }
-});
-// ─── ATTENDANCE MANAGEMENT ───────────────────────────────────────────────────
-
-// Attendance dashboard
-router.get('/attendance', requireAdminSession, (req, res) => {
-  try {
-    const date = req.query.date || new Date().toISOString().split('T')[0];
-    const attendances = attendanceSvc.getAttendanceByDate(date);
-    const stats = attendanceSvc.getAttendanceStats(date);
-    const lateCheckIns = attendanceSvc.getLateCheckIns(date);
-    const notCheckedOut = attendanceSvc.getNotCheckedOut(date);
-    
-    res.render('admin/attendance', {
-      title: 'Manajemen Absensi',
-      company: company(),
-      activePage: 'attendance',
-      session: req.session,
-      attendances,
-      stats,
-      lateCheckIns,
-      notCheckedOut,
-      selectedDate: date,
-      msg: flashMsg(req),
-      t: (key, defaultVal) => defaultVal || key
-    });
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal memuat data absensi: ' + e.message };
-    res.redirect('/admin');
-  }
-});
-
-// Get attendance by date range (API)
-router.get('/api/attendance/range', requireAdminSession, (req, res) => {
-  try {
-    const { startDate, endDate } = req.query;
-    if (!startDate || !endDate) {
-      return res.json({ success: false, message: 'Start date dan end date wajib diisi' });
-    }
-    
-    const attendances = attendanceSvc.getAttendanceByDateRange(startDate, endDate);
-    res.json({ success: true, data: attendances });
-  } catch (e) {
-    res.json({ success: false, message: e.message });
-  }
-});
-
-// Get employee attendance history
-router.get('/api/attendance/employee/:type/:id', requireAdminSession, (req, res) => {
-  try {
-    const { type, id } = req.params;
-    const limit = req.query.limit ? parseInt(req.query.limit) : 30;
-    const history = attendanceSvc.getAttendanceHistory(type, parseInt(id), limit);
-    res.json({ success: true, data: history });
-  } catch (e) {
-    res.json({ success: false, message: e.message });
-  }
-});
-
-// Get monthly summary
-router.get('/api/attendance/summary/:type/:id/:year/:month', requireAdminSession, (req, res) => {
-  try {
-    const { type, id, year, month } = req.params;
-    const summary = attendanceSvc.getMonthlyAttendanceSummary(
-      type, 
-      parseInt(id), 
-      parseInt(year), 
-      parseInt(month)
-    );
-    res.json({ success: true, data: summary });
-  } catch (e) {
-    res.json({ success: false, message: e.message });
-  }
-});
-
-// Update attendance (admin correction)
-router.post('/attendance/:id/update', requireAdminSession, express.json(), (req, res) => {
-  try {
-    const { id } = req.params;
-    const { check_in_time, check_in_note, check_out_time, check_out_note } = req.body;
-    
-    // Calculate duration if both times provided
-    let duration = 0;
-    if (check_in_time && check_out_time) {
-      const checkIn = new Date(check_in_time);
-      const checkOut = new Date(check_out_time);
-      duration = Math.floor((checkOut - checkIn) / 1000 / 60);
-    }
-    
-    attendanceSvc.updateAttendance(parseInt(id), {
-      check_in_time,
-      check_in_note: check_in_note || '',
-      check_out_time: check_out_time || null,
-      check_out_note: check_out_note || '',
-      work_duration_minutes: duration
-    });
-    
-    auditSvc.log('admin', req.session.username || 'admin', 'update_attendance', `Updated attendance #${id}`);
-    res.json({ success: true, message: 'Absensi berhasil diperbarui' });
-  } catch (e) {
-    res.json({ success: false, message: 'Gagal update absensi: ' + e.message });
-  }
-});
-
-// Delete attendance
-router.post('/attendance/:id/delete', requireAdminSession, (req, res) => {
-  try {
-    const { id } = req.params;
-    attendanceSvc.deleteAttendance(parseInt(id));
-    auditSvc.log('admin', req.session.username || 'admin', 'delete_attendance', `Deleted attendance #${id}`);
-    req.session._msg = { type: 'success', text: 'Absensi berhasil dihapus' };
-    res.redirect('/admin/attendance');
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal hapus absensi: ' + e.message };
-    res.redirect('/admin/attendance');
-  }
-});
-
-// Export attendance to Excel
-router.get('/attendance/export', requireAdminSession, (req, res) => {
-  try {
-    const { startDate, endDate } = req.query;
-    if (!startDate || !endDate) {
-      req.session._msg = { type: 'error', text: 'Tanggal mulai dan akhir wajib diisi' };
-      return res.redirect('/admin/attendance');
-    }
-    
-    const attendances = attendanceSvc.getAttendanceByDateRange(startDate, endDate);
-    
-    // Prepare data for Excel
-    const data = attendances.map(a => ({
-      'ID': a.id,
-      'Tipe Karyawan': a.employee_type,
-      'Nama': a.employee_name,
-      'Check In': a.check_in_time,
-      'Lokasi Check In': a.check_in_lat && a.check_in_lng ? `${a.check_in_lat}, ${a.check_in_lng}` : '-',
-      'Catatan Check In': a.check_in_note || '-',
-      'Check Out': a.check_out_time || '-',
-      'Lokasi Check Out': a.check_out_lat && a.check_out_lng ? `${a.check_out_lat}, ${a.check_out_lng}` : '-',
-      'Catatan Check Out': a.check_out_note || '-',
-      'Durasi (menit)': a.work_duration_minutes || 0,
-      'Status': a.status
-    }));
-    
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Absensi');
-    
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    
-    res.setHeader('Content-Disposition', `attachment; filename=absensi_${startDate}_${endDate}.xlsx`);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.send(buffer);
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal export: ' + e.message };
-    res.redirect('/admin/attendance');
-  }
-});
-
-
-// ─── PAYROLL / GAJI KARYAWAN ───────────────────────────────────────────────
-
-router.get('/payroll', requireAdmin, (req, res) => {
-  const now = new Date();
-  const month = parseInt(req.query.month) || (now.getMonth() + 1);
-  const year = parseInt(req.query.year) || now.getFullYear();
-
-  const employees = payrollSvc.getAllEmployees();
-  const slips = payrollSvc.getSlipsByPeriod(month, year);
-  const summary = payrollSvc.getPayrollSummary(month, year);
-
-  const { getSettingsWithCache } = require('../config/settingsManager');
-  res.render('admin/payroll', {
-    title: 'Gaji Karyawan',
-    company: getSettingsWithCache().company_header || 'My ISP',
-    employees,
-    slips,
-    summary,
-    selectedMonth: month,
-    selectedYear: year,
-    msg: req.session._msg || null
-  });
-  req.session._msg = null;
-});
-
-router.post('/payroll/settings', requireAdmin, (req, res) => {
-  try {
-    payrollSvc.upsertPayrollSetting(req.body);
-    req.session._msg = { type: 'success', text: 'Pengaturan gaji berhasil disimpan.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
-  }
-  res.redirect('/admin/payroll');
-});
-
-router.post('/payroll/generate', requireAdmin, (req, res) => {
-  const month = parseInt(req.body.month);
-  const year = parseInt(req.body.year);
-  if (!month || !year) {
-    req.session._msg = { type: 'error', text: 'Bulan dan tahun diperlukan' };
-    return res.redirect('/admin/payroll');
-  }
-
-  const result = payrollSvc.generateAllSlips(month, year);
-  req.session._msg = { 
-    type: 'success', 
-    text: `Generate selesai: ${result.generated} berhasil, ${result.skipped} dilewati, ${result.errors.length} error.` 
-  };
-  res.redirect(`/admin/payroll?month=${month}&year=${year}`);
-});
-
-router.post('/payroll/slip/:id/deduction', requireAdmin, express.json(), (req, res) => {
-  try {
-    const { other_deduction, other_deduction_note } = req.body;
-    payrollSvc.updateSlipDeductions(req.params.id, other_deduction, other_deduction_note);
-    res.json({ success: true, message: 'Potongan diperbarui' });
-  } catch (e) {
-    res.json({ success: false, message: e.message });
-  }
-});
-
-router.post('/payroll/slip/:id/approve', requireAdmin, (req, res) => {
-  try {
-    payrollSvc.approveSlip(req.params.id);
-    req.session._msg = { type: 'success', text: 'Slip berhasil di-approve.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: e.message };
-  }
-  res.redirect('back');
-});
-
-router.post('/payroll/slip/:id/paid', requireAdmin, (req, res) => {
-  try {
-    payrollSvc.markSlipPaid(req.params.id);
-    req.session._msg = { type: 'success', text: 'Slip ditandai lunas (paid).' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: e.message };
-  }
-  res.redirect('back');
-});
-
-router.post('/payroll/slip/:id/delete', requireAdmin, (req, res) => {
-  try {
-    payrollSvc.deleteSlip(req.params.id);
-    req.session._msg = { type: 'success', text: 'Slip berhasil dihapus.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: e.message };
-  }
-  res.redirect('back');
-});
-
-router.post('/payroll/bulk-approve', requireAdmin, (req, res) => {
-  try {
-    payrollSvc.bulkApprove(parseInt(req.body.month), parseInt(req.body.year));
-    req.session._msg = { type: 'success', text: 'Semua slip draft berhasil di-approve.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: e.message };
-  }
-  res.redirect('back');
-});
-
-router.post('/payroll/bulk-paid', requireAdmin, (req, res) => {
-  try {
-    payrollSvc.bulkMarkPaid(parseInt(req.body.month), parseInt(req.body.year));
-    req.session._msg = { type: 'success', text: 'Semua slip approved ditandai lunas.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: e.message };
-  }
-  res.redirect('back');
-});
-
-router.post('/payroll/delete-drafts', requireAdmin, (req, res) => {
-  try {
-    payrollSvc.deleteSlipsByPeriod(parseInt(req.body.month), parseInt(req.body.year));
-    req.session._msg = { type: 'success', text: 'Semua slip draft dihapus.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: e.message };
-  }
-  res.redirect('back');
-});
-
-router.get('/payroll/slip/:id/print', requireAdmin, (req, res) => {
-  const slip = payrollSvc.getSlipById(req.params.id);
-  if (!slip) return res.status(404).send('Slip tidak ditemukan');
-  
-  const { getSettingsWithCache } = require('../config/settingsManager');
-  res.render('admin/print_payslip', {
-    company: getSettingsWithCache().company_header || 'My ISP',
-    slip
-  });
-});
-
-router.post('/payroll/slip/:id/send-wa', requireAdmin, async (req, res) => {
-  try {
-    const slip = payrollSvc.getSlipById(req.params.id);
-    if (!slip) throw new Error('Slip tidak ditemukan');
-    
-    const phone = payrollSvc.getEmployeePhone(slip.employee_type, slip.employee_id);
-    if (!phone) throw new Error('Nomor HP karyawan tidak diset');
-
-    const { getSettingsWithCache } = require('../config/settingsManager');
-    const settings = getSettingsWithCache();
-    if (!settings.whatsapp_enabled) throw new Error('WhatsApp bot tidak aktif');
-
-    const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
-    if (!whatsappStatus || whatsappStatus.connection !== 'open') {
-      throw new Error('WhatsApp bot tidak terkoneksi');
-    }
-
-    const monthNames = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-    
-    const msg = `🧾 *SLIP GAJI KARYAWAN*\n\n` +
-      `👤 *Nama:* ${slip.employee_name}\n` +
-      `📅 *Periode:* ${monthNames[slip.period_month]} ${slip.period_year}\n` +
-      `🏢 *Status:* ${slip.status.toUpperCase()}\n\n` +
-      `*PENDAPATAN:*\n` +
-      `- Gaji Pokok: Rp ${slip.base_salary.toLocaleString('id-ID')}\n` +
-      (slip.transport_allowance ? `- Tunj. Transport: Rp ${slip.transport_allowance.toLocaleString('id-ID')}\n` : '') +
-      (slip.meal_allowance ? `- Tunj. Makan: Rp ${slip.meal_allowance.toLocaleString('id-ID')}\n` : '') +
-      (slip.phone_allowance ? `- Tunj. Pulsa: Rp ${slip.phone_allowance.toLocaleString('id-ID')}\n` : '') +
-      (slip.other_allowance ? `- Tunj. Lain: Rp ${slip.other_allowance.toLocaleString('id-ID')}\n` : '') +
-      (slip.ticket_bonus ? `- Bonus Tiket: +Rp ${slip.ticket_bonus.toLocaleString('id-ID')}\n` : '') +
-      (slip.collection_commission ? `- Komisi Tagihan: +Rp ${slip.collection_commission.toLocaleString('id-ID')}\n` : '') +
-      (slip.overtime_bonus ? `- Lembur: +Rp ${slip.overtime_bonus.toLocaleString('id-ID')}\n` : '') +
-      `*Total Pendapatan: Rp ${slip.gross_salary.toLocaleString('id-ID')}*\n\n` +
-      `*POTONGAN:*\n` +
-      (slip.absence_deduction ? `- Potongan Absen: -Rp ${slip.absence_deduction.toLocaleString('id-ID')}\n` : '') +
-      (slip.late_deduction ? `- Potongan Terlambat: -Rp ${slip.late_deduction.toLocaleString('id-ID')}\n` : '') +
-      (slip.other_deduction ? `- Potongan Lain: -Rp ${slip.other_deduction.toLocaleString('id-ID')}\n` : '') +
-      `*Total Potongan: Rp ${slip.total_deductions.toLocaleString('id-ID')}*\n\n` +
-      `💰 *GAJI BERSIH: Rp ${slip.net_salary.toLocaleString('id-ID')}*\n\n` +
-      `Terima kasih atas kerja keras Anda! 🙏`;
-
-    await sendWA(phone, msg);
-    res.json({ success: true, message: 'Terkirim' });
-  } catch (e) {
-    res.json({ success: false, message: e.message });
   }
 });
 

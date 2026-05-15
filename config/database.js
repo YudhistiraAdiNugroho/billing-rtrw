@@ -68,31 +68,6 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
-  CREATE TABLE IF NOT EXISTS collectors (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    name TEXT NOT NULL,
-    phone TEXT DEFAULT '',
-    is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS collector_payment_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    collector_id INTEGER NOT NULL REFERENCES collectors(id) ON DELETE CASCADE,
-    invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
-    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    amount INTEGER NOT NULL DEFAULT 0,
-    note TEXT DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'pending', -- pending, approved, rejected
-    decided_by_role TEXT DEFAULT '', -- admin, cashier
-    decided_by_name TEXT DEFAULT '',
-    decided_note TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    decided_at DATETIME
-  );
-
   CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
@@ -258,22 +233,6 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
-  CREATE TABLE IF NOT EXISTS digiflazz_staff_transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    role TEXT NOT NULL DEFAULT 'admin', -- admin, cashier
-    actor_phone TEXT DEFAULT '',
-    actor_name TEXT DEFAULT '',
-    sku TEXT NOT NULL,
-    target TEXT NOT NULL,
-    ref_id TEXT NOT NULL UNIQUE,
-    trx_id TEXT DEFAULT '',
-    sn TEXT DEFAULT '',
-    status TEXT DEFAULT '',
-    message TEXT DEFAULT '',
-    price INTEGER NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
   CREATE TABLE IF NOT EXISTS webhook_payment_notifs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     service TEXT DEFAULT '',
@@ -296,15 +255,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_agent_prices_router_profile ON agent_hotspot_prices(router_id, profile_name);
   CREATE INDEX IF NOT EXISTS idx_agent_tx_agent ON agent_transactions(agent_id);
   CREATE INDEX IF NOT EXISTS idx_agent_tx_created ON agent_transactions(created_at);
-  CREATE INDEX IF NOT EXISTS idx_digi_staff_tx_created ON digiflazz_staff_transactions(created_at);
-  CREATE INDEX IF NOT EXISTS idx_digi_staff_tx_role ON digiflazz_staff_transactions(role);
-  CREATE INDEX IF NOT EXISTS idx_digi_staff_tx_ref ON digiflazz_staff_transactions(ref_id);
-
-  CREATE INDEX IF NOT EXISTS idx_collectors_username ON collectors(username);
-  CREATE INDEX IF NOT EXISTS idx_collector_pay_req_status ON collector_payment_requests(status);
-  CREATE INDEX IF NOT EXISTS idx_collector_pay_req_invoice ON collector_payment_requests(invoice_id);
-  CREATE INDEX IF NOT EXISTS idx_collector_pay_req_collector ON collector_payment_requests(collector_id);
-  CREATE INDEX IF NOT EXISTS idx_collector_pay_req_created ON collector_payment_requests(created_at);
 
   CREATE INDEX IF NOT EXISTS idx_webhook_payment_notifs_created ON webhook_payment_notifs(created_at);
   CREATE INDEX IF NOT EXISTS idx_webhook_payment_notifs_service ON webhook_payment_notifs(service);
@@ -402,15 +352,6 @@ try {
   db.exec("ALTER TABLE customers ADD COLUMN mac_address TEXT");
 } catch (e) { /* ignore if already exists */ }
 try {
-  db.exec("ALTER TABLE customers ADD COLUMN hotspot_username TEXT DEFAULT ''");
-} catch (e) {}
-try {
-  db.exec("ALTER TABLE customers ADD COLUMN hotspot_password TEXT DEFAULT ''");
-} catch (e) {}
-try {
-  db.exec("ALTER TABLE customers ADD COLUMN hotspot_profile TEXT DEFAULT ''");
-} catch (e) {}
-try {
   db.exec("ALTER TABLE odps ADD COLUMN port_capacity INTEGER NOT NULL DEFAULT 16");
 } catch (e) { /* ignore if already exists */ }
 
@@ -431,9 +372,6 @@ try { db.exec("ALTER TABLE invoices ADD COLUMN qris_paid_notif_id INTEGER"); } c
 // Kolom untuk Login OLT (Web/API)
 try { db.exec("ALTER TABLE olts ADD COLUMN web_user TEXT DEFAULT 'admin'"); } catch (e) {}
 try { db.exec("ALTER TABLE olts ADD COLUMN web_password TEXT DEFAULT 'admin'"); } catch (e) {}
-try { db.exec("ALTER TABLE olts ADD COLUMN api_base_url TEXT"); } catch (e) {}
-try { db.exec("ALTER TABLE olts ADD COLUMN telnet_port INTEGER DEFAULT 23"); } catch (e) {}
-try { db.exec("ALTER TABLE olts ADD COLUMN enable_password TEXT"); } catch (e) {}
 
 try { db.exec("ALTER TABLE voucher_batches ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
 try { db.exec("ALTER TABLE vouchers ADD COLUMN last_seen_comment TEXT DEFAULT ''"); } catch (e) {}
@@ -445,19 +383,6 @@ try { db.exec("ALTER TABLE voucher_batches ADD COLUMN charset TEXT DEFAULT 'numb
 // Relasi notifikasi webhook → invoice (untuk audit)
 try { db.exec("ALTER TABLE webhook_payment_notifs ADD COLUMN matched_invoice_id INTEGER"); } catch (e) {}
 
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN provider TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_sku TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_target TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_ref_id TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_trx_id TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_sn TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_status TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_message TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_price INTEGER NOT NULL DEFAULT 0"); } catch (e) {}
-try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_refunded INTEGER NOT NULL DEFAULT 0"); } catch (e) {}
-try { db.exec("CREATE INDEX IF NOT EXISTS idx_agent_tx_digi_ref ON agent_transactions(digi_ref_id)"); } catch (e) {}
-try { db.exec("CREATE INDEX IF NOT EXISTS idx_agent_tx_type ON agent_transactions(type)"); } catch (e) {}
-
 // Kolom untuk Dynamic Speed & FUP di tabel packages
 try { db.exec("ALTER TABLE packages ADD COLUMN night_speed_down INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN night_speed_up INTEGER DEFAULT 0"); } catch (e) {}
@@ -467,12 +392,6 @@ try { db.exec("ALTER TABLE packages ADD COLUMN use_night_speed INTEGER DEFAULT 0
 try { db.exec("ALTER TABLE packages ADD COLUMN night_profile_name TEXT"); } catch (e) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN use_fup INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN fup_profile_name TEXT"); } catch (e) {}
-
-// Promo harga & prorata tagihan pertama (per paket + counter per pelanggan)
-try { db.exec("ALTER TABLE packages ADD COLUMN promo_price INTEGER"); } catch (e) {}
-try { db.exec("ALTER TABLE packages ADD COLUMN promo_cycles INTEGER DEFAULT 0"); } catch (e) {}
-try { db.exec("ALTER TABLE packages ADD COLUMN prorate_first_invoice INTEGER DEFAULT 0"); } catch (e) {}
-try { db.exec("ALTER TABLE customers ADD COLUMN promo_cycles_used INTEGER DEFAULT 0"); } catch (e) {}
 
 // Tabel untuk Tracking Pemakaian (Usage) Pelanggan
 db.exec(`
@@ -492,138 +411,4 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_usage_period ON customer_usage(period_month, period_year);
 `);
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS digiflazz_products (
-    sku TEXT PRIMARY KEY,
-    product_name TEXT NOT NULL,
-    category TEXT DEFAULT '',
-    brand TEXT DEFAULT '',
-    price_modal INTEGER NOT NULL DEFAULT 0,
-    price_sell INTEGER NOT NULL DEFAULT 0,
-    status INTEGER NOT NULL DEFAULT 1,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS digiflazz_sync_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    total INTEGER NOT NULL DEFAULT 0,
-    inserted INTEGER NOT NULL DEFAULT 0,
-    updated INTEGER NOT NULL DEFAULT 0,
-    active INTEGER NOT NULL DEFAULT 0,
-    inactive INTEGER NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_digiflazz_products_cat ON digiflazz_products(category);
-  CREATE INDEX IF NOT EXISTS idx_digiflazz_products_brand ON digiflazz_products(brand);
-  CREATE INDEX IF NOT EXISTS idx_digiflazz_products_status ON digiflazz_products(status);
-  CREATE INDEX IF NOT EXISTS idx_digiflazz_sync_created ON digiflazz_sync_logs(created_at);
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS digiflazz_webhook_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ref_id TEXT DEFAULT '',
-    status TEXT DEFAULT '',
-    signature TEXT DEFAULT '',
-    signature_ok INTEGER NOT NULL DEFAULT 0,
-    matched_agent_tx_id INTEGER,
-    ip TEXT DEFAULT '',
-    payload TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_digiflazz_webhook_created ON digiflazz_webhook_logs(created_at);
-  CREATE INDEX IF NOT EXISTS idx_digiflazz_webhook_ref ON digiflazz_webhook_logs(ref_id);
-`);
-
-// ─── ATTENDANCE / ABSENSI KARYAWAN ───────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS attendance (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    employee_type TEXT NOT NULL, -- technician, admin, cashier, collector
-    employee_id INTEGER NOT NULL,
-    employee_name TEXT NOT NULL,
-    check_in_time DATETIME NOT NULL,
-    check_in_lat TEXT DEFAULT '',
-    check_in_lng TEXT DEFAULT '',
-    check_in_note TEXT DEFAULT '',
-    check_out_time DATETIME,
-    check_out_lat TEXT DEFAULT '',
-    check_out_lng TEXT DEFAULT '',
-    check_out_note TEXT DEFAULT '',
-    work_duration_minutes INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'checked_in', -- checked_in, checked_out
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_attendance_employee ON attendance(employee_type, employee_id);
-  CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date(check_in_time));
-  CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance(status);
-`);
-
 module.exports = db;
-
-// ─── PAYROLL / GAJI KARYAWAN ─────────────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS payroll_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    employee_type TEXT NOT NULL,
-    employee_id INTEGER NOT NULL,
-    base_salary INTEGER DEFAULT 0,
-    transport_allowance INTEGER DEFAULT 0,
-    meal_allowance INTEGER DEFAULT 0,
-    phone_allowance INTEGER DEFAULT 0,
-    other_allowance INTEGER DEFAULT 0,
-    other_allowance_note TEXT DEFAULT '',
-    absence_deduction_per_day INTEGER DEFAULT 0,
-    bonus_per_ticket INTEGER DEFAULT 0,
-    commission_percentage REAL DEFAULT 0,
-    working_days_per_month INTEGER DEFAULT 26,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(employee_type, employee_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS payroll_slips (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    employee_type TEXT NOT NULL,
-    employee_id INTEGER NOT NULL,
-    employee_name TEXT NOT NULL,
-    period_month INTEGER NOT NULL,
-    period_year INTEGER NOT NULL,
-    base_salary INTEGER DEFAULT 0,
-    transport_allowance INTEGER DEFAULT 0,
-    meal_allowance INTEGER DEFAULT 0,
-    phone_allowance INTEGER DEFAULT 0,
-    other_allowance INTEGER DEFAULT 0,
-    other_allowance_note TEXT DEFAULT '',
-    working_days INTEGER DEFAULT 0,
-    absent_days INTEGER DEFAULT 0,
-    late_days INTEGER DEFAULT 0,
-    overtime_hours REAL DEFAULT 0,
-    total_tickets_resolved INTEGER DEFAULT 0,
-    total_collection_amount INTEGER DEFAULT 0,
-    ticket_bonus INTEGER DEFAULT 0,
-    collection_commission INTEGER DEFAULT 0,
-    overtime_bonus INTEGER DEFAULT 0,
-    absence_deduction INTEGER DEFAULT 0,
-    late_deduction INTEGER DEFAULT 0,
-    other_deduction INTEGER DEFAULT 0,
-    other_deduction_note TEXT DEFAULT '',
-    gross_salary INTEGER DEFAULT 0,
-    total_deductions INTEGER DEFAULT 0,
-    net_salary INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'draft',
-    approved_at DATETIME,
-    paid_at DATETIME,
-    notes TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(employee_type, employee_id, period_month, period_year)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_payroll_settings_emp ON payroll_settings(employee_type, employee_id);
-  CREATE INDEX IF NOT EXISTS idx_payroll_slips_emp ON payroll_slips(employee_type, employee_id);
-  CREATE INDEX IF NOT EXISTS idx_payroll_slips_period ON payroll_slips(period_month, period_year);
-  CREATE INDEX IF NOT EXISTS idx_payroll_slips_status ON payroll_slips(status);
-`);
