@@ -40,10 +40,7 @@
     <div class="card">
       <div class="card-hd">
         <h6><i class="bi bi-hdd-network"></i> <%= t('admin.routers.list_title', 'Daftar Router MikroTik') %> (<%= routers.length %>)</h6>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-outline-light btn-sm" onclick="openIsolirScriptModal()"><i class="bi bi-filetype-txt"></i> <%= t('admin.routers.isolir_script_btn', 'Script halaman isolir') %></button>
-          <button class="btn btn-p btn-sm" onclick="openModal('addModal')"><i class="bi bi-plus-lg"></i> <%= t('admin.routers.add', 'Tambah Router') %></button>
-        </div>
+        <button class="btn btn-p btn-sm" onclick="openModal('addModal')"><i class="bi bi-plus-lg"></i> <%= t('admin.routers.add', 'Tambah Router') %></button>
       </div>
       <div class="tbl-wrap">
         <table class="dtbl">
@@ -85,22 +82,6 @@
           </tbody>
         </table>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- Modal Script Isolir Portal -->
-<div class="mo" id="isolirScriptModal">
-  <div class="mb" style="max-width:720px">
-    <div class="mh"><span class="mt"><i class="bi bi-shield-lock"></i> <%= t('admin.routers.isolir_script_title', 'Script RouterOS — halaman isolir') %></span><button class="mc" onclick="closeModal('isolirScriptModal')">&times;</button></div>
-    <div class="mbody">
-      <p class="small text-muted mb-2"><%= t('admin.routers.isolir_script_help', 'Dari Pengaturan → URL aplikasi (app_url). Salin ke Winbox Terminal atau import .rsc. Sesuaikan jika bentrok dengan rule yang ada.') %></p>
-      <div id="isolir-script-meta" class="small text-muted mb-2"></div>
-      <textarea id="isolir-script-body" class="fc" readonly rows="18" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
-    </div>
-    <div class="mf">
-      <button type="button" class="btn btn-g" onclick="closeModal('isolirScriptModal')"><%= t('common.close', 'Tutup') %></button>
-      <button type="button" class="btn btn-p" onclick="copyIsolirScript()"><i class="bi bi-clipboard"></i> <%= t('admin.routers.isolir_script_copy', 'Salin script') %></button>
     </div>
   </div>
 </div>
@@ -211,32 +192,6 @@ async function setupFirewall(id) {
     const data = await res.json();
     alert(data.success ? '✅ ' + data.message : '❌ ' + data.error);
   } catch (e) { alert(I18N.systemError); }
-}
-
-async function openIsolirScriptModal() {
-  const ta = document.getElementById('isolir-script-body');
-  const meta = document.getElementById('isolir-script-meta');
-  ta.value = '<%= t('common.loading', 'Memuat...') %>';
-  meta.textContent = '';
-  openModal('isolirScriptModal');
-  try {
-    const res = await fetch('/admin/api/isolir-portal-script');
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Gagal');
-    ta.value = data.script || '';
-    meta.textContent = (data.appUrl ? ('app_url: ' + data.appUrl + ' | ') : '') + 'IP: ' + (data.billingIp || '-') + ' | NAT → HTTP:' + (data.httpNatPort ?? '-') + ' HTTPS:' + (data.httpsNatPort ?? '-');
-  } catch (e) {
-    ta.value = '';
-    meta.textContent = e.message || 'Error';
-  }
-}
-
-function copyIsolirScript() {
-  const ta = document.getElementById('isolir-script-body');
-  if (!ta || !ta.value) return;
-  ta.select();
-  document.execCommand('copy');
-  alert('<%= t('admin.routers.isolir_script_copied', 'Script disalin ke clipboard.') %>');
 }
 </script>
 </body>

@@ -69,20 +69,12 @@
     <!-- Table -->
     <div class="card">
       <div class="card-hd">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;width:100%">
-          <h6 style="margin:0"><i class="bi bi-list-ul"></i> <%= t('admin.billing.list', 'Daftar Tagihan') %> (<%= invoices.length %>)</h6>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span class="text-muted small" id="bulkCount">0 dipilih</span>
-            <button type="button" class="btn btn-s btn-sm" id="bulkPayBtn" disabled><i class="bi bi-check-lg"></i> Bayar Massal</button>
-            <button type="button" class="btn btn-d btn-sm" id="bulkDeleteBtn" disabled><i class="bi bi-trash"></i> Hapus Massal</button>
-          </div>
-        </div>
+        <h6><i class="bi bi-list-ul"></i> <%= t('admin.billing.list', 'Daftar Tagihan') %> (<%= invoices.length %>)</h6>
       </div>
       <div class="tbl-wrap">
         <table class="dtbl">
           <thead>
             <tr>
-              <th style="width:34px"><input type="checkbox" id="inv_all" style="width:16px;height:16px"></th>
               <th>#</th>
               <th><%= t('admin.billing.table.customer', 'Pelanggan') %></th>
               <th><%= t('admin.billing.table.period', 'Periode') %></th>
@@ -96,25 +88,10 @@
           </thead>
           <tbody>
           <% if (invoices.length===0) { %>
-            <tr><td colspan="10" class="text-center text-muted" style="padding:32px"><%= t('admin.billing.empty', 'Tidak ada tagihan. Generate tagihan bulanan terlebih dahulu.') %></td></tr>
+            <tr><td colspan="9" class="text-center text-muted" style="padding:32px"><%= t('admin.billing.empty', 'Tidak ada tagihan. Generate tagihan bulanan terlebih dahulu.') %></td></tr>
           <% } %>
           <% invoices.forEach((inv,i)=>{ %>
             <tr class="<%= inv.status==='paid'?'paid-row':'' %>">
-              <td>
-                <input
-                  type="checkbox"
-                  class="inv_sel"
-                  style="width:16px;height:16px"
-                  data-id="<%= inv.id %>"
-                  data-status="<%= String(inv.status || '') %>"
-                  data-customer-id="<%= inv.customer_id %>"
-                  data-customer-name="<%= String(inv.customer_name || '').replace(/\"/g, '&quot;') %>"
-                  data-period-month="<%= inv.period_month %>"
-                  data-period-year="<%= inv.period_year %>"
-                  data-amount="<%= Number(inv.amount || 0) %>"
-                  data-package="<%= String(inv.package_name || '-').replace(/\"/g, '&quot;') %>"
-                >
-              </td>
               <td class="text-muted"><%= i+1 %></td>
               <td>
                 <div class="fw6"><%= inv.customer_name %></div>
@@ -194,7 +171,6 @@
         </table>
       </div>
     </div>
-    <form id="bulkDeleteForm" method="POST" action="/admin/billing/delete-bulk" style="display:none"></form>
   </div>
 </div>
 
@@ -250,10 +226,7 @@
           </div>
         </div>
 
-        <% const payByDefault = (typeof session !== 'undefined' && session.isCashier)
-          ? (`Kasir ${(session.cashierName || '').trim()}` + ((session.cashierUsername || '').trim() ? ` (@${String(session.cashierUsername).trim()})` : '')).trim()
-          : 'Admin'; %>
-        <div class="fg"><label class="fl"><%= t('admin.billing.received_by', 'Diterima Oleh') %></label><input class="fc" name="paid_by_name" placeholder="<%= t('admin.billing.received_by_placeholder', 'Nama petugas / teknisi') %>" value="<%= payByDefault || 'Admin' %>"></div>
+        <div class="fg"><label class="fl"><%= t('admin.billing.received_by', 'Diterima Oleh') %></label><input class="fc" name="paid_by_name" placeholder="<%= t('admin.billing.received_by_placeholder', 'Nama petugas / teknisi') %>" value="Admin"></div>
         <div class="fg"><label class="fl"><%= t('admin.billing.notes_optional', 'Catatan (opsional)') %></label><textarea class="fc" name="notes" placeholder="<%= t('admin.billing.notes_placeholder', 'Transfer BRI, tunai, dll...') %>"></textarea></div>
       </div>
       <div class="mf">
@@ -346,93 +319,6 @@ document.addEventListener('click', async function(e) {
     form.action = '/admin/billing/' + id + '/pay';
   }
 });
-
-function getSelectedInvoices() {
-  return Array.from(document.querySelectorAll('.inv_sel:checked')).map(cb => cb.dataset || {});
-}
-
-function updateBulkUi() {
-  const list = getSelectedInvoices();
-  const countEl = document.getElementById('bulkCount');
-  const payBtn = document.getElementById('bulkPayBtn');
-  const delBtn = document.getElementById('bulkDeleteBtn');
-  if (countEl) countEl.textContent = `${list.length} dipilih`;
-  if (payBtn) payBtn.disabled = list.length === 0;
-  if (delBtn) delBtn.disabled = list.length === 0;
-}
-
-document.addEventListener('change', function(e) {
-  const all = document.getElementById('inv_all');
-  if (e.target && e.target.id === 'inv_all') {
-    const checked = Boolean(all && all.checked);
-    document.querySelectorAll('.inv_sel').forEach(cb => { cb.checked = checked; });
-    updateBulkUi();
-    return;
-  }
-  if (e.target && e.target.classList && e.target.classList.contains('inv_sel')) {
-    updateBulkUi();
-  }
-});
-
-document.getElementById('bulkPayBtn')?.addEventListener('click', function() {
-  const selected = getSelectedInvoices();
-  const unpaid = selected.filter(x => String(x.status || '').toLowerCase() === 'unpaid');
-  if (unpaid.length === 0) return alert('Pilih minimal 1 tagihan BELUM BAYAR.');
-
-  const form = document.getElementById('payForm');
-  const multiSection = document.getElementById('multiPaySection');
-  const unpaidList = document.getElementById('unpaidList');
-  const payDesc = document.getElementById('payDesc');
-
-  if (payDesc) payDesc.textContent = `Bayar massal: ${unpaid.length} tagihan`;
-  if (unpaidList) unpaidList.innerHTML = '';
-  if (multiSection) multiSection.style.display = 'block';
-
-  for (const inv of unpaid) {
-    const div = document.createElement('div');
-    div.style.display = 'flex';
-    div.style.alignItems = 'center';
-    div.style.gap = '10px';
-    const id = String(inv.id || '').trim();
-    const customerName = String(inv.customerName || '').trim();
-    const pkg = String(inv.package || '').trim();
-    const period = `${(MONTHS[Number(inv.periodMonth || 0)] || '')} ${String(inv.periodYear || '')}`.trim();
-    const amt = Number(inv.amount || 0) || 0;
-    div.innerHTML = `
-      <input type="checkbox" name="invoice_ids" value="${id}" id="bulk_inv_${id}" checked style="width:16px; height:16px">
-      <label for="bulk_inv_${id}" style="font-size:13px; cursor:pointer">
-        ${customerName ? `<strong>${customerName}</strong> • ` : ''}${I18N.periodPrefix} ${period}
-        <span class="text-muted">(${pkg || I18N.packageFallback})</span> -
-        <strong style="color:var(--success)">Rp ${amt.toLocaleString('id-ID')}</strong>
-      </label>
-    `;
-    unpaidList.appendChild(div);
-  }
-  if (form) form.action = '/admin/billing/pay-bulk';
-  openModal('payModal');
-});
-
-document.getElementById('bulkDeleteBtn')?.addEventListener('click', function() {
-  const selected = getSelectedInvoices();
-  if (selected.length === 0) return;
-  if (!confirm(`Hapus ${selected.length} tagihan terpilih?`)) return;
-
-  const f = document.getElementById('bulkDeleteForm');
-  if (!f) return;
-  f.innerHTML = '';
-  for (const inv of selected) {
-    const id = String(inv.id || '').trim();
-    if (!id) continue;
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'invoice_ids';
-    input.value = id;
-    f.appendChild(input);
-  }
-  f.submit();
-});
-
-updateBulkUi();
 
 setTimeout(()=>document.querySelectorAll('.alert').forEach(a=>a.style.display='none'),5000);
 </script>

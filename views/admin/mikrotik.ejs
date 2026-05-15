@@ -227,10 +227,7 @@
         <div class="fg"><label class="fl">Name</label><input class="fc" id="pp_name" required></div>
         <div class="form-row">
           <div class="fg"><label class="fl">Local Address</label><input class="fc" id="pp_local"></div>
-          <div class="fg">
-            <label class="fl">Remote Address (Pool)</label>
-            <select class="fs" id="pp_remote"><option value="">-</option></select>
-          </div>
+          <div class="fg"><label class="fl">Remote Address</label><input class="fc" id="pp_remote"></div>
         </div>
         <div class="fg"><label class="fl">Rate Limit (Rx/Tx e.g. 5M/10M)</label><input class="fc" id="pp_rate"></div>
       </div>
@@ -251,8 +248,7 @@
       <div class="mbody">
         <div class="fg"><label class="fl">Name</label><input class="fc" id="hp_name" required></div>
         <div class="form-row">
-          <div class="fg"><label class="fl">Harga Beli (Rp)</label><input class="fc" id="hp_cost" type="number" min="0" step="500" value="0" oninput="syncMikhmonOnLogin()"></div>
-          <div class="fg"><label class="fl">Harga Jual (Rp)</label><input class="fc" id="hp_price" type="number" min="0" step="500" value="0" oninput="syncMikhmonOnLogin()"></div>
+          <div class="fg"><label class="fl">Harga (Rp)</label><input class="fc" id="hp_price" type="number" min="0" step="500" value="0" oninput="syncMikhmonOnLogin()"></div>
           <div class="fg"><label class="fl">Durasi Voucher (mis. 1h / 1d / 7d)</label><input class="fc" id="hp_validity" value="1d" oninput="syncMikhmonOnLogin()"></div>
         </div>
         <div class="form-row">
@@ -266,8 +262,7 @@
       </div>
       <div class="mf">
         <button type="button" class="btn btn-g" onclick="closeModal('hotspotProfileModal')"><%= t('common.cancel', 'Batal') %></button>
-        <div id="hotspotProfileStatus" class="text-muted" style="margin-right:auto;font-size:12px"></div>
-        <button type="button" class="btn btn-p" id="hotspotProfileSaveBtn" onclick="submitHotspotProfile()"><%= t('common.save', 'Simpan') %></button>
+        <button type="submit" class="btn btn-p"><%= t('common.save', 'Simpan') %></button>
       </div>
     </form>
   </div>
@@ -329,21 +324,17 @@
   let hotspotData = [];
   let pppoeProfilesData = [];
   let hotspotProfilesData = [];
-  let ipPoolsData = [];
-  let ipPoolsRouterId = null;
 
   function getRouterId() {
     return document.getElementById('global-router-id').value;
   }
 
   function changeRouter() {
-    const active = document.querySelector('.tab.active');
-    const tabText = String(active?.textContent || '').toLowerCase();
-    if (tabText.includes('pppoe secret')) return loadSecrets();
-    if (tabText.includes('hotspot user')) return loadHotspotUsers();
-    if (tabText.includes('pppoe profile')) return loadPppoeProfiles();
-    if (tabText.includes('hotspot profile')) return loadHotspotUserProfiles();
-    return loadSecrets();
+    loadSecrets();
+    loadHotspotUsers();
+    loadProfiles();
+    loadPppoeProfiles();
+    loadHotspotUserProfiles();
   }
 
   function downloadBackup(e) {
@@ -352,70 +343,11 @@
     window.location.href = `/admin/api/mikrotik/backup?routerId=${routerId}`;
   }
 
-  function escapeHtmlAttr(s) {
-    return String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  async function ensureIpPoolsLoaded() {
-    const routerId = getRouterId() || '';
-    if (ipPoolsRouterId === routerId && Array.isArray(ipPoolsData) && ipPoolsData.length > 0) return;
-    ipPoolsRouterId = routerId;
-    try {
-      const res = await fetch(`/admin/api/mikrotik/ip-pools?routerId=${routerId}`);
-      const data = await res.json();
-      ipPoolsData = Array.isArray(data) ? data : [];
-    } catch (e) {
-      ipPoolsData = [];
-    }
-  }
-
-  function renderIpPoolsSelect(selectedValue) {
-    const sel = document.getElementById('pp_remote');
-    if (!sel) return;
-    const options = [
-      '<option value="">-</option>',
-      ...(ipPoolsData || []).map((p) => `<option value="${escapeHtmlAttr(p.name)}">${escapeHtmlAttr(p.name)}</option>`)
-    ];
-    sel.innerHTML = options.join('');
-    if (selectedValue) sel.value = selectedValue;
-  }
-
-  async function readApiErrorMessage(res, fallback) {
-    try {
-      const ct = String(res.headers.get('content-type') || '');
-      if (ct.includes('application/json')) {
-        const j = await res.json();
-        if (j && j.error) return String(j.error);
-        if (j && j.message) return String(j.message);
-        return fallback;
-      }
-      const t = await res.text();
-      return t ? String(t) : fallback;
-    } catch {
-      return fallback;
-    }
-  }
-
   async function loadPppoeProfiles() {
     try {
-      const tbody = document.getElementById('pppoe-profiles-list');
       const res = await fetch(`/admin/api/mikrotik/profiles?routerId=${getRouterId()}`);
-      if (!res.ok) {
-        const msg = await readApiErrorMessage(res, I18N.loadFailed);
-        pppoeProfilesData = [];
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
-        return;
-      }
       pppoeProfilesData = await res.json();
-      if (!Array.isArray(pppoeProfilesData) || pppoeProfilesData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Tidak ada data profile PPPoE.</td></tr>`;
-        return;
-      }
+      const tbody = document.getElementById('pppoe-profiles-list');
       tbody.innerHTML = pppoeProfilesData.map((p, i) => `
         <tr>
           <td class="fw6">${p.name}</td>
@@ -433,19 +365,9 @@
 
   async function loadHotspotUserProfiles() {
     try {
-      const tbody = document.getElementById('hotspot-profiles-list');
       const res = await fetch(`/admin/api/mikrotik/hotspot-user-profiles?routerId=${getRouterId()}`);
-      if (!res.ok) {
-        const msg = await readApiErrorMessage(res, I18N.loadFailed);
-        hotspotProfilesData = [];
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
-        return;
-      }
       hotspotProfilesData = await res.json();
-      if (!Array.isArray(hotspotProfilesData) || hotspotProfilesData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Tidak ada data profile Hotspot.</td></tr>`;
-        return;
-      }
+      const tbody = document.getElementById('hotspot-profiles-list');
       tbody.innerHTML = hotspotProfilesData.map((p, i) => {
         const meta = parseMikhmonOnLogin(p.onLogin || p['on-login'] || '');
         const price = meta ? `Rp ${Number(meta.price || 0).toLocaleString('id-ID')}` : '-';
@@ -460,7 +382,7 @@
           <td>${p.sessionTimeout || '-'}</td>
           <td>
             <button class="btn btn-g btn-icon btn-sm" onclick="editHotspotProfile(${i})"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-d btn-icon btn-sm" onclick="deleteHotspotProfile('${p.id || ''}')"><i class="bi bi-trash"></i></button>
+            <button class="btn btn-d btn-icon btn-sm" onclick="deleteHotspotProfile('${p.id || p.name}')"><i class="bi bi-trash"></i></button>
           </td>
         </tr>
       `;
@@ -475,29 +397,13 @@
         fetch(`/admin/api/mikrotik/secrets?routerId=${routerId}`),
         fetch(`/admin/api/mikrotik/active-pppoe?routerId=${routerId}`)
       ]);
-      const tbody = document.getElementById('pppoe-list');
-      if (!sRes.ok) {
-        const msg = await readApiErrorMessage(sRes, I18N.loadFailed);
-        pppoeData = [];
-        document.getElementById('pppoe-online-count').innerText = '0';
-        document.getElementById('total-secrets-count').innerText = '0';
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
-        return;
-      }
-      if (!aRes.ok) {
-        const msg = await readApiErrorMessage(aRes, I18N.loadFailed);
-        pppoeData = [];
-        document.getElementById('pppoe-online-count').innerText = '0';
-        document.getElementById('total-secrets-count').innerText = '0';
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
-        return;
-      }
       pppoeData = await sRes.json();
       const activeSessions = await aRes.json();
       
       document.getElementById('pppoe-online-count').innerText = activeSessions.length;
       document.getElementById('total-secrets-count').innerText = pppoeData.length;
 
+      const tbody = document.getElementById('pppoe-list');
       if (!pppoeData.length) {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center">' + I18N.emptySecrets + '</td></tr>';
         return;
@@ -531,71 +437,31 @@
   }
 
   async function loadHotspotUsers() {
-    const tbody = document.getElementById('hotspot-list');
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="bi bi-hourglass-split"></i> ' + I18N.loading + '</td></tr>';
-    
     try {
       const routerId = getRouterId();
-      const startTime = Date.now();
-      
-      // Parallel fetch with timeout
-      const [uRes, aRes] = await Promise.race([
-        Promise.all([
-          fetch(`/admin/api/mikrotik/hotspot-users?routerId=${routerId}`),
-          fetch(`/admin/api/mikrotik/active-hotspot?routerId=${routerId}`)
-        ]),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout (15s)')), 15000))
+      const [uRes, aRes] = await Promise.all([
+        fetch(`/admin/api/mikrotik/hotspot-users?routerId=${routerId}`),
+        fetch(`/admin/api/mikrotik/active-hotspot?routerId=${routerId}`)
       ]);
-      
-      if (!uRes.ok) {
-        const msg = await readApiErrorMessage(uRes, I18N.loadFailed);
-        hotspotData = [];
-        document.getElementById('hotspot-online-count').innerText = '0';
-        document.getElementById('total-hotspot-count').innerText = '0';
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
-        return;
-      }
-      if (!aRes.ok) {
-        const msg = await readApiErrorMessage(aRes, I18N.loadFailed);
-        hotspotData = [];
-        document.getElementById('hotspot-online-count').innerText = '0';
-        document.getElementById('total-hotspot-count').innerText = '0';
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
-        return;
-      }
-      
       hotspotData = await uRes.json();
       const activeSessions = await aRes.json();
-      
-      const loadTime = Date.now() - startTime;
-      console.log(`Hotspot users loaded in ${loadTime}ms`);
 
       document.getElementById('hotspot-online-count').innerText = activeSessions.length;
       document.getElementById('total-hotspot-count').innerText = hotspotData.length;
 
+      const tbody = document.getElementById('hotspot-list');
       if (!hotspotData.length) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center">' + I18N.emptyHotspotUsers + '</td></tr>';
         return;
       }
-      
-      // Optimized rendering: Build active sessions map for O(1) lookup
-      const activeMap = new Map();
-      activeSessions.forEach(a => activeMap.set(a.user, a));
-      
-      // Batch rendering for better performance with large datasets
-      const batchSize = 100;
-      let html = '';
-      
-      for (let i = 0; i < hotspotData.length; i++) {
-        const h = hotspotData[i];
-        const active = activeMap.get(h.name);
+      tbody.innerHTML = hotspotData.map((h, i) => {
+        const active = activeSessions.find(a => a.user === h.name);
         const statusHtml = active
           ? '<span class="badge bs">' + I18N.statusOnline + '</span>'
           : (h.disabled === true || h.disabled === 'true'
             ? '<span class="badge bd">' + I18N.statusDisabled + '</span>'
             : '<span class="badge bw">' + I18N.statusOffline + '</span>');
-        
-        html += `
+        return `
           <tr>
             <td class="fw6">${h.name}</td>
             <td><span class="badge bm">${h.profile}</span></td>
@@ -610,18 +476,10 @@
             </td>
           </tr>
         `;
-        
-        // Render in batches to prevent UI blocking
-        if ((i + 1) % batchSize === 0 || i === hotspotData.length - 1) {
-          tbody.innerHTML = html;
-          if (i < hotspotData.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 0)); // Yield to browser
-          }
-        }
-      }
+      }).join('');
     } catch (err) {
       console.error('Error loadHotspotUsers:', err);
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">' + (err.message || I18N.loadFailed) + '</td></tr>';
+      document.getElementById('hotspot-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger">' + I18N.loadFailed + '</td></tr>';
     }
   }
 
@@ -631,8 +489,8 @@
       fetch(`/admin/api/mikrotik/profiles?routerId=${routerId}`),
       fetch(`/admin/api/mikrotik/hotspot-user-profiles?routerId=${routerId}`)
     ]);
-    const pProfiles = pRes.ok ? await pRes.json() : [];
-    const hProfiles = hRes.ok ? await hRes.json() : [];
+    const pProfiles = await pRes.json();
+    const hProfiles = await hRes.json();
     
     const pSel = document.getElementById('s_profile');
     pSel.innerHTML = pProfiles.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
@@ -641,21 +499,19 @@
     hSel.innerHTML = hProfiles.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
   }
 
-  async function openAddSecret() {
+  function openAddSecret() {
     document.getElementById('secretForm').reset();
     document.getElementById('secret_id').value = '';
     document.getElementById('secretModalTitle').innerText = I18N.addSecret;
-    await loadProfiles();
     openModal('secretModal');
   }
 
-  async function editSecret(idx) {
+  function editSecret(idx) {
     const s = pppoeData[idx];
     document.getElementById('secret_id').value = s.id;
     document.getElementById('s_name').value = s.name;
     document.getElementById('s_password').value = s.password || '';
     document.getElementById('s_service').value = s.service;
-    await loadProfiles();
     document.getElementById('s_profile').value = s.profile;
     document.getElementById('s_local').value = s['local-address'] || '';
     document.getElementById('s_remote').value = s['remote-address'] || '';
@@ -666,8 +522,6 @@
 
   document.getElementById('secretForm').onsubmit = async (e) => {
     e.preventDefault();
-    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
-    if (submitBtn) submitBtn.disabled = true;
     const id = document.getElementById('secret_id').value;
     const data = {
       name: document.getElementById('s_name').value,
@@ -680,20 +534,8 @@
     };
     const routerId = getRouterId();
     const url = id ? `/admin/api/mikrotik/secrets/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/secrets?routerId=${routerId}`;
-    try {
-      const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-      if (res.ok) {
-        closeModal('secretModal');
-        loadSecrets();
-        return;
-      }
-      const msg = await readApiErrorMessage(res, I18N.saveFailed);
-      alert(msg);
-    } catch (err) {
-      alert(String(err?.message || I18N.saveFailed));
-    } finally {
-      if (submitBtn) submitBtn.disabled = false;
-    }
+    const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+    if(res.ok) { closeModal('secretModal'); loadSecrets(); } else alert(I18N.saveFailed);
   };
 
   async function deleteSecret(id) {
@@ -703,20 +545,18 @@
   }
 
   // Hotspot Handlers
-  async function openAddHotspot() {
+  function openAddHotspot() {
     document.getElementById('hotspotForm').reset();
     document.getElementById('h_id').value = '';
     document.getElementById('hotspotModalTitle').innerText = I18N.addHotspotUser;
-    await loadProfiles();
     openModal('hotspotModal');
   }
 
-  async function editHotspot(idx) {
+  function editHotspot(idx) {
     const h = hotspotData[idx];
     document.getElementById('h_id').value = h.id;
     document.getElementById('h_name').value = h.name;
     document.getElementById('h_password').value = h.password || '';
-    await loadProfiles();
     document.getElementById('h_profile').value = h.profile;
     document.getElementById('h_uptime').value = h['limit-uptime'] || '';
     document.getElementById('h_mac').value = h['mac-address'] || '';
@@ -727,8 +567,6 @@
 
   document.getElementById('hotspotForm').onsubmit = async (e) => {
     e.preventDefault();
-    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
-    if (submitBtn) submitBtn.disabled = true;
     const id = document.getElementById('h_id').value;
     const data = {
       name: document.getElementById('h_name').value,
@@ -741,20 +579,8 @@
     };
     const routerId = getRouterId();
     const url = id ? `/admin/api/mikrotik/hotspot-users/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/hotspot-users?routerId=${routerId}`;
-    try {
-      const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-      if (res.ok) {
-        closeModal('hotspotModal');
-        loadHotspotUsers();
-        return;
-      }
-      const msg = await readApiErrorMessage(res, I18N.saveFailed);
-      alert(msg);
-    } catch (err) {
-      alert(String(err?.message || I18N.saveFailed));
-    } finally {
-      if (submitBtn) submitBtn.disabled = false;
-    }
+    const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+    if(res.ok) { closeModal('hotspotModal'); loadHotspotUsers(); } else alert(I18N.saveFailed);
   };
 
   async function deleteHotspot(id) {
@@ -764,56 +590,35 @@
   }
 
   // PPPoE Profile Handlers
-  async function openAddPppoeProfile() {
+  function openAddPppoeProfile() {
     document.getElementById('pppoeProfileForm').reset();
     document.getElementById('pp_id').value = '';
     document.getElementById('pppoeProfileModalTitle').innerText = I18N.addPppoeProfile;
-    await ensureIpPoolsLoaded();
-    renderIpPoolsSelect('');
     openModal('pppoeProfileModal');
   }
-  async function editPppoeProfile(idx) {
+  function editPppoeProfile(idx) {
     const p = pppoeProfilesData[idx];
-    document.getElementById('pp_id').value = p.id || '';
+    document.getElementById('pp_id').value = p.id || p.name;
     document.getElementById('pp_name').value = p.name;
     document.getElementById('pp_local').value = p.localAddress || '';
-    const remote = (p.remoteAddress && p.remoteAddress !== '-') ? p.remoteAddress : '';
-    await ensureIpPoolsLoaded();
-    renderIpPoolsSelect(remote);
+    document.getElementById('pp_remote').value = p.remoteAddress || '';
     document.getElementById('pp_rate').value = p.rateLimit || '';
     document.getElementById('pppoeProfileModalTitle').innerText = I18N.editPppoeProfile;
     openModal('pppoeProfileModal');
   }
   document.getElementById('pppoeProfileForm').onsubmit = async (e) => {
     e.preventDefault();
-    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
-    if (submitBtn) submitBtn.disabled = true;
     const id = document.getElementById('pp_id').value;
-    const name = document.getElementById('pp_name').value;
-    const local = String(document.getElementById('pp_local').value || '').trim();
-    const remote = String(document.getElementById('pp_remote').value || '').trim();
-    const rate = String(document.getElementById('pp_rate').value || '').trim();
-    const data = { name };
-    if (local) data['local-address'] = local;
-    if (remote) data['remote-address'] = remote;
-    if (rate) data['rate-limit'] = rate;
+    const data = {
+      name: document.getElementById('pp_name').value,
+      'local-address': document.getElementById('pp_local').value,
+      'remote-address': document.getElementById('pp_remote').value,
+      'rate-limit': document.getElementById('pp_rate').value
+    };
     const routerId = getRouterId();
     const url = id && id !== data.name ? `/admin/api/mikrotik/pppoe-profiles/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/pppoe-profiles?routerId=${routerId}`;
-    try {
-      const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-      if (res.ok) {
-        closeModal('pppoeProfileModal');
-        loadPppoeProfiles();
-        loadProfiles();
-        return;
-      }
-      const msg = await readApiErrorMessage(res, I18N.saveFailed);
-      alert(msg);
-    } catch (err) {
-      alert(String(err?.message || I18N.saveFailed));
-    } finally {
-      if (submitBtn) submitBtn.disabled = false;
-    }
+    const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+    if(res.ok) { closeModal('pppoeProfileModal'); loadPppoeProfiles(); loadProfiles(); } else alert(I18N.saveFailed);
   };
   async function deletePppoeProfile(id) {
     if(!confirm(I18N.deleteProfileConfirm)) return;
@@ -826,32 +631,18 @@
     document.getElementById('hotspotProfileForm').reset();
     document.getElementById('hp_id').value = '';
     document.getElementById('hotspotProfileModalTitle').innerText = I18N.addHotspotProfile;
-    const submitBtn = document.getElementById('hotspotProfileSaveBtn');
-    if (submitBtn) submitBtn.disabled = false;
+    syncMikhmonOnLogin();
     openModal('hotspotProfileModal');
   }
-  async function editHotspotProfile(idx) {
+  function editHotspotProfile(idx) {
     const p = hotspotProfilesData[idx];
-    const pid = p.id || p['.id'] || '';
-    document.getElementById('hp_id').value = pid;
+    document.getElementById('hp_id').value = p.id || p.name;
     document.getElementById('hp_name').value = p.name;
     document.getElementById('hp_rate').value = p.rateLimit || '';
     document.getElementById('hp_shared').value = p.sharedUsers || 1;
-    const submitBtn = document.getElementById('hotspotProfileSaveBtn');
-    if (submitBtn) submitBtn.disabled = false;
-    let script = p.onLogin || p['on-login'] || '';
-    if (pid) {
-      try {
-        const res = await fetch(`/admin/api/mikrotik/hotspot-user-profiles/${pid}?routerId=${getRouterId()}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.row) script = data.row.onLogin || data.row['on-login'] || script;
-        }
-      } catch {}
-    }
+    const script = p.onLogin || p['on-login'] || '';
     document.getElementById('hp_onlogin').value = script;
     const meta = parseMikhmonOnLogin(script);
-    document.getElementById('hp_cost').value = meta ? (meta.cost || 0) : 0;
     document.getElementById('hp_price').value = meta ? (meta.price || 0) : 0;
     document.getElementById('hp_validity').value = meta ? (meta.validity || '1d') : '1d';
     document.getElementById('hotspotProfileModalTitle').innerText = I18N.editHotspotProfile;
@@ -859,90 +650,18 @@
   }
   document.getElementById('hotspotProfileForm').onsubmit = async (e) => {
     e.preventDefault();
-    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
-    const saveBtn = document.getElementById('hotspotProfileSaveBtn');
-    const statusEl = document.getElementById('hotspotProfileStatus');
-    if (statusEl) statusEl.textContent = 'Menyimpan...';
-    if (saveBtn) saveBtn.disabled = true;
-    try {
-      const formEl = e.currentTarget;
-      if (formEl && typeof formEl.checkValidity === 'function' && !formEl.checkValidity()) {
-        if (typeof formEl.reportValidity === 'function') formEl.reportValidity();
-        if (statusEl) statusEl.textContent = '';
-        return;
-      }
-
-      const idEl = document.getElementById('hp_id');
-      const nameEl = document.getElementById('hp_name');
-      const rateEl = document.getElementById('hp_rate');
-      const sharedEl = document.getElementById('hp_shared');
-      const onLoginEl = document.getElementById('hp_onlogin');
-      if (!idEl || !nameEl || !rateEl || !sharedEl) {
-        alert('Form hotspot profile tidak lengkap. Silakan refresh halaman.');
-        return;
-      }
-
-      const id = String(idEl.value || '');
-      const name = String(nameEl.value || '');
-      const rate = String(rateEl.value || '').trim();
-      const sharedRaw = String(sharedEl.value || '').trim() || '1';
-      const sharedNum = Number(sharedRaw);
-      const shared = Number.isFinite(sharedNum) && sharedNum > 0 ? sharedNum : 1;
-      const onLogin = onLoginEl ? String(onLoginEl.value || '').trim() : '';
-
-      const data = { name, 'shared-users': shared };
-      if (rate) data['rate-limit'] = rate;
-      if (onLogin) data['on-login'] = onLogin;
-
-      const routerId = getRouterId();
-      const url = id && id !== data.name
-        ? `/admin/api/mikrotik/hotspot-user-profiles/${id}/update?routerId=${routerId}`
-        : `/admin/api/mikrotik/hotspot-user-profiles?routerId=${routerId}`;
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timeoutId = controller ? setTimeout(() => controller.abort(), 10000) : null;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        signal: controller ? controller.signal : undefined
-      }).finally(() => {
-        if (timeoutId) clearTimeout(timeoutId);
-      });
-      if (res.ok) {
-        closeModal('hotspotProfileModal');
-        loadHotspotUserProfiles();
-        loadProfiles();
-        return;
-      }
-      const msg = await readApiErrorMessage(res, I18N.saveFailed);
-      if (statusEl) statusEl.textContent = '';
-      alert(msg);
-    } catch (err) {
-      if (statusEl) statusEl.textContent = '';
-      const m = String(err?.message || '');
-      if (m.toLowerCase().includes('aborted') || m.toLowerCase().includes('abort')) {
-        alert('Timeout saat menyimpan Hotspot Profile (lebih dari 10 detik). Cek koneksi API MikroTik / beban router.');
-      } else {
-        alert(m || I18N.saveFailed);
-      }
-    } finally {
-      if (saveBtn) saveBtn.disabled = false;
-    }
+    const id = document.getElementById('hp_id').value;
+    const data = {
+      name: document.getElementById('hp_name').value,
+      'rate-limit': document.getElementById('hp_rate').value,
+      'shared-users': document.getElementById('hp_shared').value,
+      'on-login': document.getElementById('hp_onlogin').value
+    };
+    const routerId = getRouterId();
+    const url = id && id !== data.name ? `/admin/api/mikrotik/hotspot-user-profiles/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/hotspot-user-profiles?routerId=${routerId}`;
+    const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+    if(res.ok) { closeModal('hotspotProfileModal'); loadHotspotUserProfiles(); loadProfiles(); } else alert(I18N.saveFailed);
   };
-
-  function submitHotspotProfile() {
-    const formEl = document.getElementById('hotspotProfileForm');
-    const statusEl = document.getElementById('hotspotProfileStatus');
-    if (statusEl) statusEl.textContent = 'Klik diterima...';
-    if (!formEl) {
-      if (statusEl) statusEl.textContent = 'Form tidak ditemukan';
-      return;
-    }
-    if (typeof formEl.requestSubmit === 'function') {
-      return formEl.requestSubmit();
-    }
-    formEl.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-  }
   async function deleteHotspotProfile(id) {
     if(!confirm(I18N.deleteProfileConfirm)) return;
     const res = await fetch(`/admin/api/mikrotik/hotspot-user-profiles/${id}/delete?routerId=${getRouterId()}`, { method: 'POST' });
@@ -950,54 +669,16 @@
   }
 
   function parseMikhmonOnLogin(script) {
-    if (!script) return null;
-    const s = String(script).trim();
-    
-    // Cari pattern :put (",rem, ... , ... , ...
-    const putMatch = s.match(/:\s*put\s*\(\s*[",]rem[",]?\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/i);
-    if (putMatch) {
-      const cost = String(putMatch[1] || '').trim();
-      const validity = String(putMatch[2] || '').trim();
-      const priceStr = String(putMatch[3] || '').trim();
-      const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-      
-      if (validity && price > 0) {
-        return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-      }
-    }
-    
-    // Fallback: split by comma
-    const parts = s.split(',').map(p => String(p).trim());
-    let remIdx = -1;
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i].includes('rem')) {
-        remIdx = i;
-        break;
-      }
-    }
-    
-    if (remIdx >= 0 && remIdx + 3 < parts.length) {
-      const cost = String(parts[remIdx + 1] || '').trim();
-      const validity = String(parts[remIdx + 2] || '').trim();
-      const priceStr = String(parts[remIdx + 3] || '').trim();
-      const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-      
-      if (validity && price > 0) {
-        return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-      }
-    }
-    
-    return null;
+    const s = String(script || '');
+    const match = s.match(/",rem,.*?,(.*?),(.*?),.*?"/);
+    if (!match) return null;
+    return { validity: match[1], price: match[2] };
   }
 
-  function buildMikhmonOnLoginScript(price, validity, cost) {
+  function buildMikhmonOnLoginScript(price, validity) {
     const p = String(price == null ? '' : price).trim() || '0';
     const v = String(validity || '').trim() || '1d';
-    const c = String(cost == null ? '' : cost).trim() || '0';
-    // Format: :put (",rem,COST,VALIDITY,PRICE,,Disable,");
-    const meta = `:put (\",rem,${c},${v},${p},,Disable,\");`;
-    
-    // Script yang support ROS6 dan ROS7 (auto-detect format tanggal)
+    const meta = `:put (\",rem,1,${v},${p},,Disable,ros6/7,\");`;
     const body =
       ` {:local c [ /ip hotspot user get [/ip hotspot user find where name=\\\"$user\\\"] comment];` +
       ` :local ucode [:pick $c 0 2];` +
@@ -1008,12 +689,7 @@
       ` /system scheduler add name=$sch disabled=no start-date=$d start-time=$t interval=\\\"${v}\\\";` +
       ` :delay 2s;` +
       ` :local exp [ /system scheduler get [ /system scheduler find where name=$sch ] next-run ];` +
-      ` :local explen [:len $exp];` +
-      ` :if ($explen > 0) do={` +
-      `   :if ($explen = 19) do={ :local comment ([:pick $exp 0 10] . \\\" \\\" . [:pick $exp 11 19]); /ip hotspot user set comment=$comment [find where name=\\\"$user\\\"]; }` +
-      `   :if ($explen = 15) do={ :local comment ([:pick $exp 0 6] . \\\"/\\\" . [:pick $exp 7 15]); /ip hotspot user set comment=$comment [find where name=\\\"$user\\\"]; }` +
-      `   :if ($explen = 8) do={ /ip hotspot user set comment=$d . \\\" \\\" . $exp [find where name=\\\"$user\\\"]; }` +
-      ` }` +
+      ` :if ([:len $exp] > 0) do={ /ip hotspot user set comment=$exp [find where name=\\\"$user\\\"]; }` +
       ` :delay 1s;` +
       ` /system scheduler remove [find where name=$sch];` +
       ` } }`;
@@ -1021,40 +697,16 @@
   }
 
   function syncMikhmonOnLogin() {
-    const cost = document.getElementById('hp_cost')?.value;
     const price = document.getElementById('hp_price')?.value;
     const validity = document.getElementById('hp_validity')?.value;
     const ta = document.getElementById('hp_onlogin');
     if (!ta) return;
-    ta.value = buildMikhmonOnLoginScript(price, validity, cost);
-  }
-
-  // Load initial card summary stats on page load
-  async function loadInitialStats() {
-    try {
-      const routerId = getRouterId();
-      // Load hotspot stats for card summary
-      const [hsUsersRes, hsActiveRes] = await Promise.all([
-        fetch(`/admin/api/mikrotik/hotspot-users?routerId=${routerId}`).catch(() => null),
-        fetch(`/admin/api/mikrotik/active-hotspot?routerId=${routerId}`).catch(() => null)
-      ]);
-      
-      if (hsUsersRes && hsUsersRes.ok) {
-        const users = await hsUsersRes.json();
-        document.getElementById('total-hotspot-count').innerText = users.length;
-      }
-      
-      if (hsActiveRes && hsActiveRes.ok) {
-        const active = await hsActiveRes.json();
-        document.getElementById('hotspot-online-count').innerText = active.length;
-      }
-    } catch (err) {
-      console.error('Error loading initial hotspot stats:', err);
-    }
+    ta.value = buildMikhmonOnLoginScript(price, validity);
   }
 
   loadSecrets();
-  loadInitialStats(); // Load hotspot card summary on page load
+  loadHotspotUsers();
+  loadProfiles();
 </script>
 </body>
 </html>

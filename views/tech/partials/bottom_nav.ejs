@@ -9,10 +9,6 @@
       <i class="bi bi-inbox-fill"></i>
       <span><%= t('tech.nav.new_tickets', 'Tiket Baru') %></span>
     </a>
-    <a href="/tech/attendance" class="nav-item <%= activePage === 'attendance' ? 'active' : '' %>">
-      <i class="bi bi-calendar-check-fill"></i>
-      <span>Absensi</span>
-    </a>
     <a href="/tech/map" class="nav-item <%= activePage === 'map' ? 'active' : '' %>">
       <i class="bi bi-map-fill"></i>
       <span><%= t('tech.nav.map', 'Peta') %></span>
@@ -20,6 +16,10 @@
     <a href="/tech/monitoring" class="nav-item <%= activePage === 'monitoring' ? 'active' : '' %>">
       <i class="bi bi-display-fill"></i>
       <span><%= t('tech.nav.monitor', 'Monitor') %></span>
+    </a>
+    <a href="/tech/history" class="nav-item <%= activePage === 'history' ? 'active' : '' %>">
+      <i class="bi bi-clock-history"></i>
+      <span><%= t('tech.nav.history', 'Riwayat') %></span>
     </a>
   </nav>
 

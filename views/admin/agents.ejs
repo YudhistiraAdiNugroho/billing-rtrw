@@ -18,9 +18,7 @@
     </div>
     <div class="tb-right">
       <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
-      <% if (typeof session !== 'undefined' && session.isAdmin) { %>
-        <button class="btn btn-p btn-sm" onclick="openModal('addAgentModal')"><i class="bi bi-plus-lg"></i> <%= t('admin.agents.add', 'Tambah Agent') %></button>
-      <% } %>
+      <button class="btn btn-p btn-sm" onclick="openModal('addAgentModal')"><i class="bi bi-plus-lg"></i> <%= t('admin.agents.add', 'Tambah Agent') %></button>
     </div>
   </div>
 
@@ -62,14 +60,12 @@
                   </td>
                   <td>
                     <div class="d-flex gap-2" style="flex-wrap:wrap">
+                      <button class="btn btn-g btn-sm" onclick='editAgent(<%- JSON.stringify(a) %>)'><i class="bi bi-pencil"></i></button>
                       <button class="btn btn-p btn-sm" onclick='openTopup(<%- JSON.stringify(a) %>)'><i class="bi bi-cash-stack"></i></button>
-                      <% if (typeof session !== 'undefined' && session.isAdmin) { %>
-                        <button class="btn btn-g btn-sm" onclick='editAgent(<%- JSON.stringify(a) %>)'><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-g btn-sm" onclick='openPrices(<%- JSON.stringify(a) %>)'><i class="bi bi-ticket-perforated"></i></button>
-                        <form action="/admin/agents/<%= a.id %>/delete" method="POST" onsubmit="return confirm(I18N.confirmDeleteAgent)">
-                          <button type="submit" class="btn btn-d btn-sm"><i class="bi bi-trash"></i></button>
-                        </form>
-                      <% } %>
+                      <button class="btn btn-g btn-sm" onclick='openPrices(<%- JSON.stringify(a) %>)'><i class="bi bi-ticket-perforated"></i></button>
+                      <form action="/admin/agents/<%= a.id %>/delete" method="POST" onsubmit="return confirm(I18N.confirmDeleteAgent)">
+                        <button type="submit" class="btn btn-d btn-sm"><i class="bi bi-trash"></i></button>
+                      </form>
                     </div>
                   </td>
                 </tr>
@@ -85,11 +81,7 @@
         <h6><i class="bi bi-journal-text"></i> <%= t('admin.agents.reports.title', 'Laporan') %></h6>
       </div>
       <div class="card-bd">
-        <% if (typeof session !== 'undefined' && session.isAdmin) { %>
-          <a href="/admin/agents/reports" class="btn btn-g"><i class="bi bi-arrow-right"></i> <%= t('admin.agents.reports.open', 'Buka Laporan Agent') %></a>
-        <% } else { %>
-          <div class="text-muted" style="color:var(--muted)!important;font-size:12px">Laporan Agent hanya bisa dibuka oleh Admin.</div>
-        <% } %>
+        <a href="/admin/agents/reports" class="btn btn-g"><i class="bi bi-arrow-right"></i> <%= t('admin.agents.reports.open', 'Buka Laporan Agent') %></a>
       </div>
     </div>
   </div>
@@ -278,43 +270,12 @@ function openTopup(a) {
 let hotspotProfilesCache = [];
 function parseMikhmonOnLogin(script) {
   if (!script) return null;
-  const s = String(script).trim();
-  
-  // Cari pattern :put (",rem, ... , ... , ...
-  const putMatch = s.match(/:\s*put\s*\(\s*[",]rem[",]?\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/i);
-  if (putMatch) {
-    const cost = String(putMatch[1] || '').trim();
-    const validity = String(putMatch[2] || '').trim();
-    const priceStr = String(putMatch[3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-    }
-  }
-  
-  // Fallback: split by comma
-  const parts = s.split(',').map(p => String(p).trim());
-  let remIdx = -1;
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i].includes('rem')) {
-      remIdx = i;
-      break;
-    }
-  }
-  
-  if (remIdx >= 0 && remIdx + 3 < parts.length) {
-    const cost = String(parts[remIdx + 1] || '').trim();
-    const validity = String(parts[remIdx + 2] || '').trim();
-    const priceStr = String(parts[remIdx + 3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-    }
-  }
-  
-  return null;
+  const m = String(script).match(/\",rem,.*?,(.*?),(.*?),.*?\"/);
+  if (!m) return null;
+  const validity = String(m[1] || '').trim();
+  const priceStr = String(m[2] || '').trim();
+  const price = Number(String(priceStr).replace(/[^\d]/g, '')) || 0;
+  return { validity, price };
 }
 
 async function loadHotspotProfiles() {

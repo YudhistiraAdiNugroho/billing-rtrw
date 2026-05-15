@@ -21,7 +21,6 @@
     "node-telegram-bot-api": "^0.67.0",
     "pino": "^9.6.0",
     "qrcode-terminal": "^0.12.0",
-    "ros-client": "^1.1.2",
     "routeros-client": "^1.1.1",
     "winston": "^3.8.2",
     "xlsx": "^0.18.5"

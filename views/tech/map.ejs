@@ -124,10 +124,8 @@
   const odpMarkers = {};
   odps.forEach(odp => {
     if (odp.lat && odp.lng) {
-      const odpLat = parseFloat(odp.lat);
-      const odpLng = parseFloat(odp.lng);
-      odpMarkers[odp.id] = [odpLat, odpLng];
-      const marker = L.marker([odpLat, odpLng], {
+      odpMarkers[odp.id] = [odp.lat, odp.lng];
+      const marker = L.marker([odp.lat, odp.lng], {
         icon: L.divIcon({
           html: '<i class="bi bi-box-seam-fill marker-odp"></i>',
           className: 'custom-div-icon',
@@ -157,30 +155,13 @@
     if (cust.lat && cust.lng) {
       const is_active = cust.status === 'active';
       const iconClass = is_active ? 'marker-cust-active' : 'marker-cust-suspended';
-      const custLat = parseFloat(cust.lat);
-      const custLng = parseFloat(cust.lng);
       
       // Draw line to ODP if connected
       if (cust.odp_id && odpMarkers[cust.odp_id]) {
-        let pathCoords = [
-          [custLat, custLng],
+        L.polyline([
+          [cust.lat, cust.lng],
           odpMarkers[cust.odp_id]
-        ];
-
-        if (cust.cable_path) {
-          try {
-            const parsed = JSON.parse(cust.cable_path);
-            if (Array.isArray(parsed) && parsed.length >= 2) {
-              const cleaned = parsed
-                .filter(p => Array.isArray(p) && p.length >= 2)
-                .map(p => [parseFloat(p[0]), parseFloat(p[1])])
-                .filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
-              if (cleaned.length >= 2) pathCoords = cleaned;
-            }
-          } catch (e) {}
-        }
-
-        L.polyline(pathCoords, {
+        ], {
           color: is_active ? '#3b82f6' : '#ef4444',
           weight: 3,
           opacity: 0.8,
@@ -190,7 +171,7 @@
         }).addTo(map);
       }
 
-      const marker = L.marker([custLat, custLng], {
+      const marker = L.marker([cust.lat, cust.lng], {
         icon: L.divIcon({
           html: `<i class="bi bi-person-fill ${iconClass}"></i>`,
           className: 'custom-div-icon',

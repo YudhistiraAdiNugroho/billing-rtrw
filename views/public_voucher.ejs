@@ -180,17 +180,19 @@
 
             <div class="col-12 col-md-5">
               <label class="muted small mb-1">Metode Pembayaran</label>
-              <% if (paymentChannels && paymentChannels.length > 0) { %>
+              <% 
+                const activeChannels = (paymentChannels || []).filter(c => c.active !== false);
+                const sortedChannels = [...activeChannels].sort((a, b) => {
+                  const priority = { 'E-Wallet': 1, 'QRIS': 2, 'Virtual Account': 3, 'Convenience Store': 4 };
+                  const prioA = priority[a.group] || 99;
+                  const prioB = priority[b.group] || 99;
+                  return prioA - prioB;
+                });
+              %>
+              <% if (sortedChannels && sortedChannels.length > 0) { %>
                 <div class="payment-methods-grid mt-1">
                   <%
-                    const sortedChannels = [...paymentChannels].sort((a, b) => {
-                      const priority = { 'E-Wallet': 1, 'QRIS': 2, 'Virtual Account': 3, 'Convenience Store': 4 };
-                      const prioA = priority[a.group] || 99;
-                      const prioB = priority[b.group] || 99;
-                      return prioA - prioB;
-                    });
-                    const activeChannels = sortedChannels.filter(c => c.active);
-                    activeChannels.forEach((channel, idx) => {
+                    sortedChannels.forEach((channel, idx) => {
                       const code = String(channel.code || '').toUpperCase();
                       const iconUrl = channel.icon_url || channel.iconUrl || '';
                       const brandMap = {
@@ -212,8 +214,9 @@
                       const groupIcon = group === 'Virtual Account' ? 'bi-bank2' : group === 'E-Wallet' ? 'bi-wallet2' : group === 'Convenience Store' ? 'bi-shop' : 'bi-qr-code-scan';
                       const shortGroup = group === 'Virtual Account' ? 'VA' : group === 'E-Wallet' ? 'E-Wallet' : group === 'Convenience Store' ? 'CS' : group === 'QRIS' ? 'QRIS' : group;
                       const radioId = `pm_${idx}_${code}`;
+                      const isChecked = code === 'QRIS' || idx === 0;
                   %>
-                    <input class="pm-radio" type="radio" id="<%= radioId %>" name="method" value="<%= channel.code %>" <%= (code === 'QRIS' || idx === 0) ? 'checked' : '' %> <%= idx === 0 ? 'required' : '' %>>
+                    <input class="pm-radio" type="radio" id="<%= radioId %>" name="method" value="<%= channel.code %>" <%= isChecked ? 'checked' : '' %> required>
                     <label class="pay-method-item" for="<%= radioId %>">
                       <div class="p-icon">
                         <% if (iconUrl) { %>
@@ -232,21 +235,11 @@
                   <% }) %>
                 </div>
               <% } else { %>
-                <input type="hidden" name="method" value="QRIS">
-                <div class="payment-methods-grid mt-1">
-                  <div class="pay-method-item" style="cursor: default">
-                    <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
-                    <div class="p-info">
-                      <span class="p-name">QRIS / E-Wallet</span>
-                      <span class="p-sub">
-                        <span class="p-chip">DANA</span>
-                        <span class="p-chip">OVO</span>
-                        <span class="p-chip">ShopeePay</span>
-                        <span class="p-chip">LinkAja</span>
-                      </span>
-                    </div>
-                  </div>
+                <div class="alert alert-warning mt-1 mb-0">
+                  <i class="bi bi-exclamation-triangle me-2"></i>
+                  <small>Tidak ada metode pembayaran yang tersedia. Hubungi admin untuk konfigurasi payment gateway.</small>
                 </div>
+                <input type="hidden" name="method" value="">
               <% } %>
             </div>
           </div>
@@ -258,7 +251,7 @@
             </label>
           </div>
 
-          <button class="btn btn-primary btnx mt-2" type="submit" <%= (!profiles || profiles.length === 0) ? 'disabled' : '' %>>
+          <button class="btn btn-primary btnx mt-2" type="submit" <%= (!profiles || profiles.length === 0 || !paymentChannels || paymentChannels.length === 0) ? 'disabled' : '' %>>
             <i class="bi bi-credit-card me-1"></i> Bayar & Buat Voucher
           </button>
         </form>
