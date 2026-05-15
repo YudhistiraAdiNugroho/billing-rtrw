@@ -2768,6 +2768,10 @@ router.get('/api/mikrotik/hotspot-profiles', requireAdmin, async (req, res) => {
   try { res.json(await mikrotikService.getHotspotProfiles(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.get('/api/mikrotik/ip-pools', requireAdmin, async (req, res) => {
+  try { res.json(await mikrotikService.getIpPools(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/api/mikrotik/active-pppoe', requireAdmin, async (req, res) => {
   try { res.json(await mikrotikService.getPppoeActive(req.query.routerId)); } catch (e) { res.status(500).json({ error: e.message }); }
 });

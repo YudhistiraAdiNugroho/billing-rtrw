@@ -443,6 +443,24 @@ async function getHotspotProfiles(routerId = null) {
   }
 }
 
+async function getIpPools(routerId = null) {
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const results = await conn.client.menu('/ip/pool').get();
+    return (Array.isArray(results) ? results : []).map(r => ({
+      id: r['.id'],
+      name: r.name,
+      ranges: r.ranges || r.range || r['ranges'] || r['range'] || ''
+    }));
+  } catch (e) {
+    logger.error('Error getting IP pools:', e);
+    return [];
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
 async function addHotspotProfile(data, routerId = null) {
   let conn = null;
   try {
@@ -634,6 +652,7 @@ module.exports = {
   updateHotspotUser,
   deleteHotspotUser,
   getHotspotProfiles,
+  getIpPools,
   getPppoeActive,
   getHotspotActive,
   addPppoeProfile,
