@@ -90,6 +90,171 @@ function initTelegram() {
     return null;
   };
 
+  const isTruthy = (value) => {
+    if (value === true || value === 1) return true;
+    const normalized = String(value == null ? '' : value).trim().toLowerCase();
+    return normalized === 'true' || normalized === 'yes' || normalized === '1' || normalized === 'on';
+  };
+
+  const formatGangguanCount = (scriptRow) => {
+    const raw = scriptRow && scriptRow.source != null ? String(scriptRow.source) : '0';
+    const count = parseInt(raw.replace(/[^\d-]/g, ''), 10);
+    return Number.isFinite(count) && count > 0 ? count : 0;
+  };
+
+  const loadPppoeSnapshot = async () => {
+    const [secrets, active, scripts] = await Promise.all([
+      mikrotikSvc.getPppoeSecrets(),
+      mikrotikSvc.getPppoeActive(),
+      mikrotikSvc.getSystemScripts()
+    ]);
+    const customers = customerSvc.getAllCustomers();
+
+    const activeMap = new Map();
+    (active || []).forEach((row) => {
+      const name = String(row && row.name ? row.name : '').trim();
+      if (name) activeMap.set(name, row);
+    });
+
+    const scriptMap = new Map();
+    (scripts || []).forEach((row) => {
+      const name = String(row && row.name ? row.name : '').trim();
+      if (name) scriptMap.set(name, row);
+    });
+
+    const customerMap = new Map();
+    (customers || []).forEach((row) => {
+      const username = String(row && row.pppoe_username ? row.pppoe_username : '').trim();
+      if (username) customerMap.set(username, row);
+    });
+
+    return {
+      secrets: Array.isArray(secrets) ? secrets : [],
+      active: Array.isArray(active) ? active : [],
+      activeMap,
+      scriptMap,
+      customerMap
+    };
+  };
+
+  const buildOfflineEntries = (snapshot) => {
+    return snapshot.secrets
+      .filter((secret) => {
+        const username = String(secret && secret.name ? secret.name : '').trim();
+        if (!username) return false;
+        if (isTruthy(secret && secret.disabled)) return false;
+        return !snapshot.activeMap.has(username);
+      })
+      .map((secret) => {
+        const username = String(secret.name || '').trim();
+        const customer = snapshot.customerMap.get(username) || null;
+        const script = snapshot.scriptMap.get(username) || null;
+        return {
+          username,
+          customerName: customer && customer.name ? customer.name : '-',
+          phone: customer && customer.phone ? customer.phone : '-',
+          profile: secret && secret.profile ? secret.profile : '-',
+          service: secret && secret.service ? secret.service : '-',
+          password: secret && secret.password ? secret.password : '-',
+          failCount: formatGangguanCount(script)
+        };
+      })
+      .sort((a, b) => {
+        if (b.failCount !== a.failCount) return b.failCount - a.failCount;
+        return a.username.localeCompare(b.username, 'id');
+      });
+  };
+
+  const buildOfflineTelegramText = (snapshot) => {
+    const now = new Date().toLocaleString('id-ID');
+    const offline = buildOfflineEntries(snapshot);
+    const lines = [];
+    lines.push('USER PPPoE OFFLINE');
+    lines.push('============================');
+    lines.push(`Waktu : ${now}`);
+    lines.push('============================');
+    lines.push('');
+    lines.push('RINGKASAN');
+    lines.push(`Total Secret : ${snapshot.secrets.length}`);
+    lines.push(`Total Aktif  : ${snapshot.active.length}`);
+    lines.push(`Total Offline: ${offline.length}`);
+    lines.push('');
+    lines.push('DAFTAR USER OFFLINE');
+
+    if (offline.length === 0) {
+      lines.push('Semua user sedang online.');
+    } else {
+      offline.slice(0, 20).forEach((row, index) => {
+        lines.push(`${index + 1}. ${row.username}`);
+        lines.push(`   Pelanggan : ${row.customerName}`);
+        lines.push(`   WA        : ${row.phone}`);
+        lines.push(`   Paket     : ${row.profile}`);
+        lines.push(`   Gangguan  : ${row.failCount}x`);
+      });
+      if (offline.length > 20) {
+        lines.push(`...dan ${offline.length - 20} user offline lainnya.`);
+      }
+    }
+
+    lines.push('');
+    lines.push('Cek detail 1 user: /cekpppoe username');
+    lines.push('Contoh: /cekpppoe budi001');
+    return lines.join('\n');
+  };
+
+  const buildPppoeUserDetailText = async (username) => {
+    const target = String(username || '').trim();
+    if (!target) throw new Error('Username PPPoE wajib diisi');
+
+    const snapshot = await loadPppoeSnapshot();
+    const secret = snapshot.secrets.find((row) => String(row && row.name ? row.name : '').trim() === target);
+    if (!secret) {
+      throw new Error(`PPPoE user "${target}" tidak ditemukan`);
+    }
+
+    const activeRow = snapshot.activeMap.get(target) || null;
+    const customer = snapshot.customerMap.get(target) || null;
+    const script = snapshot.scriptMap.get(target) || null;
+    const offline = buildOfflineEntries(snapshot);
+
+    const date = new Date().toLocaleString('id-ID');
+    const online = !!activeRow;
+    const lines = [];
+    lines.push('DETAIL CEK PPPoE');
+    lines.push('============================');
+    lines.push(`Waktu     : ${date}`);
+    lines.push(`Status    : ${online ? 'ONLINE' : 'OFFLINE'}`);
+    lines.push('============================');
+    lines.push('INFO LAYANAN');
+    lines.push(`Pelanggan : ${customer && customer.name ? customer.name : '-'}`);
+    lines.push(`No. WA    : ${customer && customer.phone ? customer.phone : '-'}`);
+    lines.push(`Username  : ${secret.name || '-'}`);
+    lines.push(`Password  : ${secret.password || '-'}`);
+    lines.push(`Service   : ${secret.service || '-'}`);
+    lines.push(`Profile   : ${secret.profile || '-'}`);
+    lines.push('');
+    lines.push('INFO PERANGKAT');
+    lines.push(`IP Aktif   : ${activeRow && activeRow.address ? activeRow.address : '-'}`);
+    lines.push(`MAC/Caller : ${activeRow && (activeRow.callerId || activeRow['caller-id']) ? (activeRow.callerId || activeRow['caller-id']) : '-'}`);
+    lines.push('');
+    lines.push('STATUS GANGGUAN');
+    lines.push(`Jumlah Gangguan : ${formatGangguanCount(script)}x Terputus`);
+    lines.push(`Total Secret    : ${snapshot.secrets.length}`);
+    lines.push(`Total Active    : ${snapshot.active.length}`);
+    lines.push(`Total Offline   : ${offline.length}`);
+
+    if (!online && offline.length) {
+      lines.push('');
+      lines.push('User Offline Lain');
+      offline.slice(0, 10).forEach((row) => {
+        lines.push(`- ${row.username} (${row.failCount}x)`);
+      });
+      if (offline.length > 10) lines.push(`...dan ${offline.length - 10} lainnya.`);
+    }
+
+    return lines.join('\n');
+  };
+
   // Main Menu (Inline Keyboard for better visibility)
   const mainMenu = {
     reply_markup: {
@@ -243,39 +408,8 @@ function initTelegram() {
 
     else if (data === 'mt_offline') {
       try {
-        const secrets = await mikrotikSvc.getPppoeSecrets();
-        const active = await mikrotikSvc.getPppoeActive();
-        const scripts = await mikrotikSvc.getSystemScripts();
-        const activeNames = active.map(a => a.name);
-        
-        const offline = secrets.filter(s => !activeNames.includes(s.name) && s.disabled === false);
-        
-        let txt = `*🔴 USER PPPoE OFFLINE*\n`;
-        txt += `============================\n`;
-        txt += `📅 *${new Date().toLocaleString('id-ID')}*\n`;
-        txt += `============================\n\n`;
-        
-        txt += `📋 *RINGKASAN:*\n`;
-        txt += `• Total Secret: ${secrets.length}\n`;
-        txt += `• Total Aktif: ${active.length}\n`;
-        txt += `• *Terputus: ${offline.length}*\n\n`;
-        
-        txt += `👤 *DAFTAR USER OFFLINE:*\n`;
-        if (offline.length === 0) {
-          txt += `✅ Semua user online.\n`;
-        } else {
-          offline.slice(0, 25).forEach(s => {
-            const sc = scripts.find(scr => scr.name === s.name);
-            const failCount = sc ? (sc.source || '0') : '0';
-            txt += `• \`${s.name}\` [⚡${failCount}x]\n`;
-          });
-          if (offline.length > 25) txt += `\n_...dan ${offline.length - 25} lainnya._\n`;
-        }
-        
-        txt += `\n============================\n`;
-        txt += `_Powered by Admin Portal_`;
-        
-        bot.sendMessage(chatId, txt, { parse_mode: 'Markdown' });
+        const snapshot = await loadPppoeSnapshot();
+        bot.sendMessage(chatId, buildOfflineTelegramText(snapshot));
       } catch (e) {
         bot.sendMessage(chatId, 'Error: ' + e.message);
       }
@@ -460,6 +594,17 @@ function initTelegram() {
       bot.sendMessage(msg.chat.id, `✅ Profile *${user}* diubah ke *${profile}*.`);
     } catch (e) {
       bot.sendMessage(msg.chat.id, 'Gagal: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/cekpppoe (\S+)/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    try {
+      const username = match[1];
+      const detail = await buildPppoeUserDetailText(username);
+      bot.sendMessage(msg.chat.id, detail);
+    } catch (e) {
+      bot.sendMessage(msg.chat.id, 'Gagal cek PPPoE: ' + e.message);
     }
   });
 
