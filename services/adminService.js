@@ -46,6 +46,36 @@ function authenticateCashier(username, password) {
   return db.prepare('SELECT * FROM cashiers WHERE username = ? AND password = ? AND is_active = 1').get(username, password);
 }
 
+function getAllCollectors() {
+  return db.prepare('SELECT * FROM collectors ORDER BY created_at DESC').all();
+}
+
+function createCollector(data) {
+  return db
+    .prepare(
+      'INSERT INTO collectors (username, password, name, phone, is_active) VALUES (?, ?, ?, ?, 1)'
+    )
+    .run(
+      String(data.username || '').trim(),
+      String(data.password || ''),
+      String(data.name || '').trim(),
+      String(data.phone || '').trim()
+    );
+}
+
+function updateCollector(id, data) {
+  const stmt = db.prepare('UPDATE collectors SET username = ?, password = ?, name = ?, phone = ?, is_active = ? WHERE id = ?');
+  return stmt.run(data.username, data.password, data.name, data.phone || '', data.is_active ? 1 : 0, id);
+}
+
+function deleteCollector(id) {
+  return db.prepare('DELETE FROM collectors WHERE id = ?').run(id);
+}
+
+function authenticateCollector(username, password) {
+  return db.prepare('SELECT * FROM collectors WHERE username = ? AND password = ? AND is_active = 1').get(username, password);
+}
+
 module.exports = {
   getAllTechnicians,
   createTechnician,
@@ -55,5 +85,10 @@ module.exports = {
   createCashier,
   updateCashier,
   deleteCashier,
-  authenticateCashier
+  authenticateCashier,
+  getAllCollectors,
+  createCollector,
+  updateCollector,
+  deleteCollector,
+  authenticateCollector
 };

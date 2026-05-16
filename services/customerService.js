@@ -2,6 +2,7 @@
  * Service: CRUD Pelanggan & Paket
  */
 const db = require('../config/database');
+const { logger } = require('../config/logger');
 
 // ─── CUSTOMERS ───────────────────────────────────────────────
 function getAllCustomers(search = '') {
@@ -11,6 +12,8 @@ function getAllCustomers(search = '') {
 
   const base = `
     SELECT c.*, p.name as package_name, p.price as package_price,
+           p.promo_cycles as package_promo_cycles,
+           p.prorate_first_invoice as package_prorate_first_invoice,
            p.speed_down, p.speed_up, p.fup_limit_gb, p.use_fup,
            r.name as router_name,
            o.name as olt_name,
@@ -31,9 +34,18 @@ function getAllCustomers(search = '') {
   return db.prepare(base + ` ORDER BY c.name ASC`).all();
 }
 
+function resetPromoCyclesUsed(customerId) {
+  const id = Number(customerId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error('ID pelanggan tidak valid');
+  return db.prepare('UPDATE customers SET promo_cycles_used = 0 WHERE id=?').run(id);
+}
+
 function getCustomerById(id) {
   return db.prepare(`
-    SELECT c.*, p.name as package_name, p.price as package_price, r.name as router_name, o.name as olt_name, odp.name as odp_name
+    SELECT c.*, p.name as package_name, p.price as package_price,
+           p.promo_cycles as package_promo_cycles,
+           p.prorate_first_invoice as package_prorate_first_invoice,
+           r.name as router_name, o.name as olt_name, odp.name as odp_name
     FROM customers c 
     LEFT JOIN packages p ON c.package_id = p.id 
     LEFT JOIN routers r ON c.router_id = r.id
@@ -45,8 +57,8 @@ function getCustomerById(id) {
 
 function createCustomer(data) {
   return db.prepare(`
-    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
     data.package_id ? parseInt(data.package_id) : null,
@@ -64,13 +76,20 @@ function createCustomer(data) {
     data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
     data.connection_type || 'pppoe',
     data.static_ip || '',
-    data.mac_address || ''
+    data.mac_address || '',
+    data.hotspot_username || '',
+    data.hotspot_password || '',
+    data.hotspot_profile || ''
   );
 }
 
 function updateCustomer(id, data) {
-  return db.prepare(`
-    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?
+  const prev = db.prepare('SELECT package_id FROM customers WHERE id=?').get(id);
+  const newPkgId = data.package_id ? parseInt(data.package_id, 10) : null;
+  const pkgChanged = prev && Number(prev.package_id || 0) !== Number(newPkgId || 0);
+
+  const result = db.prepare(`
+    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?
     WHERE id=?
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
@@ -91,8 +110,17 @@ function updateCustomer(id, data) {
     data.connection_type || 'pppoe',
     data.static_ip || '',
     data.mac_address || '',
+    data.hotspot_username || '',
+    data.hotspot_password || '',
+    data.hotspot_profile || '',
     id
   );
+
+  if (pkgChanged) {
+    db.prepare('UPDATE customers SET promo_cycles_used = 0 WHERE id=?').run(id);
+  }
+
+  return result;
 }
 
 function updateCustomerCablePath(id, path) {
@@ -142,20 +170,32 @@ function createPackage(data) {
   const f_down = Math.round(parseFloat(data.fup_speed_down || 0) * 1000);
   const f_limit = parseFloat(data.fup_limit_gb || 0);
 
+  const promoPrice = parsePromoPrice(data.promo_price);
+  const promoCycles = Math.max(0, parseInt(data.promo_cycles, 10) || 0);
+  const prorateFirst = data.prorate_first_invoice ? 1 : 0;
+
   return db.prepare(`
     INSERT INTO packages (
-      name, price, speed_down, speed_up, 
+      name, price, promo_price, promo_cycles, prorate_first_invoice,
+      speed_down, speed_up, 
       use_night_speed, night_profile_name, night_speed_down, night_speed_up, 
       use_fup, fup_profile_name, fup_limit_gb, fup_speed_down, 
       description
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    data.name, parseInt(data.price) || 0, down, up, 
+    data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
+    down, up,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || ''
   );
+}
+
+function parsePromoPrice(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 function updatePackage(id, data) {
@@ -165,16 +205,21 @@ function updatePackage(id, data) {
   const n_up = Math.round(parseFloat(data.night_speed_up || 0) * 1000);
   const f_down = Math.round(parseFloat(data.fup_speed_down || 0) * 1000);
   const f_limit = parseFloat(data.fup_limit_gb || 0);
+  const promoPrice = parsePromoPrice(data.promo_price);
+  const promoCycles = Math.max(0, parseInt(data.promo_cycles, 10) || 0);
+  const prorateFirst = data.prorate_first_invoice ? 1 : 0;
 
   return db.prepare(`
     UPDATE packages 
-    SET name=?, price=?, speed_down=?, speed_up=?, 
+    SET name=?, price=?, promo_price=?, promo_cycles=?, prorate_first_invoice=?,
+        speed_down=?, speed_up=?, 
         use_night_speed=?, night_profile_name=?, night_speed_down=?, night_speed_up=?, 
         use_fup=?, fup_profile_name=?, fup_limit_gb=?, fup_speed_down=?, 
         description=?, is_active=? 
     WHERE id=?
   `).run(
-    data.name, parseInt(data.price) || 0, down, up, 
+    data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
+    down, up,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || '', data.is_active == '1' ? 1 : 0, id
@@ -198,8 +243,8 @@ function findCustomerByAny(val) {
     if (p1) return getCustomerById(p1.id);
   }
 
-  // 2. Try GenieACS Tag atau PPPoE Username (Exact Match)
-  const t = db.prepare('SELECT id FROM customers WHERE genieacs_tag = ? OR pppoe_username = ?').get(cleanVal, cleanVal);
+  // 2. Try GenieACS Tag, PPPoE Username, atau MAC Address (Exact Match)
+  const t = db.prepare('SELECT id FROM customers WHERE genieacs_tag = ? OR pppoe_username = ? OR mac_address = ?').get(cleanVal, cleanVal, cleanVal);
   if (t) return getCustomerById(t.id);
 
   // 3. Try ID if numeric
@@ -220,7 +265,14 @@ async function suspendCustomer(id) {
 
   if (customer.connection_type === 'static' && customer.static_ip) {
     const pkg = getPackageById(customer.package_id);
-    const limit = pkg ? `${Math.round(pkg.speed_up/1000)}M/${Math.round(pkg.speed_down/1000)}M` : '5M/5M';
+    let limit = '5M/5M';
+    if (pkg) {
+      const up = Number(pkg.speed_up || 0) || 0;
+      const down = Number(pkg.speed_down || 0) || 0;
+      const upMbps = up > 0 ? Math.max(1, Math.round(up / 1000)) : 5;
+      const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
+      limit = `${upMbps}M/${downMbps}M`;
+    }
     await mikrotikSvc.manageStaticIp({
       ip: customer.static_ip,
       name: customer.name,
@@ -230,6 +282,15 @@ async function suspendCustomer(id) {
   } else if (customer.pppoe_username) {
     const isolirProfile = customer.isolir_profile || 'isolir';
     await mikrotikSvc.setPppoeProfile(customer.pppoe_username, isolirProfile, customer.router_id);
+    if (customer.router_id) {
+      try {
+        await mikrotikSvc.ensurePppProfileIsolirAddressListHook(isolirProfile, customer.router_id);
+      } catch (e) {
+        logger.warn(`[suspendCustomer] Hook profil isolir "${isolirProfile}" di router ${customer.router_id}: ${e.message}`);
+      }
+    }
+  } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
+    await mikrotikSvc.setHotspotUserDisabled(customer.hotspot_username, true, customer.router_id);
   }
   return true;
 }
@@ -243,7 +304,14 @@ async function activateCustomer(id) {
 
   if (customer.connection_type === 'static' && customer.static_ip) {
     const pkg = getPackageById(customer.package_id);
-    const limit = pkg ? `${Math.round(pkg.speed_up/1000)}M/${Math.round(pkg.speed_down/1000)}M` : '5M/5M';
+    let limit = '5M/5M';
+    if (pkg) {
+      const up = Number(pkg.speed_up || 0) || 0;
+      const down = Number(pkg.speed_down || 0) || 0;
+      const upMbps = up > 0 ? Math.max(1, Math.round(up / 1000)) : 5;
+      const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
+      limit = `${upMbps}M/${downMbps}M`;
+    }
     await mikrotikSvc.manageStaticIp({
       ip: customer.static_ip,
       name: customer.name,
@@ -254,6 +322,16 @@ async function activateCustomer(id) {
     const pkg = getPackageById(customer.package_id);
     const targetProfile = pkg ? pkg.name : 'default';
     await mikrotikSvc.setPppoeProfile(customer.pppoe_username, targetProfile, customer.router_id);
+  } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
+    const pkg = getPackageById(customer.package_id);
+    const targetProfile = String(customer.hotspot_profile || '').trim() || (pkg ? pkg.name : '');
+    await mikrotikSvc.upsertHotspotUser({
+      username: String(customer.hotspot_username || '').trim(),
+      password: String(customer.hotspot_password || '').trim(),
+      profile: targetProfile,
+      macAddress: String(customer.mac_address || '').trim(),
+      disabled: false
+    }, customer.router_id);
   }
   return true;
 }
@@ -261,5 +339,6 @@ async function activateCustomer(id) {
 module.exports = {
   getAllCustomers, getCustomerById, createCustomer, updateCustomer, deleteCustomer, getCustomerStats,
   getAllPackages, getPackageById, createPackage, updatePackage, deletePackage,
-  suspendCustomer, activateCustomer, findCustomerByAny, updateCustomerCablePath
+  suspendCustomer, activateCustomer, findCustomerByAny, updateCustomerCablePath,
+  resetPromoCyclesUsed
 };

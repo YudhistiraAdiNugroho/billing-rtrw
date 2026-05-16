@@ -13,6 +13,7 @@ const GENIEACS_PASSWORD = process.env.GENIEACS_PASSWORD;
 // Buat instance axios dengan konfigurasi default
 const axiosInstance = axios.create({
     baseURL: GENIEACS_URL,
+    timeout: 30000, // 30 detik timeout (default 0 = no timeout)
     auth: {
         username: GENIEACS_USERNAME,
         password: GENIEACS_PASSWORD
@@ -28,11 +29,17 @@ const genieacsApi = {
     async getDevices() {
         try {
             logger.debug('[GenieACS] Getting all devices...');
-            const response = await axiosInstance.get('/devices');
+            const response = await axiosInstance.get('/devices', {
+                timeout: 45000 // 45 detik untuk query devices (bisa banyak)
+            });
             logger.debug(`[GenieACS] Found ${response.data?.length || 0} devices`);
             return response.data;
         } catch (error) {
-            logger.error(`[GenieACS] Error getting devices: ${error.response?.data ? JSON.stringify(error.response.data) : error.message}`);
+            if (error.code === 'ECONNABORTED') {
+                logger.error('[GenieACS] Timeout getting devices - consider reducing query frequency');
+            } else {
+                logger.error(`[GenieACS] Error getting devices: ${error.response?.data ? JSON.stringify(error.response.data) : error.message}`);
+            }
             throw error;
         }
     },
@@ -583,25 +590,41 @@ async function monitorOfflineDevices(thresholdHours = 24) {
 
 // Jadwalkan monitoring setiap 6 jam
 function scheduleMonitoring() {
-    // Jalankan sekali saat startup
+    // Jalankan sekali saat startup (delay lebih lama untuk stabilitas)
     setTimeout(async () => {
-        console.log('Menjalankan pemantauan RXPower awal...');
-        await monitorRXPower();
-        
-        console.log('Menjalankan pemantauan perangkat offline awal...');
-        await monitorOfflineDevices();
-        
-        // Jadwalkan secara berkala
-        setInterval(async () => {
-            console.log('Menjalankan pemantauan RXPower terjadwal...');
+        logger.info('[Monitoring] Menjalankan pemantauan RXPower awal...');
+        try {
             await monitorRXPower();
+        } catch (error) {
+            logger.error('[Monitoring] Error pada pemantauan RXPower awal:', error.message);
+        }
+        
+        logger.info('[Monitoring] Menjalankan pemantauan perangkat offline awal...');
+        try {
+            await monitorOfflineDevices();
+        } catch (error) {
+            logger.error('[Monitoring] Error pada pemantauan offline awal:', error.message);
+        }
+        
+        // Jadwalkan secara berkala dengan error handling
+        setInterval(async () => {
+            logger.info('[Monitoring] Menjalankan pemantauan RXPower terjadwal...');
+            try {
+                await monitorRXPower();
+            } catch (error) {
+                logger.error('[Monitoring] Error pada pemantauan RXPower:', error.message);
+            }
         }, 6 * 60 * 60 * 1000); // Setiap 6 jam
         
         setInterval(async () => {
-            console.log('Menjalankan pemantauan perangkat offline terjadwal...');
-            await monitorOfflineDevices();
+            logger.info('[Monitoring] Menjalankan pemantauan perangkat offline terjadwal...');
+            try {
+                await monitorOfflineDevices();
+            } catch (error) {
+                logger.error('[Monitoring] Error pada pemantauan offline:', error.message);
+            }
         }, 12 * 60 * 60 * 1000); // Setiap 12 jam
-    }, 5 * 60 * 1000); // Mulai 5 menit setelah server berjalan
+    }, 10 * 60 * 1000); // Mulai 10 menit setelah server berjalan (lebih stabil)
 }
 
 // Jalankan penjadwalan monitoring

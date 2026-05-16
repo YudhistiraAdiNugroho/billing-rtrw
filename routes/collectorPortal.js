@@ -6,6 +6,8 @@ const db = require('../config/database');
 const billingSvc = require('../services/billingService');
 const customerSvc = require('../services/customerService');
 const adminSvc = require('../services/adminService');
+const attendanceSvc = require('../services/attendanceService');
+const { uploadAttendance, removeAttendanceFile } = require('../middleware/attendanceUpload');
 
 function requireCollectorSession(req, res, next) {
   if (req.session && req.session.isCollector && req.session.collectorId) return next();
@@ -44,8 +46,7 @@ router.post('/login', express.urlencoded({ extended: true }), (req, res) => {
 router.get('/logout', (req, res) => {
   req.session.destroy();
   res.redirect('/collector/login');
-
-const attendanceSvc = require('../services/attendanceService');
+});
 
 // ─── COLLECTOR ATTENDANCE ────────────────────────────────────────────────────
 router.get('/attendance', requireCollectorSession, (req, res) => {
@@ -80,13 +81,18 @@ router.get('/attendance', requireCollectorSession, (req, res) => {
   }
 });
 
-router.post('/attendance/checkin', requireCollectorSession, express.json(), (req, res) => {
+router.post('/attendance/checkin', requireCollectorSession, uploadAttendance.single('photo'), (req, res) => {
   try {
     const collectorId = req.session.collectorId;
     const collectorName = req.session.collectorName;
+
+    if (!req.file) {
+      return res.json({ success: false, message: 'Foto check-in wajib diunggah' });
+    }
     
     const today = attendanceSvc.getTodayAttendance('collector', collectorId);
     if (today) {
+      removeAttendanceFile(req.file);
       return res.json({ success: false, message: 'Anda sudah melakukan check-in hari ini' });
     }
     
@@ -96,40 +102,48 @@ router.post('/attendance/checkin', requireCollectorSession, express.json(), (req
       employee_name: collectorName,
       lat: req.body.lat || '',
       lng: req.body.lng || '',
-      note: req.body.note || ''
+      note: req.body.note || '',
+      photo: req.file ? '/uploads/attendance/' + req.file.filename : ''
     });
     
     res.json({ success: true, message: 'Check-in berhasil!', id: result.lastInsertRowid });
   } catch (e) {
+    removeAttendanceFile(req.file);
     res.json({ success: false, message: 'Gagal check-in: ' + e.message });
   }
 });
 
-router.post('/attendance/checkout', requireCollectorSession, express.json(), (req, res) => {
+router.post('/attendance/checkout', requireCollectorSession, uploadAttendance.single('photo'), (req, res) => {
   try {
     const collectorId = req.session.collectorId;
+
+    if (!req.file) {
+      return res.json({ success: false, message: 'Foto check-out wajib diunggah' });
+    }
     
     const today = attendanceSvc.getTodayAttendance('collector', collectorId);
     if (!today) {
+      removeAttendanceFile(req.file);
       return res.json({ success: false, message: 'Anda belum check-in hari ini' });
     }
     
     if (today.status === 'checked_out') {
+      removeAttendanceFile(req.file);
       return res.json({ success: false, message: 'Anda sudah check-out hari ini' });
     }
     
     attendanceSvc.checkOut(today.id, {
       lat: req.body.lat || '',
       lng: req.body.lng || '',
-      note: req.body.note || ''
+      note: req.body.note || '',
+      photo: req.file ? '/uploads/attendance/' + req.file.filename : ''
     });
     
     res.json({ success: true, message: 'Check-out berhasil!' });
   } catch (e) {
+    removeAttendanceFile(req.file);
     res.json({ success: false, message: 'Gagal check-out: ' + e.message });
   }
-});
-
 });
 
 router.get('/', requireCollectorSession, (req, res) => {

@@ -3,19 +3,92 @@
  */
 const db = require('../config/database');
 const auditTrail = require('./auditTrailService');
-const { logger } = require('../config/logger');
+
+function daysInMonth(year, month1to12) {
+  return new Date(year, month1to12, 0).getDate();
+}
+
+function parseInstallYMD(installDate) {
+  if (!installDate || typeof installDate !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(installDate.trim());
+  if (!m) return null;
+  const y = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  const d = parseInt(m[3], 10);
+  if (!y || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return { y, m: mo, d };
+}
+
+function countInvoicesForCustomer(customerId) {
+  const r = db.prepare('SELECT COUNT(*) as c FROM invoices WHERE customer_id=?').get(customerId);
+  return r ? Number(r.c) || 0 : 0;
+}
+
+/**
+ * Hitung nominal tagihan + catatan otomatis (promo siklus & prorata bulan pertama).
+ * Promo: pakai promo_price untuk N invoice pertama per pelanggan (promo_cycles), lalu harga normal.
+ * Prorata: jika paket mengaktifkan prorate_first_invoice, belum pernah ada invoice,
+ *          tanggal pasang (install_date) di bulan/tahun tagihan yang sama → proporsi sisa hari bulan.
+ */
+function computeInvoiceAmountAndMeta(customer, pkg, periodMonth, periodYear) {
+  const price = Number(pkg.price) || 0;
+  const promoRaw = pkg.promo_price;
+  const promoPrice = promoRaw != null && promoRaw !== '' ? Number(promoRaw) : null;
+  const promoCycles = Math.max(0, parseInt(pkg.promo_cycles, 10) || 0);
+  const promoUsed = Math.max(0, parseInt(customer.promo_cycles_used, 10) || 0);
+  const prorateEnabled = !!pkg.prorate_first_invoice;
+
+  const usePromo = promoPrice != null && Number.isFinite(promoPrice) && promoCycles > 0 && promoUsed < promoCycles;
+  let amount = usePromo ? promoPrice : price;
+
+  const priorCount = countInvoicesForCustomer(customer.id);
+  const isFirstEverInvoice = priorCount === 0;
+  let prorated = false;
+  let billableDays = null;
+  let dim = null;
+
+  if (prorateEnabled && isFirstEverInvoice && customer.install_date) {
+    const inst = parseInstallYMD(String(customer.install_date));
+    if (inst && inst.y === periodYear && inst.m === periodMonth) {
+      dim = daysInMonth(periodYear, periodMonth);
+      billableDays = Math.min(dim, Math.max(1, dim - inst.d + 1));
+      amount = Math.round(amount * (billableDays / dim));
+      prorated = billableDays < dim;
+    }
+  }
+
+  const metaParts = [];
+  if (usePromo) {
+    metaParts.push(`Promo siklus ${promoUsed + 1}/${promoCycles} @ Rp ${Number(promoPrice).toLocaleString('id-ID')}`);
+  }
+  if (prorated && billableDays != null && dim != null) {
+    metaParts.push(`Prorata ${billableDays}/${dim} hari`);
+  }
+  const notesAuto = metaParts.length ? `AUTO: ${metaParts.join(' | ')}` : '';
+
+  return {
+    amount: Math.max(0, Math.round(amount)),
+    bumpPromo: usePromo,
+    notesAuto
+  };
+}
 
 function generateMonthlyInvoices(month, year) {
   const customers = db.prepare("SELECT * FROM customers WHERE status IN ('active','suspended') AND package_id IS NOT NULL").all();
   const existing  = db.prepare('SELECT customer_id FROM invoices WHERE period_month=? AND period_year=?').all(month, year);
   const existingIds = new Set(existing.map(e => e.customer_id));
-  const insert = db.prepare(`INSERT INTO invoices (customer_id, period_month, period_year, amount) VALUES (?, ?, ?, ?)`);
+  const insert = db.prepare(`INSERT INTO invoices (customer_id, period_month, period_year, amount, notes) VALUES (?, ?, ?, ?, ?)`);
+  const bumpPromo = db.prepare('UPDATE customers SET promo_cycles_used = COALESCE(promo_cycles_used,0) + 1 WHERE id=?');
   let created = 0;
   const run = db.transaction(() => {
     for (const c of customers) {
       if (existingIds.has(c.id)) continue;
-      const pkg = db.prepare('SELECT price FROM packages WHERE id=?').get(c.package_id);
-      if (pkg) { insert.run(c.id, month, year, pkg.price); created++; }
+      const pkg = db.prepare('SELECT * FROM packages WHERE id=?').get(c.package_id);
+      if (!pkg) continue;
+      const { amount, bumpPromo: bump, notesAuto } = computeInvoiceAmountAndMeta(c, pkg, month, year);
+      insert.run(c.id, month, year, amount, notesAuto);
+      if (bump) bumpPromo.run(c.id);
+      created++;
     }
   });
   run();
@@ -30,7 +103,7 @@ function generateInvoiceForCustomer(customerId, month, year) {
   if (!Number.isFinite(m) || m < 1 || m > 12) throw new Error('Bulan tidak valid');
   if (!Number.isFinite(y) || y < 2000 || y > 3000) throw new Error('Tahun tidak valid');
 
-  const customer = db.prepare('SELECT id, name, package_id FROM customers WHERE id=?').get(cid);
+  const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(cid);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
   if (!customer.package_id) throw new Error('Pelanggan belum memiliki paket');
 
@@ -39,10 +112,14 @@ function generateInvoiceForCustomer(customerId, month, year) {
     return { created: false, invoiceId: exists.id, customerName: customer.name };
   }
 
-  const pkg = db.prepare('SELECT price FROM packages WHERE id=?').get(customer.package_id);
+  const pkg = db.prepare('SELECT * FROM packages WHERE id=?').get(customer.package_id);
   if (!pkg) throw new Error('Paket pelanggan tidak ditemukan');
 
-  const r = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount) VALUES (?, ?, ?, ?)').run(cid, m, y, pkg.price);
+  const { amount, bumpPromo: bump, notesAuto } = computeInvoiceAmountAndMeta(customer, pkg, m, y);
+  const r = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount, notes) VALUES (?, ?, ?, ?, ?)').run(cid, m, y, amount, notesAuto);
+  if (bump) {
+    db.prepare('UPDATE customers SET promo_cycles_used = COALESCE(promo_cycles_used,0) + 1 WHERE id=?').run(cid);
+  }
   return { created: true, invoiceId: r.lastInsertRowid, customerName: customer.name };
 }
 
@@ -77,15 +154,16 @@ function payInvoicesForCustomerMonths(customerId, year, months, paidByName, note
   const selectedMonths = [...new Set(rawMonths.map(m => parseInt(m)).filter(m => Number.isFinite(m) && m >= 1 && m <= 12))].sort((a, b) => a - b);
   if (selectedMonths.length === 0) throw new Error('Pilih minimal 1 bulan');
 
-  const customer = db.prepare('SELECT id, name, package_id FROM customers WHERE id=?').get(cid);
+  const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(cid);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
   if (!customer.package_id) throw new Error('Pelanggan belum memiliki paket');
 
-  const pkg = db.prepare('SELECT price FROM packages WHERE id=?').get(customer.package_id);
+  const pkg = db.prepare('SELECT * FROM packages WHERE id=?').get(customer.package_id);
   if (!pkg) throw new Error('Paket pelanggan tidak ditemukan');
 
   const selectInv = db.prepare('SELECT id, status, amount FROM invoices WHERE customer_id=? AND period_month=? AND period_year=? LIMIT 1');
-  const insertInv = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount) VALUES (?, ?, ?, ?)');
+  const insertInv = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount, notes) VALUES (?, ?, ?, ?, ?)');
+  const bumpPromo = db.prepare('UPDATE customers SET promo_cycles_used = COALESCE(promo_cycles_used,0) + 1 WHERE id=?');
   const payInv = db.prepare(`UPDATE invoices SET status='paid', paid_at=CURRENT_TIMESTAMP, paid_by_name=?, notes=? WHERE id=?`);
 
   const summary = { customerName: customer.name, year: y, paidMonths: [], alreadyPaidMonths: [], createdMonths: [], totalAmount: 0, totalMonths: 0 };
@@ -97,12 +175,14 @@ function payInvoicesForCustomerMonths(customerId, year, months, paidByName, note
         continue;
       }
       let invoiceId = inv ? inv.id : null;
-      let amount = inv ? Number(inv.amount) : Number(pkg.price);
+      let amount = inv ? Number(inv.amount) : 0;
       if (!invoiceId) {
-        const r = insertInv.run(cid, m, y, pkg.price);
+        const { amount: computed, bumpPromo: bump, notesAuto } = computeInvoiceAmountAndMeta(customer, pkg, m, y);
+        const r = insertInv.run(cid, m, y, computed, notesAuto);
         invoiceId = r.lastInsertRowid;
         summary.createdMonths.push(m);
-        amount = Number(pkg.price);
+        amount = computed;
+        if (bump) bumpPromo.run(cid);
       }
       payInv.run(paidByName || 'Admin', notes || '', invoiceId);
       summary.paidMonths.push(m);
@@ -323,10 +403,26 @@ function getInvoicesByAny(val) {
 
   if (customer) {
     return db.prepare(`
-      SELECT i.*, p.name as package_name
+      SELECT i.*,
+             c.name as customer_name,
+             c.phone as customer_phone,
+             c.address as customer_address,
+             c.pppoe_username,
+             c.genieacs_tag,
+             c.connection_type,
+             c.static_ip,
+             c.status as customer_status,
+             c.router_id,
+             c.install_date,
+             c.isolate_day,
+             c.isolir_profile,
+             p.name as package_name,
+             p.price as package_price,
+             r.name as router_name
       FROM invoices i
       JOIN customers c ON i.customer_id = c.id
       LEFT JOIN packages p ON c.package_id = p.id
+      LEFT JOIN routers r ON c.router_id = r.id
       WHERE i.customer_id = ?
       ORDER BY i.period_year DESC, i.period_month DESC
     `).all(customer.id);
@@ -336,17 +432,35 @@ function getInvoicesByAny(val) {
   if (keyword.length < 3) return [];
   
   return db.prepare(`
-    SELECT i.*, p.name as package_name, c.name as customer_name, c.phone as customer_phone
+    SELECT i.*,
+           c.name as customer_name,
+           c.phone as customer_phone,
+           c.address as customer_address,
+           c.pppoe_username,
+           c.genieacs_tag,
+           c.connection_type,
+           c.static_ip,
+           c.mac_address,
+           c.status as customer_status,
+           c.router_id,
+           c.install_date,
+           c.isolate_day,
+           c.isolir_profile,
+           p.name as package_name,
+           p.price as package_price,
+           r.name as router_name
     FROM invoices i
     JOIN customers c ON i.customer_id = c.id
     LEFT JOIN packages p ON c.package_id = p.id
+    LEFT JOIN routers r ON c.router_id = r.id
     WHERE lower(c.name) LIKE ?
        OR lower(c.phone) LIKE ?
        OR lower(c.genieacs_tag) LIKE ?
        OR lower(c.pppoe_username) LIKE ?
+       OR lower(c.mac_address) LIKE ?
     ORDER BY i.period_year DESC, i.period_month DESC
     LIMIT 300
-  `).all(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+  `).all(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
 }
 
 function getUnpaidInvoicesByCustomerId(customerId) {
@@ -366,6 +480,55 @@ function getTodayRevenue() {
     FROM invoices 
     WHERE status='paid' AND date(paid_at, 'localtime') = date('now', 'localtime')
   `).get();
+}
+
+/**
+ * Buat tagihan susulan untuk bulan kalender **tanggal pasang** (prorata sisa hari),
+ * hanya jika belum ada invoice periode itu. Dasar nominal: **harga reguler** paket (bukan harga promo).
+ */
+function createInstallProrataCatchUpInvoice(customerId) {
+  const cid = Number(customerId);
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error('ID pelanggan tidak valid');
+
+  const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(cid);
+  if (!customer) throw new Error('Pelanggan tidak ditemukan');
+  if (!customer.package_id) throw new Error('Pelanggan belum memiliki paket');
+  if (!customer.install_date) throw new Error('Isi tanggal pasang (install_date) di data pelanggan');
+
+  const inst = parseInstallYMD(String(customer.install_date));
+  if (!inst) throw new Error('Format tanggal pasang tidak valid (gunakan YYYY-MM-DD)');
+
+  const pkg = db.prepare('SELECT * FROM packages WHERE id=?').get(customer.package_id);
+  if (!pkg) throw new Error('Paket tidak ditemukan');
+  if (!pkg.prorate_first_invoice) throw new Error('Paket ini belum mengaktifkan opsi prorata tagihan pertama');
+
+  const periodMonth = inst.m;
+  const periodYear = inst.y;
+
+  const exists = db.prepare('SELECT id FROM invoices WHERE customer_id=? AND period_month=? AND period_year=? LIMIT 1').get(cid, periodMonth, periodYear);
+  if (exists) {
+    throw new Error(`Sudah ada tagihan untuk periode pasang ${String(periodMonth).padStart(2, '0')}/${periodYear}`);
+  }
+
+  const dim = daysInMonth(periodYear, periodMonth);
+  const billableDays = Math.min(dim, Math.max(1, dim - inst.d + 1));
+  const basePrice = Number(pkg.price) || 0;
+  const amount = Math.max(0, Math.round(basePrice * (billableDays / dim)));
+  const notesAuto = `AUTO: Susulan prorata bulan pasang (${billableDays}/${dim} hari, dasar harga reguler Rp ${basePrice.toLocaleString('id-ID')})`;
+
+  const r = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount, notes) VALUES (?, ?, ?, ?, ?)').run(
+    cid, periodMonth, periodYear, amount, notesAuto
+  );
+
+  return {
+    invoiceId: r.lastInsertRowid,
+    amount,
+    periodMonth,
+    periodYear,
+    customerName: customer.name,
+    billableDays,
+    daysInMonth: dim
+  };
 }
 
 function updatePaymentInfo(invoiceId, data) {
@@ -388,7 +551,7 @@ function updatePaymentInfo(invoiceId, data) {
 module.exports = {
   getInvoicesByAny,
   getUnpaidInvoicesByCustomerId,
-  generateMonthlyInvoices, generateInvoiceForCustomer, payInvoiceForCustomerPeriod, payInvoicesForCustomerMonths, getPaidMonthsForCustomerYear, getCustomerBillingYearSummary, getAllInvoices, getInvoiceById,
+  generateMonthlyInvoices, generateInvoiceForCustomer, createInstallProrataCatchUpInvoice, payInvoiceForCustomerPeriod, payInvoicesForCustomerMonths, getPaidMonthsForCustomerYear, getCustomerBillingYearSummary, getAllInvoices, getInvoiceById,
   markAsPaid, markAsUnpaid, deleteInvoice,
   getInvoiceSummary, getMonthlyRevenue,
   getDashboardStats, getRecentPayments, getTopUnpaid,

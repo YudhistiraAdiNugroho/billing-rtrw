@@ -37,11 +37,20 @@ function getTicketById(id) {
   `).get(id);
 }
 
-function createTicket(customerId, subject, message) {
-  return db.prepare(`
-    INSERT INTO tickets (customer_id, subject, message)
-    VALUES (?, ?, ?)
-  `).run(customerId, subject, message);
+function createTicket(customerId, subject, message, extraData = {}) {
+  const { customerPhotos, customerPhotoMetadata } = extraData;
+  
+  if (customerPhotos || customerPhotoMetadata) {
+    return db.prepare(`
+      INSERT INTO tickets (customer_id, subject, message, customer_photos, customer_photo_metadata)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(customerId, subject, message, customerPhotos || '', customerPhotoMetadata || '');
+  } else {
+    return db.prepare(`
+      INSERT INTO tickets (customer_id, subject, message)
+      VALUES (?, ?, ?)
+    `).run(customerId, subject, message);
+  }
 }
 
 function updateTicketStatus(id, status, technicianId = null) {

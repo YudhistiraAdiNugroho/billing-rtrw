@@ -67,8 +67,8 @@ function checkIn(data) {
   const stmt = db.prepare(`
     INSERT INTO attendance (
       employee_type, employee_id, employee_name,
-      check_in_time, check_in_lat, check_in_lng, check_in_note
-    ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
+      check_in_time, check_in_lat, check_in_lng, check_in_note, check_in_photo
+    ) VALUES (?, ?, ?, datetime('now', 'localtime'), ?, ?, ?, ?)
   `);
   
   return stmt.run(
@@ -77,7 +77,8 @@ function checkIn(data) {
     data.employee_name,
     data.lat || '',
     data.lng || '',
-    data.note || ''
+    data.note || '',
+    data.photo || ''
   );
 }
 
@@ -105,10 +106,11 @@ function checkOut(attendanceId, data) {
   
   const stmt = db.prepare(`
     UPDATE attendance 
-    SET check_out_time = CURRENT_TIMESTAMP,
+    SET check_out_time = datetime('now', 'localtime'),
         check_out_lat = ?,
         check_out_lng = ?,
         check_out_note = ?,
+        check_out_photo = ?,
         work_duration_minutes = ?,
         status = 'checked_out'
     WHERE id = ?
@@ -118,6 +120,7 @@ function checkOut(attendanceId, data) {
     data.lat || '',
     data.lng || '',
     data.note || '',
+    data.photo || '',
     durationMinutes,
     attendanceId
   );
