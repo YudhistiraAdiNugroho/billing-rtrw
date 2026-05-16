@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pengaturan Sidebar | <%= company %></title>
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="/admin/manifest.webmanifest">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+<%- include('partials/sidebar', { activePage: 'sidebar_settings', company }) %>
+<div class="mw">
+  <div class="topbar">
+    <div class="tb-title">
+      <button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+      <i class="bi bi-layout-sidebar-inset"></i> Pengaturan Sidebar
+    </div>
+    <div class="tb-right">
+      <span class="adm-badge"><i class="bi bi-shield-lock"></i> Kontrol Menu</span>
+      <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i> Logout</a>
+    </div>
+  </div>
+
+  <div class="page">
+    <% if (msg) { %>
+      <div class="alert alert-<%= msg.type === 'success' ? 's' : 'd' %>">
+        <i class="bi bi-<%= msg.type === 'success' ? 'check-circle' : 'exclamation-circle' %>"></i>
+        <%= msg.text %>
+      </div>
+    <% } %>
+
+    <div style="display:grid;gap:16px">
+      <div class="card">
+        <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <h6 style="margin:0"><i class="bi bi-grid-3x3-gap"></i> Status Semua Menu Sidebar</h6>
+          <% if (canManageSidebar) { %>
+            <span class="badge badge-success" style="background:rgba(34,197,94,.18);color:#bbf7d0;padding:6px 10px;border-radius:999px">Admin dapat mengubah semua menu</span>
+          <% } else { %>
+            <span class="badge badge-warning" style="background:rgba(245,158,11,.18);color:#fde68a;padding:6px 10px;border-radius:999px">Mode baca saja untuk akun ini</span>
+          <% } %>
+        </div>
+        <div class="card-bd">
+          <p class="hint" style="margin-top:0">
+            Setiap menu bisa diatur menjadi <strong>Tampil</strong>, <strong>Sembunyikan</strong>, atau <strong>Kunci</strong>.
+            Menu yang dikunci akan meminta password khusus sebelum dibuka.
+          </p>
+
+          <% if (canManageSidebar) { %>
+            <form method="POST" action="/admin/sidebar-settings">
+              <div class="tbl-wrap">
+                <table class="dtbl">
+                  <thead>
+                    <tr>
+                      <th>Menu</th>
+                      <th>Section</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% menuConfigs.forEach((menu) => { %>
+                      <tr>
+                        <td>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <i class="<%= menu.icon %>"></i>
+                            <div>
+                              <div style="font-weight:700"><%= menu.labelDefault %></div>
+                              <div class="hint mono"><%= menu.href %></div>
+                            </div>
+                          </div>
+                        </td>
+                        <td><span class="hint"><%= menu.sectionLabel %></span></td>
+                        <td><span class="hint"><%= menu.roleLabel %></span></td>
+                        <td style="min-width:180px">
+                          <select class="fs" name="menu_state[<%= menu.key %>]">
+                            <option value="visible" <%= menu.state === 'visible' ? 'selected' : '' %>>Tampil</option>
+                            <option value="hidden" <%= menu.state === 'hidden' ? 'selected' : '' %>>Sembunyikan</option>
+                            <option value="locked" <%= menu.state === 'locked' ? 'selected' : '' %>>Kunci</option>
+                          </select>
+                        </td>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:12px;align-items:end;margin-top:16px">
+                <div class="fg" style="margin:0">
+                  <label class="fl">Password Aktivasi</label>
+                  <input type="password" class="fc" name="feature_password" placeholder="Masukkan password aktivasi sebelum menyimpan" required>
+                  <div class="hint" style="margin-top:6px">Perubahan status menu sidebar hanya akan disimpan jika password aktivasi benar.</div>
+                </div>
+                <div class="hint" style="align-self:center">
+                  Hubungi <strong><%= featureContactPhone %></strong> untuk mendapatkan password aktivasi.
+                </div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap">
+                <button type="submit" class="btn btn-p">
+                  <i class="bi bi-save"></i> Simpan Pengaturan Sidebar
+                </button>
+              </div>
+            </form>
+          <% } else { %>
+            <div class="alert alert-d">
+              <i class="bi bi-lock"></i> Hanya admin utama yang dapat mengubah status menu sidebar.
+            </div>
+          <% } %>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <h6 style="margin:0"><i class="bi bi-lightbulb"></i> Catatan</h6>
+        </div>
+        <div class="card-bd">
+          <div class="alert alert-s" style="margin-bottom:12px">
+            <i class="bi bi-info-circle"></i> Jika menu berstatus <strong>Kunci</strong> diklik dari sidebar, sistem hanya akan menampilkan pemberitahuan untuk menghubungi <strong><%= featureContactPhone %></strong>.
+          </div>
+          <ul style="margin:0;padding-left:18px;display:grid;gap:8px">
+            <li>Status <strong>Sembunyikan</strong> akan menghilangkan menu dari sidebar dan menolak akses URL langsung.</li>
+            <li>Status <strong>Kunci</strong> tetap menampilkan menu, tetapi tidak bisa dibuka sampai statusnya diubah di halaman ini.</li>
+            <li>Perubahan status menu hanya dapat disimpan setelah memasukkan password aktivasi yang benar.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
