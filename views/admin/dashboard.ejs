@@ -241,6 +241,9 @@
           <option value="online"><%= t('admin.dashboard.online', 'Online') %></option>
           <option value="offline"><%= t('admin.dashboard.offline', 'Offline') %></option>
         </select>
+        <button class="btn btn-g btn-sm" onclick="openGenieACSSettings()" title="Pengaturan GenieACS">
+          <i class="bi bi-gear"></i> GenieACS
+        </button>
         <button class="btn btn-p btn-sm" id="btn-refresh" onclick="refreshAll()">
           <i class="bi bi-arrow-clockwise"></i> <%= t('common.refresh', 'Refresh') %>
         </button>
@@ -324,6 +327,65 @@
       <button class="btn btn-s" id="btn-save-password">
         <span class="btn-text"><i class="bi bi-check-lg"></i> <%= t('common.save', 'Simpan') %></span>
         <span class="btn-loader" style="display:none"><i class="bi bi-arrow-clockwise spin"></i> <%= t('common.processing', 'Memproses...') %></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL GENIEACS SETTINGS ── -->
+<div class="mo" id="genieacsModal">
+  <div class="mb" style="max-width:600px">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-gear"></i> Pengaturan GenieACS</span>
+      <button class="mc" onclick="closeModal('genieacsModal')">&times;</button>
+    </div>
+    <div class="mbody">
+      <form id="genieacsSettingsForm">
+        <div class="fg">
+          <label class="fl">Timeout (ms)</label>
+          <input type="number" class="fc" id="genieacs_timeout" name="genieacs_timeout" 
+                 value="<%= typeof settings !== 'undefined' && settings.genieacs_timeout ? settings.genieacs_timeout : 30000 %>" 
+                 min="5000" max="120000" step="1000">
+          <small class="text-muted" style="font-size:11px;display:block;margin-top:4px">Timeout untuk request ke GenieACS (5000-120000 ms)</small>
+        </div>
+        
+        <div class="fg">
+          <label class="fl">RX Power Threshold (dBm)</label>
+          <input type="number" class="fc" id="genieacs_rxpower_threshold" name="genieacs_rxpower_threshold" 
+                 value="<%= typeof settings !== 'undefined' && settings.genieacs_rxpower_threshold ? settings.genieacs_rxpower_threshold : -27 %>" 
+                 min="-40" max="-15" step="0.5">
+          <small class="text-muted" style="font-size:11px;display:block;margin-top:4px">Threshold untuk warning RX Power (-40 sampai -15 dBm)</small>
+        </div>
+
+        <div class="fg">
+          <label class="fl">Monitoring Interval (jam)</label>
+          <input type="number" class="fc" id="genieacs_monitoring_interval" name="genieacs_monitoring_interval" 
+                 value="<%= typeof settings !== 'undefined' && settings.genieacs_monitoring_interval ? settings.genieacs_monitoring_interval : 6 %>" 
+                 min="1" max="24" step="1">
+          <small class="text-muted" style="font-size:11px;display:block;margin-top:4px">Interval monitoring otomatis (1-24 jam)</small>
+        </div>
+        
+        <div class="fg">
+          <label class="fl">Monitoring Enabled</label>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <input type="checkbox" id="genieacs_monitoring_enabled" name="genieacs_monitoring_enabled" 
+                   style="width:40px;height:20px;cursor:pointer"
+                   <%= typeof settings !== 'undefined' && settings.genieacs_monitoring_enabled !== false ? 'checked' : '' %>>
+            <label for="genieacs_monitoring_enabled" style="cursor:pointer;font-size:13px;margin:0">
+              Aktifkan monitoring otomatis RX Power & Offline Devices
+            </label>
+          </div>
+        </div>
+
+        <div id="genieacsMessage" style="display:none;margin-top:16px;padding:12px;border-radius:6px;font-size:13px"></div>
+      </form>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="testGenieACSConnection()">
+        <i class="bi bi-wifi"></i> Test Koneksi
+      </button>
+      <button class="btn btn-p" onclick="saveGenieACSSettings()">
+        <i class="bi bi-save"></i> Simpan
       </button>
     </div>
   </div>
@@ -716,6 +778,93 @@ loadDevices();
 
 // ── CHECK IF SHOULD GO TO MONITORING TAB (from sidebar link) ──
 if (window.location.hash === '#monitoring') showTab('monitoring');
+
+// ── GENIEACS SETTINGS FUNCTIONS ────────────────────────────────
+function openGenieACSSettings() {
+  openModal('genieacsModal');
+}
+
+async function saveGenieACSSettings() {
+  const formData = {
+    genieacs_timeout: parseInt(document.getElementById('genieacs_timeout').value),
+    genieacs_rxpower_threshold: parseFloat(document.getElementById('genieacs_rxpower_threshold').value),
+    genieacs_monitoring_interval: parseInt(document.getElementById('genieacs_monitoring_interval').value),
+    genieacs_monitoring_enabled: document.getElementById('genieacs_monitoring_enabled').checked
+  };
+
+  // Validate
+  if (formData.genieacs_timeout < 5000 || formData.genieacs_timeout > 120000) {
+    showGenieACSMessage('Timeout harus antara 5000-120000 ms', 'danger');
+    return;
+  }
+  if (formData.genieacs_rxpower_threshold < -40 || formData.genieacs_rxpower_threshold > -15) {
+    showGenieACSMessage('RX Power threshold harus antara -40 sampai -15 dBm', 'danger');
+    return;
+  }
+  if (formData.genieacs_monitoring_interval < 1 || formData.genieacs_monitoring_interval > 24) {
+    showGenieACSMessage('Monitoring interval harus antara 1-24 jam', 'danger');
+    return;
+  }
+
+  try {
+    const response = await fetch('/admin/api/genieacs/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData)
+    });
+
+    const result = await response.json();
+    
+    if (result.success) {
+      showGenieACSMessage(result.message, 'success');
+      setTimeout(() => {
+        closeModal('genieacsModal');
+        showToast('Pengaturan GenieACS berhasil disimpan', 's');
+      }, 1500);
+    } else {
+      showGenieACSMessage(result.message, 'danger');
+    }
+  } catch (error) {
+    showGenieACSMessage('Error: ' + error.message, 'danger');
+  }
+}
+
+async function testGenieACSConnection() {
+  showGenieACSMessage('Testing koneksi ke GenieACS...', 'info');
+
+  try {
+    const response = await fetch('/admin/api/genieacs/test');
+    const result = await response.json();
+    
+    if (result.success) {
+      const msg = result.message + (result.deviceCount !== undefined ? ' (' + result.deviceCount + ' devices)' : '');
+      showGenieACSMessage(msg, 'success');
+    } else {
+      showGenieACSMessage('Koneksi gagal: ' + result.message, 'danger');
+    }
+  } catch (error) {
+    showGenieACSMessage('Error: ' + error.message, 'danger');
+  }
+}
+
+function showGenieACSMessage(msg, type) {
+  const messageDiv = document.getElementById('genieacsMessage');
+  messageDiv.style.display = 'block';
+  
+  const colors = {
+    success: { bg: 'rgba(63, 185, 80, 0.15)', border: 'rgba(63, 185, 80, 0.3)', text: '#3fb950' },
+    danger: { bg: 'rgba(248, 81, 73, 0.15)', border: 'rgba(248, 81, 73, 0.3)', text: '#f85149' },
+    info: { bg: 'rgba(102, 126, 234, 0.15)', border: 'rgba(102, 126, 234, 0.3)', text: '#667eea' }
+  };
+  
+  const color = colors[type] || colors.info;
+  messageDiv.style.background = color.bg;
+  messageDiv.style.border = '1px solid ' + color.border;
+  messageDiv.style.color = color.text;
+  
+  const icons = { success: 'check-circle', danger: 'x-circle', info: 'info-circle' };
+  messageDiv.innerHTML = '<i class="bi bi-' + icons[type] + '"></i> ' + msg;
+}
 </script>
 </body>
 </html>

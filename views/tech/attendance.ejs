@@ -64,11 +64,45 @@
           <div style="color: white; font-size: 13px; margin-top: 4px;"><%= todayAttendance.check_out_note %></div>
         </div>
       <% } %>
+
+      <% if (todayAttendance.check_in_photo || todayAttendance.check_out_photo) { %>
+        <div style="padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 8px;">
+          <span style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Foto Absensi:</span>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
+            <% if (todayAttendance.check_in_photo) { %>
+              <a href="<%= todayAttendance.check_in_photo %>" target="_blank" style="color: white; text-decoration: none; font-size: 12px;">
+                <img src="<%= todayAttendance.check_in_photo %>" alt="Foto check-in" style="width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px;">
+                Check-in
+              </a>
+            <% } %>
+            <% if (todayAttendance.check_out_photo) { %>
+              <a href="<%= todayAttendance.check_out_photo %>" target="_blank" style="color: white; text-decoration: none; font-size: 12px;">
+                <img src="<%= todayAttendance.check_out_photo %>" alt="Foto check-out" style="width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px;">
+                Check-out
+              </a>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
     </div>
 
     <% if (todayAttendance.status === 'checked_in') { %>
       <textarea id="checkoutNote" class="form-control mt-3" placeholder="Catatan check-out (opsional)" rows="2" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;"></textarea>
-      <button class="btn btn-danger btn-action mt-2" onclick="checkout()">
+      <div class="mt-3">
+        <label for="checkoutPhoto" style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 6px;">Foto selfie check-out (wajib)</label>
+        <input id="checkoutPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkoutPhoto', 'checkoutPhotoInfo', 'checkoutPhotoPreviewWrap', 'checkoutPhotoPreview')" class="form-control" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;">
+        <div id="checkoutPhotoInfo" style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px;">Belum ada foto selfie dipilih. Foto wajib untuk check-out.</div>
+        <div id="checkoutPhotoStatus" style="display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; background: rgba(239, 68, 68, 0.18); color: #fecaca;">Foto wajib</div>
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <button type="button" onclick="document.getElementById('checkoutPhoto').click()" class="btn btn-sm" style="background: rgba(59, 130, 246, 0.18); color: white; border: 1px solid rgba(59, 130, 246, 0.45);">Pilih/Ganti Foto</button>
+          <button type="button" onclick="clearSelectedPhoto('checkoutPhoto')" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.14); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.35);">Hapus Foto</button>
+        </div>
+        <div id="checkoutPhotoPreviewWrap" style="display: none; margin-top: 8px;">
+          <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px;">Preview foto final yang akan dikirim:</div>
+          <img id="checkoutPhotoPreview" alt="Preview foto check-out" style="width: 100%; max-width: 240px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); object-fit: cover;">
+        </div>
+      </div>
+      <button id="checkoutSubmitBtn" class="btn btn-danger btn-action mt-2" onclick="checkout(event)" disabled style="opacity: 0.55; cursor: not-allowed;">
         <i class="bi bi-box-arrow-right me-2"></i>Check-out Sekarang
       </button>
     <% } %>
@@ -82,7 +116,21 @@
     </p>
     
     <textarea id="checkinNote" class="form-control mt-3" placeholder="Catatan check-in (opsional)" rows="2" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;"></textarea>
-    <button class="btn btn-success btn-action mt-2" onclick="checkin()">
+    <div class="mt-3">
+      <label for="checkinPhoto" style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 6px;">Foto selfie check-in (wajib)</label>
+      <input id="checkinPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkinPhoto', 'checkinPhotoInfo', 'checkinPhotoPreviewWrap', 'checkinPhotoPreview')" class="form-control" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;">
+      <div id="checkinPhotoInfo" style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px;">Belum ada foto selfie dipilih. Foto wajib untuk check-in.</div>
+      <div id="checkinPhotoStatus" style="display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; background: rgba(239, 68, 68, 0.18); color: #fecaca;">Foto wajib</div>
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <button type="button" onclick="document.getElementById('checkinPhoto').click()" class="btn btn-sm" style="background: rgba(59, 130, 246, 0.18); color: white; border: 1px solid rgba(59, 130, 246, 0.45);">Pilih/Ganti Foto</button>
+        <button type="button" onclick="clearSelectedPhoto('checkinPhoto')" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.14); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.35);">Hapus Foto</button>
+      </div>
+      <div id="checkinPhotoPreviewWrap" style="display: none; margin-top: 8px;">
+        <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px;">Preview foto final yang akan dikirim:</div>
+        <img id="checkinPhotoPreview" alt="Preview foto check-in" style="width: 100%; max-width: 240px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); object-fit: cover;">
+      </div>
+    </div>
+    <button id="checkinSubmitBtn" class="btn btn-success btn-action mt-2" onclick="checkin(event)" disabled style="opacity: 0.55; cursor: not-allowed;">
       <i class="bi bi-box-arrow-in-right me-2"></i>Check-in Sekarang
     </button>
   <% } %>
@@ -165,6 +213,293 @@
 
 <script>
   let currentLocation = null;
+  const processedAttendancePhotos = {};
+  const photoFieldConfig = {
+    checkinPhoto: { infoId: 'checkinPhotoInfo', previewWrapId: 'checkinPhotoPreviewWrap', previewImgId: 'checkinPhotoPreview', statusId: 'checkinPhotoStatus', submitBtnId: 'checkinSubmitBtn' },
+    checkoutPhoto: { infoId: 'checkoutPhotoInfo', previewWrapId: 'checkoutPhotoPreviewWrap', previewImgId: 'checkoutPhotoPreview', statusId: 'checkoutPhotoStatus', submitBtnId: 'checkoutSubmitBtn' }
+  };
+
+  function setPhotoStatus(statusId, text, mode = 'idle') {
+    const el = document.getElementById(statusId);
+    if (!el) return;
+    const palette = {
+      idle: ['rgba(239, 68, 68, 0.18)', '#fecaca'],
+      waiting: ['rgba(245, 158, 11, 0.18)', '#fde68a'],
+      processing: ['rgba(59, 130, 246, 0.18)', '#bfdbfe'],
+      ready: ['rgba(16, 185, 129, 0.18)', '#bbf7d0'],
+      error: ['rgba(239, 68, 68, 0.18)', '#fecaca']
+    };
+    const [bg, color] = palette[mode] || palette.idle;
+    el.style.background = bg;
+    el.style.color = color;
+    el.textContent = text;
+  }
+
+  function setSubmitButtonState(buttonId, enabled) {
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+    button.disabled = !enabled;
+    button.style.opacity = enabled ? '1' : '0.55';
+    button.style.cursor = enabled ? 'pointer' : 'not-allowed';
+  }
+
+  function resetPhotoPreview(previewWrapId, previewImgId) {
+    const previewWrap = document.getElementById(previewWrapId);
+    const previewImg = document.getElementById(previewImgId);
+    if (previewImg && previewImg.dataset.objectUrl) {
+      URL.revokeObjectURL(previewImg.dataset.objectUrl);
+      delete previewImg.dataset.objectUrl;
+    }
+    if (previewImg) previewImg.removeAttribute('src');
+    if (previewWrap) previewWrap.style.display = 'none';
+  }
+
+  function setPhotoPreview(previewWrapId, previewImgId, file) {
+    const previewWrap = document.getElementById(previewWrapId);
+    const previewImg = document.getElementById(previewImgId);
+    if (!previewWrap || !previewImg) return;
+
+    resetPhotoPreview(previewWrapId, previewImgId);
+    const previewSource = file && file.blob ? file.blob : file;
+    const objectUrl = URL.createObjectURL(previewSource);
+    previewImg.src = objectUrl;
+    previewImg.dataset.objectUrl = objectUrl;
+    previewWrap.style.display = 'block';
+  }
+
+  function getOriginalPhotoFile(inputId) {
+    const input = document.getElementById(inputId);
+    return input && input.files && input.files[0] ? input.files[0] : null;
+  }
+
+  function updatePhotoInfo(inputId, infoId, previewWrapId, previewImgId) {
+    const input = document.getElementById(inputId);
+    const info = document.getElementById(infoId);
+    const config = getPhotoState(inputId);
+    if (!input || !info) return;
+    const file = input.files && input.files[0];
+    delete processedAttendancePhotos[inputId];
+    if (!file) {
+      info.textContent = 'Belum ada foto selfie dipilih.';
+      resetPhotoPreview(previewWrapId, previewImgId);
+        if (config) setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
+        if (config) setSubmitButtonState(config.submitBtnId, false);
+      return;
+    }
+    info.textContent = `Foto dipilih: ${file.name} (${Math.round(file.size / 1024)} KB)`;
+    if (config) setPhotoStatus(config.statusId, 'Menyiapkan preview', 'processing');
+    refreshPhotoPreview(inputId).catch((error) => {
+      info.textContent = error.message;
+      resetPhotoPreview(previewWrapId, previewImgId);
+      if (config) setPhotoStatus(config.statusId, 'Preview gagal', 'error');
+    });
+  }
+
+  function getPhotoState(inputId) {
+    return photoFieldConfig[inputId];
+  }
+
+  function clearSelectedPhoto(inputId) {
+    const config = getPhotoState(inputId);
+    const input = document.getElementById(inputId);
+    if (!config || !input) return;
+    input.value = '';
+    delete processedAttendancePhotos[inputId];
+    const info = document.getElementById(config.infoId);
+    if (info) info.textContent = 'Belum ada foto selfie dipilih. Foto wajib untuk absensi.';
+    resetPhotoPreview(config.previewWrapId, config.previewImgId);
+    setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
+    setSubmitButtonState(config.submitBtnId, false);
+  }
+
+  async function refreshPhotoPreview(inputId, force = false) {
+    const config = getPhotoState(inputId);
+    const input = document.getElementById(inputId);
+    const info = config ? document.getElementById(config.infoId) : null;
+    const file = input && input.files && input.files[0];
+    if (!config || !info) return null;
+
+    if (!file) {
+      info.textContent = 'Belum ada foto selfie dipilih. Foto wajib untuk absensi.';
+      resetPhotoPreview(config.previewWrapId, config.previewImgId);
+      delete processedAttendancePhotos[inputId];
+      setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
+      setSubmitButtonState(config.submitBtnId, false);
+      return null;
+    }
+
+    if (!currentLocation) {
+      info.textContent = `Foto dipilih: ${file.name} (${Math.round(file.size / 1024)} KB). Preview menunggu lokasi GPS.`;
+      resetPhotoPreview(config.previewWrapId, config.previewImgId);
+      setPhotoStatus(config.statusId, 'Menunggu GPS', 'waiting');
+      setSubmitButtonState(config.submitBtnId, false);
+      return null;
+    }
+
+    const cacheKey = [file.name, file.size, file.lastModified, currentLocation.lat, currentLocation.lng].join('|');
+    const cached = processedAttendancePhotos[inputId];
+    if (!force && cached && cached.cacheKey === cacheKey && cached.file) {
+      setPhotoPreview(config.previewWrapId, config.previewImgId, cached.file);
+      info.textContent = `Preview siap: ${(cached.file.filename || cached.file.name)} (${Math.round(cached.file.size / 1024)} KB).`;
+      setPhotoStatus(config.statusId, 'Preview siap dikirim', 'ready');
+      setSubmitButtonState(config.submitBtnId, true);
+      return cached.file;
+    }
+
+    info.textContent = 'Memproses foto untuk preview...';
+    setPhotoStatus(config.statusId, 'Memproses foto', 'processing');
+    setSubmitButtonState(config.submitBtnId, false);
+    let processedFile;
+    try {
+      processedFile = await processAttendancePhotoFile(file, currentLocation);
+    } catch (error) {
+      processedFile = file;
+      info.textContent = `Foto asli siap dikirim: ${file.name} (${Math.round(file.size / 1024)} KB).`;
+      setPhotoStatus(config.statusId, 'Foto asli siap dikirim', 'ready');
+    }
+    processedAttendancePhotos[inputId] = { cacheKey, file: processedFile };
+    setPhotoPreview(config.previewWrapId, config.previewImgId, processedFile);
+    if (processedFile === file) {
+      info.textContent = `Foto asli siap dikirim: ${file.name} (${Math.round(file.size / 1024)} KB).`;
+      setPhotoStatus(config.statusId, 'Foto asli siap dikirim', 'ready');
+    } else {
+      info.textContent = `Preview siap: ${processedFile.filename} (${Math.round(processedFile.size / 1024)} KB).`;
+      setPhotoStatus(config.statusId, 'Preview siap dikirim', 'ready');
+    }
+    setSubmitButtonState(config.submitBtnId, true);
+    return processedFile;
+  }
+
+  function refreshAllPhotoPreviews() {
+    Object.keys(photoFieldConfig).forEach((inputId) => {
+      refreshPhotoPreview(inputId, true).catch(() => {});
+    });
+  }
+
+  function buildAttendanceFormData(location, note, photoInputId) {
+    const formData = new FormData();
+    formData.append('lat', location.lat);
+    formData.append('lng', location.lng);
+    formData.append('note', note);
+
+    return getProcessedAttendancePhoto(photoInputId, location).then((processedPhoto) => {
+      if (processedPhoto && processedPhoto.blob) {
+        formData.append('photo', processedPhoto.blob, processedPhoto.filename);
+      } else if (processedPhoto) {
+        formData.append('photo', processedPhoto, processedPhoto.name || 'attendance-selfie.jpg');
+      } else {
+        const originalFile = getOriginalPhotoFile(photoInputId);
+        if (originalFile) {
+          formData.append('photo', originalFile, originalFile.name);
+        }
+      }
+      return formData;
+    });
+  }
+
+  function loadImageFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Gagal membaca foto yang dipilih'));
+      };
+      img.src = objectUrl;
+    });
+  }
+
+  function canvasToBlob(canvas, type, quality) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Gagal memproses foto absensi'));
+          return;
+        }
+        resolve(blob);
+      }, type, quality);
+    });
+  }
+
+  function buildWatermarkLines(location) {
+    const timestamp = new Date().toLocaleString('id-ID', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    return [
+      'Absensi Karyawan',
+      `Waktu: ${timestamp}`,
+      `GPS: ${location.lat}, ${location.lng}`
+    ];
+  }
+
+  async function processAttendancePhotoFile(originalFile, location) {
+    const image = await loadImageFromFile(originalFile);
+    const maxWidth = 1280;
+    const scale = Math.min(1, maxWidth / image.width);
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const watermarkLines = buildWatermarkLines(location);
+    const fontSize = Math.max(20, Math.round(width * 0.028));
+    const lineGap = Math.round(fontSize * 0.35);
+    const padding = Math.round(fontSize * 0.8);
+    const overlayHeight = Math.round((fontSize + lineGap) * watermarkLines.length + padding * 1.6);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0, width, height);
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillRect(0, height - overlayHeight, width, overlayHeight);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `600 ${fontSize}px Arial, sans-serif`;
+    ctx.textBaseline = 'top';
+
+    let textY = height - overlayHeight + padding;
+    watermarkLines.forEach((line, index) => {
+      if (index > 0) {
+        ctx.font = `500 ${Math.max(16, Math.round(fontSize * 0.88))}px Arial, sans-serif`;
+      } else {
+        ctx.font = `600 ${fontSize}px Arial, sans-serif`;
+      }
+      ctx.fillText(line, padding, textY);
+      textY += (index > 0 ? Math.max(16, Math.round(fontSize * 0.88)) : fontSize) + lineGap;
+    });
+
+    const blob = await canvasToBlob(canvas, 'image/jpeg', 0.82);
+    const baseName = (originalFile.name || 'attendance-photo').replace(/\.[^.]+$/, '');
+    return {
+      blob,
+      filename: `${baseName}-wm.jpg`,
+      size: blob.size
+    };
+  }
+
+  async function getProcessedAttendancePhoto(photoInputId, location) {
+    currentLocation = location;
+    try {
+      const processed = await refreshPhotoPreview(photoInputId);
+      if (processed) return processed;
+
+      const originalFile = getOriginalPhotoFile(photoInputId);
+      if (!originalFile) return null;
+      return await processAttendancePhotoFile(originalFile, location);
+    } catch (error) {
+      return getOriginalPhotoFile(photoInputId);
+    }
+  }
 
   // Get current location
   function getLocation() {
@@ -185,6 +520,7 @@
             lng: position.coords.longitude.toString()
           };
           locationInfo.innerHTML = `<i class="bi bi-geo-alt-fill text-success"></i> Lokasi berhasil didapat`;
+          refreshAllPhotoPreviews();
           resolve(currentLocation);
         },
         (error) => {
@@ -200,9 +536,13 @@
     });
   }
 
-  async function checkin() {
+  async function checkin(evt) {
+    const btn = evt.currentTarget;
+    if (!document.getElementById('checkinPhoto')?.files?.[0]) {
+      alert('Foto check-in wajib diunggah sebelum absensi.');
+      return;
+    }
     try {
-      const btn = event.target;
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Memproses...';
 
@@ -211,12 +551,7 @@
 
       const response = await fetch('/tech/attendance/checkin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lat: location.lat,
-          lng: location.lng,
-          note: note
-        })
+        body: await buildAttendanceFormData(location, note, 'checkinPhoto')
       });
 
       const result = await response.json();
@@ -231,14 +566,18 @@
       }
     } catch (error) {
       alert('Gagal check-in: ' + error.message);
-      event.target.disabled = false;
-      event.target.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Check-in Sekarang';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Check-in Sekarang';
     }
   }
 
-  async function checkout() {
+  async function checkout(evt) {
+    const btn = evt.currentTarget;
+    if (!document.getElementById('checkoutPhoto')?.files?.[0]) {
+      alert('Foto check-out wajib diunggah sebelum absensi.');
+      return;
+    }
     try {
-      const btn = event.target;
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Memproses...';
 
@@ -247,12 +586,7 @@
 
       const response = await fetch('/tech/attendance/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lat: location.lat,
-          lng: location.lng,
-          note: note
-        })
+        body: await buildAttendanceFormData(location, note, 'checkoutPhoto')
       });
 
       const result = await response.json();
@@ -267,8 +601,8 @@
       }
     } catch (error) {
       alert('Gagal check-out: ' + error.message);
-      event.target.disabled = false;
-      event.target.innerHTML = '<i class="bi bi-box-arrow-right me-2"></i>Check-out Sekarang';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-box-arrow-right me-2"></i>Check-out Sekarang';
     }
   }
 

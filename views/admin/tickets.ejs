@@ -94,9 +94,22 @@
                   data-message="<%= ticket.message %>"
                   data-subject="<%= ticket.subject %>"
                   data-customer="<%= ticket.customer_name %>"
+                  data-notes="<%= ticket.technician_notes || '' %>"
+                  data-photos="<%= ticket.photos || '' %>"
+                  data-customer-photos="<%= ticket.customer_photos || '' %>"
                   data-tech="<%= ticket.technician_name || t('admin.tickets.no_technician', 'Belum ada') %>">
                   <i class="bi bi-pencil"></i>
                 </button>
+                <% if ((ticket.photos && ticket.photos !== '' && ticket.photos !== '[]') || (ticket.customer_photos && ticket.customer_photos !== '' && ticket.customer_photos !== '[]')) { %>
+                  <button class="btn btn-p btn-icon btn-sm view-photos-btn" title="Lihat Foto"
+                    data-id="<%= ticket.id %>"
+                    data-photos="<%= ticket.photos || '' %>"
+                    data-customer-photos="<%= ticket.customer_photos || '' %>"
+                    data-customer="<%= ticket.customer_name %>"
+                    data-subject="<%= ticket.subject %>">
+                    <i class="bi bi-images"></i>
+                  </button>
+                <% } %>
                 <form method="POST" action="/admin/tickets/<%= ticket.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.tickets.confirm.delete', 'Hapus keluhan ini?') %>')">
                   <button class="btn btn-d btn-icon btn-sm" title="<%= t('common.delete', 'Hapus') %>"><i class="bi bi-trash"></i></button>
                 </form>
@@ -120,6 +133,10 @@
         <div class="fg"><label class="fl"><%= t('admin.tickets.table.issue', 'Kendala') %></label><input class="fc" id="upSubject" readonly></div>
         <div class="fg"><label class="fl"><%= t('admin.tickets.table.technician', 'Teknisi') %></label><input class="fc" id="upTechnician" readonly></div>
         <div class="fg"><label class="fl"><%= t('admin.tickets.modal.message', 'Detail Pesan') %></label><textarea class="fc" id="upMessage" rows="3" readonly></textarea></div>
+        <div class="fg" id="techNotesContainer" style="display:none;">
+          <label class="fl"><i class="bi bi-pencil-square me-1"></i>Catatan Teknisi</label>
+          <textarea class="fc" id="upNotes" rows="3" readonly style="background:#f8f9fa"></textarea>
+        </div>
         <div class="fg">
           <label class="fl"><%= t('admin.tickets.actions.update_status', 'Update Status') %></label>
           <select class="fs" name="status" id="upStatus">
@@ -134,6 +151,26 @@
         <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> <%= t('admin.tickets.actions.save_changes', 'Simpan Perubahan') %></button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Modal Photo Gallery -->
+<div class="mo" id="photoModal">
+  <div class="mb" style="max-width:900px">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-images"></i> Foto Pekerjaan</span>
+      <button class="mc" onclick="closeModal('photoModal')">&times;</button>
+    </div>
+    <div class="mbody">
+      <div class="mb-3">
+        <div class="fw-bold" id="photoCustomer"></div>
+        <div class="text-muted small" id="photoSubject"></div>
+      </div>
+      <div id="photoGallery" class="row g-2"></div>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-g" onclick="closeModal('photoModal')">Tutup</button>
+    </div>
   </div>
 </div>
 
@@ -152,7 +189,87 @@ document.addEventListener('click', function(e) {
   document.getElementById('upSubject').value = btn.dataset.subject;
   document.getElementById('upCustomer').value = btn.dataset.customer;
   document.getElementById('upTechnician').value = btn.dataset.tech;
+  
+  // Show technician notes if available
+  const notes = btn.dataset.notes || '';
+  const notesContainer = document.getElementById('techNotesContainer');
+  if (notes && notes.trim() !== '') {
+    document.getElementById('upNotes').value = notes;
+    notesContainer.style.display = 'block';
+  } else {
+    notesContainer.style.display = 'none';
+  }
+  
   openModal('updateModal');
+});
+
+// View photos
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.view-photos-btn');
+  if (!btn) return;
+  
+  const techPhotos = JSON.parse(btn.dataset.photos || '[]');
+  const customerPhotos = JSON.parse(btn.dataset.customerPhotos || '[]');
+  const customer = btn.dataset.customer;
+  const subject = btn.dataset.subject;
+  
+  document.getElementById('photoCustomer').textContent = customer;
+  document.getElementById('photoSubject').textContent = subject;
+  
+  const gallery = document.getElementById('photoGallery');
+  gallery.innerHTML = '';
+  
+  const allPhotos = [...customerPhotos, ...techPhotos];
+  
+  if (allPhotos.length === 0) {
+    gallery.innerHTML = '<div class="col-12 text-center text-muted">Tidak ada foto</div>';
+  } else {
+    // Customer photos first
+    if (customerPhotos.length > 0) {
+      const customerSection = document.createElement('div');
+      customerSection.className = 'col-12 mb-3';
+      customerSection.innerHTML = '<h6 class="text-primary mb-2"><i class="bi bi-person-circle me-1"></i>Foto dari Pelanggan</h6>';
+      gallery.appendChild(customerSection);
+      
+      customerPhotos.forEach((photo, index) => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-6';
+        col.innerHTML = `
+          <div class="position-relative">
+            <a href="${photo}" target="_blank">
+              <img src="${photo}" class="img-fluid rounded" style="width:100%; height:200px; object-fit:cover; border:2px solid #3b82f6; cursor:pointer;">
+            </a>
+            <span class="position-absolute top-0 start-0 badge bg-primary m-2">P${index + 1}</span>
+          </div>
+        `;
+        gallery.appendChild(col);
+      });
+    }
+    
+    // Technician photos
+    if (techPhotos.length > 0) {
+      const techSection = document.createElement('div');
+      techSection.className = 'col-12 mb-3 mt-3';
+      techSection.innerHTML = '<h6 class="text-success mb-2"><i class="bi bi-tools me-1"></i>Foto dari Teknisi</h6>';
+      gallery.appendChild(techSection);
+      
+      techPhotos.forEach((photo, index) => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-6';
+        col.innerHTML = `
+          <div class="position-relative">
+            <a href="${photo}" target="_blank">
+              <img src="${photo}" class="img-fluid rounded" style="width:100%; height:200px; object-fit:cover; border:2px solid #10b981; cursor:pointer;">
+            </a>
+            <span class="position-absolute top-0 start-0 badge bg-success m-2">T${index + 1}</span>
+          </div>
+        `;
+        gallery.appendChild(col);
+      });
+    }
+  }
+  
+  openModal('photoModal');
 });
 
 setTimeout(()=>document.querySelectorAll('.alert').forEach(a=>a.style.display='none'),5000);

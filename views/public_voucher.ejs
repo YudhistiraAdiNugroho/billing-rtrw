@@ -30,7 +30,8 @@
     .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid rgba(148,163,184,.18)}
     .pill-u{background: rgba(248, 81, 73, .12);color:#fca5a5;border-color: rgba(248, 81, 73, .28)}
     .pill-p{background: rgba(63, 185, 80, .12);color:#86efac;border-color: rgba(63, 185, 80, .28)}
-    .voucher-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .voucher-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+    @media (max-width: 576px){.voucher-grid{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}}
     .voucher-radio{position:absolute;opacity:0;pointer-events:none}
     .voucher-card{border:1px solid rgba(148,163,184,.18);background: rgba(15, 23, 42, 0.28);border-radius:14px;padding:12px 12px;cursor:pointer;transition: all .18s ease}
     .voucher-card:hover{transform: translateY(-1px);border-color: rgba(99, 102, 241, 0.6);box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25)}
@@ -38,32 +39,36 @@
     .voucher-title{font-weight:800;font-size:14px;margin:0 0 4px 0;display:flex;align-items:center;justify-content:space-between;gap:10px}
     .voucher-meta{margin:0;color: rgba(148, 163, 184, 0.95);font-size:12px;line-height:1.35}
     .voucher-price{font-weight:900}
-    .payment-methods-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-    @media (max-width: 390px){.payment-methods-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    .pm-radio{position:absolute;opacity:0;pointer-events:none}
-    .pay-method-item{display:flex;align-items:center;gap:15px;padding:14px 14px;background: rgba(15, 23, 42, 0.55);border: 1px solid rgba(148, 163, 184, 0.16);border-radius: 14px;cursor:pointer;transition: all .2s ease}
+    .payment-methods-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+    @media (max-width: 576px){.payment-methods-grid{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}}
+    @media (max-width: 390px){.payment-methods-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}
+    .pay-method-item{display:flex;align-items:center;gap:12px;padding:12px 10px;background: rgba(15, 23, 42, 0.55);border: 1px solid rgba(148, 163, 184, 0.16);border-radius: 12px;cursor:pointer;transition: all .2s ease;flex-direction:column;text-align:center}
     .pay-method-item:hover{background: rgba(15, 23, 42, 0.75);border-color: rgba(99, 102, 241, 0.7);transform: translateY(-1px);box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35)}
     .pm-radio:checked + .pay-method-item{background: rgba(99, 102, 241, 0.12);border-color: rgba(99, 102, 241, 0.85);box-shadow: 0 18px 34px rgba(99, 102, 241, 0.12)}
-    .p-icon{width:45px;height:45px;background: rgba(30, 41, 59, 0.9);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#6366f1;box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);overflow:hidden;flex:0 0 auto}
-    .p-logo{width:100%;height:100%;object-fit:contain;padding:8px;background: rgba(255, 255, 255, 0.95)}
-    .p-badge{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:.2px;text-transform:uppercase}
+    .p-icon{width:40px;height:40px;background: rgba(30, 41, 59, 0.9);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#6366f1;box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);overflow:hidden;flex:0 0 auto;margin:0 auto}
+    .p-logo{width:100%;height:100%;object-fit:contain;padding:6px;background: rgba(255, 255, 255, 0.95)}
+    .p-badge{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:.1px;text-transform:uppercase}
     .pb-dana{background: linear-gradient(135deg, rgba(59,130,246,0.95), rgba(14,165,233,0.95));color:#0b1220}
     .pb-ovo{background: linear-gradient(135deg, rgba(168,85,247,0.95), rgba(99,102,241,0.95));color:#0b1220}
     .pb-shopeepay{background: linear-gradient(135deg, rgba(249,115,22,0.95), rgba(244,63,94,0.95));color:#0b1220}
     .pb-linkaja{background: linear-gradient(135deg, rgba(239,68,68,0.95), rgba(244,63,94,0.95));color:#0b1220}
     .pb-gopay{background: linear-gradient(135deg, rgba(34,197,94,0.95), rgba(16,185,129,0.95));color:#0b1220}
     .pb-bank{background: linear-gradient(135deg, rgba(15,23,42,0.82), rgba(30,41,59,0.92));color:#e2e8f0}
-    .p-info{display:flex;flex-direction:column;min-width:0}
-    .p-name{font-size:15px;font-weight:700;color:#f8fafc}
-    .p-sub{font-size:12px;color: rgba(148, 163, 184, 0.9);display:flex;flex-wrap:wrap;gap:6px}
-    .p-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;border:1px solid rgba(148, 163, 184, 0.22);background: rgba(15, 23, 42, 0.35);color: rgba(226, 232, 240, 0.92);font-size:11px;font-weight:700;line-height:1.4;white-space:nowrap}
-    @media (max-width: 576px){
-      .pay-method-item{flex-direction:column;align-items:flex-start;gap:10px;padding:12px}
-      .p-sub{display:none}
-      .p-name{font-size:13px}
-      .p-icon{width:42px;height:42px;font-size:20px}
+    .p-info{display:flex;flex-direction:column;min-width:0;gap:2px}
+    .p-name{font-size:13px;font-weight:700;color:#f8fafc;line-height:1.2}
+    .p-sub{font-size:11px;color: rgba(148, 163, 184, 0.9);display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+    .p-chip{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;border:1px solid rgba(148, 163, 184, 0.22);background: rgba(15, 23, 42, 0.35);color: rgba(226, 232, 240, 0.92);font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap}
+    @media (min-width: 577px){
+      .pay-method-item{flex-direction:row;text-align:left;gap:12px;padding:12px 14px}
+      .p-icon{margin:0}
+      .p-sub{justify-content:flex-start}
     }
-    @media (max-width: 576px){.wrap{padding:10px}.cardx{border-radius:15px}.body{padding:18px 14px}}
+    @media (max-width: 576px){
+      .pay-method-item{padding:10px 8px;gap:8px}
+      .p-icon{width:36px;height:36px;font-size:18px}
+      .p-name{font-size:12px}
+      .p-sub{display:none}
+    }
   </style>
 </head>
 <body>
@@ -149,7 +154,7 @@
           </div>
 
           <div class="row g-2">
-            <div class="col-12 col-md-7">
+            <div class="col-12 col-lg-7">
               <label class="muted small mb-1">Paket Voucher</label>
               <% if (!profiles || profiles.length === 0) { %>
                 <div class="muted small mt-1">Belum ada profile voucher (metadata Mikhmon) di MikroTik.</div>
@@ -178,21 +183,19 @@
               <% } %>
             </div>
 
-            <div class="col-12 col-md-5">
+            <div class="col-12 col-lg-5">
               <label class="muted small mb-1">Metode Pembayaran</label>
-              <% 
-                const activeChannels = (paymentChannels || []).filter(c => c.active !== false);
-                const sortedChannels = [...activeChannels].sort((a, b) => {
-                  const priority = { 'E-Wallet': 1, 'QRIS': 2, 'Virtual Account': 3, 'Convenience Store': 4 };
-                  const prioA = priority[a.group] || 99;
-                  const prioB = priority[b.group] || 99;
-                  return prioA - prioB;
-                });
-              %>
-              <% if (sortedChannels && sortedChannels.length > 0) { %>
+              <% if (paymentChannels && paymentChannels.length > 0) { %>
                 <div class="payment-methods-grid mt-1">
                   <%
-                    sortedChannels.forEach((channel, idx) => {
+                    const sortedChannels = [...paymentChannels].sort((a, b) => {
+                      const priority = { 'E-Wallet': 1, 'QRIS': 2, 'Virtual Account': 3, 'Convenience Store': 4 };
+                      const prioA = priority[a.group] || 99;
+                      const prioB = priority[b.group] || 99;
+                      return prioA - prioB;
+                    });
+                    const activeChannels = sortedChannels.filter(c => c.active);
+                    activeChannels.forEach((channel, idx) => {
                       const code = String(channel.code || '').toUpperCase();
                       const iconUrl = channel.icon_url || channel.iconUrl || '';
                       const brandMap = {
@@ -214,9 +217,8 @@
                       const groupIcon = group === 'Virtual Account' ? 'bi-bank2' : group === 'E-Wallet' ? 'bi-wallet2' : group === 'Convenience Store' ? 'bi-shop' : 'bi-qr-code-scan';
                       const shortGroup = group === 'Virtual Account' ? 'VA' : group === 'E-Wallet' ? 'E-Wallet' : group === 'Convenience Store' ? 'CS' : group === 'QRIS' ? 'QRIS' : group;
                       const radioId = `pm_${idx}_${code}`;
-                      const isChecked = code === 'QRIS' || idx === 0;
                   %>
-                    <input class="pm-radio" type="radio" id="<%= radioId %>" name="method" value="<%= channel.code %>" <%= isChecked ? 'checked' : '' %> required>
+                    <input class="pm-radio" type="radio" id="<%= radioId %>" name="method" value="<%= channel.code %>" <%= (code === 'QRIS' || idx === 0) ? 'checked' : '' %> <%= idx === 0 ? 'required' : '' %>>
                     <label class="pay-method-item" for="<%= radioId %>">
                       <div class="p-icon">
                         <% if (iconUrl) { %>
@@ -235,11 +237,21 @@
                   <% }) %>
                 </div>
               <% } else { %>
-                <div class="alert alert-warning mt-1 mb-0">
-                  <i class="bi bi-exclamation-triangle me-2"></i>
-                  <small>Tidak ada metode pembayaran yang tersedia. Hubungi admin untuk konfigurasi payment gateway.</small>
+                <input type="hidden" name="method" value="QRIS">
+                <div class="payment-methods-grid mt-1">
+                  <div class="pay-method-item" style="cursor: default">
+                    <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
+                    <div class="p-info">
+                      <span class="p-name">QRIS / E-Wallet</span>
+                      <span class="p-sub">
+                        <span class="p-chip">DANA</span>
+                        <span class="p-chip">OVO</span>
+                        <span class="p-chip">ShopeePay</span>
+                        <span class="p-chip">LinkAja</span>
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <input type="hidden" name="method" value="">
               <% } %>
             </div>
           </div>
@@ -251,7 +263,7 @@
             </label>
           </div>
 
-          <button class="btn btn-primary btnx mt-2" type="submit" <%= (!profiles || profiles.length === 0 || !paymentChannels || paymentChannels.length === 0) ? 'disabled' : '' %>>
+          <button class="btn btn-primary btnx mt-2" type="submit" <%= (!profiles || profiles.length === 0) ? 'disabled' : '' %>>
             <i class="bi bi-credit-card me-1"></i> Bayar & Buat Voucher
           </button>
         </form>
