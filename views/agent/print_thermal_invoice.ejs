@@ -71,7 +71,7 @@
   <% const mns=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
   <div class="small">
     <div class="row"><div><%= t('agent.receipt.transaction_no', 'No. Transaksi') %></div><div class="bold">#<%= tx.id %></div></div>
-    <div class="row"><div><%= t('agent.receipt.date', 'Tanggal') %></div><div class="bold"><%= tx.created_at ? new Date(tx.created_at).toLocaleString('id-ID') : new Date().toLocaleString('id-ID') %></div></div>
+    <div class="row"><div><%= t('agent.receipt.date', 'Tanggal') %></div><div class="bold"><%= tx.created_at ? formatDateLocal(tx.created_at) : getNowLocal() %></div></div>
     <div class="row"><div><%= t('admin.nav.agents', 'Agent') %></div><div class="bold"><%= tx.agent_name || '' %><%= tx.agent_username ? (' (@' + tx.agent_username + ')') : '' %></div></div>
   </div>
 

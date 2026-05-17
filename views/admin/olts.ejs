@@ -684,7 +684,7 @@ async function loadOltDashboard(id) {
     document.getElementById('stat-uptime').innerText = stats.uptime || 'N/A';
     document.getElementById('stat-traffic-in').innerText = formatBytes(stats.uplink_rx) + '/s';
     document.getElementById('stat-traffic-out').innerText = formatBytes(stats.uplink_tx) + '/s';
-    document.getElementById('last-update').innerText = new Date().toLocaleTimeString(I18N.lang === 'en' ? 'en-US' : 'id-ID');
+    document.getElementById('last-update').innerText = new Date().toLocaleTimeString(I18N.lang === 'en' ? 'en-US' : 'id-ID', { timeZone: '<%= settings.timezone %>' });
     
     // Render Card List
     const cardContainer = document.getElementById('card-list-container');

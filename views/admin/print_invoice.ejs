@@ -53,8 +53,8 @@
   <% const mns = (lang || 'id') === 'en' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
   
   <div class="mb-1">
-    <div><%= t('admin.print_invoice.receipt_no', 'No. Struk') %>: <span class="bold">INV-<%= invoice.id %>-<%= new Date().getFullYear() %></span></div>
-    <div><%= t('admin.print_invoice.date', 'Tanggal') %>: <%= invoice.paid_at ? new Date(invoice.paid_at).toLocaleString((lang || 'id') === 'en' ? 'en-US' : 'id-ID') : new Date().toLocaleString((lang || 'id') === 'en' ? 'en-US' : 'id-ID') %></div>
+    <div><%= t('admin.print_invoice.receipt_no', 'No. Struk') %>: <span class="bold">INV-<%= invoice.id %>-<%= getCurrentTimeInfo().year %></span></div>
+    <div><%= t('admin.print_invoice.date', 'Tanggal') %>: <%= invoice.paid_at ? formatDateLocal(invoice.paid_at) : getNowLocal() %></div>
     <div><%= t('admin.print_invoice.cashier', 'Kasir') %>: <%= invoice.paid_by_name || t('admin.print_invoice.system', 'Sistem') %></div>
     <% if (invoice.notes) { %>
       <div><%= t('admin.print_invoice.notes', 'Catatan') %>: <%= invoice.notes %></div>

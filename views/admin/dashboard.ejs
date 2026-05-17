@@ -486,7 +486,7 @@ async function loadStats() {
     document.getElementById('donut-pct').textContent  = pct + '%';
     document.getElementById('leg-online').textContent  = online;
     document.getElementById('leg-offline').textContent = offline;
-    document.getElementById('last-update-time').textContent = I18N.updatePrefix + ' ' + new Date().toLocaleTimeString('id-ID');
+    document.getElementById('last-update-time').textContent = I18N.updatePrefix + ' ' + new Date().toLocaleTimeString('id-ID', { timeZone: '<%= settings.timezone %>' });
 
     updateDonut(online, offline);
   } catch(e) { console.error('Stats error:', e); }

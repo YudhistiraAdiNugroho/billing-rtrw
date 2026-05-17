@@ -112,7 +112,7 @@ const selectInvoiceByUniqueAmount = db.prepare(`
 const markInvoicePaidAppendNote = db.prepare(`
   UPDATE invoices
   SET status='paid',
-      paid_at=CURRENT_TIMESTAMP,
+      paid_at=NOW_LOCAL(),
       paid_by_name=?,
       notes=CASE
         WHEN notes IS NULL OR TRIM(notes) = '' THEN ?

@@ -267,7 +267,7 @@
     <!-- All Attendance Records -->
     <div class="card" style="margin-top:20px">
       <div class="card-hd">
-        <h6><i class="bi bi-calendar-check"></i> Semua Absensi - <%= new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></h6>
+        <h6><i class="bi bi-calendar-check"></i> Semua Absensi - <%= new Date(selectedDate).toLocaleDateString('id-ID', { timeZone: settings.timezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></h6>
       </div>
       
       <% if (attendances.length > 0) { %>
@@ -292,14 +292,14 @@
               <td class="fw6"><%= att.employee_name %></td>
               <td><span class="type-badge type-<%= att.employee_type %>"><%= att.employee_type %></span></td>
               <td>
-                <%= new Date(att.check_in_time).toLocaleTimeString('id-ID') %>
+                <%= new Date(att.check_in_time).toLocaleTimeString('id-ID', { timeZone: settings.timezone }) %>
                 <% if (att.check_in_note) { %>
                   <div class="time-info">💬 <%= att.check_in_note %></div>
                 <% } %>
               </td>
               <td>
                 <% if (att.check_out_time) { %>
-                  <%= new Date(att.check_out_time).toLocaleTimeString('id-ID') %>
+                  <%= new Date(att.check_out_time).toLocaleTimeString('id-ID', { timeZone: settings.timezone }) %>
                   <% if (att.check_out_note) { %>
                     <div class="time-info">💬 <%= att.check_out_note %></div>
                   <% } %>
