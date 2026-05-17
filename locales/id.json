@@ -957,6 +957,7 @@
       "office_lng": "Longitude Kantor",
       "operational_hours": "Jam Operasional",
       "server_port": "Port Server",
+      "timezone": "Zona Waktu (WIB/WITA/WIT)",
       "customer_otp_login": "Login OTP Pelanggan",
       "otp_enabled": "Aktif (Kirim via WA)",
       "otp_disabled": "Nonaktif (Langsung)",

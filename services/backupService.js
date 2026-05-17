@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { logger } = require('../config/logger');
-const { getSetting } = require('../config/settingsManager');
+const { getSetting, getCurrentDateInTimezone, getNowLocalISO } = require('../config/settingsManager');
 
 const projectRoot = path.join(__dirname, '..');
 const backupDir = path.join(projectRoot, 'backups');
@@ -22,7 +22,7 @@ if (!fs.existsSync(backupDir)) {
  * Generate timestamp untuk nama file backup
  */
 function getBackupTimestamp() {
-  const now = new Date();
+  const now = getCurrentDateInTimezone();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
@@ -54,7 +54,7 @@ function backupDatabase() {
       success: true,
       fileName: backupFileName,
       size: stats.size,
-      timestamp: new Date().toISOString()
+      timestamp: getNowLocalISO()
     };
   } catch (e) {
     logger.error(`[Backup] Failed to backup database: ${e.message}`);
@@ -86,7 +86,7 @@ function backupSettings() {
       success: true,
       fileName: backupFileName,
       size: stats.size,
-      timestamp: new Date().toISOString()
+      timestamp: getNowLocalISO()
     };
   } catch (e) {
     logger.error(`[Backup] Failed to backup settings: ${e.message}`);
@@ -107,7 +107,7 @@ function backupAll() {
   return {
     database: dbResult,
     settings: settingsResult,
-    timestamp: new Date().toISOString()
+    timestamp: getNowLocalISO()
   };
 }
 
@@ -144,7 +144,7 @@ function restoreDatabase(backupFileName) {
       success: true,
       fileName: backupFileName,
       size: stats.size,
-      timestamp: new Date().toISOString(),
+      timestamp: getNowLocalISO(),
       preRestoreBackup: preRestoreBackup.fileName
     };
   } catch (e) {
@@ -189,7 +189,7 @@ function restoreSettings(backupFileName) {
       success: true,
       fileName: backupFileName,
       size: stats.size,
-      timestamp: new Date().toISOString(),
+      timestamp: getNowLocalISO(),
       preRestoreBackup: preRestoreBackup.fileName
     };
   } catch (e) {

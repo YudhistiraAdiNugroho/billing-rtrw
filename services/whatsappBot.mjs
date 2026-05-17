@@ -7,7 +7,7 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaile
 
 const require = createRequire(import.meta.url);
 const { logger } = require('../config/logger.js');
-const { getSetting, getNowLocal } = require('../config/settingsManager.js');
+const { getSetting, getNowLocal, formatDateLocal, getCurrentDateInTimezone } = require('../config/settingsManager.js');
 const customerDevice = require('./customerDeviceService.js');
 const { WaLidStore } = require('./waLidStore.js');
 const billingSvc = require('./billingService.js');
@@ -441,7 +441,7 @@ ${footerInfo}`;
     const num = String(i + 1).padStart(2, '0');
     const tags = Array.isArray(d._tags) ? d._tags.join(', ') : String(d._tags || '-');
     const pppoeUsername = d.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username?._value || '-';
-    const li = d._lastInform ? new Date(d._lastInform).toLocaleString('id-ID') : '-';
+    const li = d._lastInform ? formatDateLocal(d._lastInform) : '-';
     return `${num}. 🏷️ *${tags}*
    � PPPoE: ${pppoeUsername}
    ⏱️ Last inform: ${li}`;
@@ -568,7 +568,7 @@ export const whatsappStatus = {
   connection: 'connecting',
   qr: null,
   user: null,
-  lastUpdate: new Date()
+  lastUpdate: getCurrentDateInTimezone()
 };
 
 let currentSock = null;
@@ -651,7 +651,7 @@ export async function startWhatsAppBot() {
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
-    whatsappStatus.lastUpdate = new Date();
+    whatsappStatus.lastUpdate = getCurrentDateInTimezone();
     
     if (qr) {
       whatsappStatus.qr = qr;
@@ -696,7 +696,7 @@ export async function startWhatsAppBot() {
           const body =
             `✅ QR berhasil dipindai dan bot sudah aktif.\n\n` +
             `Nomor Bot: ${wid}\n` +
-            `Waktu: ${new Date().toLocaleString('id-ID')}\n\n` +
+            `Waktu: ${getNowLocal()}\n\n` +
             `Silakan gunakan menu Admin untuk fitur billing, notifikasi, dan broadcast.\n\n` +
             `🙏 Jika aplikasi ini bermanfaat dan Anda ingin mendukung pengembangan, Anda dapat berdonasi secara sukarela ke nomor: 081947215703.\n` +
             `Terima kasih atas dukungannya.`;
@@ -877,7 +877,7 @@ export async function startWhatsAppBot() {
         if (parsed.admin && parsed.cmd === 'vcr') {
           try {
             const [code, profile] = parsed.args;
-            const now = new Date();
+            const now = getCurrentDateInTimezone();
             const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
             const comment = `vc ${code} ${dateStr}`;
             

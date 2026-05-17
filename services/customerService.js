@@ -3,10 +3,11 @@
  */
 const db = require('../config/database');
 const { logger } = require('../config/logger');
+const { getCurrentDateInTimezone } = require('../config/settingsManager');
 
 // ─── CUSTOMERS ───────────────────────────────────────────────
 function getAllCustomers(search = '') {
-  const now = new Date();
+  const now = getCurrentDateInTimezone();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 

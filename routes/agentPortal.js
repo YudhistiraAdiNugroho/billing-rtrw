@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getSetting } = require('../config/settingsManager');
+const { getSetting, getSettings, formatDateLocal, getNowLocal } = require('../config/settingsManager');
 const agentSvc = require('../services/agentService');
 const billingSvc = require('../services/billingService');
 const customerSvc = require('../services/customerService');
@@ -25,6 +25,14 @@ function popReceipt(req) {
 function company() {
   return getSetting('company_header', 'ISP App');
 }
+
+router.use((req, res, next) => {
+  res.locals.session = req.session;
+  res.locals.settings = getSettings();
+  res.locals.formatDateLocal = formatDateLocal;
+  res.locals.getNowLocal = getNowLocal;
+  next();
+});
 
 router.get('/login', (req, res) => {
   if (req.session && req.session.isAgent) return res.redirect('/agent');

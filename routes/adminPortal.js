@@ -3,7 +3,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { getSetting, getSettings, saveSettings, getNowLocal, getCurrentDateInTimezone } = require('../config/settingsManager');
+const { getSetting, getSettings, saveSettings, getNowLocal, getCurrentDateInTimezone, getCurrentTimeInfo, getNowLocalISO, formatDateLocal } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 const customerDevice = require('../services/customerDeviceService');
@@ -429,6 +429,10 @@ router.use((req, res, next) => {
   res.locals.session = req.session;
   res.locals.sidebarSections = sidebarMenuSvc.getSidebarSections(req.session);
   res.locals.sidebarBottomNavItems = sidebarMenuSvc.getBottomNavItems(req.session);
+  res.locals.settings = getSettings();
+  res.locals.formatDateLocal = formatDateLocal;
+  res.locals.getNowLocal = getNowLocal;
+  res.locals.getCurrentTimeInfo = getCurrentTimeInfo;
   next();
 });
 
@@ -1879,8 +1883,9 @@ router.post('/packages/:id/delete', requireAdminSession, (req, res) => {
 
 // ─── BILLING ───────────────────────────────────────────────────────────────
 router.get('/billing', requireAdminSession, requireSidebarMenuAccess('billing'), (req, res) => {
-  const { month: filterMonth, year: filterYear = new Date().getFullYear(), status: filterStatus = 'all', search = '' } = req.query;
-  const summary = billingSvc.getInvoiceSummary(filterMonth || new Date().getMonth()+1, filterYear);
+  const timeInfo = getCurrentTimeInfo();
+  const { month: filterMonth, year: filterYear = timeInfo.year, status: filterStatus = 'all', search = '' } = req.query;
+  const summary = billingSvc.getInvoiceSummary(filterMonth || timeInfo.month, filterYear);
   const invoices = billingSvc.getAllInvoices({ month: filterMonth, year: filterYear, status: filterStatus, search });
   res.render('admin/billing', {
     title: 'Tagihan', company: company(), activePage: 'billing',
@@ -1926,7 +1931,7 @@ router.get('/api/billing/unpaid/:customerId', requireAdmin, (req, res) => {
 
 router.get('/api/customers/:id/paid-months', requireAdmin, (req, res) => {
   try {
-    const year = parseInt(req.query.year || new Date().getFullYear());
+    const year = parseInt(req.query.year || getCurrentTimeInfo().year);
     const months = billingSvc.getPaidMonthsForCustomerYear(req.params.id, year);
     res.json({ year, months });
   } catch (e) {
@@ -1936,7 +1941,7 @@ router.get('/api/customers/:id/paid-months', requireAdmin, (req, res) => {
 
 router.get('/api/customers/:id/billing-year', requireAdmin, (req, res) => {
   try {
-    const year = parseInt(req.query.year || new Date().getFullYear());
+    const year = parseInt(req.query.year || getCurrentTimeInfo().year);
     const summary = billingSvc.getCustomerBillingYearSummary(req.params.id, year);
     res.json(summary);
   } catch (e) {
@@ -3102,7 +3107,7 @@ router.get('/api/stats', requireAdmin, async (req, res) => {
       if (d._lastInform && (now - new Date(d._lastInform).getTime()) < 15 * 60 * 1000) online++;
       else offline++;
     });
-    res.json({ total, online, offline, warning: 0, lastUpdate: new Date().toISOString() });
+    res.json({ total, online, offline, warning: 0, lastUpdate: getNowLocalISO() });
   } catch (e) {
     res.status(500).json({ error: 'Failed to get stats', detail: e.message });
   }
@@ -4342,7 +4347,7 @@ router.post('/whatsapp/test-notification', requireAdminSession, async (req, res)
     const msg =
       `🧪 *TEST NOTIFIKASI WHATSAPP*\n\n` +
       `✅ Jika pesan ini masuk, berarti notifikasi WhatsApp dari Billing Alijaya System sudah berfungsi.\n` +
-      `📅 Waktu: ${new Date().toLocaleString('id-ID')}`;
+      `📅 Waktu: ${getNowLocal()}`;
     const ok = await sendWA(adminPhone, msg);
     if (!ok) throw new Error('Gagal mengirim pesan test (sendWA=false).');
     req.session._msg = { type: 'success', text: 'Test notifikasi WhatsApp berhasil dikirim.' };

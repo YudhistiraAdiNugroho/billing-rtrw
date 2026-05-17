@@ -24,7 +24,7 @@ function initAuditTrailTable() {
         details TEXT,
         ip_address TEXT,
         user_agent TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT (NOW_LOCAL())
       );
 
       CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_trail(actor_type, actor_id);
@@ -189,7 +189,7 @@ function getAuditStats() {
     const recentStmt = db.prepare(`
       SELECT COUNT(*) as count
       FROM audit_trail
-      WHERE created_at >= datetime('now', '-24 hours')
+      WHERE created_at >= datetime(NOW_LOCAL(), '-24 hours')
     `);
     stats.recent_24h = recentStmt.get().count;
 

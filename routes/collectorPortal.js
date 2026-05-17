@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getSetting, getCurrentDateInTimezone } = require('../config/settingsManager');
+const { getSetting, getCurrentDateInTimezone, getSettings, formatDateLocal, getNowLocal } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 const billingSvc = require('../services/billingService');
@@ -23,6 +23,14 @@ function flashMsg(req) {
   delete req.session._msg;
   return m || null;
 }
+
+router.use((req, res, next) => {
+  res.locals.session = req.session;
+  res.locals.settings = getSettings();
+  res.locals.formatDateLocal = formatDateLocal;
+  res.locals.getNowLocal = getNowLocal;
+  next();
+});
 
 router.get('/login', (req, res) => {
   if (req.session && req.session.isCollector) return res.redirect('/collector');

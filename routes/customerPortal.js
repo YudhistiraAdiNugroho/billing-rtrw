@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const customerDevice = require('../services/customerDeviceService');
-const { getSettingsWithCache, getNowLocal } = require('../config/settingsManager');
+const { getSettingsWithCache, getNowLocal, getCurrentTimeInfo, getNowLocalISO, formatDateLocal } = require('../config/settingsManager');
 const billingSvc = require('../services/billingService');
 const paymentSvc = require('../services/paymentService');
 const customerSvc = require('../services/customerService');
@@ -1006,6 +1006,11 @@ router.post('/login-otp', (req, res) => {
 
 // Pelanggan terisolir: paksa halaman /isolated, kecuali cek tagihan / bayar / logout
 router.use((req, res, next) => {
+  res.locals.session = req.session;
+  res.locals.settings = getSettingsWithCache();
+  res.locals.formatDateLocal = formatDateLocal;
+  res.locals.getNowLocal = getNowLocal;
+
   if (isSuspendedPortalExemptPath(req.path)) return next();
   const loginId = req.session && req.session.phone;
   if (!loginId) return next();
@@ -1913,7 +1918,7 @@ router.post('/payment/callback', express.json(), async (req, res) => {
         if (!customer.phone) {
           throw new Error('Nomor WhatsApp pelanggan kosong');
         }
-        const msg = `✅ *PEMBAYARAN BERHASIL*\n\nTerima kasih Kak *${customer.name}*,\n\nPembayaran tagihan internet periode *${checkInv.period_month}/${checkInv.period_year}* telah kami terima via *${gateway}*.\n\n💰 *Total:* Rp ${checkInv.amount.toLocaleString('id-ID')}\n📅 *Waktu:* ${new Date().toLocaleString('id-ID')}\n\nStatus layanan Anda kini telah aktif. Selamat berinternet kembali! 🚀`;
+        const msg = `✅ *PEMBAYARAN BERHASIL*\n\nTerima kasih Kak *${customer.name}*,\n\nPembayaran tagihan internet periode *${checkInv.period_month}/${checkInv.period_year}* telah kami terima via *${gateway}*.\n\n💰 *Total:* Rp ${checkInv.amount.toLocaleString('id-ID')}\n📅 *Waktu:* ${getNowLocal()}\n\nStatus layanan Anda kini telah aktif. Selamat berinternet kembali! 🚀`;
         await sendWA(customer.phone, msg);
       } catch (waErr) {
         logger.error(`[Webhook] Gagal kirim notif WA: ${waErr.message}`);

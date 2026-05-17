@@ -3,6 +3,7 @@
  */
 const db = require('../config/database');
 const auditTrail = require('./auditTrailService');
+const { getCurrentDateInTimezone } = require('../config/settingsManager');
 
 function daysInMonth(year, month1to12) {
   return new Date(year, month1to12, 0).getDate();
@@ -164,7 +165,7 @@ function payInvoicesForCustomerMonths(customerId, year, months, paidByName, note
   const selectInv = db.prepare('SELECT id, status, amount FROM invoices WHERE customer_id=? AND period_month=? AND period_year=? LIMIT 1');
   const insertInv = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount, notes) VALUES (?, ?, ?, ?, ?)');
   const bumpPromo = db.prepare('UPDATE customers SET promo_cycles_used = COALESCE(promo_cycles_used,0) + 1 WHERE id=?');
-  const payInv = db.prepare(`UPDATE invoices SET status='paid', paid_at=CURRENT_TIMESTAMP, paid_by_name=?, notes=? WHERE id=?`);
+  const payInv = db.prepare(`UPDATE invoices SET status='paid', paid_at=NOW_LOCAL(), paid_by_name=?, notes=? WHERE id=?`);
 
   const summary = { customerName: customer.name, year: y, paidMonths: [], alreadyPaidMonths: [], createdMonths: [], totalAmount: 0, totalMonths: 0 };
   const run = db.transaction(() => {
@@ -273,7 +274,7 @@ function getInvoiceById(id) {
 
 function markAsPaid(invoiceId, paidByName, notes, actor = null) {
   const result = db.prepare(`
-    UPDATE invoices SET status='paid', paid_at=CURRENT_TIMESTAMP, paid_by_name=?, notes=? WHERE id=?
+    UPDATE invoices SET status='paid', paid_at=NOW_LOCAL(), paid_by_name=?, notes=? WHERE id=?
   `).run(paidByName || 'Admin', notes || '', invoiceId);
 
   // Catat audit trail jika berhasil
@@ -353,7 +354,7 @@ function getMonthlyRevenue(year) {
 }
 
 function getDashboardStats() {
-  const now = new Date();
+  const now = getCurrentDateInTimezone();
   const m = now.getMonth() + 1;
   const y = now.getFullYear();
   const totalRevenue  = db.prepare("SELECT SUM(amount) as t FROM invoices WHERE status='paid'").get();
@@ -478,7 +479,7 @@ function getTodayRevenue() {
   return db.prepare(`
     SELECT SUM(amount) as total, COUNT(*) as count 
     FROM invoices 
-    WHERE status='paid' AND date(paid_at, 'localtime') = date('now', 'localtime')
+    WHERE status='paid' AND date(paid_at) = date(NOW_LOCAL())
   `).get();
 }
 

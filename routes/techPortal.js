@@ -3,7 +3,7 @@ const router = express.Router();
 const techSvc = require('../services/techService');
 const customerSvc = require('../services/customerService');
 const odpSvc = require('../services/odpService');
-const { getSetting, getNowLocal, getCurrentDateInTimezone } = require('../config/settingsManager');
+const { getSetting, getNowLocal, getCurrentDateInTimezone, getNowLocalISO, formatDateLocal, getSettings } = require('../config/settingsManager');
 const mikrotikService = require('../services/mikrotikService');
 const db = require('../config/database');
 const oltSvc = require('../services/oltService');
@@ -78,6 +78,14 @@ function flashMsg(req) {
 }
 
 function company() { return getSetting('company_header', 'ISP App'); }
+
+router.use((req, res, next) => {
+  res.locals.session = req.session;
+  res.locals.settings = getSettings();
+  res.locals.formatDateLocal = formatDateLocal;
+  res.locals.getNowLocal = getNowLocal;
+  next();
+});
 
 // --- AUTH ---
 router.get('/login', (req, res) => {
@@ -187,7 +195,7 @@ router.post('/tickets/:id/update', requireTechSession, upload.array('photos', 10
         filename: f.filename,
         originalName: f.originalname,
         size: f.size,
-        uploadedAt: new Date().toISOString(),
+        uploadedAt: getNowLocalISO(),
         lat: req.body.gps_lat || '',
         lng: req.body.gps_lng || ''
       }));
