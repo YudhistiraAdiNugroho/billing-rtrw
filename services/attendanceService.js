@@ -1,5 +1,5 @@
 const db = require('../config/database');
-const { getSetting } = require('../config/settingsManager');
+const { getSetting, getCurrentDateInTimezone, parseDateInTimezone } = require('../config/settingsManager');
 
 /**
  * ATTENDANCE SERVICE
@@ -68,7 +68,7 @@ function checkIn(data) {
     INSERT INTO attendance (
       employee_type, employee_id, employee_name,
       check_in_time, check_in_lat, check_in_lng, check_in_note, check_in_photo
-    ) VALUES (?, ?, ?, datetime('now', 'localtime'), ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, NOW_LOCAL(), ?, ?, ?, ?)
   `);
   
   return stmt.run(
@@ -100,13 +100,13 @@ function checkOut(attendanceId, data) {
   }
   
   // Calculate work duration in minutes
-  const checkInTime = new Date(attendance.check_in_time);
-  const checkOutTime = new Date();
+  const checkInTime = parseDateInTimezone(attendance.check_in_time);
+  const checkOutTime = getCurrentDateInTimezone();
   const durationMinutes = Math.floor((checkOutTime - checkInTime) / 1000 / 60);
   
   const stmt = db.prepare(`
     UPDATE attendance 
-    SET check_out_time = datetime('now', 'localtime'),
+    SET check_out_time = NOW_LOCAL(),
         check_out_lat = ?,
         check_out_lng = ?,
         check_out_note = ?,
@@ -132,7 +132,7 @@ function getTodayAttendance(employeeType, employeeId) {
     SELECT * FROM attendance 
     WHERE employee_type = ? 
       AND employee_id = ? 
-      AND date(check_in_time) = date('now', 'localtime')
+      AND date(check_in_time) = date(NOW_LOCAL())
     ORDER BY check_in_time DESC
     LIMIT 1
   `);
@@ -199,7 +199,7 @@ function getMonthlyAttendanceSummary(employeeType, employeeId, year, month) {
 function getTodayAllAttendance() {
   const stmt = db.prepare(`
     SELECT * FROM attendance 
-    WHERE date(check_in_time) = date('now', 'localtime')
+    WHERE date(check_in_time) = date(NOW_LOCAL())
     ORDER BY check_in_time DESC
   `);
   
@@ -208,7 +208,7 @@ function getTodayAllAttendance() {
 
 // Get attendance statistics for admin
 function getAttendanceStats(date = null) {
-  const dateFilter = date ? `date(check_in_time) = date('${date}')` : `date(check_in_time) = date('now', 'localtime')`;
+  const dateFilter = date ? `date(check_in_time) = date('${date}')` : `date(check_in_time) = date(NOW_LOCAL())`;
   
   const stmt = db.prepare(`
     SELECT 
@@ -232,7 +232,7 @@ function hasCheckedInToday(employeeType, employeeId) {
 
 // Get late check-ins (after 8:30 AM)
 function getLateCheckIns(date = null) {
-  const dateFilter = date ? `date(check_in_time) = date('${date}')` : `date(check_in_time) = date('now', 'localtime')`;
+  const dateFilter = date ? `date(check_in_time) = date('${date}')` : `date(check_in_time) = date(NOW_LOCAL())`;
   
   const stmt = db.prepare(`
     SELECT * FROM attendance 
@@ -246,7 +246,7 @@ function getLateCheckIns(date = null) {
 
 // Get employees who haven't checked out
 function getNotCheckedOut(date = null) {
-  const dateFilter = date ? `date(check_in_time) = date('${date}')` : `date(check_in_time) = date('now', 'localtime')`;
+  const dateFilter = date ? `date(check_in_time) = date('${date}')` : `date(check_in_time) = date(NOW_LOCAL())`;
   
   const stmt = db.prepare(`
     SELECT * FROM attendance 

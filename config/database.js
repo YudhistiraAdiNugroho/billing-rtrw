@@ -16,12 +16,30 @@ try {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
-  // Menambahkan fungsi waktu lokal untuk SQLite
+  // Menambahkan fungsi waktu lokal untuk SQLite sesuai setting timezone
   db.function('NOW_LOCAL', () => {
+    const { getSetting } = require('./settingsManager');
+    const tz = getSetting('timezone', 'Asia/Jakarta');
     const now = new Date();
-    const offset = now.getTimezoneOffset() * 60000; // offset dalam milidetik
-    const localTime = new Date(now.getTime() - offset);
-    return localTime.toISOString().slice(0, 19).replace('T', ' ');
+    
+    // Format: YYYY-MM-DD HH:mm:ss
+    const options = {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    };
+    
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(now);
+    const p = {};
+    parts.forEach(part => p[part.type] = part.value);
+    
+    return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
   });
 } catch (err) {
   console.error('[DB] Gagal membuka database:', err.message);

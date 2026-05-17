@@ -998,7 +998,7 @@ router.get('/cashiers/attendance', requireAdminSession, requireSidebarMenuAccess
     const todayAttendance = attendanceSvc.getTodayAttendance('cashier', cashierId);
     const history = attendanceSvc.getAttendanceHistory('cashier', cashierId, 10);
     
-    const now = new Date();
+    const now = getCurrentDateInTimezone();
     const summary = attendanceSvc.getMonthlyAttendanceSummary(
       'cashier', 
       cashierId, 
@@ -4479,7 +4479,7 @@ router.get('/api/mikrotik/users/:routerId', requireAdmin, async (req, res) => {
 // Attendance dashboard
 router.get('/attendance', requireAdminSession, requireSidebarMenuAccess('attendance'), (req, res) => {
   try {
-    const date = req.query.date || new Date().toISOString().split('T')[0];
+    const date = req.query.date || getNowLocal().split(' ')[0];
     const attendances = attendanceSvc.getAttendanceByDate(date);
     const stats = attendanceSvc.getAttendanceStats(date);
     const lateCheckIns = attendanceSvc.getLateCheckIns(date);

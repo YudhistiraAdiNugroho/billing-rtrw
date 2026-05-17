@@ -579,7 +579,7 @@ router.get('/attendance', requireTechSession, (req, res) => {
   const history = attendanceSvc.getAttendanceHistory('technician', techId, 10);
   
   // Get monthly summary
-  const now = new Date();
+  const now = getCurrentDateInTimezone();
   const summary = attendanceSvc.getMonthlyAttendanceSummary(
     'technician',
     techId,

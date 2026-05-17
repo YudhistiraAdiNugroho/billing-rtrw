@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getSetting } = require('../config/settingsManager');
+const { getSetting, getCurrentDateInTimezone } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 const billingSvc = require('../services/billingService');
@@ -57,7 +57,7 @@ router.get('/attendance', requireCollectorSession, (req, res) => {
     const todayAttendance = attendanceSvc.getTodayAttendance('collector', collectorId);
     const history = attendanceSvc.getAttendanceHistory('collector', collectorId, 10);
     
-    const now = new Date();
+    const now = getCurrentDateInTimezone();
     const summary = attendanceSvc.getMonthlyAttendanceSummary(
       'collector', 
       collectorId, 
