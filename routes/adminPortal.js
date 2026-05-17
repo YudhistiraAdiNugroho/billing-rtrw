@@ -3,7 +3,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { getSetting, getSettings, saveSettings, getNowLocal } = require('../config/settingsManager');
+const { getSetting, getSettings, saveSettings, getNowLocal, getCurrentDateInTimezone } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 const customerDevice = require('../services/customerDeviceService');
