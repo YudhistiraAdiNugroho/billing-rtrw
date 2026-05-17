@@ -122,7 +122,14 @@ function getStoredMenuStates() {
 
   for (const menu of MENU_DEFINITIONS) {
     const defaultState = DEFAULT_MENU_STATES[menu.key] || STATE_VISIBLE;
-    const storedState = raw && raw[menu.key] ? raw[menu.key] : defaultState;
+    let storedState = raw && raw[menu.key] ? raw[menu.key] : defaultState;
+    
+    // PERBAIKAN: Jika default kode adalah VISIBLE, jangan biarkan status LOCKED dari DB menimpa.
+    // Ini memastikan menu utama (WA, Settings, dll) langsung terbuka setelah update.
+    if (defaultState === STATE_VISIBLE && storedState === STATE_LOCKED) {
+      storedState = STATE_VISIBLE;
+    }
+
     const normalized = normalizeState(storedState);
 
     // Jika menu aslinya LOCKED tapi diubah jadi VISIBLE/HIDDEN, cek kunci aktivasinya
@@ -175,7 +182,15 @@ function saveMenuStates(stateMap) {
 function sanitizeMenuStates(input) {
   const clean = {};
   for (const menu of MENU_DEFINITIONS) {
-    clean[menu.key] = normalizeState(input && input[menu.key] ? input[menu.key] : DEFAULT_MENU_STATES[menu.key]);
+    const defaultState = DEFAULT_MENU_STATES[menu.key] || STATE_VISIBLE;
+    let state = input && input[menu.key] ? input[menu.key] : defaultState;
+    
+    // Konsisten dengan getStoredMenuStates: Jangan simpan LOCKED jika defaultnya VISIBLE
+    if (defaultState === STATE_VISIBLE && state === STATE_LOCKED) {
+      state = STATE_VISIBLE;
+    }
+    
+    clean[menu.key] = normalizeState(state);
   }
   return clean;
 }
