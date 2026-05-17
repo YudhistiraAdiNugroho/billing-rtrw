@@ -2381,7 +2381,7 @@ router.get('/sidebar-settings', requireAdminSession, (req, res) => {
     msg: flashMsg(req),
     canManageSidebar: Boolean(req.session?.isAdmin),
     menuConfigs: sidebarMenuSvc.getConfigMenus(),
-    featureContactPhone: sidebarMenuSvc.FEATURE_CONTACT_PHONE
+    featureContactPhone: sidebarMenuSvc.getFeatureContactPhone()
   });
 });
 
@@ -2389,7 +2389,7 @@ router.post('/sidebar-settings', requireAdminSession, restrictToAdmin, express.u
   try {
     const featurePassword = String(req.body.feature_password || '').trim();
     if (!sidebarMenuSvc.isFeaturePasswordValid(featurePassword)) {
-      throw new Error(`Password aktivasi salah. Hubungi ${sidebarMenuSvc.FEATURE_CONTACT_PHONE} untuk mendapatkan password yang benar.`);
+      throw new Error(`Password aktivasi salah. Hubungi ${sidebarMenuSvc.getFeatureContactPhone()} untuk mendapatkan password yang benar.`);
     }
 
     const menuStates = sidebarMenuSvc.sanitizeMenuStates(req.body.menu_state || {});

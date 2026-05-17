@@ -218,6 +218,12 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS agents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -569,7 +575,32 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance(status);
 `);
 
+/**
+ * Helper untuk App Settings (Database)
+ */
+const getAppSetting = (key, defaultValue = null) => {
+  try {
+    const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key);
+    return row ? JSON.parse(row.value) : defaultValue;
+  } catch (e) {
+    return defaultValue;
+  }
+};
+
+const saveAppSetting = (key, value) => {
+  try {
+    const jsonValue = JSON.stringify(value);
+    db.prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)').run(key, jsonValue);
+    return true;
+  } catch (e) {
+    console.error(`[DB] Error saving setting ${key}:`, e.message);
+    return false;
+  }
+};
+
 module.exports = db;
+module.exports.getAppSetting = getAppSetting;
+module.exports.saveAppSetting = saveAppSetting;
 
 // ─── PAYROLL / GAJI KARYAWAN ─────────────────────────────────────────────────
 db.exec(`

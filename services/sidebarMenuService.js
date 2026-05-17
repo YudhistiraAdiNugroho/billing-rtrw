@@ -1,8 +1,18 @@
 const crypto = require('crypto');
 const { getSetting, getSettings, saveSettings } = require('../config/settingsManager');
+const { getAppSetting, saveAppSetting } = require('../config/database');
 
 const FEATURE_PASSWORD_HASH = '45d841d9f79ebadb8db21b0068b6b6d10a49ff66865e9fbf88267cceccd3c784';
 const FEATURE_CONTACT_PHONE = '081947215703';
+
+function getFeaturePasswordHash() {
+  return getSetting('feature_password_hash', FEATURE_PASSWORD_HASH);
+}
+
+function getFeatureContactPhone() {
+  return getSetting('feature_contact_phone', FEATURE_CONTACT_PHONE);
+}
+
 const SETTINGS_KEY = 'sidebar_menu_states';
 const STATE_VISIBLE = 'visible';
 const STATE_HIDDEN = 'hidden';
@@ -19,29 +29,29 @@ const MENU_DEFINITIONS = [
   { key: 'customers', section: 'billing', href: '/admin/customers', icon: 'bi bi-people', labelKey: 'admin.nav.customers', labelDefault: 'Pelanggan', roles: ['admin', 'cashier'], bottomNav: true, activePages: ['customers'] },
   { key: 'packages', section: 'billing', href: '/admin/packages', icon: 'bi bi-box-seam', labelKey: 'admin.nav.internet_packages', labelDefault: 'Paket Internet', roles: ['admin', 'cashier'], activePages: ['packages'] },
   { key: 'billing', section: 'billing', href: '/admin/billing', icon: 'bi bi-receipt', labelKey: 'admin.nav.invoices', labelDefault: 'Tagihan', roles: ['admin', 'cashier'], bottomNav: true, activePages: ['billing'] },
-  { key: 'digiflazz', section: 'billing', href: '/admin/digiflazz', icon: 'bi bi-phone', labelKey: '', labelDefault: 'Digiflazz', roles: ['admin'], activePages: ['digiflazz'] },
+  { key: 'digiflazz', section: 'billing', href: '/admin/digiflazz', icon: 'bi bi-phone', labelKey: 'admin.nav.digiflazz', labelDefault: 'Digiflazz', roles: ['admin'], activePages: ['digiflazz'] },
   { key: 'reports', section: 'billing', href: '/admin/reports', icon: 'bi bi-bar-chart-line', labelKey: 'admin.nav.finance_report', labelDefault: 'Laporan Keuangan', roles: ['admin', 'cashier'], activePages: ['reports'] },
-  { key: 'cashiers_reports', section: 'billing', href: '/admin/cashiers/reports', icon: 'bi bi-journal-text', labelKey: '', labelDefault: 'Laporan Kasir', roles: ['admin', 'cashier'], activePages: ['cashiers_reports'] },
-  { key: 'collector_payments', section: 'billing', href: '/admin/collector-payments', icon: 'bi bi-check2-square', labelKey: '', labelDefault: 'Approval Kolektor', roles: ['admin', 'cashier'], activePages: ['collector_payments'] },
+  { key: 'cashiers_reports', section: 'billing', href: '/admin/cashiers/reports', icon: 'bi bi-journal-text', labelKey: 'admin.nav.cashiers_reports', labelDefault: 'Laporan Kasir', roles: ['admin', 'cashier'], activePages: ['cashiers_reports'] },
+  { key: 'collector_payments', section: 'billing', href: '/admin/collector-payments', icon: 'bi bi-check2-square', labelKey: 'admin.nav.collector_payments', labelDefault: 'Approval Kolektor', roles: ['admin', 'cashier'], activePages: ['collector_payments'] },
 
   { key: 'tickets', section: 'service', href: '/admin/tickets', icon: 'bi bi-headset', labelKey: 'admin.nav.customer_tickets', labelDefault: 'Keluhan Pelanggan', roles: ['admin', 'cashier'], activePages: ['tickets'] },
-  { key: 'inventory', section: 'service', href: '/admin/inventory', icon: 'bi bi-boxes', labelKey: '', labelDefault: 'Inventaris (Stok)', roles: ['admin', 'cashier'], activePages: ['inventory'] },
-  { key: 'attendance', section: 'service', href: '/admin/attendance', icon: 'bi bi-calendar-check', labelKey: '', labelDefault: 'Absensi Karyawan', roles: ['admin', 'cashier'], activePages: ['attendance'] },
-  { key: 'payroll', section: 'service', href: '/admin/payroll', icon: 'bi bi-wallet2', labelKey: '', labelDefault: 'Gaji Karyawan', roles: ['admin', 'cashier'], activePages: ['payroll'] },
+  { key: 'inventory', section: 'service', href: '/admin/inventory', icon: 'bi bi-boxes', labelKey: 'admin.nav.inventory', labelDefault: 'Inventaris (Stok)', roles: ['admin', 'cashier'], activePages: ['inventory'] },
+  { key: 'attendance', section: 'service', href: '/admin/attendance', icon: 'bi bi-calendar-check', labelKey: 'admin.nav.attendance', labelDefault: 'Absensi Karyawan', roles: ['admin', 'cashier'], activePages: ['attendance'] },
+  { key: 'payroll', section: 'service', href: '/admin/payroll', icon: 'bi bi-wallet2', labelKey: 'admin.nav.payroll', labelDefault: 'Gaji Karyawan', roles: ['admin', 'cashier'], activePages: ['payroll'] },
 
-  { key: 'cashier_attendance', section: 'cashier', href: '/admin/cashiers/attendance', icon: 'bi bi-calendar-check', labelKey: '', labelDefault: 'Absensi Saya', roles: ['cashier'], activePages: ['cashier_attendance'] },
+  { key: 'cashier_attendance', section: 'cashier', href: '/admin/cashiers/attendance', icon: 'bi bi-calendar-check', labelKey: 'admin.nav.cashier_attendance', labelDefault: 'Absensi Saya', roles: ['cashier'], activePages: ['cashier_attendance'] },
 
   { key: 'technicians', section: 'user_management', href: '/admin/technicians', icon: 'bi bi-person-gear', labelKey: 'admin.nav.technicians', labelDefault: 'Teknisi', roles: ['admin'], activePages: ['technicians'] },
   { key: 'cashiers', section: 'user_management', href: '/admin/cashiers', icon: 'bi bi-person-vcard', labelKey: 'admin.nav.cashiers', labelDefault: 'Kasir', roles: ['admin'], activePages: ['cashiers'] },
-  { key: 'collectors', section: 'user_management', href: '/admin/collectors', icon: 'bi bi-person-badge', labelKey: '', labelDefault: 'Kolektor', roles: ['admin'], activePages: ['collectors'] },
+  { key: 'collectors', section: 'user_management', href: '/admin/collectors', icon: 'bi bi-person-badge', labelKey: 'admin.nav.collectors', labelDefault: 'Kolektor', roles: ['admin'], activePages: ['collectors'] },
   { key: 'agents', section: 'user_management', href: '/admin/agents', icon: 'bi bi-person-badge', labelKey: 'admin.nav.agents', labelDefault: 'Agent', roles: ['admin', 'cashier'], activePages: ['agents'] },
   { key: 'agents_reports', section: 'user_management', href: '/admin/agents/reports', icon: 'bi bi-journal-text', labelKey: 'admin.nav.agent_reports', labelDefault: 'Laporan Agent', roles: ['admin'], activePages: ['agents_reports'] },
 
   { key: 'update', section: 'system', href: '/admin/update', icon: 'bi bi-cloud-arrow-down', labelKey: 'admin.nav.update', labelDefault: 'Update GitHub', roles: ['admin'], activePages: ['update'] },
   { key: 'settings', section: 'system', href: '/admin/settings', icon: 'bi bi-gear', labelKey: 'admin.nav.settings', labelDefault: 'Pengaturan', roles: ['admin'], activePages: ['settings'] },
-  { key: 'backup', section: 'system', href: '/admin/backup', icon: 'bi bi-hdd-stack', labelKey: '', labelDefault: 'Backup & Recovery', roles: ['admin'], activePages: ['backup'] },
-  { key: 'monitoring', section: 'system', href: '/admin/monitoring', icon: 'bi bi-activity', labelKey: '', labelDefault: 'Monitoring Sistem', roles: ['admin'], activePages: ['monitoring'] },
-  { key: 'audit_logs', section: 'system', href: '/admin/audit-logs', icon: 'bi bi-shield-lock', labelKey: '', labelDefault: 'Log Aktivitas', roles: ['admin'], activePages: ['audit_logs'] }
+  { key: 'backup', section: 'system', href: '/admin/backup', icon: 'bi bi-hdd-stack', labelKey: 'admin.nav.backup', labelDefault: 'Backup & Recovery', roles: ['admin'], activePages: ['backup'] },
+  { key: 'monitoring', section: 'system', href: '/admin/monitoring', icon: 'bi bi-activity', labelKey: 'admin.nav.monitoring', labelDefault: 'Monitoring Sistem', roles: ['admin'], activePages: ['monitoring'] },
+  { key: 'audit_logs', section: 'system', href: '/admin/audit-logs', icon: 'bi bi-shield-lock', labelKey: 'admin.nav.audit_logs', labelDefault: 'Log Aktivitas', roles: ['admin'], activePages: ['audit_logs'] }
 ];
 
 const DEFAULT_MENU_STATES = {
@@ -78,7 +88,7 @@ const SECTION_DEFINITIONS = [
   { key: 'main', labelKey: 'admin.section.main', labelDefault: 'UTAMA' },
   { key: 'billing', labelKey: 'admin.section.billing', labelDefault: 'BILLING' },
   { key: 'service', labelKey: 'admin.section.service', labelDefault: 'LAYANAN' },
-  { key: 'cashier', labelKey: '', labelDefault: 'KASIR' },
+  { key: 'cashier', labelKey: 'admin.section.cashier', labelDefault: 'KASIR' },
   { key: 'user_management', labelKey: 'admin.section.user_management', labelDefault: 'MANAJEMEN USER' },
   { key: 'system', labelKey: 'admin.section.system', labelDefault: 'SISTEM' }
 ];
@@ -93,17 +103,73 @@ function normalizeState(value) {
 }
 
 function getStoredMenuStates() {
-  const raw = getSetting(SETTINGS_KEY, {});
+  // Coba ambil dari Database dulu (Lebih Aman)
+  let raw = getAppSetting(SETTINGS_KEY, null);
+  let activationKeys = getAppSetting('sidebar_activation_keys', {});
+
+  // Fallback ke settings.json jika di DB masih kosong (Migration)
+  if (raw === null) {
+    raw = getSetting(SETTINGS_KEY, {});
+    activationKeys = getSetting('sidebar_activation_keys', {});
+    // Langsung migrasi ke DB agar kedepannya pakai DB
+    if (Object.keys(raw).length > 0) {
+      saveAppSetting(SETTINGS_KEY, raw);
+      saveAppSetting('sidebar_activation_keys', activationKeys);
+    }
+  }
+
   const stateMap = {};
+
   for (const menu of MENU_DEFINITIONS) {
-    stateMap[menu.key] = normalizeState(raw && raw[menu.key] ? raw[menu.key] : DEFAULT_MENU_STATES[menu.key]);
+    const defaultState = DEFAULT_MENU_STATES[menu.key] || STATE_VISIBLE;
+    const storedState = raw && raw[menu.key] ? raw[menu.key] : defaultState;
+    const normalized = normalizeState(storedState);
+
+    // Jika menu aslinya LOCKED tapi diubah jadi VISIBLE/HIDDEN, cek kunci aktivasinya
+    if (defaultState === STATE_LOCKED && normalized !== STATE_LOCKED) {
+      const expectedKey = sha256(menu.key + getFeaturePasswordHash());
+      const providedKey = activationKeys[menu.key];
+
+      if (providedKey !== expectedKey) {
+        // Kunci tidak cocok! Kembalikan ke LOCKED
+        stateMap[menu.key] = STATE_LOCKED;
+        continue;
+      }
+    }
+
+    stateMap[menu.key] = normalized;
   }
   return stateMap;
 }
 
 function saveMenuStates(stateMap) {
-  const current = getSettings();
-  return saveSettings({ ...current, [SETTINGS_KEY]: sanitizeMenuStates(stateMap) });
+  const activationKeys = getAppSetting('sidebar_activation_keys', {});
+  const passwordHash = getFeaturePasswordHash();
+
+  for (const key in stateMap) {
+    const newState = stateMap[key];
+    const defaultState = DEFAULT_MENU_STATES[key] || STATE_VISIBLE;
+
+    // Jika menu yang aslinya LOCKED diaktifkan (jadi visible/hidden), generate kunci
+    if (defaultState === STATE_LOCKED && newState !== STATE_LOCKED) {
+      activationKeys[key] = sha256(key + passwordHash);
+    } else if (newState === STATE_LOCKED) {
+      // Jika dikunci kembali, hapus kuncinya
+      delete activationKeys[key];
+    }
+  }
+
+  // Simpan ke Database (Utama)
+  saveAppSetting(SETTINGS_KEY, sanitizeMenuStates(stateMap));
+  saveAppSetting('sidebar_activation_keys', activationKeys);
+
+  // Tetap simpan ke settings.json sebagai cadangan / kompatibilitas
+  const currentJson = getSettings();
+  return saveSettings({
+    ...currentJson,
+    [SETTINGS_KEY]: sanitizeMenuStates(stateMap),
+    sidebar_activation_keys: activationKeys
+  });
 }
 
 function sanitizeMenuStates(input) {
@@ -131,7 +197,7 @@ function enrichMenu(menu, states) {
     locked,
     hidden,
     hrefResolved: menu.href,
-    lockedMessage: locked ? `Menu "${menu.labelDefault}" terkunci. Hubungi ${FEATURE_CONTACT_PHONE} untuk mendapatkan password aktivasi.` : ''
+    lockedMessage: locked ? `Menu "${menu.labelDefault}" terkunci. Hubungi ${getFeatureContactPhone()} untuk mendapatkan password aktivasi.` : ''
   };
 }
 
@@ -162,16 +228,20 @@ function getBottomNavItems(session) {
 
 function getConfigMenus() {
   const states = getStoredMenuStates();
-  return MENU_DEFINITIONS.map((menu) => ({
-    ...menu,
-    state: states[menu.key] || DEFAULT_MENU_STATES[menu.key] || STATE_VISIBLE,
-    roleLabel: menu.roles.includes('admin') && menu.roles.includes('cashier')
-      ? 'Admin & Kasir'
-      : menu.roles.includes('cashier')
-        ? 'Kasir'
-        : 'Admin',
-    sectionLabel: SECTION_DEFINITIONS.find((section) => section.key === menu.section)?.labelDefault || menu.section
-  }));
+  return MENU_DEFINITIONS.map((menu) => {
+    const section = SECTION_DEFINITIONS.find((s) => s.key === menu.section);
+    return {
+      ...menu,
+      state: states[menu.key] || DEFAULT_MENU_STATES[menu.key] || STATE_VISIBLE,
+      roleLabel: menu.roles.includes('admin') && menu.roles.includes('cashier')
+        ? 'Admin & Kasir'
+        : menu.roles.includes('cashier')
+          ? 'Kasir'
+          : 'Admin',
+      sectionLabel: section?.labelDefault || menu.section,
+      sectionLabelKey: section?.labelKey || ''
+    };
+  });
 }
 
 function getMenuDefinition(key) {
@@ -179,7 +249,7 @@ function getMenuDefinition(key) {
 }
 
 function isFeaturePasswordValid(password) {
-  return sha256(password) === FEATURE_PASSWORD_HASH;
+  return sha256(password) === getFeaturePasswordHash();
 }
 
 function evaluateMenuAccess(menuKey, session) {
@@ -204,7 +274,8 @@ function evaluateMenuAccess(menuKey, session) {
 }
 
 module.exports = {
-  FEATURE_CONTACT_PHONE,
+  getFeatureContactPhone,
+  getFeaturePasswordHash,
   STATE_VISIBLE,
   STATE_HIDDEN,
   STATE_LOCKED,
