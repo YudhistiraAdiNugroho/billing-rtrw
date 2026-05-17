@@ -66,12 +66,12 @@
                           <div style="display:flex;align-items:center;gap:10px">
                             <i class="<%= menu.icon %>"></i>
                             <div>
-                              <div style="font-weight:700"><%= menu.labelDefault %></div>
+                              <div style="font-weight:700"><%= menu.labelKey ? t(menu.labelKey, menu.labelDefault) : menu.labelDefault %></div>
                               <div class="hint mono"><%= menu.href %></div>
                             </div>
                           </div>
                         </td>
-                        <td><span class="hint"><%= menu.sectionLabel %></span></td>
+                        <td><span class="hint"><%= menu.sectionLabelKey ? t(menu.sectionLabelKey, menu.sectionLabel) : menu.sectionLabel %></span></td>
                         <td><span class="hint"><%= menu.roleLabel %></span></td>
                         <td style="min-width:180px">
                           <select class="fs" name="menu_state[<%= menu.key %>]">
