@@ -318,8 +318,17 @@
         </div>
 
         <div class="text-center footer-text mt-4">
-          <p class="mb-2"><%= t('customer.not_subscribed', 'Belum berlangganan?') %> <a href="/customer/register"
+          <p class="mb-3"><%= t('customer.not_subscribed', 'Belum berlangganan?') %> <a href="/customer/register"
               style="color: #6366f1; text-decoration: none; font-weight: 700;"><%= t('customer.register_new', 'Daftar Pemasangan Baru') %></a></p>
+          
+          <div class="d-flex flex-wrap justify-content-center gap-3 mb-3" style="font-size: 13px;">
+            <a href="/customer/about" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.about', 'Tentang Kami') %></a>
+            <a href="/customer/contact" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.contact', 'Kontak') %></a>
+            <a href="/customer/tos" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.tos', 'Syarat & Ketentuan') %></a>
+            <a href="/customer/privacy" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.privacy', 'Kebijakan Privasi') %></a>
+            <a href="/customer/tos#refund" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.refund', 'Kebijakan Refund') %></a>
+          </div>
+
           &copy; <%= new Date().getFullYear() %> <%= settings.company_header %>
         </div>
       </div>

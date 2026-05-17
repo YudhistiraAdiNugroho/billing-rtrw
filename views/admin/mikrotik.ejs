@@ -692,15 +692,19 @@
     const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
     const id = document.getElementById('secret_id').value;
-    const data = {
-      name: document.getElementById('s_name').value,
-      password: document.getElementById('s_password').value,
-      service: document.getElementById('s_service').value,
-      profile: document.getElementById('s_profile').value,
-      'local-address': document.getElementById('s_local').value,
-      'remote-address': document.getElementById('s_remote').value,
-      comment: document.getElementById('s_comment').value
-    };
+    const name = document.getElementById('s_name').value;
+    const password = document.getElementById('s_password').value;
+    const service = document.getElementById('s_service').value;
+    const profile = document.getElementById('s_profile').value;
+    const local = document.getElementById('s_local').value.trim();
+    const remote = document.getElementById('s_remote').value.trim();
+    const comment = document.getElementById('s_comment').value.trim();
+
+    const data = { name, password, service, profile };
+    if (local) data['local-address'] = local;
+    if (remote) data['remote-address'] = remote;
+    if (comment) data['comment'] = comment;
+
     const routerId = getRouterId();
     const url = id ? `/admin/api/mikrotik/secrets/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/secrets?routerId=${routerId}`;
     try {
@@ -753,15 +757,18 @@
     const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
     const id = document.getElementById('h_id').value;
-    const data = {
-      name: document.getElementById('h_name').value,
-      password: document.getElementById('h_password').value,
-      profile: document.getElementById('h_profile').value,
-      'limit-uptime': document.getElementById('h_uptime').value,
-      'mac-address': document.getElementById('h_mac').value,
-      comment: document.getElementById('h_comment').value,
-      server: 'all'
-    };
+    const name = document.getElementById('h_name').value;
+    const password = document.getElementById('h_password').value;
+    const profile = document.getElementById('h_profile').value;
+    const uptime = document.getElementById('h_uptime').value.trim();
+    const mac = document.getElementById('h_mac').value.trim();
+    const comment = document.getElementById('h_comment').value.trim();
+
+    const data = { name, password, profile, server: 'all' };
+    if (uptime) data['limit-uptime'] = uptime;
+    if (mac) data['mac-address'] = mac;
+    if (comment) data['comment'] = comment;
+
     const routerId = getRouterId();
     const url = id ? `/admin/api/mikrotik/hotspot-users/${id}/update?routerId=${routerId}` : `/admin/api/mikrotik/hotspot-users?routerId=${routerId}`;
     try {

@@ -1137,7 +1137,8 @@
       "about": "About",
       "tos": "Terms of Service",
       "privacy": "Privacy Policy",
-      "contact": "Contact"
+      "contact": "Contact",
+      "refund": "Refund Policy"
     },
     "payment": {
       "choose_title": "Choose Payment",
