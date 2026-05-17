@@ -15,6 +15,14 @@ try {
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+
+  // Menambahkan fungsi waktu lokal untuk SQLite
+  db.function('NOW_LOCAL', () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000; // offset dalam milidetik
+    const localTime = new Date(now.getTime() - offset);
+    return localTime.toISOString().slice(0, 19).replace('T', ' ');
+  });
 } catch (err) {
   console.error('[DB] Gagal membuka database:', err.message);
   process.exit(1);
@@ -29,7 +37,7 @@ db.exec(`
     speed_up INTEGER DEFAULT 0,
     description TEXT DEFAULT '',
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS customers (
@@ -44,7 +52,7 @@ db.exec(`
     status TEXT DEFAULT 'active',
     install_date DATE,
     notes TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS technicians (
@@ -55,7 +63,7 @@ db.exec(`
     phone TEXT DEFAULT '',
     area TEXT DEFAULT '',
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS cashiers (
@@ -65,7 +73,7 @@ db.exec(`
     name TEXT NOT NULL,
     phone TEXT DEFAULT '',
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS collectors (
@@ -75,7 +83,7 @@ db.exec(`
     name TEXT NOT NULL,
     phone TEXT DEFAULT '',
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS collector_payment_requests (
@@ -89,7 +97,7 @@ db.exec(`
     decided_by_role TEXT DEFAULT '', -- admin, cashier
     decided_by_name TEXT DEFAULT '',
     decided_note TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
     decided_at DATETIME
   );
 
@@ -103,7 +111,7 @@ db.exec(`
     paid_at DATETIME,
     paid_by_name TEXT DEFAULT '',
     notes TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS tickets (
@@ -118,8 +126,8 @@ db.exec(`
     photo_metadata TEXT DEFAULT '', -- JSON array of metadata (timestamp, gps, etc)
     customer_photos TEXT DEFAULT '', -- JSON array of customer uploaded photos
     customer_photo_metadata TEXT DEFAULT '', -- JSON array of customer photo metadata
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS routers (
@@ -131,7 +139,7 @@ db.exec(`
     password TEXT NOT NULL,
     description TEXT DEFAULT '',
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS olts (
@@ -143,7 +151,7 @@ db.exec(`
     brand TEXT DEFAULT 'zte', -- zte, huawei, vsol, hioso, hsqg, etc.
     description TEXT DEFAULT '',
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS odps (
@@ -155,7 +163,7 @@ db.exec(`
     lat TEXT,
     lng TEXT,
     description TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS voucher_batches (
@@ -171,8 +179,8 @@ db.exec(`
     code_length INTEGER NOT NULL DEFAULT 4,
     status TEXT DEFAULT 'creating',
     created_by TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS vouchers (
@@ -188,7 +196,7 @@ db.exec(`
     last_seen_comment TEXT DEFAULT '',
     last_seen_uptime TEXT DEFAULT '',
     last_seen_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
     UNIQUE(router_id, code)
   );
 
@@ -214,14 +222,14 @@ db.exec(`
     payment_reference TEXT DEFAULT '',
     payment_payload TEXT,
     payment_expires_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS agents (
@@ -233,7 +241,7 @@ db.exec(`
     balance INTEGER NOT NULL DEFAULT 0,
     billing_fee INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS agent_hotspot_prices (
@@ -245,7 +253,7 @@ db.exec(`
     buy_price INTEGER NOT NULL DEFAULT 0,
     sell_price INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
     UNIQUE(agent_id, router_id, profile_name)
   );
 
@@ -266,7 +274,7 @@ db.exec(`
     balance_before INTEGER NOT NULL DEFAULT 0,
     balance_after INTEGER NOT NULL DEFAULT 0,
     note TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS digiflazz_staff_transactions (
@@ -282,7 +290,7 @@ db.exec(`
     status TEXT DEFAULT '',
     message TEXT DEFAULT '',
     price INTEGER NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS webhook_payment_notifs (
@@ -293,7 +301,7 @@ db.exec(`
     parsed_ok INTEGER NOT NULL DEFAULT 0,
     ip TEXT DEFAULT '',
     user_agent TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE INDEX IF NOT EXISTS idx_voucher_batches_router ON voucher_batches(router_id);
@@ -421,9 +429,14 @@ try {
 try {
   db.exec("ALTER TABLE customers ADD COLUMN hotspot_profile TEXT DEFAULT ''");
 } catch (e) {}
-try {
-  db.exec("ALTER TABLE odps ADD COLUMN port_capacity INTEGER NOT NULL DEFAULT 16");
-} catch (e) { /* ignore if already exists */ }
+try { db.exec("ALTER TABLE odps ADD COLUMN port_capacity INTEGER NOT NULL DEFAULT 16"); } catch (e) { /* ignore if already exists */ }
+
+// Kolom untuk Tiket Bantuan (Foto & Catatan Teknisi)
+try { db.exec("ALTER TABLE tickets ADD COLUMN technician_notes TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE tickets ADD COLUMN photos TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE tickets ADD COLUMN photo_metadata TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE tickets ADD COLUMN customer_photos TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE tickets ADD COLUMN customer_photo_metadata TEXT DEFAULT ''"); } catch (e) {}
 
 // Kolom untuk Payment Gateway di tabel invoices
 try { db.exec("ALTER TABLE invoices ADD COLUMN payment_gateway TEXT"); } catch (e) {}
@@ -446,7 +459,7 @@ try { db.exec("ALTER TABLE olts ADD COLUMN api_base_url TEXT"); } catch (e) {}
 try { db.exec("ALTER TABLE olts ADD COLUMN telnet_port INTEGER DEFAULT 23"); } catch (e) {}
 try { db.exec("ALTER TABLE olts ADD COLUMN enable_password TEXT"); } catch (e) {}
 
-try { db.exec("ALTER TABLE voucher_batches ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+try { db.exec("ALTER TABLE voucher_batches ADD COLUMN updated_at DATETIME DEFAULT (NOW_LOCAL())"); } catch (e) {}
 try { db.exec("ALTER TABLE vouchers ADD COLUMN last_seen_comment TEXT DEFAULT ''"); } catch (e) {}
 try { db.exec("ALTER TABLE vouchers ADD COLUMN last_seen_uptime TEXT DEFAULT ''"); } catch (e) {}
 try { db.exec("ALTER TABLE vouchers ADD COLUMN last_seen_at DATETIME"); } catch (e) {}
@@ -496,7 +509,7 @@ db.exec(`
     bytes_out INTEGER DEFAULT 0,
     last_total_bytes_in INTEGER DEFAULT 0, -- Untuk menghitung delta
     last_total_bytes_out INTEGER DEFAULT 0,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT (NOW_LOCAL()),
     UNIQUE(customer_id, period_month, period_year)
   );
   CREATE INDEX IF NOT EXISTS idx_usage_customer ON customer_usage(customer_id);
@@ -512,7 +525,7 @@ db.exec(`
     price_modal INTEGER NOT NULL DEFAULT 0,
     price_sell INTEGER NOT NULL DEFAULT 0,
     status INTEGER NOT NULL DEFAULT 1,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE TABLE IF NOT EXISTS digiflazz_sync_logs (
@@ -522,7 +535,7 @@ db.exec(`
     updated INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 0,
     inactive INTEGER NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE INDEX IF NOT EXISTS idx_digiflazz_products_cat ON digiflazz_products(category);
@@ -541,7 +554,7 @@ db.exec(`
     matched_agent_tx_id INTEGER,
     ip TEXT DEFAULT '',
     payload TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE INDEX IF NOT EXISTS idx_digiflazz_webhook_created ON digiflazz_webhook_logs(created_at);
@@ -567,7 +580,7 @@ db.exec(`
     check_out_photo TEXT DEFAULT '', -- Path to check-out photo
     work_duration_minutes INTEGER DEFAULT 0,
     status TEXT DEFAULT 'checked_in', -- checked_in, checked_out
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
   CREATE INDEX IF NOT EXISTS idx_attendance_employee ON attendance(employee_type, employee_id);
@@ -590,7 +603,7 @@ const getAppSetting = (key, defaultValue = null) => {
 const saveAppSetting = (key, value) => {
   try {
     const jsonValue = JSON.stringify(value);
-    db.prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)').run(key, jsonValue);
+    db.prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, (NOW_LOCAL()))').run(key, jsonValue);
     return true;
   } catch (e) {
     console.error(`[DB] Error saving setting ${key}:`, e.message);
@@ -618,8 +631,8 @@ db.exec(`
     bonus_per_ticket INTEGER DEFAULT 0,
     commission_percentage REAL DEFAULT 0,
     working_days_per_month INTEGER DEFAULT 26,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL()),
     UNIQUE(employee_type, employee_id)
   );
 
@@ -656,7 +669,7 @@ db.exec(`
     approved_at DATETIME,
     paid_at DATETIME,
     notes TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
     UNIQUE(employee_type, employee_id, period_month, period_year)
   );
 

@@ -188,8 +188,8 @@ router.post('/tickets/:id/update', requireTechSession, upload.array('photos', 10
         originalName: f.originalname,
         size: f.size,
         uploadedAt: new Date().toISOString(),
-        lat: req.body[`photo_lat_${idx}`] || '',
-        lng: req.body[`photo_lng_${idx}`] || ''
+        lat: req.body.gps_lat || '',
+        lng: req.body.gps_lng || ''
       }));
     }
     

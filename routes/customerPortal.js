@@ -1565,8 +1565,8 @@ router.post('/tickets/create', uploadCustomer.array('photos', 5), async (req, re
         originalName: f.originalname,
         size: f.size,
         uploadedAt: new Date().toISOString(),
-        lat: req.body[`photo_lat_${idx}`] || '',
-        lng: req.body[`photo_lng_${idx}`] || ''
+        lat: req.body.gps_lat || '',
+        lng: req.body.gps_lng || ''
       }));
     }
     
