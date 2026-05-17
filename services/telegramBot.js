@@ -1,5 +1,5 @@
 const TelegramBot = require('node-telegram-bot-api');
-const { getSetting } = require('../config/settingsManager');
+const { getSetting, getNowLocal } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const customerSvc = require('./customerService');
 const billingSvc = require('./billingService');
@@ -166,7 +166,7 @@ function initTelegram() {
   };
 
   const buildOfflineTelegramText = (snapshot) => {
-    const now = new Date().toLocaleString('id-ID');
+    const now = getNowLocal();
     const offline = buildOfflineEntries(snapshot);
     const lines = [];
     lines.push('USER PPPoE OFFLINE');
@@ -217,7 +217,7 @@ function initTelegram() {
     const script = snapshot.scriptMap.get(target) || null;
     const offline = buildOfflineEntries(snapshot);
 
-    const date = new Date().toLocaleString('id-ID');
+    const date = getNowLocal();
     const online = !!activeRow;
     const lines = [];
     lines.push('DETAIL CEK PPPoE');

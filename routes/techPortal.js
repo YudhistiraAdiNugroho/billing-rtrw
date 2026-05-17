@@ -3,7 +3,7 @@ const router = express.Router();
 const techSvc = require('../services/techService');
 const customerSvc = require('../services/customerService');
 const odpSvc = require('../services/odpService');
-const { getSetting } = require('../config/settingsManager');
+const { getSetting, getNowLocal } = require('../config/settingsManager');
 const mikrotikService = require('../services/mikrotikService');
 const db = require('../config/database');
 const oltSvc = require('../services/oltService');
@@ -516,7 +516,7 @@ router.post('/api/device/:tag/ssid', requireTechSession, express.json(), async (
         if (cust && cust.phone) {
           const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
           if (whatsappStatus && whatsappStatus.connection === 'open') {
-            const now = new Date().toLocaleString('id-ID');
+            const now = getNowLocal();
             const msg = `\ud83d\udcf6 *PERUBAHAN SSID WIFI*\n\n` +
               `\ud83d\udc64 *Pelanggan:* ${cust.name}\n` +
               `\ud83d\udd52 *Waktu:* ${now}\n\n` +
@@ -548,7 +548,7 @@ router.post('/api/device/:tag/password', requireTechSession, express.json(), asy
         if (cust && cust.phone) {
           const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
           if (whatsappStatus && whatsappStatus.connection === 'open') {
-            const now = new Date().toLocaleString('id-ID');
+            const now = getNowLocal();
             const msg = `\ud83d\udd11 *PERUBAHAN PASSWORD WIFI*\n\n` +
               `\ud83d\udc64 *Pelanggan:* ${cust.name}\n` +
               `\ud83d\udd52 *Waktu:* ${now}\n\n` +

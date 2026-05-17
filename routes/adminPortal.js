@@ -3,7 +3,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { getSetting, getSettings, saveSettings } = require('../config/settingsManager');
+const { getSetting, getSettings, saveSettings, getNowLocal } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 const customerDevice = require('../services/customerDeviceService');
@@ -3174,7 +3174,7 @@ router.post('/api/device/:tag/ssid', requireAdmin, express.json(), async (req, r
       const tag = req.params.tag;
       const cust = customerSvc.findCustomerByAny(tag);
       if (cust && cust.phone) {
-        const now = new Date().toLocaleString('id-ID');
+        const now = getNowLocal();
         const msg = `📶 *PERUBAHAN SSID WIFI*\n\n` +
           `👤 *Pelanggan:* ${cust.name}\n` +
           `🕒 *Waktu:* ${now}\n\n` +
@@ -3199,7 +3199,7 @@ router.post('/api/device/:tag/password', requireAdmin, express.json(), async (re
       const tag = req.params.tag;
       const cust = customerSvc.findCustomerByAny(tag);
       if (cust && cust.phone) {
-        const now = new Date().toLocaleString('id-ID');
+        const now = getNowLocal();
         const msg = `🔑 *PERUBAHAN PASSWORD WIFI*\n\n` +
           `👤 *Pelanggan:* ${cust.name}\n` +
           `🕒 *Waktu:* ${now}\n\n` +
@@ -3232,7 +3232,7 @@ router.post('/api/bulk/ssid', requireAdmin, express.json(), async (req, res) => 
         try {
           const cust = customerSvc.findCustomerByAny(tag);
           if (cust && cust.phone) {
-            const now = new Date().toLocaleString('id-ID');
+            const now = getNowLocal();
             const msg = `📶 *PERUBAHAN SSID WIFI*\n\n` +
               `👤 *Pelanggan:* ${cust.name}\n` +
               `🕒 *Waktu:* ${now}\n\n` +

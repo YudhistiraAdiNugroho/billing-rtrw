@@ -7,7 +7,7 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaile
 
 const require = createRequire(import.meta.url);
 const { logger } = require('../config/logger.js');
-const { getSetting } = require('../config/settingsManager.js');
+const { getSetting, getNowLocal } = require('../config/settingsManager.js');
 const customerDevice = require('./customerDeviceService.js');
 const { WaLidStore } = require('./waLidStore.js');
 const billingSvc = require('./billingService.js');
@@ -1216,7 +1216,7 @@ export async function startWhatsAppBot() {
             if (ok) {
               await reply(`✅ SSID untuk *${targetTag}* berhasil diubah menjadi:\n\n📶 *${parsed.rest}*`);
               // Kirim notifikasi ke pelanggan
-              const now = new Date().toLocaleString('id-ID');
+              const now = getNowLocal();
               const cust = customerSvc.findCustomerByAny(targetTag);
               const custName = cust?.name ? `👤 *Pelanggan:* ${cust.name}\n` : '';
               const notifMsg =
@@ -1248,7 +1248,7 @@ export async function startWhatsAppBot() {
             if (ok) {
               await reply('✅ Password WiFi berhasil diubah.');
               // Kirim notifikasi ke pelanggan
-              const now = new Date().toLocaleString('id-ID');
+              const now = getNowLocal();
               const cust = customerSvc.findCustomerByAny(targetTag);
               const custName = cust?.name ? `👤 *Pelanggan:* ${cust.name}\n` : '';
               const notifMsg =
@@ -1336,7 +1336,7 @@ export async function startWhatsAppBot() {
             try {
               const cust = customerSvc.findCustomerByAny(ctx.billingKey || ctx.deviceKey);
               if (cust && cust.phone) {
-                const now = new Date().toLocaleString('id-ID');
+                const now = getNowLocal();
                 const notifMsg =
                   `📶 *PERUBAHAN SSID WIFI*\n\n` +
                   `👤 *Pelanggan:* ${cust.name}\n` +
@@ -1366,7 +1366,7 @@ export async function startWhatsAppBot() {
             try {
               const cust = customerSvc.findCustomerByAny(ctx.billingKey || ctx.deviceKey);
               if (cust && cust.phone) {
-                const now = new Date().toLocaleString('id-ID');
+                const now = getNowLocal();
                 const notifMsg =
                   `🔑 *PERUBAHAN PASSWORD WIFI*\n\n` +
                   `👤 *Pelanggan:* ${cust.name}\n` +

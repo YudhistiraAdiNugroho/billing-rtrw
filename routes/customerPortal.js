@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const customerDevice = require('../services/customerDeviceService');
-const { getSettingsWithCache } = require('../config/settingsManager');
+const { getSettingsWithCache, getNowLocal } = require('../config/settingsManager');
 const billingSvc = require('../services/billingService');
 const paymentSvc = require('../services/paymentService');
 const customerSvc = require('../services/customerService');
@@ -1274,7 +1274,7 @@ router.post('/change-ssid', async (req, res) => {
         if (profile && profile.phone) {
           const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
           if (whatsappStatus && whatsappStatus.connection === 'open') {
-            const now = new Date().toLocaleString('id-ID');
+            const now = getNowLocal();
             const msg = `\ud83d\udcf6 *PERUBAHAN SSID WIFI*\n\n` +
               `\ud83d\udc64 *Pelanggan:* ${profile.name}\n` +
               `\ud83d\udd52 *Waktu:* ${now}\n\n` +
@@ -1311,7 +1311,7 @@ router.post('/change-password', async (req, res) => {
         if (profile && profile.phone) {
           const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
           if (whatsappStatus && whatsappStatus.connection === 'open') {
-            const now = new Date().toLocaleString('id-ID');
+            const now = getNowLocal();
             const msg = `\ud83d\udd11 *PERUBAHAN PASSWORD WIFI*\n\n` +
               `\ud83d\udc64 *Pelanggan:* ${profile.name}\n` +
               `\ud83d\udd52 *Waktu:* ${now}\n\n` +
