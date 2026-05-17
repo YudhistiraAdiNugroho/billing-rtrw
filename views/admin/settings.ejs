@@ -185,6 +185,14 @@
               <input class="fc" type="number" name="server_port" value="<%= settings.server_port || 3001 %>">
             </div>
             <div class="fg">
+              <label class="fl"><%= t('admin.settings.timezone', 'Zona Waktu') %></label>
+              <select class="fs" name="timezone">
+                <option value="Asia/Jakarta" <%= settings.timezone === 'Asia/Jakarta' ? 'selected' : '' %>>WIB (Asia/Jakarta)</option>
+                <option value="Asia/Makassar" <%= settings.timezone === 'Asia/Makassar' ? 'selected' : '' %>>WITA (Asia/Makassar)</option>
+                <option value="Asia/Jayapura" <%= settings.timezone === 'Asia/Jayapura' ? 'selected' : '' %>>WIT (Asia/Jayapura)</option>
+              </select>
+            </div>
+            <div class="fg">
               <label class="fl"><%= t('admin.settings.customer_otp_login', 'Login OTP Pelanggan') %></label>
               <select class="fs" name="login_otp_enabled">
                 <option value="true" <%= settings.login_otp_enabled ? 'selected' : '' %>><%= t('admin.settings.otp_enabled', 'Aktif (Kirim via WA)') %></option>
