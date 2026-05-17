@@ -398,6 +398,59 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_inventory_logs_created ON inventory_logs(created_at);
 `);
 
+/**
+ * Memastikan menu-menu utama (WA, Settings, dll) selalu terbuka (Visible)
+ * meskipun setelah update dari GitHub yang mungkin mengunci menu tersebut secara default.
+ */
+function forceUnlockCoreMenus() {
+  try {
+    const SETTINGS_KEY = 'sidebar_menu_states';
+    const KEYS_KEY = 'sidebar_activation_keys';
+    
+    // Ambil status menu saat ini dari DB
+    const rowStates = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(SETTINGS_KEY);
+    const rowKeys = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(KEYS_KEY);
+    
+    let states = rowStates ? JSON.parse(rowStates.value) : {};
+    let keys = rowKeys ? JSON.parse(rowKeys.value) : {};
+    
+    const coreMenus = ['mikrotik', 'whatsapp', 'broadcast', 'digiflazz', 'update', 'settings', 'backup', 'monitoring', 'audit_logs'];
+    const passwordHash = '45d841d9f79ebadb8db21b0068b6b6d10a49ff66865e9fbf88267cceccd3c784'; // Hash dari 'donasidulu'
+    
+    const crypto = require('crypto');
+    function sha256(input) {
+      return crypto.createHash('sha256').update(String(input || '')).digest('hex');
+    }
+
+    let changed = false;
+    for (const menu of coreMenus) {
+      // Paksa status jadi visible
+      if (states[menu] !== 'visible') {
+        states[menu] = 'visible';
+        changed = true;
+      }
+      // Pastikan ada kunci aktivasi yang valid agar kode lama tetap membukanya
+      const validKey = sha256(menu + passwordHash);
+      if (keys[menu] !== validKey) {
+        keys[menu] = validKey;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      const now = new Date().toISOString();
+      db.prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)').run(SETTINGS_KEY, JSON.stringify(states), now);
+      db.prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)').run(KEYS_KEY, JSON.stringify(keys), now);
+      console.log('[DB] Core menus have been force-unlocked.');
+    }
+  } catch (e) {
+    console.error('[DB] Gagal force unlock core menus:', e.message);
+  }
+}
+
+// Jalankan force unlock setiap kali database diinisialisasi
+forceUnlockCoreMenus();
+
 // Tambahkan kolom baru jika belum ada
 try {
   db.exec("ALTER TABLE customers ADD COLUMN auto_isolate INTEGER DEFAULT 1");
@@ -629,10 +682,6 @@ const saveAppSetting = (key, value) => {
   }
 };
 
-module.exports = db;
-module.exports.getAppSetting = getAppSetting;
-module.exports.saveAppSetting = saveAppSetting;
-
 // ─── PAYROLL / GAJI KARYAWAN ─────────────────────────────────────────────────
 db.exec(`
   CREATE TABLE IF NOT EXISTS payroll_settings (
@@ -696,3 +745,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_payroll_slips_period ON payroll_slips(period_month, period_year);
   CREATE INDEX IF NOT EXISTS idx_payroll_slips_status ON payroll_slips(status);
 `);
+
+module.exports = db;
+module.exports.getAppSetting = getAppSetting;
+module.exports.saveAppSetting = saveAppSetting;
