@@ -224,74 +224,21 @@
               <form id="payForm" method="POST" action="/customer/public/payment/create/0" class="d-grid gap-2">
                 <input type="hidden" name="token" id="pay_token" value="">
 
-                <% if (paymentChannels && paymentChannels.length > 0) { %>
-                  <div class="payment-methods-grid pay-scroll">
-                    <%
-                      const sortedChannels = [...paymentChannels].sort((a, b) => {
-                        const priority = { 'E-Wallet': 1, 'QRIS': 2, 'Virtual Account': 3, 'Convenience Store': 4 };
-                        const prioA = priority[a.group] || 99;
-                        const prioB = priority[b.group] || 99;
-                        return prioA - prioB;
-                      });
-                      const activeChannels = sortedChannels.filter(c => c.active);
-                      activeChannels.forEach((channel, idx) => {
-                        const code = String(channel.code || '').toUpperCase();
-                        const iconUrl = channel.icon_url || channel.iconUrl || '';
-                        const brandMap = {
-                          DANA: { label: 'DANA', cls: 'pb-dana' },
-                          OVO: { label: 'OVO', cls: 'pb-ovo' },
-                          SHOPEEPAY: { label: 'SP', cls: 'pb-shopeepay' },
-                          LINKAJA: { label: 'LA', cls: 'pb-linkaja' },
-                          GOPAY: { label: 'GoPay', cls: 'pb-gopay' }
-                        };
-                        let brand = null;
-                        for (const k of Object.keys(brandMap)) { if (code.includes(k)) { brand = brandMap[k]; break; } }
-                        const bankMap = { BCAVA: 'BCA', BNIVA: 'BNI', BRIVA: 'BRI', MANDIRIVA: 'Mandiri', PERMATAVA: 'Permata', CIMBVA: 'CIMB', DANAMONVA: 'Danamon' };
-                        if (!brand && bankMap[code]) brand = { label: bankMap[code], cls: 'pb-bank' };
-                        const nameMap = { BCAVA: 'BCA VA', BNIVA: 'BNI VA', BRIVA: 'BRI VA', MANDIRIVA: 'Mandiri VA', PERMATAVA: 'Permata VA', CIMBVA: 'CIMB VA', DANAMONVA: 'Danamon VA', QRIS: 'QRIS' };
-                        let shortName = nameMap[code] || String(channel.name || '').trim();
-                        shortName = shortName.replace(/virtual account/ig, 'VA').replace(/^bank\s+/ig, '').replace(/\s+/g, ' ').trim();
-                        if (code !== 'QRIS' && code.includes('QRIS') && brand) shortName = `QRIS ${brand.label}`;
-                        const group = String(channel.group || '');
-                        const groupIcon = group === 'Virtual Account' ? 'bi-bank2' : group === 'E-Wallet' ? 'bi-wallet2' : group === 'Convenience Store' ? 'bi-shop' : 'bi-qr-code-scan';
-                        const shortGroup = group === 'Virtual Account' ? 'VA' : group === 'E-Wallet' ? 'E-Wallet' : group === 'Convenience Store' ? 'CS' : group === 'QRIS' ? 'QRIS' : group;
-                        const radioId = `pm_${idx}_${code}`;
-                    %>
-                      <input class="pm-radio" type="radio" id="<%= radioId %>" name="method" value="<%= channel.code %>" <%= (code === 'QRIS' || idx === 0) ? 'checked' : '' %> <%= idx === 0 ? 'required' : '' %>>
-                      <label class="pay-method-item" for="<%= radioId %>">
-                        <div class="p-icon">
-                          <% if (iconUrl) { %>
-                            <img class="p-logo" src="<%= iconUrl %>" alt="<%= channel.name %>" loading="lazy" referrerpolicy="no-referrer">
-                          <% } else if (brand) { %>
-                            <span class="p-badge <%= brand.cls %>"><%= brand.label %></span>
-                          <% } else { %>
-                            <i class="bi <%= groupIcon %>"></i>
-                          <% } %>
-                        </div>
-                        <div class="p-info">
-                          <span class="p-name"><%= shortName %></span>
-                          <span class="p-sub"><%= shortGroup %></span>
-                        </div>
-                      </label>
-                    <% }) %>
-                  </div>
-                <% } else { %>
-                  <input type="hidden" name="method" value="QRIS">
-                  <div class="payment-methods-grid">
-                    <div class="pay-method-item" style="cursor: default">
-                      <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
-                      <div class="p-info">
-                        <span class="p-name">QRIS / E-Wallet</span>
-                        <span class="p-sub">
-                          <span class="p-chip">DANA</span>
-                          <span class="p-chip">OVO</span>
-                          <span class="p-chip">ShopeePay</span>
-                          <span class="p-chip">LinkAja</span>
-                        </span>
-                      </div>
+                <input type="hidden" name="method" value="QRIS">
+                <div class="payment-methods-grid">
+                  <div class="pay-method-item" style="cursor: default">
+                    <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
+                    <div class="p-info">
+                      <span class="p-name">QRIS / E-Wallet</span>
+                      <span class="p-sub">
+                        <span class="p-chip">DANA</span>
+                        <span class="p-chip">OVO</span>
+                        <span class="p-chip">ShopeePay</span>
+                        <span class="p-chip">LinkAja</span>
+                      </span>
                     </div>
                   </div>
-                <% } %>
+                </div>
 
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" value="1" id="tos_pay" name="tos" required>
