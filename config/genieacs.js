@@ -1,19 +1,103 @@
 const axios = require('axios');
 require('dotenv').config();
 const { logger } = require('./logger');
+const db = require('./database');
+const { getSetting } = require('./settingsManager');
 // const { sendTechnicianMessage } = require('./sendMessage');
 // const mikrotik = require('./mikrotik');
 // const { getMikrotikConnection } = require('./mikrotik');
 
-// Konfigurasi GenieACS API
+// Konfigurasi GenieACS API (Legacy - untuk backward compatibility)
 const GENIEACS_URL = process.env.GENIEACS_URL || 'http://localhost:7557';
 const GENIEACS_USERNAME = process.env.GENIEACS_USERNAME;
 const GENIEACS_PASSWORD = process.env.GENIEACS_PASSWORD;
 
-// Buat instance axios dengan konfigurasi default
+// Helper: Get all ACS servers from database
+function getAllACSServers() {
+    try {
+        const legacyUrl = getSetting('genieacs_url', GENIEACS_URL);
+        const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
+        const legacyPass = getSetting('genieacs_password', GENIEACS_PASSWORD);
+        
+        const servers = [];
+        
+        // Add legacy server if configured
+        if (legacyUrl) {
+            servers.push({
+                id: 'legacy',
+                name: 'Default ACS',
+                url: legacyUrl,
+                username: legacyUser,
+                password: legacyPass,
+                status: 'active'
+            });
+        }
+        
+        // Add servers from database
+        const dbServers = db.prepare('SELECT * FROM genieacs_servers WHERE status = ?').all('active');
+        servers.push(...dbServers);
+        
+        return servers;
+    } catch (error) {
+        logger.error(`[GenieACS] Error getting ACS servers: ${error.message}`);
+        return [];
+    }
+}
+
+// Helper: Get specific ACS server by ID
+function getACSServer(serverId) {
+    if (serverId === 'legacy') {
+        const legacyUrl = getSetting('genieacs_url', GENIEACS_URL);
+        const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
+        const legacyPass = getSetting('genieacs_password', GENIEACS_PASSWORD);
+        
+        if (legacyUrl) {
+            return {
+                id: 'legacy',
+                name: 'Default ACS',
+                url: legacyUrl,
+                username: legacyUser,
+                password: legacyPass,
+                status: 'active'
+            };
+        }
+        return null;
+    }
+    
+    try {
+        const server = db.prepare('SELECT * FROM genieacs_servers WHERE id = ?').get(serverId);
+        return server || null;
+    } catch (error) {
+        logger.error(`[GenieACS] Error getting ACS server ${serverId}: ${error.message}`);
+        return null;
+    }
+}
+
+// Helper: Create axios instance for specific server
+function createAxiosInstance(server) {
+    const config = {
+        baseURL: server.url.endsWith('/') ? server.url.slice(0, -1) : server.url,
+        timeout: 30000,
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+    };
+    
+    if (server.username && server.password) {
+        config.auth = {
+            username: server.username,
+            password: server.password
+        };
+    }
+    
+    return axios.create(config);
+}
+
+// Legacy axios instance (untuk backward compatibility)
 const axiosInstance = axios.create({
     baseURL: GENIEACS_URL,
-    timeout: 30000, // 30 detik timeout (default 0 = no timeout)
+    timeout: 30000,
     auth: {
         username: GENIEACS_USERNAME,
         password: GENIEACS_PASSWORD
@@ -26,67 +110,131 @@ const axiosInstance = axios.create({
 
 // GenieACS API wrapper
 const genieacsApi = {
-    async getDevices() {
+    // Get devices from all servers or specific server
+    async getDevices(serverId = null) {
         try {
             logger.debug('[GenieACS] Getting all devices...');
-            const response = await axiosInstance.get('/devices', {
-                timeout: 45000 // 45 detik untuk query devices (bisa banyak)
-            });
-            logger.debug(`[GenieACS] Found ${response.data?.length || 0} devices`);
-            return response.data;
-        } catch (error) {
-            if (error.code === 'ECONNABORTED') {
-                logger.error('[GenieACS] Timeout getting devices - consider reducing query frequency');
-            } else {
-                logger.error(`[GenieACS] Error getting devices: ${error.response?.data ? JSON.stringify(error.response.data) : error.message}`);
-            }
-            throw error;
-        }
-    },
-
-    async findDeviceByPhoneNumber(phoneNumber) {
-        try {
-            // Mencari device berdasarkan tag yang berisi nomor telepon
-            const response = await axiosInstance.get('/devices', {
-                params: {
-                    'query': JSON.stringify({
-                        '_tags': phoneNumber
-                    })
+            
+            const servers = serverId ? [getACSServer(serverId)].filter(Boolean) : getAllACSServers();
+            const allDevices = [];
+            
+            for (const server of servers) {
+                try {
+                    const instance = createAxiosInstance(server);
+                    const response = await instance.get('/devices', {
+                        timeout: 45000
+                    });
+                    
+                    const devices = response.data || [];
+                    // Add server info to each device
+                    devices.forEach(device => {
+                        device._acs_server_id = server.id;
+                        device._acs_server_name = server.name;
+                    });
+                    
+                    allDevices.push(...devices);
+                    logger.debug(`[GenieACS] Found ${devices.length} devices from ${server.name}`);
+                } catch (error) {
+                    logger.error(`[GenieACS] Error getting devices from ${server.name}: ${error.message}`);
                 }
-            });
-
-            if (!response.data || response.data.length === 0) {
-                throw new Error(`No device found with phone number: ${phoneNumber}`);
             }
-
-            return response.data[0]; // Mengembalikan device pertama yang ditemukan
+            
+            logger.debug(`[GenieACS] Total devices found: ${allDevices.length}`);
+            return allDevices;
         } catch (error) {
-            logger.error(`[GenieACS] Error finding device with phone number ${phoneNumber}: ${error.response?.data ? JSON.stringify(error.response.data) : error.message}`);
+            logger.error(`[GenieACS] Error getting devices: ${error.message}`);
             throw error;
         }
     },
 
-    async getDeviceByPhoneNumber(phoneNumber) {
+    // Find device by phone number across all servers (returns full device data)
+    async findDeviceByPhoneNumber(phoneNumber, serverId = null) {
         try {
-            const device = await this.findDeviceByPhoneNumber(phoneNumber);
-            return await this.getDevice(device._id);
+            logger.debug(`[GenieACS] Finding device with phone number: ${phoneNumber}`);
+            
+            const servers = serverId ? [getACSServer(serverId)].filter(Boolean) : getAllACSServers();
+            
+            for (const server of servers) {
+                try {
+                    const instance = createAxiosInstance(server);
+                    // Don't use projection - get full device data
+                    const response = await instance.get('/devices', {
+                        params: {
+                            'query': JSON.stringify({
+                                '_tags': phoneNumber
+                            })
+                        },
+                        timeout: 15000 // Increase timeout for full data
+                    });
+
+                    if (response.data && response.data.length > 0) {
+                        const device = response.data[0];
+                        device._acs_server_id = server.id;
+                        device._acs_server_name = server.name;
+                        logger.debug(`[GenieACS] Device found on ${server.name} with full data`);
+                        return device;
+                    }
+                } catch (error) {
+                    logger.debug(`[GenieACS] Device not found on ${server.name}: ${error.message}`);
+                }
+            }
+            
+            throw new Error(`No device found with phone number: ${phoneNumber}`);
+        } catch (error) {
+            logger.error(`[GenieACS] Error finding device with phone number ${phoneNumber}: ${error.message}`);
+            throw error;
+        }
+    },
+
+    async getDeviceByPhoneNumber(phoneNumber, serverId = null) {
+        try {
+            // findDeviceByPhoneNumber already returns full device data
+            return await this.findDeviceByPhoneNumber(phoneNumber, serverId);
         } catch (error) {
             logger.error(`[GenieACS] Error getting device by phone number ${phoneNumber}: ${error.message}`);
             throw error;
         }
     },
 
-    async getDevice(deviceId) {
+    async getDevice(deviceId, serverId = null) {
         try {
-            const response = await axiosInstance.get(`/devices/${encodeURIComponent(deviceId)}`);
-            return response.data;
+            // If serverId provided, use that server
+            if (serverId) {
+                const server = getACSServer(serverId);
+                if (!server) {
+                    throw new Error(`ACS Server ${serverId} not found`);
+                }
+                const instance = createAxiosInstance(server);
+                const response = await instance.get(`/devices/${encodeURIComponent(deviceId)}`);
+                const device = response.data;
+                device._acs_server_id = server.id;
+                device._acs_server_name = server.name;
+                return device;
+            }
+            
+            // Otherwise, search all servers
+            const servers = getAllACSServers();
+            for (const server of servers) {
+                try {
+                    const instance = createAxiosInstance(server);
+                    const response = await instance.get(`/devices/${encodeURIComponent(deviceId)}`);
+                    const device = response.data;
+                    device._acs_server_id = server.id;
+                    device._acs_server_name = server.name;
+                    return device;
+                } catch (error) {
+                    // Continue to next server
+                }
+            }
+            
+            throw new Error(`Device ${deviceId} not found on any server`);
         } catch (error) {
-            logger.error(`[GenieACS] Error getting device ${deviceId}: ${error.response?.data ? JSON.stringify(error.response.data) : error.message}`);
+            logger.error(`[GenieACS] Error getting device ${deviceId}: ${error.message}`);
             throw error;
         }
     },
 
-    async setParameterValues(deviceId, parameters) {
+    async setParameterValues(deviceId, parameters, serverId = null) {
         try {
             logger.debug(`[GenieACS] Setting parameters for device: ${deviceId}`);
 
@@ -116,13 +264,17 @@ const genieacsApi = {
 
             logger.debug(`[GenieACS] Formatted parameter values count: ${parameterValues.length}`);
 
+            // Get server instance
+            const server = serverId ? getACSServer(serverId) : null;
+            const instance = server ? createAxiosInstance(server) : axiosInstance;
+
             // Kirim task ke GenieACS
             const task = {
                 name: "setParameterValues",
                 parameterValues: parameterValues
             };
 
-            const response = await axiosInstance.post(
+            const response = await instance.post(
                 `/devices/${encodeURIComponent(deviceId)}/tasks`,
                 task
             );
@@ -135,7 +287,7 @@ const genieacsApi = {
                 objectName: "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1"
             };
 
-            const refreshResponse = await axiosInstance.post(
+            const refreshResponse = await instance.post(
                 `/devices/${encodeURIComponent(deviceId)}/tasks`,
                 refreshTask
             );
@@ -149,13 +301,16 @@ const genieacsApi = {
         }
     },
 
-    async reboot(deviceId) {
+    async reboot(deviceId, serverId = null) {
         try {
+            const server = serverId ? getACSServer(serverId) : null;
+            const instance = server ? createAxiosInstance(server) : axiosInstance;
+            
             const task = {
                 name: "reboot",
                 timestamp: new Date().toISOString()
             };
-            const response = await axiosInstance.post(
+            const response = await instance.post(
                 `/devices/${encodeURIComponent(deviceId)}/tasks`,
                 task
             );
@@ -166,13 +321,16 @@ const genieacsApi = {
         }
     },
 
-    async factoryReset(deviceId) {
+    async factoryReset(deviceId, serverId = null) {
         try {
+            const server = serverId ? getACSServer(serverId) : null;
+            const instance = server ? createAxiosInstance(server) : axiosInstance;
+            
             const task = {
                 name: "factoryReset",
                 timestamp: new Date().toISOString()
             };
-            const response = await axiosInstance.post(
+            const response = await instance.post(
                 `/devices/${encodeURIComponent(deviceId)}/tasks`,
                 task
             );
@@ -631,7 +789,14 @@ function scheduleMonitoring() {
 scheduleMonitoring();
 
 module.exports = {
+    // Multi-server helpers
+    getAllACSServers,
+    getACSServer,
+    createAxiosInstance,
+    
+    // GenieACS API methods (now support multi-server)
     getDevices: genieacsApi.getDevices,
+    getDevice: genieacsApi.getDevice,
     getDeviceInfo: genieacsApi.getDeviceInfo,
     findDeviceByPhoneNumber: genieacsApi.findDeviceByPhoneNumber,
     getDeviceByPhoneNumber: genieacsApi.getDeviceByPhoneNumber,
@@ -639,6 +804,8 @@ module.exports = {
     reboot: genieacsApi.reboot,
     factoryReset: genieacsApi.factoryReset,
     getVirtualParameters: genieacsApi.getVirtualParameters,
+    
+    // Monitoring functions (automatically support multi-server)
     monitorRXPower,
     monitorOfflineDevices
 };

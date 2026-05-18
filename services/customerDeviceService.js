@@ -1,39 +1,66 @@
 /**
  * Logika GenieACS yang dipakai portal web dan bot WhatsApp.
+ * Updated to support multi-server GenieACS setup.
  */
 const axios = require('axios');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const auditTrail = require('./auditTrailService');
 const { logger } = require('../config/logger');
+const genieacsApi = require('../config/genieacs');
+
+// Helper: Search device across all servers (always get full data)
+async function searchDeviceAcrossServers(query, fullData = true) {
+  try {
+    const servers = genieacsApi.getAllACSServers();
+    
+    for (const server of servers) {
+      try {
+        const instance = genieacsApi.createAxiosInstance(server);
+        const params = {
+          query: JSON.stringify(query)
+        };
+        
+        // Only add projection if explicitly requesting minimal data
+        if (!fullData) {
+          params.projection = '_id,_tags';
+        }
+        
+        const response = await instance.get('/devices', {
+          params,
+          timeout: 15000 // Increase timeout for full data
+        });
+        
+        if (response.data && response.data.length > 0) {
+          const device = response.data[0];
+          device._acs_server_id = server.id;
+          device._acs_server_name = server.name;
+          logger.debug(`[CustomerDevice] Device found on ${server.name}`);
+          return device;
+        }
+      } catch (error) {
+        logger.debug(`[CustomerDevice] Device not found on ${server.name}: ${error.message}`);
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    logger.error(`[CustomerDevice] Error searching device: ${error.message}`);
+    return null;
+  }
+}
 
 async function findDeviceByTag(tag) {
-  const settings = getSettingsWithCache();
-  const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-  const username = settings.genieacs_username || '';
-  const password = settings.genieacs_password || '';
   try {
-    const response = await axios.get(`${genieacsUrl}/devices`, {
-      params: {
-        query: JSON.stringify({ $or: [{ _id: tag }, { _tags: tag }] }),
-        projection: '_id,_tags'
-      },
-      auth: { username, password },
-      timeout: 10000
-    });
-    if (response.data && response.data.length > 0) {
-      return response.data[0];
-    }
-    return null;
+    const query = { $or: [{ _id: tag }, { _tags: tag }] };
+    // Get full data by default
+    return await searchDeviceAcrossServers(query, true);
   } catch (e) {
+    logger.error(`[CustomerDevice] Error finding device by tag: ${e.message}`);
     return null;
   }
 }
 
 async function findDeviceByPppoe(pppoeUser) {
-  const settings = getSettingsWithCache();
-  const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-  const username = settings.genieacs_username || '';
-  const password = settings.genieacs_password || '';
   try {
     const query = {
       $or: [
@@ -45,39 +72,21 @@ async function findDeviceByPppoe(pppoeUser) {
         { "Device.PPP.Interface.1.Username._value": pppoeUser }
       ]
     };
-    const response = await axios.get(`${genieacsUrl}/devices`, {
-      params: {
-        query: JSON.stringify(query),
-        projection: '_id,_tags'
-      },
-      auth: { username, password },
-      timeout: 10000
-    });
-    if (response.data && response.data.length > 0) {
-      return response.data[0];
-    }
-    return null;
+    // Get full data by default
+    return await searchDeviceAcrossServers(query, true);
   } catch (e) {
+    logger.error(`[CustomerDevice] Error finding device by PPPoE: ${e.message}`);
     return null;
   }
 }
 
 async function fetchFullDevice(tag) {
-  const settings = getSettingsWithCache();
-  const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-  const username = settings.genieacs_username || '';
-  const password = settings.genieacs_password || '';
   try {
-    const response = await axios.get(`${genieacsUrl}/devices`, {
-      params: { query: JSON.stringify({ $or: [{ _id: tag }, { _tags: tag }] }) },
-      auth: { username, password },
-      timeout: 15000
-    });
-    if (response.data && response.data.length > 0) {
-      return response.data[0];
-    }
-    return null;
+    const query = { $or: [{ _id: tag }, { _tags: tag }] };
+    // Always get full data
+    return await searchDeviceAcrossServers(query, true);
   } catch (e) {
+    logger.error(`[CustomerDevice] Error fetching full device: ${e.message}`);
     return null;
   }
 }

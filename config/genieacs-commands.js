@@ -244,10 +244,10 @@ async function handleChangeWifiSSID(remoteJid, senderNumber, newSSID) {
             text: formatResponse(`Sedang mengubah SSID perangkat ke "${newSSID}"...`)
         });
         
-        // Set SSID parameter value
+        // Set SSID parameter value (pass server ID from device)
         await genieacsApi.setParameterValues(device._id, {
             'SSID': newSSID
-        });
+        }, device._acs_server_id);
         
         // Send success message
         await sock.sendMessage(remoteJid, { 
@@ -292,10 +292,10 @@ async function handleChangeWifiPassword(remoteJid, senderNumber, newPassword) {
             text: formatResponse('Sedang mengubah password WiFi...')
         });
         
-        // Set password parameter value
+        // Set password parameter value (pass server ID from device)
         await genieacsApi.setParameterValues(device._id, {
             'KeyPassphrase': newPassword
-        });
+        }, device._acs_server_id);
         
         // Send success message
         await sock.sendMessage(remoteJid, { 
@@ -437,8 +437,9 @@ async function handleRestartConfirmation(remoteJid, senderNumber, confirmed) {
                 text: formatResponse('Sedang merestart perangkat...')
             });
             
-            // Restart device
-            await genieacsApi.reboot(deviceId);
+            // Restart device (pass server ID from pending restart)
+            const device = await genieacsApi.getDevice(deviceId);
+            await genieacsApi.reboot(deviceId, device._acs_server_id);
             
             // Send success message
             await sock.sendMessage(remoteJid, { 
@@ -583,8 +584,9 @@ async function handleFactoryResetConfirmation(remoteJid, senderNumber) {
             text: formatResponse(`🔄 Melakukan factory reset perangkat...\nMohon tunggu beberapa menit.`)
         });
 
-        // Factory reset device
-        await genieacsApi.factoryReset(deviceId);
+        // Factory reset device (pass server ID)
+        const device = await genieacsApi.getDevice(deviceId);
+        await genieacsApi.factoryReset(deviceId, device._acs_server_id);
 
         // Send success message
         await sock.sendMessage(remoteJid, {
@@ -789,8 +791,8 @@ async function handleAdminRestartDevice(remoteJid, phoneNumber) {
             text: formatResponse(`🔄 Melakukan restart perangkat pelanggan ${phoneNumber}...\nMohon tunggu beberapa menit.`)
         });
 
-        // Restart device
-        await genieacsApi.reboot(device._id);
+        // Restart device (pass server ID from device)
+        await genieacsApi.reboot(device._id, device._acs_server_id);
 
         // Send success message
         await sock.sendMessage(remoteJid, {
