@@ -286,12 +286,12 @@
 
 <!-- ── MODAL DETAIL DEVICE ── -->
 <div class="mo" id="deviceModal">
-  <div class="mb" style="max-width:680px">
+  <div class="mb" style="max-width:920px">
     <div class="mh">
       <span class="mt"><i class="bi bi-router"></i> <%= t('admin.dashboard.device_detail', 'Detail Perangkat') %></span>
       <button class="mc" onclick="closeModal('deviceModal')">&times;</button>
     </div>
-    <div class="mbody" id="device-detail"><div class="text-muted text-center" style="padding:20px"><%= t('common.loading_short', 'Memuat...') %></div></div>
+    <div class="mbody" id="device-detail" style="max-height:72vh;overflow:auto"><div class="text-muted text-center" style="padding:20px"><%= t('common.loading_short', 'Memuat...') %></div></div>
     <div class="mf"><button class="btn btn-g" onclick="closeModal('deviceModal')"><%= t('common.close', 'Tutup') %></button></div>
   </div>
 </div>
@@ -621,36 +621,66 @@ async function showDetail(tag) {
   try {
     const res = await fetch('/admin/api/device/' + encodeURIComponent(tag));
     const d   = await res.json();
-    const isOn = d.status === 'Online';
+    const isOn = String(d.status || '').toLowerCase() === 'online';
+    const lastInformText = d.lastInform ? new Date(d.lastInform).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '-';
+    const connected = Array.isArray(d.connectedUsers) ? d.connectedUsers : [];
     document.getElementById('device-detail').innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-        <div>
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            ${row("<%= t('admin.dashboard.detail.tag', 'Tag') %>",d.phone)}${row("<%= t('admin.dashboard.detail.status', 'Status') %>",`<span class="badge ${isOn?'bs':'bd'}">${d.status}</span>`)}
-            ${row("<%= t('admin.dashboard.detail.ssid', 'SSID') %>",d.ssid||'-')}${row("<%= t('admin.dashboard.detail.serial', 'Serial') %>",`<code style="color:var(--info)">${d.serialNumber}</code>`)}
-            ${row("<%= t('admin.dashboard.detail.model', 'Model') %>",d.model||'-')}${row("<%= t('admin.dashboard.detail.software', 'SW Version') %>",d.softwareVersion||'-')}
-          </table>
+      <div style="padding:14px 16px;border-radius:12px;margin-bottom:16px;font-weight:700;border:1px solid var(--border);background:${isOn ? 'rgba(16,185,129,.10)' : 'rgba(239,68,68,.10)'};color:${isOn ? 'var(--success)' : 'var(--danger)'}">
+        <i class="bi bi-circle-fill" style="font-size:10px"></i>
+        ${isOn ? I18N.online : I18N.offline}
+        <span style="color:var(--muted);font-weight:600">— <%= t('admin.dashboard.detail.last_inform', 'Last Inform') %>: ${lastInformText}</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;color:var(--muted)"><i class="bi bi-info-circle"></i> Device Info</div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px;border-bottom:1px solid rgba(51,65,85,.10)"><span style="color:var(--muted)">Tag</span><span style="font-weight:800">${d.phone || '-'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px;border-bottom:1px solid rgba(51,65,85,.10)"><span style="color:var(--muted)">Model</span><span>${d.model || '-'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px;border-bottom:1px solid rgba(51,65,85,.10)"><span style="color:var(--muted)">Serial</span><code style="color:var(--info)">${d.serialNumber || '-'}</code></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px"><span style="color:var(--muted)">SW Version</span><span>${d.softwareVersion || '-'}</span></div>
         </div>
-        <div>
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            ${row("<%= t('admin.dashboard.detail.pppoe_user', 'PPPoE User') %>",d.pppoeUsername||'-')}${row("<%= t('admin.dashboard.detail.ip', 'IP') %>",d.pppoeIP||'-')}
-            ${row("<%= t('admin.dashboard.detail.rx_power', 'RX Power') %>",d.rxPower||'-')}${row("<%= t('admin.dashboard.detail.uptime', 'Uptime') %>",d.uptime||'-')}
-            ${row("<%= t('admin.dashboard.detail.last_inform', 'Last Inform') %>",d.lastInform||'-')}${row("<%= t('admin.dashboard.detail.user_conn', 'User Conn.') %>",d.totalAssociations||'-')}
-          </table>
+
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;color:var(--muted)"><i class="bi bi-diagram-3"></i> Network Info</div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px;border-bottom:1px solid rgba(51,65,85,.10)"><span style="color:var(--muted)">PPPoE User</span><span>${d.pppoeUsername || '-'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px;border-bottom:1px solid rgba(51,65,85,.10)"><span style="color:var(--muted)">IP</span><code>${d.pppoeIP || '-'}</code></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px;border-bottom:1px solid rgba(51,65,85,.10)"><span style="color:var(--muted)">RX Power</span><span class="badge" style="background:var(--primary);color:white">${d.rxPower || '-'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px;border-bottom:1px solid rgba(51,65,85,.10)"><span style="color:var(--muted)">SSID</span><span>${d.ssid || '-'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 18px"><span style="color:var(--muted)">Uptime</span><span>${d.uptime || '-'}</span></div>
         </div>
       </div>
-      ${d.connectedUsers && d.connectedUsers.length > 0 ? `
-      <div style="margin-top:16px">
-        <h6 style="font-size:13px;font-weight:600;margin-bottom:10px"><i class="bi bi-devices"></i> ${I18N.connectedDevicesTitlePrefix} (${d.connectedUsers.length})</h6>
-        <div class="tbl-wrap"><table class="dtbl">
-          <thead><tr><th>Hostname</th><th>IP</th><th>MAC</th><th>Interface</th><th><%= t('admin.dashboard.detail.status', 'Status') %></th></tr></thead>
-          <tbody>${d.connectedUsers.map(u=>`<tr><td>${u.hostname}</td><td>${u.ip}</td><td style="font-size:11px">${u.mac}</td><td>${u.iface}</td><td><span class="badge ${u.status==='Online'?'bs':'bm'}">${u.status}</span></td></tr>`).join('')}</tbody>
-        </table></div>
-      </div>` : '<p class="text-muted" style="margin-top:12px;font-size:13px"><i class="bi bi-info-circle"></i> ' + I18N.noConnectedDevices + '</p>'}
+
+      <div style="margin-top:16px;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;color:var(--muted);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div><i class="bi bi-people"></i> Connected Clients (Live)</div>
+          <span class="badge bm">${connected.length}</span>
+        </div>
+        <div style="padding:16px 18px">
+          ${connected.length > 0 ? connected.map((u) => {
+            const iface = String(u.iface || '');
+            const isWiFi = iface.toLowerCase().includes('wifi') || iface.toLowerCase().includes('wlan') || iface.toLowerCase().includes('802.11');
+            const isUon = String(u.status || '').toLowerCase() === 'online';
+            return `
+              <div style="background:var(--sub-bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <div style="width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(59,130,246,.10);color:var(--primary)">
+                    <i class="bi bi-${isWiFi ? 'wifi' : 'ethernet'}"></i>
+                  </div>
+                  <div style="flex:1">
+                    <div style="font-weight:800">${u.hostname || '-'}</div>
+                    <div style="font-size:11px;color:var(--muted)">${u.ip || '-'} | ${u.mac || '-'}</div>
+                  </div>
+                  <span class="badge ${isUon ? 'bs' : 'bm'}">${u.status || '-'}</span>
+                </div>
+                <div style="font-size:11px;color:var(--muted)">Interface: ${iface || '-'}</div>
+              </div>
+            `;
+          }).join('') : `<div style="text-align:center;color:var(--muted);padding:10px 0"><i class="bi bi-info-circle"></i> ${I18N.noConnectedDevices}</div>`}
+        </div>
+      </div>
     `;
   } catch(e) { document.getElementById('device-detail').innerHTML = '<p class="text-muted text-center" style="padding:20px">' + I18N.detailLoadFailed + '</p>'; }
 }
-function row(k,v){return `<tr><td style="padding:6px 0;color:var(--muted);font-size:12px">${k}</td><td style="padding:6px 0;font-weight:500">${v||'-'}</td></tr>`;}
 
 function editSsid(tag, currentSsid) { document.getElementById('edit-tag').value = tag; document.getElementById('new-ssid').value = (currentSsid && currentSsid !== '-') ? currentSsid : ''; openModal('ssidModal'); }
 function editPassword(tag) { document.getElementById('edit-pass-tag').value = tag; document.getElementById('new-password').value = ''; openModal('passwordModal'); }

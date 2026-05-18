@@ -396,6 +396,20 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_inventory_stock_sn ON inventory_stock(serial_number);
   CREATE INDEX IF NOT EXISTS idx_inventory_logs_item ON inventory_logs(item_id);
   CREATE INDEX IF NOT EXISTS idx_inventory_logs_created ON inventory_logs(created_at);
+
+  CREATE TABLE IF NOT EXISTS genieacs_servers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    cwmp_url TEXT,
+    username TEXT,
+    password TEXT,
+    location TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',
+    device_count INTEGER DEFAULT 0,
+    last_sync DATETIME,
+    created_at DATETIME DEFAULT (NOW_LOCAL())
+  );
 `);
 
 /**
@@ -658,6 +672,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date(check_in_time));
   CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance(status);
 `);
+
+try {
+  const attendanceColumns = db.prepare('PRAGMA table_info(attendance)').all().map(c => c.name);
+  if (!attendanceColumns.includes('check_in_photo')) {
+    db.exec("ALTER TABLE attendance ADD COLUMN check_in_photo TEXT DEFAULT ''");
+  }
+  if (!attendanceColumns.includes('check_out_photo')) {
+    db.exec("ALTER TABLE attendance ADD COLUMN check_out_photo TEXT DEFAULT ''");
+  }
+} catch (e) {}
 
 /**
  * Helper untuk App Settings (Database)
