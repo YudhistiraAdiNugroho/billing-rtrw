@@ -370,10 +370,11 @@ async function fetchDevicesFromACS(server, vParams = [], paths = {}, options = {
 
 router.get('/', async (req, res) => {
     try {
+        const searchQuery = String(req.query.q || '').trim() || null;
         const acsServers = getACSServers();
         const legacyACS = getLegacyACS();
         
-        const activeServers = acsServers.length > 0 ? acsServers : 
+        const activeServers = acsServers.length > 0 ? acsServers :
             (legacyACS.acs_url ? [{ id: 'legacy', name: 'Default ACS', url: legacyACS.acs_url, username: legacyACS.acs_user, password: legacyACS.acs_pass }] : []);
 
         const selectedAcsId = req.query.acs || (activeServers[0]?.id);
@@ -381,8 +382,77 @@ router.get('/', async (req, res) => {
 
         let allDevices = [];
         if (targetServers.length > 0) {
-            const results = await Promise.allSettled(targetServers.map(s => fetchDevicesFromACS(s, [], legacyACS)));
-            results.forEach(r => { if (r.status === 'fulfilled') allDevices = allDevices.concat(r.value.devices); });
+            if (searchQuery) {
+                // Search mode: query devices with search filter
+                const query = JSON.stringify({
+                    $or: [
+                        { '_deviceId._SerialNumber': { $regex: searchQuery, $options: 'i' } },
+                        { 'VirtualParameters.CustomerName': { $regex: searchQuery, $options: 'i' } },
+                        { 'VirtualParameters.customer_name': { $regex: searchQuery, $options: 'i' } },
+                        { 'VirtualParameters.PPPoEUser': { $regex: searchQuery, $options: 'i' } },
+                        { '_tags': searchQuery }
+                    ]
+                });
+                
+                for (const server of targetServers) {
+                    try {
+                        const baseUrl = normalizeUrl(server.url);
+                        const response = await axios.get(`${baseUrl}/devices`, {
+                            ...getAxiosConfig(server),
+                            params: { query, limit: 100 }
+                        });
+                        
+                        if (Array.isArray(response.data)) {
+                            const devices = response.data.map(d => {
+                                let rxPower = '-';
+                                for (const path of RX_POWER_PATHS) {
+                                    const val = getNestedValue(d, path);
+                                    if (val && val !== '-') { rxPower = val; break; }
+                                }
+                                
+                                let pppoeUser = '-';
+                                for (const path of PPPOE_PATHS) {
+                                    const val = getNestedValue(d, path);
+                                    if (val && val !== '-') { pppoeUser = val; break; }
+                                }
+                                
+                                let ip = d._ip || '-';
+                                if (ip === '-') {
+                                    for (const path of IP_PATHS) {
+                                        const val = getNestedValue(d, path);
+                                        if (val && val !== '-') { ip = val; break; }
+                                    }
+                                }
+                                
+                                const customerName = getNestedValue(d, 'VirtualParameters.CustomerName') ||
+                                                    getNestedValue(d, 'VirtualParameters.customer_name') || '-';
+                                
+                                return {
+                                    id: d._id,
+                                    sn: d._deviceId?._SerialNumber || d._id,
+                                    last_inform: d._lastInform,
+                                    isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < 300000) : false,
+                                    manufacturer: d._deviceId?._Manufacturer || '-',
+                                    model: d._deviceId?._ProductClass || '-',
+                                    rx_power: rxPower,
+                                    pppoe_ip: ip,
+                                    pppoe_user: pppoeUser,
+                                    customer_name: customerName,
+                                    acs_server_id: server.id,
+                                    acs_server_name: server.name
+                                };
+                            });
+                            allDevices = allDevices.concat(devices);
+                        }
+                    } catch (err) {
+                        console.error(`Search error on server ${server.name}:`, err.message);
+                    }
+                }
+            } else {
+                // Normal mode: fetch all devices
+                const results = await Promise.allSettled(targetServers.map(s => fetchDevicesFromACS(s, [], legacyACS)));
+                results.forEach(r => { if (r.status === 'fulfilled') allDevices = allDevices.concat(r.value.devices); });
+            }
         }
 
         res.render('admin/acs', {
@@ -390,10 +460,12 @@ router.get('/', async (req, res) => {
             devices: allDevices,
             acsServers: activeServers,
             selectedAcsId,
+            searchQuery,
             currentPage: 'acs_pro'
         });
     } catch (err) {
-        res.render('admin/acs', { user: req.session, devices: [], acsServers: [], selectedAcsId: null, currentPage: 'acs_pro' });
+        console.error('ACS page error:', err);
+        res.render('admin/acs', { user: req.session, devices: [], acsServers: [], selectedAcsId: null, searchQuery: null, currentPage: 'acs_pro' });
     }
 });
 
@@ -720,48 +792,13 @@ router.get('/api/clients/:deviceId', requireAdmin, async (req, res) => {
     }
 });
 
-// GET /admin/acs/search
+// GET /admin/acs/search - Redirect to main page with query params
 router.get('/search', requireAdminSession, async (req, res) => {
-    try {
-        const { q } = req.query;
-        const acsServers = getACSServers();
-        
-        const activeServers = acsServers;
-        const baseUrlNormalize = (s) => normalizeUrl(s.url);
-
-        const query = JSON.stringify({
-            $or: [
-                { '_deviceId._SerialNumber': { $regex: q, $options: 'i' } },
-                { 'VirtualParameters.CustomerName': { $regex: q, $options: 'i' } },
-                { 'VirtualParameters.PPPoEUser': { $regex: q, $options: 'i' } }
-            ]
-        });
-
-        let allDevices = [];
-        for (const s of activeServers) {
-            try {
-                const response = await axios.get(`${baseUrlNormalize(s)}/devices`, {
-                    ...getAxiosConfig(s),
-                    params: { query, limit: 100 }
-                });
-                if (Array.isArray(response.data)) {
-                    // Reuse the same logic as listing for mapping
-                    const results = await fetchDevicesFromACS(s, [], {}, { limit: 100 });
-                    allDevices = allDevices.concat(results.devices);
-                }
-            } catch (err) {}
-        }
-
-        res.render('admin/acs', {
-            user: req.session,
-            devices: allDevices,
-            acsServers: activeServers,
-            selectedAcsId: 'all',
-            currentPage: 'acs_pro'
-        });
-    } catch (err) {
-        res.redirect('/admin/acs');
-    }
+    const { q, acs } = req.query;
+    const params = new URLSearchParams();
+    if (q) params.append('q', q);
+    if (acs) params.append('acs', acs);
+    res.redirect(`/admin/acs?${params.toString()}`);
 });
 
 module.exports = router;

@@ -341,9 +341,21 @@ function markSlipPaid(id) {
   if (!slip) throw new Error('Slip tidak ditemukan');
   if (slip.status !== 'approved') throw new Error('Hanya slip yang sudah approved yang bisa ditandai paid');
 
-  return db.prepare(`
+  const result = db.prepare(`
     UPDATE payroll_slips SET status = 'paid', paid_at = CURRENT_TIMESTAMP WHERE id = ?
   `).run(id);
+
+  // Auto Insert ke Tabel Pengeluaran (Expenses)
+  try {
+    db.prepare(`
+      INSERT INTO expenses (date, category, amount, description, payment_method, recorded_by_name)
+      VALUES (date('now', 'localtime'), 'Gaji & Tunjangan', ?, ?, 'transfer', 'Sistem (Payroll)')
+    `).run(slip.net_salary, `Gaji ${slip.employee_name} (Periode ${slip.period_month}/${slip.period_year})`);
+  } catch (e) {
+    logger.error('Gagal mencatat expense dari slip gaji: ' + e.message);
+  }
+
+  return result;
 }
 
 function bulkApprove(month, year) {
@@ -354,10 +366,28 @@ function bulkApprove(month, year) {
 }
 
 function bulkMarkPaid(month, year) {
-  return db.prepare(`
+  const slipsToPay = db.prepare(`SELECT * FROM payroll_slips WHERE period_month = ? AND period_year = ? AND status = 'approved'`).all(month, year);
+  
+  const result = db.prepare(`
     UPDATE payroll_slips SET status = 'paid', paid_at = CURRENT_TIMESTAMP
     WHERE period_month = ? AND period_year = ? AND status = 'approved'
   `).run(month, year);
+
+  // Auto Insert ke Tabel Pengeluaran (Expenses) untuk semua slip
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO expenses (date, category, amount, description, payment_method, recorded_by_name)
+      VALUES (date('now', 'localtime'), 'Gaji & Tunjangan', ?, ?, 'transfer', 'Sistem (Payroll)')
+    `);
+    
+    for (const slip of slipsToPay) {
+      stmt.run(slip.net_salary, `Gaji ${slip.employee_name} (Periode ${slip.period_month}/${slip.period_year})`);
+    }
+  } catch (e) {
+    logger.error('Gagal mencatat expense bulk slip gaji: ' + e.message);
+  }
+
+  return result;
 }
 
 function deleteSlip(id) {

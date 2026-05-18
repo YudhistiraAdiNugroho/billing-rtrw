@@ -47,6 +47,47 @@ try {
 }
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS expense_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    parent_id INTEGER REFERENCES expense_categories(id),
+    description TEXT,
+    icon TEXT DEFAULT 'bi bi-tag',
+    color TEXT DEFAULT '#6366f1',
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE TABLE IF NOT EXISTS expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date DATE NOT NULL,
+    category TEXT NOT NULL,
+    subcategory TEXT,
+    amount INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    vendor TEXT,
+    receipt_number TEXT,
+    payment_method TEXT DEFAULT 'cash',
+    recorded_by_role TEXT,
+    recorded_by_name TEXT,
+    created_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE TABLE IF NOT EXISTS cash_in (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date DATE NOT NULL,
+    category TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    description TEXT,
+    reference_type TEXT,
+    reference_id INTEGER,
+    receipt_number TEXT,
+    payment_method TEXT DEFAULT 'cash',
+    recorded_by_role TEXT,
+    recorded_by_name TEXT,
+    created_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
   CREATE TABLE IF NOT EXISTS packages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -308,6 +349,7 @@ db.exec(`
     status TEXT DEFAULT '',
     message TEXT DEFAULT '',
     price INTEGER NOT NULL DEFAULT 0,
+    sell_price INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
@@ -770,6 +812,29 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_payroll_slips_status ON payroll_slips(status);
 `);
 
+// Tambahkan kategori pengeluaran default jika belum ada
+try {
+  db.exec(`
+    INSERT OR IGNORE INTO expense_categories (name, parent_id, description, icon, color) VALUES
+    ('Perangkat', NULL, 'Pembelian perangkat jaringan', 'bi bi-router', '#3b82f6'),
+    ('Utilitas', NULL, 'Biaya utilitas (listrik, internet, dll)', 'bi bi-lightning-charge', '#f59e0b'),
+    ('Gaji & Tunjangan', NULL, 'Gaji karyawan dan tunjangan', 'bi bi-wallet2', '#10b981'),
+    ('Maintenance', NULL, 'Biaya perawatan dan perbaikan', 'bi bi-tools', '#ef4444'),
+    ('Operasional', NULL, 'Biaya operasional lainnya', 'bi bi-briefcase', '#8b5cf6');
+  `);
+} catch (e) {}
+
+// Safe migration for PPOB Digiflazz sell_price
+try {
+  const digiCols = db.prepare("PRAGMA table_info(digiflazz_staff_transactions)").all();
+  if (!digiCols.find(c => c.name === 'sell_price')) {
+    db.exec("ALTER TABLE digiflazz_staff_transactions ADD COLUMN sell_price INTEGER NOT NULL DEFAULT 0");
+  }
+} catch(e) {
+  console.error('Failed to migrate digiflazz_staff_transactions:', e);
+}
+
 module.exports = db;
 module.exports.getAppSetting = getAppSetting;
 module.exports.saveAppSetting = saveAppSetting;
+

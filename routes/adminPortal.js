@@ -2358,13 +2358,38 @@ router.get('/reports', requireAdminSession, requireSidebarMenuAccess('reports'),
   ).get(nowYearStr, nowMonthStr);
   const agentDepositThisMonth = Number(agentDepositMonthRow?.t || 0);
 
-  const cashInYear = revenueYearDirect + agentDepositYear;
-  const cashInThisMonth = revenueThisMonthDirect + agentDepositThisMonth;
+  const customCashInYearRow = db.prepare("SELECT SUM(amount) as t FROM cash_in WHERE strftime('%Y', date) = ?").get(yStr);
+  const customCashInYear = Number(customCashInYearRow?.t || 0);
+
+  const customCashInMonthRow = db.prepare("SELECT SUM(amount) as t FROM cash_in WHERE strftime('%Y', date) = ? AND strftime('%m', date) = ?").get(nowYearStr, nowMonthStr);
+  const customCashInMonth = Number(customCashInMonthRow?.t || 0);
+
+  const cashInYear = revenueYearDirect + agentDepositYear + customCashInYear;
+  const cashInThisMonth = revenueThisMonthDirect + agentDepositThisMonth + customCashInMonth;
   const pendingAmountRow = db.prepare("SELECT SUM(amount) as t FROM invoices WHERE status='unpaid'").get();
   const pendingAmount = Number(pendingAmountRow?.t || 0);
 
+  const expensesYearRow = db.prepare("SELECT SUM(amount) as t FROM expenses WHERE strftime('%Y', date) = ?").get(yStr);
+  const expensesRegularYear = Number(expensesYearRow?.t || 0);
+  const digiflazzCostYear = Number(db.prepare("SELECT SUM(digi_price) as t FROM agent_transactions WHERE type='pulsa' AND digi_status='sukses' AND strftime('%Y', created_at) = ?").get(yStr)?.t || 0);
+  const expensesYear = expensesRegularYear + digiflazzCostYear;
+
+  const expensesMonthRow = db.prepare("SELECT SUM(amount) as t FROM expenses WHERE strftime('%Y', date) = ? AND strftime('%m', date) = ?").get(nowYearStr, nowMonthStr);
+  const expensesRegularMonth = Number(expensesMonthRow?.t || 0);
+  const digiflazzCostMonth = Number(db.prepare("SELECT SUM(digi_price) as t FROM agent_transactions WHERE type='pulsa' AND digi_status='sukses' AND strftime('%Y', created_at) = ? AND strftime('%m', created_at) = ?").get(nowYearStr, nowMonthStr)?.t || 0);
+  const expensesMonth = expensesRegularMonth + digiflazzCostMonth;
+
+  const netProfitYear = cashInYear - expensesYear;
+  const netProfitMonth = cashInThisMonth - expensesMonth;
+
+  const expensesByCategory = db.prepare("SELECT category, SUM(amount) as total FROM expenses WHERE strftime('%Y', date) = ? GROUP BY category").all(yStr);
+  if (digiflazzCostYear > 0) {
+    expensesByCategory.push({ category: 'Modal PPOB (Digiflazz)', total: digiflazzCostYear });
+  }
+  expensesByCategory.sort((a, b) => b.total - a.total);
+
   res.render('admin/reports', {
-    title: 'Laporan Keuangan', company: company(), activePage: 'reports',
+    title: 'Laporan Laba / Rugi', company: company(), activePage: 'reports',
     filterYear, monthlyData, chartData: monthlyData, recentPayments, topUnpaid,
     totalRevenue: revenueYearAll,
     thisMonth: revenueThisMonthAll,
@@ -2374,9 +2399,76 @@ router.get('/reports', requireAdminSession, requireSidebarMenuAccess('reports'),
     revenueThisMonthAgent,
     agentDepositYear,
     agentDepositThisMonth,
+    customCashInYear,
+    customCashInMonth,
     cashInYear,
-    cashInThisMonth
+    cashInThisMonth,
+    expensesYear,
+    expensesMonth,
+    netProfitYear,
+    netProfitMonth,
+    expensesByCategory
   });
+});
+
+router.get('/reports/print', requireAdminSession, requireSidebarMenuAccess('reports'), (req, res) => {
+  const filterYear = parseInt(req.query.year) || new Date().getFullYear();
+  const yStr = String(filterYear);
+  const nowYearStr = String(new Date().getFullYear());
+  const nowMonthStr = String(new Date().getMonth() + 1).padStart(2, '0');
+
+  // Kalkulasi sama seperti laporan utama
+  const revenueYearDirect = Number(db.prepare("SELECT SUM(amount) as t FROM invoices WHERE status='paid' AND strftime('%Y', paid_at) = ? AND (paid_by_name IS NULL OR paid_by_name NOT LIKE 'Agent %')").get(yStr)?.t || 0);
+  const agentDepositYear = Number(db.prepare("SELECT SUM(amount_buy) as t FROM agent_transactions WHERE type='topup' AND strftime('%Y', created_at) = ?").get(yStr)?.t || 0);
+  const customCashInYear = Number(db.prepare("SELECT SUM(amount) as t FROM cash_in WHERE strftime('%Y', date) = ?").get(yStr)?.t || 0);
+  const cashInYear = revenueYearDirect + agentDepositYear + customCashInYear;
+
+  const expensesRegularYear = Number(db.prepare("SELECT SUM(amount) as t FROM expenses WHERE strftime('%Y', date) = ?").get(yStr)?.t || 0);
+  const digiflazzCostYear = Number(db.prepare("SELECT SUM(digi_price) as t FROM agent_transactions WHERE type='pulsa' AND digi_status='sukses' AND strftime('%Y', created_at) = ?").get(yStr)?.t || 0);
+  const expensesYear = expensesRegularYear + digiflazzCostYear;
+  
+  const netProfitYear = cashInYear - expensesYear;
+
+  const expensesByCategory = db.prepare("SELECT category, SUM(amount) as total FROM expenses WHERE strftime('%Y', date) = ? GROUP BY category").all(yStr);
+  if (digiflazzCostYear > 0) {
+    expensesByCategory.push({ category: 'Modal PPOB (Digiflazz)', total: digiflazzCostYear });
+  }
+  expensesByCategory.sort((a, b) => b.total - a.total);
+
+  res.render('admin/reports_print', {
+    company: company(),
+    filterYear,
+    cashInYear,
+    expensesYear,
+    netProfitYear,
+    expensesByCategory,
+    formatDateLocal
+  });
+});
+
+router.get('/reports/export-csv', requireAdminSession, requireSidebarMenuAccess('reports'), (req, res) => {
+  const filterYear = parseInt(req.query.year) || new Date().getFullYear();
+  const yStr = String(filterYear);
+
+  // Ambil data detail pengeluaran & pemasukan
+  const expenses = db.prepare("SELECT date, category, amount, description FROM expenses WHERE strftime('%Y', date) = ? ORDER BY date ASC").all(yStr);
+  const cashIn = db.prepare("SELECT date, category, amount, description FROM cash_in WHERE strftime('%Y', date) = ? ORDER BY date ASC").all(yStr);
+
+  let csvContent = `Laporan Keuangan ${company()} - Tahun ${filterYear}\n\n`;
+  
+  csvContent += "=== DATA PENGELUARAN ===\nTanggal,Kategori,Nominal,Deskripsi\n";
+  expenses.forEach(e => {
+    csvContent += `${e.date},"${e.category}",${e.amount},"${(e.description||'').replace(/"/g, '""')}"\n`;
+  });
+
+  csvContent += "\n=== DATA KAS MASUK TAMBAHAN ===\nTanggal,Sumber/Kategori,Nominal,Deskripsi\n";
+  cashIn.forEach(c => {
+    csvContent += `${c.date},"${c.category}",${c.amount},"${(c.description||'').replace(/"/g, '""')}"\n`;
+  });
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="Laporan_Keuangan_${filterYear}.csv"`);
+  res.send(csvContent);
 });
 
 // ─── SETTINGS ──────────────────────────────────────────────────────────────
@@ -4822,5 +4914,8 @@ router.post('/payroll/slip/:id/send-wa', requireAdmin, async (req, res) => {
 });
 
 router.use('/acs', acsPortal);
+
+// Mount Finance Portal
+router.use('/finance', require('./financePortal'));
 
 module.exports = router;
