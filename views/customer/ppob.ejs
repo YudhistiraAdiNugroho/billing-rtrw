@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Beli Pulsa & PPOB - <%= settings.company_header || 'ISP App' %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Outfit',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+    
+    .topbar{background:#1e293b;border-bottom:1px solid #334155;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .topbar a{color:#94a3b8;text-decoration:none;display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500;transition:color .2s}
+    .topbar a:hover{color:#38bdf8}
+    .topbar h1{font-size:18px;font-weight:700;color:#f1f5f9;display:flex;align-items:center;gap:8px}
+    .topbar .badge{background:#0ea5e9;color:#fff;font-size:11px;padding:3px 10px;border-radius:999px;font-weight:600}
+    
+    .container{max-width:1000px;margin:0 auto;padding:24px 16px}
+    
+    /* Alert Styles */
+    .alert{padding:14px 18px;border-radius:12px;margin-bottom:20px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500}
+    .alert-success{background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);color:#34d399}
+    .alert-danger{background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171}
+    
+    /* Balance Widget Card */
+    .balance-card{background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border:1px solid #334155;border-radius:20px;padding:24px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;position:relative;overflow:hidden}
+    .balance-card::before{content:'';position:absolute;top:-50%;left:-20%;width:300px;height:300px;background:radial-gradient(circle,rgba(14,165,233,0.1) 0%,rgba(15,23,42,0) 70%);pointer-events:none}
+    .balance-info h2{font-size:32px;font-weight:800;color:#f8fafc;margin-top:6px;letter-spacing:-0.5px}
+    .balance-info p{font-size:13px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+    .btn-topup{background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;border:none;border-radius:14px;padding:12px 20px;font-size:14px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:8px;box-shadow:0 10px 20px rgba(14,165,233,0.2);transition:all .2s;font-family:'Outfit',sans-serif}
+    .btn-topup:hover{transform:translateY(-2px);box-shadow:0 12px 24px rgba(14,165,233,0.35);opacity:0.95}
+
+    .section-title{font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;margin:28px 0 12px;display:flex;align-items:center;gap:6px}
+    
+    /* Category Filter Tabs */
+    .cat-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;overflow-x:auto;padding-bottom:4px}
+    .cat-tabs::-webkit-scrollbar{height:4px}
+    .cat-tabs::-webkit-scrollbar-thumb{background:#334155;border-radius:999px}
+    .cat-tab{padding:8px 18px;border-radius:999px;border:1px solid #334155;background:#1e293b;color:#94a3b8;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;font-family:'Outfit',sans-serif}
+    .cat-tab:hover,.cat-tab.active{background:#0ea5e9;border-color:#0ea5e9;color:#fff;box-shadow:0 4px 12px rgba(14,165,233,0.25)}
+    
+    /* Catalog Layout */
+    .page-layout{display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start}
+    
+    .brand-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+    .brand-card{background:#1e293b;border:1px solid #334155;border-radius:18px;overflow:hidden;transition:all .2s}
+    .brand-card:hover{border-color:#475569;transform:translateY(-2px)}
+    .brand-head{padding:16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:15px;color:#f1f5f9;background:rgba(30,41,59,0.5)}
+    .brand-head .icon{color:#0ea5e9;margin-right:8px}
+    .brand-items{border-top:1px solid #334155}
+    .prod-item{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #334155;cursor:pointer;transition:background .2s}
+    .prod-item:hover{background:#0f172a}
+    .prod-item:last-child{border-bottom:none}
+    .prod-name{font-size:14px;font-weight:600;color:#e2e8f0;line-height:1.3}
+    .prod-price{font-size:14px;font-weight:700;color:#10b981;white-space:nowrap}
+    .prod-item.selected{background:#0ea5e9 !important;border-left:4px solid #0284c7}
+    .prod-item.selected .prod-name{color:#fff}
+    .prod-item.selected .prod-price{color:#fff}
+    
+    /* Order Form */
+    .order-form{background:#1e293b;border:1px solid #334155;border-radius:20px;padding:24px;position:sticky;top:90px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1)}
+    .order-form h3{font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:20px;display:flex;align-items:center;gap:8px}
+    
+    .selected-prod-info{background:#0f172a;border:1px solid #334155;border-radius:14px;padding:16px;margin-bottom:18px;display:none}
+    .selected-prod-info.show{display:block;animation:fadeIn .2s}
+    .selected-prod-name{font-size:13px;color:#94a3b8;margin-bottom:4px;font-weight:500}
+    .selected-prod-price{font-size:24px;font-weight:800;color:#10b981}
+    
+    .form-group{margin-bottom:18px}
+    .form-group label{display:block;font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px}
+    .form-group input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:12px 16px;font-size:14px;color:#e2e8f0;outline:none;transition:all .2s;font-family:'Outfit',sans-serif}
+    .form-group input:focus{border-color:#0ea5e9;box-shadow:0 0 0 2px rgba(14,165,233,0.2)}
+    
+    .btn-beli{width:100%;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Outfit',sans-serif;box-shadow:0 10px 15px -3px rgba(16,185,129,0.2)}
+    .btn-beli:hover{opacity:.95;transform:translateY(-1px)}
+    .btn-beli:disabled{background:#475569 !important;color:#94a3b8;box-shadow:none;cursor:not-allowed;transform:none}
+    
+    /* Transaction History Table */
+    .history-card{background:#1e293b;border:1px solid #334155;border-radius:20px;padding:24px;margin-top:32px}
+    .history-card h3{font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:16px}
+    .table-responsive{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;text-align:left}
+    th{padding:12px 16px;font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;border-bottom:1px solid #334155}
+    td{padding:14px 16px;font-size:13px;border-bottom:1px solid #334155;color:#e2e8f0}
+    tr:last-child td{border-bottom:none}
+    
+    .badge-status{padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;display:inline-block}
+    .badge-success{background:rgba(16,185,129,0.15);color:#34d399}
+    .badge-pending{background:rgba(245,158,11,0.15);color:#fbbf24}
+    .badge-failed{background:rgba(239,68,68,0.15);color:#f87171}
+    
+    .no-data{text-align:center;padding:40px 20px;color:#64748b}
+    .no-data i{font-size:32px;display:block;margin-bottom:8px}
+
+    @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+    
+    @media(max-width:768px){
+      .page-layout{grid-template-columns:1fr}
+      .order-form{position:static;margin-top:24px}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="/customer/dashboard"><i class="bi bi-arrow-left"></i> Kembali</a>
+    <h1><i class="bi bi-phone" style="color:#0ea5e9"></i> Beli Pulsa & PPOB</h1>
+    <span class="badge">Sistem Saldo</span>
+  </div>
+
+  <div class="container">
+    <% if(error){ %>
+    <div class="alert alert-danger"><i class="bi bi-exclamation-circle"></i> <%= error %></div>
+    <% } %>
+    <% if(info){ %>
+    <div class="alert alert-success"><i class="bi bi-check-circle"></i> <%= info %></div>
+    <% } %>
+
+    <!-- Balance Widget -->
+    <div class="balance-card">
+      <div class="balance-info">
+        <p><i class="bi bi-wallet2"></i> Saldo Anda</p>
+        <h2>Rp <%= Number(customer.balance || 0).toLocaleString('id-ID') %></h2>
+      </div>
+      <div>
+        <a href="/customer/topup" class="btn-topup">
+          <i class="bi bi-plus-circle-fill"></i> Isi Saldo (Top-Up)
+        </a>
+      </div>
+    </div>
+
+    <% if(!digiflazzConfigured){ %>
+    <div style="text-align:center;padding:60px 20px;color:#64748b">
+      <i class="bi bi-plug-fill" style="font-size:64px;margin-bottom:16px;display:block"></i>
+      <h3 style="color:#e2e8f0;margin-bottom:8px">Layanan PPOB Belum Aktif</h3>
+      <p>Hubungi admin untuk mengaktifkan konfigurasi Digiflazz.</p>
+    </div>
+    <% } else { %>
+
+    <!-- Filter Kategori -->
+    <div class="cat-tabs">
+      <button class="cat-tab active" onclick="filterCat(this, 'all')">Semua</button>
+      <% digiflazzCategories.forEach(cat => { %>
+      <button class="cat-tab" onclick="filterCat(this, '<%= cat.replace(/'/g, "\\'") %>')"><%= cat %></button>
+      <% }) %>
+    </div>
+
+    <div class="page-layout">
+      <!-- Kiri: Katalog Produk -->
+      <div>
+        <p class="section-title">Katalog Produk</p>
+        <div class="brand-grid" id="brandGrid">
+          <% digiflazzBrandsData.forEach(brand => { %>
+          <div class="brand-card" data-category="<%= brand.category %>">
+            <div class="brand-head" onclick="toggleBrand(this)">
+              <span><i class="bi bi-phone-vibrate icon"></i> <%= brand.name %> <small style="color:#64748b;font-weight:400;font-size:11px">(<%= brand.category %>)</small></span>
+              <i class="bi bi-chevron-down" style="color:#64748b;font-size:12px"></i>
+            </div>
+            <div class="brand-items">
+              <% brand.items.forEach(item => { %>
+              <div class="prod-item" 
+                   data-sku="<%= item.sku %>" 
+                   data-name="<%= item.product_name %>" 
+                   data-price="<%= item.price_sell || item.price_modal %>"
+                   onclick="selectProduct(this)">
+                <span class="prod-name"><%= item.product_name %></span>
+                <span class="prod-price">Rp <%= Number(item.price_sell || item.price_modal || 0).toLocaleString('id-ID') %></span>
+              </div>
+              <% }) %>
+            </div>
+          </div>
+          <% }) %>
+        </div>
+      </div>
+
+      <!-- Kanan: Form Pemesanan -->
+      <div>
+        <p class="section-title">Konfirmasi Pembelian</p>
+        <div class="order-form">
+          <h3><i class="bi bi-credit-card" style="color:#0ea5e9"></i> Pembelian Instant</h3>
+          
+          <div class="selected-prod-info" id="selectedInfo">
+            <div class="selected-prod-name" id="selectedName">-</div>
+            <div class="selected-prod-price" id="selectedPrice">Rp 0</div>
+          </div>
+
+          <form method="POST" action="/customer/ppob/buy" id="ppobForm">
+            <input type="hidden" name="sku" id="hiddenSku">
+            <input type="hidden" name="product_name" id="hiddenName">
+            <input type="hidden" name="price" id="hiddenPrice">
+
+            <div class="form-group">
+              <label>Nomor Tujuan / Target <span style="color:#ef4444">*</span></label>
+              <input type="text" name="target" id="targetInput" placeholder="No HP / ID Pelanggan" required inputmode="numeric">
+            </div>
+
+            <button type="submit" class="btn-beli" id="beliFinal" disabled>
+              <i class="bi bi-shield-lock-fill"></i> Bayar Sekarang (Potong Saldo)
+            </button>
+            <p style="text-align:center;font-size:12px;color:#64748b;margin-top:12px">Pulsa/token akan dikirim otomatis dan saldo dipotong langsung.</p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Riwayat Transaksi -->
+    <div class="history-card">
+      <h3><i class="bi bi-clock-history" style="color:#0ea5e9"></i> Riwayat Pembelian Saldo & PPOB</h3>
+      <div class="table-responsive">
+        <% if (history.length === 0) { %>
+          <div class="no-data">
+            <i class="bi bi-clipboard-x"></i>
+            <p>Belum ada transaksi pembelian sebelumnya.</p>
+          </div>
+        <% } else { %>
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>Produk</th>
+                <th>Target</th>
+                <th>Biaya</th>
+                <th>Status</th>
+                <th>SN / Keterangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% history.forEach(tx => { %>
+                <tr>
+                  <td><%= new Date(tx.created_at).toLocaleString('id-ID', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}) %></td>
+                  <td><strong><%= tx.product_name %></strong></td>
+                  <td><code><%= tx.target %></code></td>
+                  <td style="color:#f43f5e;font-weight:700">- Rp <%= Number(tx.price).toLocaleString('id-ID') %></td>
+                  <td>
+                    <span class="badge-status <%= tx.status === 'fulfilled' ? 'badge-success' : tx.status === 'processing' ? 'badge-pending' : 'badge-failed' %>">
+                      <%= tx.status === 'fulfilled' ? 'BERHASIL' : tx.status === 'processing' ? 'DIPROSES' : 'GAGAL' %>
+                    </span>
+                  </td>
+                  <td>
+                    <% if (tx.status === 'fulfilled') { %>
+                      <small style="color:#10b981;font-weight:600"><%= tx.digi_sn || 'Sukses' %></small>
+                    <% } else { %>
+                      <small style="color:#94a3b8"><%= tx.digi_message || '-' %></small>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+  </div>
+
+  <script>
+    let selectedSku = null;
+
+    function filterCat(btn, cat) {
+      document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.brand-card').forEach(card => {
+        if (cat === 'all' || card.dataset.category === cat) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    function toggleBrand(head) {
+      const items = head.nextElementSibling;
+      const icon = head.querySelector('.bi-chevron-down, .bi-chevron-up');
+      if (items.style.display === 'none') {
+        items.style.display = '';
+        if (icon) { icon.classList.remove('bi-chevron-up'); icon.classList.add('bi-chevron-down'); }
+      } else {
+        items.style.display = 'none';
+        if (icon) { icon.classList.remove('bi-chevron-down'); icon.classList.add('bi-chevron-up'); }
+      }
+    }
+
+    function selectProduct(el) {
+      document.querySelectorAll('.prod-item').forEach(p => p.classList.remove('selected'));
+      el.classList.add('selected');
+      
+      const sku = el.dataset.sku;
+      const name = el.dataset.name;
+      const price = el.dataset.price;
+      
+      selectedSku = sku;
+      document.getElementById('hiddenSku').value = sku;
+      document.getElementById('hiddenName').value = name;
+      document.getElementById('hiddenPrice').value = price;
+      document.getElementById('selectedName').textContent = name;
+      document.getElementById('selectedPrice').textContent = 'Rp ' + Number(price).toLocaleString('id-ID');
+      document.getElementById('selectedInfo').classList.add('show');
+      document.getElementById('beliFinal').disabled = false;
+      
+      if (window.innerWidth <= 768) {
+        document.querySelector('.order-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    document.getElementById('ppobForm').addEventListener('submit', function(e) {
+      const target = document.getElementById('targetInput').value.trim();
+      if (!selectedSku) { e.preventDefault(); alert('Silakan pilih produk terlebih dahulu!'); return; }
+      if (!target) { e.preventDefault(); alert('Nomor tujuan wajib diisi!'); return; }
+      
+      const userConfirmed = confirm('Konfirmasi Pembayaran:\nApakah Anda yakin ingin memotong saldo untuk pembelian ini?');
+      if (!userConfirmed) { e.preventDefault(); return; }
+
+      document.getElementById('beliFinal').disabled = true;
+      document.getElementById('beliFinal').innerHTML = '<i class="bi bi-hourglass-split"></i> Memproses Pembelian...';
+    });
+  </script>
+</body>
+</html>

@@ -848,6 +848,36 @@
                   </div>
                 </div>
 
+                <div class="accordion-item" id="ppob-section">
+                  <h2 class="accordion-header" id="headingPpob">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                      data-bs-target="#collapsePpob" aria-expanded="false" aria-controls="collapsePpob">
+                      <i class="bi bi-phone me-2"></i>
+                      <span>Pulsa & PPOB</span>
+                    </button>
+                  </h2>
+                  <div id="collapsePpob" class="accordion-collapse collapse" aria-labelledby="headingPpob"
+                    data-bs-parent="#customerAccordion">
+                    <div class="accordion-body">
+                      <div class="section-block">
+                        <div class="alert alert-info mb-0 py-2" style="background: rgba(14, 165, 233, 0.10); border-color: rgba(14, 165, 233, 0.35); color: rgba(226, 232, 240, 0.95);">
+                          <i class="bi bi-wallet2 me-2"></i>Saldo PPOB: <strong>Rp <%= Number((typeof customerBalance !== 'undefined' ? customerBalance : 0) || 0).toLocaleString('id-ID') %></strong>
+                        </div>
+                      </div>
+                      <div class="section-block">
+                        <div class="d-grid gap-2">
+                          <a href="/customer/topup" class="btn btn-action btn-ssid w-100">
+                            <i class="bi bi-plus-circle me-2"></i>Isi Saldo (Top-Up)
+                          </a>
+                          <a href="/customer/ppob" class="btn btn-action btn-ssid w-100">
+                            <i class="bi bi-phone me-2"></i>Beli Pulsa / PPOB
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="accordion-item" id="settings-section">
                   <h2 class="accordion-header" id="headingSettings">
                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"

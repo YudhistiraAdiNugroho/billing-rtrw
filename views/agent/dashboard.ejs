@@ -510,6 +510,24 @@
       </div>
     </div>
 
+    <div class="cardx" id="section-deposit">
+      <div class="hd">
+        <h6><i class="bi bi-wallet2"></i> Deposit / Top-Up</h6>
+        <span class="pill"><i class="bi bi-qr-code-scan"></i> QRIS</span>
+      </div>
+      <div class="bd">
+        <form method="POST" action="/agent/topup/create" class="d-grid gap-2">
+          <input type="number" name="amount" class="form-control" min="10000" step="1000" placeholder="Nominal top-up (min Rp 10.000)" required>
+          <button type="submit" class="btn-action">
+            <i class="bi bi-plus-circle me-2"></i>Top-Up Deposit via QRIS
+          </button>
+        </form>
+        <div class="text-muted mt-2" style="color:var(--muted)!important;font-size:12px">
+          Setelah pembayaran berhasil, saldo deposit akan bertambah otomatis.
+        </div>
+      </div>
+    </div>
+
     <div class="cardx" id="section-bill">
       <div class="hd">
         <h6><i class="bi bi-receipt"></i> <%= t('agent.pay_invoice', 'Bayar Tagihan') %></h6>
