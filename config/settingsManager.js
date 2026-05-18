@@ -14,7 +14,23 @@ let watcher = null;
 // Helper untuk baca settings.json secara dinamis
 function getSettings() {
   try {
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) || {};
+    const fallbackTz = 'Asia/Jakarta';
+    const tz = typeof settings.timezone === 'string' ? settings.timezone.trim() : '';
+
+    if (!tz) {
+      settings.timezone = fallbackTz;
+      return settings;
+    }
+
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date());
+      settings.timezone = tz;
+    } catch (e) {
+      settings.timezone = fallbackTz;
+    }
+
+    return settings;
   } catch (error) {
     logger.error(`[settings] Error reading settings.json: ${error.message}`);
     return {};
