@@ -40,10 +40,6 @@
         .btn-action:disabled { opacity:0.5; cursor:not-allowed; }
         .btn-action:disabled:hover { background:var(--sub-bg); color:var(--muted); border-color:var(--border); transform:none; }
 
-        .filter-bar { display:flex; gap:15px; margin-bottom:20px; align-items:center; flex-wrap:wrap; }
-        .filter-select { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:10px 15px; color:var(--text); font-size:13px; cursor:pointer; min-width:180px; }
-        .filter-select:focus { outline:none; border-color:var(--primary); }
-
         .acs-server-tag { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; background:rgba(59,130,246,0.1); color:var(--primary); border:1px solid rgba(59,130,246,0.2); }
         .acs-server-tag.offline { background:rgba(239,68,68,0.1); color:#EF4444; border-color:rgba(239,68,68,0.2); }
 
@@ -97,18 +93,22 @@
             </div>
 
             <div id="tab-devices" class="tab-pane active">
-                <div class="filter-bar">
-                    <form action="/admin/acs/search" method="GET" style="display:flex; gap:10px; flex:1;">
-                        <input type="text" name="q" class="form-control" placeholder="Search SN, Customer, PPPoE..." required>
-                        <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i></button>
-                    </form>
-                    <select id="acsFilter" class="filter-select" onchange="location.href='/admin/acs?acs='+this.value">
+                <form action="/admin/acs/search" method="GET" class="srow">
+                    <div class="sinput" style="max-width:340px">
+                        <i class="bi bi-search"></i>
+                        <input class="fc" name="q" placeholder="Search SN, Customer, PPPoE..." required>
+                    </div>
+                    <select class="fs" id="acsFilter" name="acs" style="width:200px" onchange="this.form.submit()">
                         <option value="all">All ACS Servers</option>
                         <% acsServers.forEach(s => { %>
                             <option value="<%= s.id %>" <%= String(selectedAcsId) === String(s.id) ? 'selected' : '' %>><%= s.name %></option>
                         <% }); %>
                     </select>
-                </div>
+                    <button class="btn btn-g btn-sm" type="submit"><i class="bi bi-search"></i> Search</button>
+                    <% if (typeof searchQuery !== 'undefined' && searchQuery) { %>
+                        <a href="/admin/acs" class="btn btn-g btn-sm"><i class="bi bi-x"></i> Reset</a>
+                    <% } %>
+                </form>
                 <div class="table-container">
                     <table>
                         <thead>
