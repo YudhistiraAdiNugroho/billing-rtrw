@@ -4,6 +4,14 @@ const { getSetting, getSettings, formatDateLocal, getNowLocal } = require('../co
 const agentSvc = require('../services/agentService');
 const billingSvc = require('../services/billingService');
 const customerSvc = require('../services/customerService');
+const paymentSvc = require('../services/paymentService');
+const db = require('../config/database');
+
+function isEnabledFlag(val) {
+  if (val === true || val === 1) return true;
+  const s = String(val || '').trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+}
 
 function requireAgentSession(req, res, next) {
   if (req.session && req.session.isAgent && req.session.agentId) return next();
@@ -119,6 +127,62 @@ router.get('/', requireAgentSession, (req, res) => {
     msg: flashMsg(req),
     receipt: popReceipt(req)
   });
+});
+
+router.post('/topup/create', requireAgentSession, express.urlencoded({ extended: true }), async (req, res) => {
+  const settings = getSettings();
+  const agentId = req.session.agentId;
+  const agent = agentSvc.getAgentById(agentId);
+  if (!agent) return res.redirect('/agent/login');
+
+  const amount = parseInt(req.body.amount || '0');
+  if (!amount || amount < 10000) {
+    req.session._msg = { type: 'error', text: 'Minimal top-up Rp 10.000' };
+    return res.redirect('/agent');
+  }
+
+  try {
+    const ins = db.prepare(`INSERT INTO agent_topup_requests (agent_id, amount, status) VALUES (?, ?, 'pending')`).run(agentId, amount);
+    const reqId = Number(ins.lastInsertRowid);
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const appUrl = settings.app_url || `${protocol}://${req.get('host')}`;
+    const enabled = {
+      tripay: isEnabledFlag(settings.tripay_enabled),
+      midtrans: isEnabledFlag(settings.midtrans_enabled),
+      xendit: isEnabledFlag(settings.xendit_enabled),
+      duitku: isEnabledFlag(settings.duitku_enabled)
+    };
+    let gateway = String(settings.default_gateway || 'tripay').toLowerCase();
+    if (!enabled[gateway]) {
+      gateway =
+        enabled.tripay ? 'tripay' :
+        enabled.midtrans ? 'midtrans' :
+        enabled.xendit ? 'xendit' :
+        enabled.duitku ? 'duitku' :
+        'tripay';
+    }
+
+    const invoiceLike = { id: `AGTOP${reqId}`, amount, item_name: `Top-Up Deposit Agent ${agent.name}`, sku: `AGTOP-${reqId}` };
+    const buyer = { name: agent.name, phone: agent.phone || '', email: '' };
+    const returnPath = `/agent?info=topup_pending`;
+
+    let result;
+    if (gateway === 'midtrans') result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, 'snap', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+    else if (gateway === 'xendit') result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, 'xendit', appUrl, { returnPath, orderPrefix: 'AGTOP', description: invoiceLike.item_name });
+    else if (gateway === 'duitku') result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, 'duitku', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+    else result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, 'QRIS', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
+
+    if (!result.success) throw new Error(result.message || 'Gagal membuat transaksi');
+
+    db.prepare(`UPDATE agent_topup_requests SET payment_gateway=?, payment_order_id=?, payment_link=?, payment_reference=?, payment_payload=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(gateway, result.order_id || '', result.link || '', result.reference || '', result.payload ? JSON.stringify(result.payload) : null, reqId);
+
+    return res.redirect(result.link);
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+    return res.redirect('/agent');
+  }
 });
 
 router.post('/pay-invoice', requireAgentSession, express.urlencoded({ extended: true }), async (req, res) => {

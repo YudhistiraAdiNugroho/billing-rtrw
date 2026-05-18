@@ -285,6 +285,63 @@ db.exec(`
     updated_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
+  CREATE TABLE IF NOT EXISTS public_ppob_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER,
+    buyer_phone TEXT NOT NULL,
+    sku TEXT NOT NULL,
+    product_name TEXT DEFAULT '',
+    target TEXT NOT NULL,
+    price INTEGER NOT NULL DEFAULT 0,
+    payment_gateway TEXT DEFAULT '',
+    payment_order_id TEXT DEFAULT '',
+    payment_link TEXT DEFAULT '',
+    payment_reference TEXT DEFAULT '',
+    payment_payload TEXT,
+    payment_expires_at DATETIME,
+    status TEXT DEFAULT 'pending', 
+    paid_at DATETIME,
+    fulfilled_at DATETIME,
+    digi_trx_id TEXT DEFAULT '',
+    digi_sn TEXT DEFAULT '',
+    digi_message TEXT DEFAULT '',
+    wa_sent INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE TABLE IF NOT EXISTS customer_topup_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0,
+    payment_gateway TEXT DEFAULT '',
+    payment_order_id TEXT DEFAULT '',
+    payment_link TEXT DEFAULT '',
+    payment_reference TEXT DEFAULT '',
+    payment_payload TEXT,
+    payment_expires_at DATETIME,
+    status TEXT DEFAULT 'pending',
+    paid_at DATETIME,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_topup_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0,
+    payment_gateway TEXT DEFAULT '',
+    payment_order_id TEXT DEFAULT '',
+    payment_link TEXT DEFAULT '',
+    payment_reference TEXT DEFAULT '',
+    payment_payload TEXT,
+    payment_expires_at DATETIME,
+    status TEXT DEFAULT 'pending',
+    paid_at DATETIME,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
   CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -832,6 +889,16 @@ try {
   }
 } catch(e) {
   console.error('Failed to migrate digiflazz_staff_transactions:', e);
+}
+
+// Safe migration: tambah kolom balance ke tabel customers (untuk sistem saldo PPOB pelanggan)
+try {
+  const custCols = db.prepare("PRAGMA table_info(customers)").all();
+  if (!custCols.find(c => c.name === 'balance')) {
+    db.exec("ALTER TABLE customers ADD COLUMN balance INTEGER NOT NULL DEFAULT 0");
+  }
+} catch(e) {
+  console.error('Failed to migrate customers balance:', e);
 }
 
 module.exports = db;

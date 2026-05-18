@@ -1055,6 +1055,7 @@ router.get('/dashboard', async (req, res) => {
   if (profile) {
     tickets = ticketSvc.getTicketsByCustomerId(profile.id);
   }
+  const customerBalance = profile ? getCustomerBalance(profile.id) : 0;
 
   if (profile && profile.router_id) {
     req.session.router_id = Number(profile.router_id);
@@ -1089,6 +1090,7 @@ router.get('/dashboard', async (req, res) => {
     trafficMaxDownMbps,
     trafficMaxUpMbps,
     connectedUsers: deviceData ? deviceData.connectedUsers : [],
+    customerBalance,
     isLoggedIn: true,
     notif: msgNotif || (deviceData ? null : dashboardNotif('Data perangkat tidak ditemukan di sistem ONU.', 'warning'))
   });
@@ -1362,6 +1364,7 @@ router.post('/change-tag', async (req, res) => {
       settings,
       paymentChannels: [],
       connectedUsers: data ? data.connectedUsers : [],
+      customerBalance: 0,
       notif: dashboardNotif('ID/Tag baru tidak boleh kosong atau sama dengan yang lama.', 'warning')
     });
   }
@@ -1407,6 +1410,7 @@ router.post('/change-tag', async (req, res) => {
     return cleanDb === cleanLogin || c.phone === resolvedPhone || c.pppoe_username === (deviceData ? deviceData.pppoeUsername : null);
   });
   const tickets = profile ? ticketSvc.getTicketsByCustomerId(profile.id) : [];
+  const customerBalance = profile ? getCustomerBalance(profile.id) : 0;
 
   res.render('dashboard', {
     customer: deviceData || fallbackCustomer(resolvedPhone),
@@ -1416,6 +1420,7 @@ router.post('/change-tag', async (req, res) => {
     settings,
     paymentChannels: [],
     connectedUsers: deviceData ? deviceData.connectedUsers : [],
+    customerBalance,
     notif
   });
 });
@@ -1801,6 +1806,69 @@ router.post('/payment/callback', express.json(), async (req, res) => {
   }
 
   if (gatewayOrderId && status === 'paid') {
+    // --- Cek Request Top-Up Saldo Pelanggan ---
+    const topupReq = db.prepare('SELECT * FROM customer_topup_requests WHERE payment_order_id = ? OR id = ?').get(gatewayOrderId, gatewayOrderId.replace('TOPUP', ''));
+    if (topupReq && String(topupReq.status) === 'pending') {
+      const reqId = Number(topupReq.id);
+      logger.info(`[Webhook] Pembayaran Top-Up Pelanggan diterima via ${gateway} untuk Request ID: ${reqId}`);
+      
+      db.transaction(() => {
+        db.prepare(`UPDATE customer_topup_requests SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(reqId);
+        db.prepare(`UPDATE customers SET balance = balance + ? WHERE id=?`).run(topupReq.amount, topupReq.customer_id);
+      })();
+
+      // Kirim notifikasi WA ke pelanggan
+      const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(topupReq.customer_id);
+      if (settings.whatsapp_enabled && customer && customer.phone) {
+        try {
+          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+          if (whatsappStatus.connection === 'open') {
+            const currentBalance = db.prepare('SELECT balance FROM customers WHERE id = ?').get(customer.id)?.balance || 0;
+            const waMsg = 
+              `✅ *TOP-UP SALDO BERHASIL*\n\n` +
+              `👤 *Nama:* ${customer.name}\n` +
+              `💰 *Nominal:* Rp ${Number(topupReq.amount).toLocaleString('id-ID')}\n` +
+              `💳 *Total Saldo:* Rp ${Number(currentBalance).toLocaleString('id-ID')}\n` +
+              `🏷️ *Via:* ${gateway}\n\n` +
+              `Saldo sudah bisa digunakan untuk membeli pulsa/token di portal pelanggan.`;
+            await sendWA(customer.phone, waMsg);
+          }
+        } catch(waErr) { logger.error('[Topup Webhook] WA error: ' + waErr.message); }
+      }
+    }
+
+    // --- Cek Request Top-Up Saldo Agen ---
+    const agentTopupReq = db.prepare('SELECT * FROM agent_topup_requests WHERE payment_order_id = ? OR id = ?').get(gatewayOrderId, gatewayOrderId.replace('AGTOP', ''));
+    if (agentTopupReq && String(agentTopupReq.status) === 'pending') {
+      const reqId = Number(agentTopupReq.id);
+      logger.info(`[Webhook] Pembayaran Top-Up Agen diterima via ${gateway} untuk Request ID: ${reqId}`);
+      
+      db.transaction(() => {
+        db.prepare(`UPDATE agent_topup_requests SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(reqId);
+        db.prepare(`UPDATE agents SET balance = balance + ? WHERE id=?`).run(agentTopupReq.amount, agentTopupReq.agent_id);
+      })();
+
+      // Kirim notifikasi WA ke Agen
+      const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentTopupReq.agent_id);
+      if (settings.whatsapp_enabled && agent && agent.phone) {
+        try {
+          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+          if (whatsappStatus.connection === 'open') {
+            const currentBalance = db.prepare('SELECT balance FROM agents WHERE id = ?').get(agent.id)?.balance || 0;
+            const waMsg = 
+              `✅ *TOP-UP DEPOSIT AGEN BERHASIL*\n\n` +
+              `👤 *Nama Agen:* ${agent.name}\n` +
+              `💰 *Nominal:* Rp ${Number(agentTopupReq.amount).toLocaleString('id-ID')}\n` +
+              `💳 *Total Saldo:* Rp ${Number(currentBalance).toLocaleString('id-ID')}\n` +
+              `🏷️ *Via:* ${gateway}\n\n` +
+              `Deposit sudah bertambah dan bisa digunakan kembali.`;
+            await sendWA(agent.phone, waMsg);
+          }
+        } catch(waErr) { logger.error('[AgentTopup Webhook] WA error: ' + waErr.message); }
+      }
+    }
+
+    // --- Cek Pesanan Voucher Hotspot ---
     const order = db.prepare('SELECT * FROM public_voucher_orders WHERE payment_order_id = ?').get(gatewayOrderId);
     if (order) {
       const orderId = Number(order.id || 0);
@@ -1933,6 +2001,258 @@ router.post('/payment/callback', express.json(), async (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// ─── PPOB & SALDO PELANGGAN ───────────────────────────────────────────────────
+
+const agentSvc = require('../services/agentService');
+
+function getCustomerBalance(customerId) {
+  const row = db.prepare('SELECT balance FROM customers WHERE id = ?').get(customerId);
+  return Number(row?.balance || 0);
+}
+
+function adjustCustomerBalance(customerId, delta, note = '') {
+  return db.transaction(() => {
+    const fresh = db.prepare('SELECT balance FROM customers WHERE id = ?').get(customerId);
+    const before = Number(fresh?.balance || 0);
+    const after = Math.max(0, before + delta);
+    db.prepare('UPDATE customers SET balance = ? WHERE id = ?').run(after, customerId);
+    return { before, after };
+  })();
+}
+
+// Halaman PPOB & saldo untuk pelanggan (wajib login)
+router.get('/ppob', (req, res) => {
+  const settings = getSettingsWithCache();
+  if (!req.session.phone) return res.redirect('/customer/login?next=/customer/ppob');
+
+  const customer = customerSvc.findCustomerByAny(req.session.phone);
+  if (!customer) return res.redirect('/customer/login');
+
+  const digiflazzConfigured = Boolean(
+    String(settings.digiflazz_username || '').trim() &&
+    String(settings.digiflazz_api_key || '').trim()
+  );
+  const products = digiflazzConfigured
+    ? agentSvc.listDigiflazzProducts({ include_inactive: false, limit: 3000 })
+    : [];
+  const brandsMap = new Map();
+  for (const p of products) {
+    const brand = String(p.brand || '').trim() || '-';
+    const cat = String(p.category || '').trim() || '-';
+    const key = `${cat}__${brand}`;
+    if (!brandsMap.has(key)) brandsMap.set(key, { key, name: brand, category: cat, items: [] });
+    brandsMap.get(key).items.push(p);
+  }
+  const history = db.prepare(`SELECT * FROM public_ppob_orders WHERE customer_id = ? ORDER BY id DESC LIMIT 20`).all(customer.id);
+
+  res.render('customer/ppob', {
+    settings,
+    customer: { ...customer, balance: getCustomerBalance(customer.id) },
+    digiflazzConfigured,
+    digiflazzCategories: [...new Set(products.map(p => String(p.category||'').trim()).filter(Boolean))].sort(),
+    digiflazzBrandsData: Array.from(brandsMap.values()),
+    history,
+    error: req.query.err ? String(req.query.err) : null,
+    info: req.query.info ? String(req.query.info) : null,
+  });
+});
+
+// Beli PPOB pakai saldo (wajib login)
+router.post('/ppob/buy', express.urlencoded({ extended: true }), async (req, res) => {
+  const redirectErr = (msg) => res.redirect('/customer/ppob?err=' + encodeURIComponent(msg));
+  if (!req.session.phone) return res.redirect('/customer/login');
+
+  const customer = customerSvc.findCustomerByAny(req.session.phone);
+  if (!customer) return redirectErr('Sesi tidak valid, silakan login ulang.');
+
+  const sku = String(req.body.sku || '').trim();
+  const target = String(req.body.target || '').trim().replace(/\s+/g, '');
+  const productName = String(req.body.product_name || sku).trim();
+  const price = parseInt(req.body.price || '0');
+
+  if (!sku || !target || !price) return redirectErr('Data pesanan tidak lengkap.');
+
+  const balance = getCustomerBalance(customer.id);
+  if (balance < price) return redirectErr(`Saldo tidak cukup. Saldo Anda: Rp ${balance.toLocaleString('id-ID')}, diperlukan: Rp ${price.toLocaleString('id-ID')}. Silakan top-up terlebih dahulu.`);
+
+  // Potong saldo
+  adjustCustomerBalance(customer.id, -price, `Beli PPOB ${productName} -> ${target}`);
+
+  // Catat pesanan
+  const ins = db.prepare(`INSERT INTO public_ppob_orders (customer_id, buyer_phone, sku, product_name, target, price, status) VALUES (?, ?, ?, ?, ?, ?, 'processing')`).run(customer.id, customer.phone, sku, productName, target, price);
+  const orderId = Number(ins.lastInsertRowid);
+
+  // Eksekusi Digiflazz
+  try {
+    const digiResult = await agentSvc.buyPulsaAsAdmin({ sku, target, actorName: `Pelanggan ${customer.name}`, actorPhone: customer.phone });
+    const digiSn = String(digiResult?.vendor?.sn || '');
+    const digiTrxId = String(digiResult?.vendor?.trx_id || '');
+    const digiMsg = String(digiResult?.vendor?.message || '');
+    const digiStatus = String(digiResult?.vendor?.status || 'pending').toLowerCase();
+    const isFailed = digiStatus === 'gagal' || digiStatus === 'failed';
+
+    // Refund saldo jika gagal
+    if (isFailed) {
+      adjustCustomerBalance(customer.id, price, `Refund PPOB gagal - ${sku} -> ${target}`);
+      db.prepare(`UPDATE public_ppob_orders SET status='failed', digi_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(digiMsg || 'Gagal dari provider', orderId);
+      return redirectErr('Transaksi ditolak provider, saldo otomatis dikembalikan. ' + (digiMsg || ''));
+    }
+
+    db.prepare(`UPDATE public_ppob_orders SET status='fulfilled', fulfilled_at=CURRENT_TIMESTAMP, digi_trx_id=?, digi_sn=?, digi_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(digiTrxId, digiSn, digiMsg, orderId);
+
+    const settings2 = getSettingsWithCache();
+    if (settings2.whatsapp_enabled && customer.phone) {
+      try {
+        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+        if (whatsappStatus.connection === 'open') {
+          await sendWA(customer.phone, `✅ *PPOB BERHASIL*\n\n📦 *Produk:* ${productName}\n🎯 *Tujuan:* ${target}\n💰 *Nominal:* Rp ${price.toLocaleString('id-ID')}\n${digiSn ? `🔢 *SN:* ${digiSn}\n` : ''}💳 *Sisa Saldo:* Rp ${getCustomerBalance(customer.id).toLocaleString('id-ID')}\n\nTerima kasih!`);
+        }
+      } catch (waErr) { logger.error('[PPOB] WA error: ' + waErr.message); }
+    }
+
+    return res.redirect('/customer/ppob?info=' + encodeURIComponent(`Berhasil! ${productName} → ${target}${digiSn ? '. SN: ' + digiSn : ''}`));
+  } catch (e) {
+    logger.error('[PPOB] Digiflazz error: ' + e.message);
+    adjustCustomerBalance(customer.id, price, `Refund PPOB error - ${sku}`);
+    db.prepare(`UPDATE public_ppob_orders SET status='failed', digi_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(e.message, orderId);
+    return redirectErr('Gagal memproses transaksi, saldo dikembalikan. ' + e.message);
+  }
+});
+
+// ─── TOP-UP SALDO via Payment Gateway ────────────────────────────────────────
+
+// Halaman request top-up saldo pelanggan
+router.get('/topup', async (req, res) => {
+  const settings = getSettingsWithCache();
+  if (!req.session.phone) return res.redirect('/customer/login?next=/customer/topup');
+  const customer = customerSvc.findCustomerByAny(req.session.phone);
+  if (!customer) return res.redirect('/customer/login');
+
+  let paymentChannels = [];
+  try {
+    if (settings.tripay_enabled) {
+      paymentChannels = await paymentSvc.getTripayChannels();
+      const qris = paymentChannels.find(c => String(c.code||'').toUpperCase()==='QRIS');
+      const others = paymentChannels.filter(c => String(c.code||'').toUpperCase()!=='QRIS');
+      paymentChannels = [...(qris?[qris]:[]), ...others];
+    }
+  } catch(e) { paymentChannels = []; }
+
+  const history = db.prepare(`SELECT * FROM customer_topup_requests WHERE customer_id = ? ORDER BY id DESC LIMIT 10`).all(customer.id);
+
+  res.render('customer/topup', {
+    settings,
+    customer: { ...customer, balance: getCustomerBalance(customer.id) },
+    paymentChannels,
+    history,
+    error: req.query.err ? String(req.query.err) : null,
+    info: req.query.info ? String(req.query.info) : null,
+  });
+});
+
+// Proses request top-up → redirect ke Payment Gateway
+router.post('/topup/create', express.urlencoded({ extended: true }), async (req, res) => {
+  const settings = getSettingsWithCache();
+  const redirectErr = (msg) => res.redirect('/customer/topup?err=' + encodeURIComponent(msg));
+  if (!req.session.phone) return res.redirect('/customer/login');
+  const customer = customerSvc.findCustomerByAny(req.session.phone);
+  if (!customer) return redirectErr('Sesi tidak valid');
+
+  const amount = parseInt(req.body.amount || '0');
+  const MIN_TOPUP = 10000;
+  if (!amount || amount < MIN_TOPUP) return redirectErr(`Minimal top-up Rp ${MIN_TOPUP.toLocaleString('id-ID')}`);
+
+  try {
+    const ins = db.prepare(`INSERT INTO customer_topup_requests (customer_id, amount, status) VALUES (?, ?, 'pending')`).run(customer.id, amount);
+    const reqId = Number(ins.lastInsertRowid);
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const appUrl = settings.app_url || `${protocol}://${req.get('host')}`;
+    const enabled = {
+      tripay: isEnabledFlag(settings.tripay_enabled),
+      midtrans: isEnabledFlag(settings.midtrans_enabled),
+      xendit: isEnabledFlag(settings.xendit_enabled),
+      duitku: isEnabledFlag(settings.duitku_enabled)
+    };
+    let gateway = String(settings.default_gateway || 'tripay').toLowerCase();
+    if (!enabled[gateway]) gateway = enabled.tripay?'tripay':enabled.midtrans?'midtrans':enabled.xendit?'xendit':enabled.duitku?'duitku':'tripay';
+
+    const invoiceLike = { id: `TOPUP${reqId}`, amount, item_name: `Top-Up Saldo ${customer.name}`, sku: `TOPUP-${reqId}` };
+    const buyer = { name: customer.name, phone: customer.phone || '', email: customer.email || '' };
+    const returnPath = `/customer/topup?info=${encodeURIComponent('Menunggu konfirmasi pembayaran...')}`;
+
+    let result;
+    if (gateway === 'midtrans') result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, 'snap', appUrl, { returnPath, orderPrefix: 'TOPUP', itemName: invoiceLike.item_name });
+    else if (gateway === 'xendit') result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, 'xendit', appUrl, { returnPath, orderPrefix: 'TOPUP', description: invoiceLike.item_name });
+    else if (gateway === 'duitku') result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, 'duitku', appUrl, { returnPath, orderPrefix: 'TOPUP', itemName: invoiceLike.item_name });
+    else result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, 'QRIS', appUrl, { returnPath, orderPrefix: 'TOPUP', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
+
+    if (!result.success) throw new Error(result.message || 'Gagal membuat transaksi');
+
+    db.prepare(`UPDATE customer_topup_requests SET payment_gateway=?, payment_order_id=?, payment_link=?, payment_reference=?, payment_payload=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(gateway, result.order_id||'', result.link||'', result.reference||'', result.payload ? JSON.stringify(result.payload) : null, reqId);
+
+    return res.redirect(result.link);
+  } catch(e) {
+    logger.error('[Topup] Error: ' + e.message);
+    return redirectErr('Gagal membuat pembayaran: ' + e.message);
+  }
+});
+
+// ─── TOP-UP SALDO AGEN via Payment Gateway ───────────────────────────────────
+
+// Route untuk agen request top-up via gateway
+router.post('/agent-topup/create', express.urlencoded({ extended: true }), async (req, res) => {
+  const settings = getSettingsWithCache();
+  if (!req.session.isAgent) return res.redirect('/agent/login');
+  const agentId = req.session.agentId;
+  const agent = agentSvc.getAgentById(agentId);
+  if (!agent) return res.redirect('/agent');
+
+  const amount = parseInt(req.body.amount || '0');
+  if (!amount || amount < 10000) {
+    req.session._msg = { type: 'error', text: 'Minimal top-up Rp 10.000' };
+    return res.redirect('/agent');
+  }
+
+  try {
+    const ins = db.prepare(`INSERT INTO agent_topup_requests (agent_id, amount, status) VALUES (?, ?, 'pending')`).run(agentId, amount);
+    const reqId = Number(ins.lastInsertRowid);
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const appUrl = settings.app_url || `${protocol}://${req.get('host')}`;
+    const enabled = {
+      tripay: isEnabledFlag(settings.tripay_enabled),
+      midtrans: isEnabledFlag(settings.midtrans_enabled),
+      xendit: isEnabledFlag(settings.xendit_enabled),
+      duitku: isEnabledFlag(settings.duitku_enabled)
+    };
+    let gateway = String(settings.default_gateway || 'tripay').toLowerCase();
+    if (!enabled[gateway]) gateway = enabled.tripay?'tripay':enabled.midtrans?'midtrans':enabled.xendit?'xendit':enabled.duitku?'duitku':'tripay';
+
+    const invoiceLike = { id: `AGTOP${reqId}`, amount, item_name: `Top-Up Saldo Agent ${agent.name}`, sku: `AGTOP-${reqId}` };
+    const buyer = { name: agent.name, phone: agent.phone || '', email: '' };
+    const returnPath = `/agent?info=topup_pending`;
+
+    let result;
+    if (gateway === 'midtrans') result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, 'snap', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+    else if (gateway === 'xendit') result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, 'xendit', appUrl, { returnPath, orderPrefix: 'AGTOP', description: invoiceLike.item_name });
+    else if (gateway === 'duitku') result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, 'duitku', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+    else result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, 'QRIS', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
+
+    if (!result.success) throw new Error(result.message || 'Gagal membuat transaksi');
+
+    db.prepare(`UPDATE agent_topup_requests SET payment_gateway=?, payment_order_id=?, payment_link=?, payment_reference=?, payment_payload=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(gateway, result.order_id||'', result.link||'', result.reference||'', result.payload ? JSON.stringify(result.payload) : null, reqId);
+
+    return res.redirect(result.link);
+  } catch(e) {
+    logger.error('[AgentTopup] Error: ' + e.message);
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+    return res.redirect('/agent');
+  }
 });
 
 module.exports = router;
