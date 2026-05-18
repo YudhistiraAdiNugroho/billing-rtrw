@@ -686,8 +686,7 @@ router.post('/public/voucher/create-payment', async (req, res) => {
         'tripay';
     }
 
-    let method = String(req.body.method || 'QRIS').trim().toUpperCase();
-    if (!method) method = 'QRIS';
+    let method = 'QRIS';
 
     if (gateway === 'tripay') {
       try {
@@ -1494,8 +1493,7 @@ router.post('/public/payment/create/:invoiceId', async (req, res) => {
     }
 
     const gateway = settings.default_gateway || 'tripay';
-    const rawMethod = String(req.body.method || 'QRIS').trim().toUpperCase().slice(0, 40);
-    let method = rawMethod || 'QRIS';
+    let method = 'QRIS';
     const cust = customerSvc.getCustomerById(inv.customer_id);
 
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -1679,7 +1677,7 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
     }
 
     const gateway = settings.default_gateway || 'tripay';
-    const method = req.query.method || 'QRIS';
+    const method = 'QRIS';
     const cust = customerSvc.getCustomerById(inv.customer_id);
     
     // Tentukan base URL aplikasi untuk callback

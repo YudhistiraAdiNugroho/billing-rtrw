@@ -23,6 +23,7 @@ const MENU_DEFINITIONS = [
   { key: 'dashboard', section: 'main', href: '/admin', icon: 'bi bi-speedometer2', labelKey: 'admin.nav.dashboard', labelDefault: 'Dashboard', roles: ['admin', 'cashier'], bottomNav: true, activePages: ['dashboard'] },
   { key: 'mikrotik', section: 'main', href: '/admin/mikrotik', icon: 'bi bi-router', labelKey: 'admin.nav.mikrotik', labelDefault: 'MikroTik', roles: ['admin', 'cashier'], bottomNav: true, activePages: ['mikrotik'] },
   { key: 'map', section: 'main', href: '/admin/map', icon: 'bi bi-map', labelKey: 'admin.nav.network_map', labelDefault: 'Peta Jaringan', roles: ['admin', 'cashier'], activePages: ['map'] },
+  { key: 'acs_pro', section: 'main', href: '/admin/acs', icon: 'bi bi-hdd-network', labelKey: 'admin.nav.acs_pro', labelDefault: 'GenieACS Pro', roles: ['admin'], activePages: ['acs_pro'] },
   { key: 'whatsapp', section: 'main', href: '/admin/whatsapp', icon: 'bi bi-whatsapp', labelKey: 'admin.nav.whatsapp', labelDefault: 'WhatsApp', roles: ['admin', 'cashier'], activePages: ['whatsapp'] },
   { key: 'broadcast', section: 'main', href: '/admin/whatsapp/broadcast', icon: 'bi bi-megaphone', labelKey: 'admin.broadcast.title', labelDefault: 'Broadcast WhatsApp', roles: ['admin', 'cashier'], activePages: ['broadcast'] },
 
@@ -58,6 +59,7 @@ const DEFAULT_MENU_STATES = {
   dashboard: STATE_VISIBLE,
   mikrotik: STATE_VISIBLE,
   map: STATE_VISIBLE,
+  acs_pro: STATE_VISIBLE,
   whatsapp: STATE_VISIBLE,
   broadcast: STATE_VISIBLE,
   customers: STATE_VISIBLE,

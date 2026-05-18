@@ -31,6 +31,7 @@ const payrollSvc = require('../services/payrollService');
 const sidebarMenuSvc = require('../services/sidebarMenuService');
 const axios = require('axios');
 const crypto = require('crypto');
+const acsPortal = require('./acsPortal');
 const { uploadAttendance, removeAttendanceFile } = require('../middleware/attendanceUpload');
 
 const DIGIFLAZZ_URL = 'https://api.digiflazz.com/v1';
@@ -430,6 +431,7 @@ router.use((req, res, next) => {
   res.locals.sidebarSections = sidebarMenuSvc.getSidebarSections(req.session);
   res.locals.sidebarBottomNavItems = sidebarMenuSvc.getBottomNavItems(req.session);
   res.locals.settings = getSettings();
+  res.locals.company = company();
   res.locals.formatDateLocal = formatDateLocal;
   res.locals.getNowLocal = getNowLocal;
   res.locals.getCurrentTimeInfo = getCurrentTimeInfo;
@@ -4818,5 +4820,7 @@ router.post('/payroll/slip/:id/send-wa', requireAdmin, async (req, res) => {
     res.json({ success: false, message: e.message });
   }
 });
+
+router.use('/acs', acsPortal);
 
 module.exports = router;
