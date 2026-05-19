@@ -12,6 +12,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { uploadAttendance, removeAttendanceFile } = require('../middleware/attendanceUpload');
+const genieacsApi = require('../config/genieacs');
 
 // Configure multer for photo uploads
 const storage = multer.diskStorage({
@@ -277,10 +278,12 @@ router.post('/tickets/:id/update', requireTechSession, upload.array('photos', 10
 
 // --- MONITORING ONU ---
 router.get('/monitoring', requireTechSession, (req, res) => {
+  const acsServers = genieacsApi.getAllACSServers();
   res.render('tech/monitoring', {
     title: 'Monitoring ONU',
     company: company(),
     activePage: 'monitoring',
+    acsServers,
     msg: flashMsg(req)
   });
 });
@@ -434,7 +437,7 @@ router.get('/api/odps/:id/ports', requireTechSession, (req, res) => {
 
 router.get('/api/devices', requireTechSession, async (req, res) => {
   try {
-    const { search, status, limit = 100, offset = 0 } = req.query;
+    const { search, status, acs, limit = 100, offset = 0 } = req.query;
     const customers = db.prepare('SELECT id, name, phone, pppoe_username, genieacs_tag FROM customers').all();
     const byPppoe = new Map();
     const byTag = new Map();
@@ -475,7 +478,9 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
         ssid: mapped.ssid,
         customerId: customer ? customer.id : null,
         customerName: customer ? customer.name : '',
-        customerPhone: customer ? customer.phone : ''
+        customerPhone: customer ? customer.phone : '',
+        acsServerName: d._acs_server_name || 'Default ACS',
+        acsServerId: d._acs_server_id || 'legacy'
       };
     });
 
@@ -489,6 +494,10 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
         (d.customerName && d.customerName.toLowerCase().includes(s)) ||
         (d.customerPhone && d.customerPhone.toLowerCase().includes(s))
       );
+    }
+
+    if (acs && acs !== 'all') {
+      devices = devices.filter(d => String(d.acsServerId) === String(acs));
     }
 
     if (status && status !== 'all') devices = devices.filter(d => d.status === status);

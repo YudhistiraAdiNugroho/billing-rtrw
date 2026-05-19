@@ -2,12 +2,8 @@
  * Service: Audit Trail untuk Operasi Sensitif
  * Mencatat semua operasi sensitif untuk tracking dan security
  */
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('../config/database');
 const { logger } = require('../config/logger');
-
-const dbPath = path.join(__dirname, '../database/billing.db');
-const db = new Database(dbPath);
 
 // Inisialisasi tabel audit_trail
 function initAuditTrailTable() {

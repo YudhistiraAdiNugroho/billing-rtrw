@@ -369,17 +369,20 @@ async function updateSSID(tag, newSSID, actor = null) {
     const device = await resolveDeviceToken(tag);
     if (!device) return false;
     const deviceId = encodeURIComponent(device._id);
-    const settings = getSettingsWithCache();
-    const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-    const auth = { username: settings.genieacs_username || '', password: settings.genieacs_password || '' };
-    const tasksUrl = `${genieacsUrl}/devices/${deviceId}/tasks`;
+    
+    // Gunakan server yang sesuai
+    const server = device._acs_server_id ? genieacsApi.getACSServer(device._acs_server_id) : genieacsApi.getACSServer('legacy');
+    if (!server) return false;
+    
+    const instance = genieacsApi.createAxiosInstance(server);
+    const tasksUrl = `/devices/${deviceId}/tasks`;
 
     const trySet = async (path, value) => {
       try {
-        await axios.post(tasksUrl, {
+        await instance.post(tasksUrl, {
           name: 'setParameterValues',
           parameterValues: [[path, value, 'xsd:string']]
-        }, { auth, timeout: 15000 });
+        }, { timeout: 15000 });
         return true;
       } catch (e) {
         return false;
@@ -402,10 +405,10 @@ async function updateSSID(tag, newSSID, actor = null) {
     ok = (await trySet('Device.WiFi.SSID.2.SSID', newSSID5G)) || ok;
 
     try {
-      await axios.post(tasksUrl, { name: 'refreshObject', objectName: 'InternetGatewayDevice.LANDevice.1.WLANConfiguration' }, { auth, timeout: 15000 });
+      await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'InternetGatewayDevice.LANDevice.1.WLANConfiguration' }, { timeout: 15000 });
     } catch (e) {}
     try {
-      await axios.post(tasksUrl, { name: 'refreshObject', objectName: 'Device.WiFi.SSID' }, { auth, timeout: 15000 });
+      await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'Device.WiFi.SSID' }, { timeout: 15000 });
     } catch (e) {}
 
     // Catat audit trail jika berhasil
@@ -444,19 +447,22 @@ async function updatePassword(tag, newPassword, actor = null) {
       return false;
     }
     const deviceId = encodeURIComponent(device._id);
-    const settings = getSettingsWithCache();
-    const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-    const auth = { username: settings.genieacs_username || '', password: settings.genieacs_password || '' };
-    const tasksUrl = `${genieacsUrl}/devices/${deviceId}/tasks`;
+    
+    // Gunakan server yang sesuai
+    const server = device._acs_server_id ? genieacsApi.getACSServer(device._acs_server_id) : genieacsApi.getACSServer('legacy');
+    if (!server) return false;
+    
+    const instance = genieacsApi.createAxiosInstance(server);
+    const tasksUrl = `/devices/${deviceId}/tasks`;
 
     logger.info(`[updatePassword] Setting password for device ${deviceId}, tag ${tag}`);
 
     const trySet = async (path) => {
       try {
-        await axios.post(tasksUrl, {
+        await instance.post(tasksUrl, {
           name: 'setParameterValues',
           parameterValues: [[path, newPassword, 'xsd:string']]
-        }, { auth, timeout: 15000 });
+        }, { timeout: 15000 });
         return true;
       } catch (e) {
         return false;
@@ -490,10 +496,10 @@ async function updatePassword(tag, newPassword, actor = null) {
 
     // Refresh object
     try {
-      await axios.post(tasksUrl, { name: 'refreshObject', objectName: 'InternetGatewayDevice.LANDevice.1.WLANConfiguration' }, { auth, timeout: 15000 });
+      await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'InternetGatewayDevice.LANDevice.1.WLANConfiguration' }, { timeout: 15000 });
     } catch (e) {}
     try {
-      await axios.post(tasksUrl, { name: 'refreshObject', objectName: 'Device.WiFi.AccessPoint' }, { auth, timeout: 15000 });
+      await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'Device.WiFi.AccessPoint' }, { timeout: 15000 });
     } catch (e) {}
 
     // Catat audit trail jika berhasil
@@ -523,14 +529,16 @@ async function updatePassword(tag, newPassword, actor = null) {
 async function requestReboot(tag, actor = null) {
   const device = await resolveDeviceToken(tag);
   if (!device || !device._id) return { ok: false, message: 'Perangkat tidak ditemukan.' };
-  const settings = getSettingsWithCache();
-  const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-  const auth = { username: settings.genieacs_username || '', password: settings.genieacs_password || '' };
+  
+  const server = device._acs_server_id ? genieacsApi.getACSServer(device._acs_server_id) : genieacsApi.getACSServer('legacy');
+  if (!server) return { ok: false, message: 'Server ACS tidak ditemukan.' };
+  
+  const instance = genieacsApi.createAxiosInstance(server);
+  
   try {
-    await axios.post(
-      `${genieacsUrl}/devices/${encodeURIComponent(device._id)}/tasks`,
-      { name: 'reboot', timestamp: new Date().toISOString() },
-      { auth }
+    await instance.post(
+      `/devices/${encodeURIComponent(device._id)}/tasks`,
+      { name: 'reboot', timestamp: new Date().toISOString() }
     );
 
     // Catat audit trail jika berhasil
@@ -558,9 +566,7 @@ async function requestReboot(tag, actor = null) {
 
 /** Daftar perangkat yang punya minimal satu tag (untuk admin WA). */
 async function listDevicesWithTags(limit = 250) {
-  const settings = getSettingsWithCache();
-  const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-  const auth = { username: settings.genieacs_username || '', password: settings.genieacs_password || '' };
+  const servers = genieacsApi.getAllACSServers();
   const queries = [
     { _tags: { $exists: true, $ne: [] } },
     { _tags: { $exists: true, $not: { $size: 0 } } },
@@ -576,62 +582,96 @@ async function listDevicesWithTags(limit = 250) {
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username._value'
   ].join(',');
-  for (const query of queries) {
-    try {
-      const response = await axios.get(`${genieacsUrl}/devices`, {
-        params: {
-          query: JSON.stringify(query),
-          limit: Math.max(1, Math.min(parseInt(limit, 10) || 250, 500)),
-          projection
-        },
-        auth,
-        timeout: 45000
-      });
-      const rows = Array.isArray(response.data) ? response.data : [];
-      if (rows.length > 0) {
-        return { ok: true, devices: rows.slice(0, limit) };
+
+  let allDevices = [];
+  const maxLimit = Math.max(1, Math.min(parseInt(limit, 10) || 250, 500));
+
+  for (const server of servers) {
+    let found = false;
+    for (const query of queries) {
+      try {
+        const instance = genieacsApi.createAxiosInstance(server);
+        const response = await instance.get(`/devices`, {
+          params: {
+            query: JSON.stringify(query),
+            limit: maxLimit,
+            projection
+          },
+          timeout: 45000
+        });
+        const rows = Array.isArray(response.data) ? response.data : [];
+        if (rows.length > 0) {
+          rows.forEach(d => {
+            d._acs_server_id = server.id;
+            d._acs_server_name = server.name;
+          });
+          allDevices.push(...rows);
+          found = true;
+          break;
+        }
+      } catch (e) {
+        /* coba query alternatif */
       }
-    } catch (e) {
-      /* coba query alternatif */
     }
   }
+  
+  if (allDevices.length > 0) {
+    return { ok: true, devices: allDevices.slice(0, limit) };
+  }
+  
   return { ok: false, devices: [], message: 'Gagal mengambil daftar dari GenieACS.' };
 }
 
 /** Mengambil semua perangkat tanpa melihat tag. */
 async function listAllDevices(limit = 500) {
-  const settings = getSettingsWithCache();
-  const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-  const auth = { username: settings.genieacs_username || '', password: settings.genieacs_password || '' };
-  try {
-    const response = await axios.get(`${genieacsUrl}/devices`, {
-      params: {
-        limit,
-        projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
-      },
-      auth,
-      timeout: 45000
-    });
-    const rows = Array.isArray(response.data) ? response.data : [];
-    return { ok: true, devices: rows.slice(0, limit) };
-  } catch (e) {
-    return { ok: false, devices: [], message: 'Gagal mengambil daftar dari GenieACS: ' + e.message };
+  const servers = genieacsApi.getAllACSServers();
+  let allDevices = [];
+  let lastError = null;
+
+  for (const server of servers) {
+    try {
+      const instance = genieacsApi.createAxiosInstance(server);
+      const response = await instance.get(`/devices`, {
+        params: {
+          limit,
+          projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
+        },
+        timeout: 45000
+      });
+      const rows = Array.isArray(response.data) ? response.data : [];
+      rows.forEach(d => {
+        d._acs_server_id = server.id;
+        d._acs_server_name = server.name;
+      });
+      allDevices.push(...rows);
+    } catch (e) {
+      lastError = e;
+      logger.error(`[CustomerDevice] Error listing devices on ${server.name}: ${e.message}`);
+    }
   }
+  
+  if (allDevices.length > 0 || !lastError) {
+    return { ok: true, devices: allDevices.slice(0, limit) };
+  }
+  
+  return { ok: false, devices: [], message: 'Gagal mengambil daftar dari GenieACS: ' + (lastError ? lastError.message : 'Unknown error') };
 }
 
 async function updateCustomerTag(oldTag, newTag) {
   const device = await findDeviceByTag(oldTag);
   if (!device || !device._id) return { ok: false, message: 'Perangkat tidak ditemukan.' };
-  const settings = getSettingsWithCache();
-  const genieacsUrl = settings.genieacs_url || 'http://localhost:7557';
-  const auth = { username: settings.genieacs_username || '', password: settings.genieacs_password || '' };
+  
+  const server = device._acs_server_id ? genieacsApi.getACSServer(device._acs_server_id) : genieacsApi.getACSServer('legacy');
+  if (!server) return { ok: false, message: 'Server ACS tidak ditemukan.' };
+  
+  const instance = genieacsApi.createAxiosInstance(server);
+  
   try {
     const tags = Array.isArray(device._tags) ? device._tags.filter((t) => t !== oldTag) : [];
     tags.push(newTag);
-    await axios.put(
-      `${genieacsUrl}/devices/${encodeURIComponent(device._id)}`,
-      { _id: device._id, _tags: tags },
-      { auth }
+    await instance.put(
+      `/devices/${encodeURIComponent(device._id)}`,
+      { _id: device._id, _tags: tags }
     );
     return { ok: true };
   } catch (e) {
