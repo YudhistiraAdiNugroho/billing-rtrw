@@ -25,7 +25,7 @@
 <%- include('../partials/sidebar', { activePage: 'expense_categories', company }) %>
 <div class="mw">
   <div class="topbar">
-    <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-tags"></i> Kategori Pengeluaran</div>
+    <div class="tb-title"><button class="cat-tab" onclick="filterCat(this, '<%= cat %>')"><%= cat %></button><i class="bi bi-tags"></i> Kategori Pengeluaran</div>
     <div class="tb-right">
       <button class="btn btn-p btn-sm" onclick="openModal('addModal')"><i class="bi bi-plus-lg"></i> Tambah Kategori</button>
     </div>
@@ -45,7 +45,7 @@
       <% categories.forEach(cat => { %>
         <div class="cat-card">
           <div class="cat-info">
-            <div class="cat-icon" style="<%- 'background:' + cat.color + '20; color:' + cat.color %>">
+            <div class="cat-icon" <%- 'style="background: ' + cat.color + '20; color: ' + cat.color + ';"' %>>
               <i class="<%= cat.icon || 'bi bi-tag' %>"></i>
             </div>
             <div>
@@ -79,7 +79,7 @@
         </div>
         <div class="fg">
           <label class="fl">Deskripsi</label>
-          <input type="text" class="fc" name="description" placeholder="BBM untuk operasional teknisi">
+          <textarea class="fc" name="description" placeholder="Beli Router Mikrotik RB750Gr3..."></textarea>
         </div>
         
         <div class="form-row mt-3">

@@ -674,65 +674,7 @@
       </div>
     </div>
 
-    <!-- GenieACS Settings -->
-    <div class="card mb16">
-      <div class="card-hd">
-        <h6><i class="bi bi-gear"></i> Pengaturan GenieACS</h6>
-      </div>
-      <div class="card-bd">
-        <form id="genieacsSettingsForm">
-          <div class="mon-grid">
-            <div>
-              <label class="form-label">Timeout (ms)</label>
-              <input type="number" class="form-control" id="genieacs_timeout" name="genieacs_timeout" 
-                     value="<%= typeof settings !== 'undefined' && settings.genieacs_timeout ? settings.genieacs_timeout : 30000 %>" 
-                     min="5000" max="120000" step="1000">
-              <small class="text-muted">Timeout untuk request ke GenieACS (5000-120000 ms)</small>
-            </div>
-            
-            <div>
-              <label class="form-label">RX Power Threshold (dBm)</label>
-              <input type="number" class="form-control" id="genieacs_rxpower_threshold" name="genieacs_rxpower_threshold" 
-                     value="<%= typeof settings !== 'undefined' && settings.genieacs_rxpower_threshold ? settings.genieacs_rxpower_threshold : -27 %>" 
-                     min="-40" max="-15" step="0.5">
-              <small class="text-muted">Threshold untuk warning RX Power (-40 sampai -15 dBm)</small>
-            </div>
-          </div>
 
-          <div class="mon-grid mt16">
-            <div>
-              <label class="form-label">Monitoring Interval (jam)</label>
-              <input type="number" class="form-control" id="genieacs_monitoring_interval" name="genieacs_monitoring_interval" 
-                     value="<%= typeof settings !== 'undefined' && settings.genieacs_monitoring_interval ? settings.genieacs_monitoring_interval : 6 %>" 
-                     min="1" max="24" step="1">
-              <small class="text-muted">Interval monitoring otomatis (1-24 jam)</small>
-            </div>
-            
-            <div>
-              <label class="form-label">Monitoring Enabled</label>
-              <div class="form-check form-switch mt-2">
-                <input class="form-check-input" type="checkbox" id="genieacs_monitoring_enabled" name="genieacs_monitoring_enabled" 
-                       <%= typeof settings !== 'undefined' && settings.genieacs_monitoring_enabled !== false ? 'checked' : '' %>>
-                <label class="form-check-label" for="genieacs_monitoring_enabled">
-                  Aktifkan monitoring otomatis RX Power & Offline Devices
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="text-center mt16">
-            <button type="submit" class="btn btn-p">
-              <i class="bi bi-save"></i> Simpan Pengaturan
-            </button>
-            <button type="button" class="btn btn-g" onclick="testGenieACSConnection()">
-              <i class="bi bi-wifi"></i> Test Koneksi
-            </button>
-          </div>
-        </form>
-        
-        <div id="genieacsMessage" class="mt16" style="display: none;"></div>
-      </div>
-    </div>
 
     <!-- Bottom Actions -->
     <div class="text-center mb16">

@@ -10,11 +10,28 @@
   </button>
 </div>
 
-<!-- Search Bar -->
+<!-- Search & Filter Bar -->
 <div class="mb-3">
-  <div class="input-group">
-    <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-search"></i></span>
-    <input type="text" id="search-input" class="form-control bg-dark border-secondary text-white shadow-none" placeholder="Cari: Nama / No HP / PPPoE / SN / Tag..." oninput="filterDevices()">
+  <div class="row g-2">
+    <div class="col-12 col-md-7">
+      <div class="input-group">
+        <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-search"></i></span>
+        <input type="text" id="search-input" class="form-control bg-dark border-secondary text-white shadow-none" placeholder="Cari: Nama / No HP / PPPoE / SN / Tag..." oninput="filterDevices()">
+      </div>
+    </div>
+    <div class="col-12 col-md-5">
+      <div class="input-group">
+        <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-server"></i></span>
+        <select id="server-filter" class="form-select bg-dark border-secondary text-white shadow-none" onchange="loadDevices()">
+          <option value="all">Semua Server ACS</option>
+          <% if (typeof acsServers !== 'undefined') { %>
+            <% acsServers.forEach(s => { %>
+              <option value="<%= s.id %>"><%= s.name %></option>
+            <% }); %>
+          <% } %>
+        </select>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -66,11 +83,13 @@ const actionModal = new bootstrap.Modal(document.getElementById('actionModal'));
 
 async function loadDevices() {
   const container = document.getElementById('device-list');
+  container.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="text-secondary mt-2 small">Memuat data perangkat...</p></div>`;
+  const acsFilter = document.getElementById('server-filter').value;
   try {
-    const res = await fetch('/tech/api/devices');
+    const res = await fetch(`/tech/api/devices?acs=${encodeURIComponent(acsFilter)}`);
     const data = await res.json();
     allDevices = data.devices || [];
-    renderDevices(allDevices);
+    filterDevices(); // Apply client search if any
   } catch (e) {
     container.innerHTML = `<div class="alert alert-danger small">Gagal memuat data: ${e.message}</div>`;
   }
@@ -97,6 +116,12 @@ function renderDevices(devices) {
           </div>
           <span class="badge-status badge-${isOn ? 'resolved' : 'open'}">
             ${isOn ? 'Online' : 'Offline'}
+          </span>
+        </div>
+        
+        <div class="mb-2">
+          <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size: 10px; padding: 3px 8px;">
+            <i class="bi bi-server me-1"></i>${d.acsServerName || 'Default ACS'}
           </span>
         </div>
         
@@ -137,14 +162,15 @@ function renderDevices(devices) {
 
 function filterDevices() {
   const q = document.getElementById('search-input').value.toLowerCase();
-  const filtered = allDevices.filter(d => 
-    d.tags.some(t => t.toLowerCase().includes(q)) || 
-    d.serialNumber.toLowerCase().includes(q) ||
-    (d.pppoeUsername && d.pppoeUsername !== 'N/A' && String(d.pppoeUsername).toLowerCase().includes(q)) ||
-    (d.customerName && String(d.customerName).toLowerCase().includes(q)) ||
-    (d.customerPhone && String(d.customerPhone).toLowerCase().includes(q)) ||
-    (d.id && String(d.id).toLowerCase().includes(q))
-  );
+  
+  const filtered = allDevices.filter(d => {
+    return d.tags.some(t => t.toLowerCase().includes(q)) || 
+      d.serialNumber.toLowerCase().includes(q) ||
+      (d.pppoeUsername && d.pppoeUsername !== 'N/A' && String(d.pppoeUsername).toLowerCase().includes(q)) ||
+      (d.customerName && String(d.customerName).toLowerCase().includes(q)) ||
+      (d.customerPhone && String(d.customerPhone).toLowerCase().includes(q)) ||
+      (d.id && String(d.id).toLowerCase().includes(q));
+  });
   renderDevices(filtered);
 }
 

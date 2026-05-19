@@ -76,7 +76,7 @@
             <tr>
               <td style="white-space:nowrap"><%= formatDateLocal(item.date) %></td>
               <td>
-                <span class="badge" style="<%- 'background:' + (item.category_color ? item.category_color+'20' : 'rgba(255,255,255,0.1)') + '; color:' + (item.category_color || 'white') + '; border: 1px solid ' + (item.category_color ? item.category_color+'50' : 'rgba(255,255,255,0.2)') %>">
+                <span class="badge" <%- 'style="background: ' + (item.category_color ? item.category_color+'20' : 'rgba(255,255,255,0.1)') + '; color: ' + (item.category_color || 'white') + '; border: 1px solid ' + (item.category_color ? item.category_color+'50' : 'rgba(255,255,255,0.2)') + ';"' %>>
                   <i class="<%= item.category_icon || 'bi bi-tag' %>"></i> <%= item.category %>
                 </span>
               </td>

@@ -142,7 +142,7 @@
     <div class="cat-tabs">
       <button class="cat-tab active" onclick="filterCat(this, 'all')">Semua</button>
       <% digiflazzCategories.forEach(cat => { %>
-      <button class="cat-tab" onclick="filterCat(this, '<%= cat.replace(/'/g, "\\'") %>')"><%= cat %></button>
+      <button class="cat-tab" data-cat="<%= cat %>" onclick="filterCat(this, this.getAttribute('data-cat'))"><%= cat %></button>
       <% }) %>
     </div>
 
