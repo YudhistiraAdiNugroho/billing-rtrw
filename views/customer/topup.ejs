@@ -68,6 +68,116 @@
     @media(max-width:576px){
       .preset-grid{grid-template-columns:repeat(2,1fr)}
     }
+    
+    /* Payment Method Styles */
+    .payment-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+      gap:12px;
+      margin-top:10px;
+    }
+    @media(max-width:576px){
+      .payment-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+    }
+    
+    .payment-radio{position:absolute;opacity:0;pointer-events:none}
+    .payment-card{
+      background:#0f172a;
+      border:2px solid #334155;
+      border-radius:14px;
+      padding:14px 12px;
+      cursor:pointer;
+      transition:all .25s cubic-bezier(0.4,0,0.2,1);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:8px;
+      text-align:center;
+      position:relative;
+      overflow:hidden;
+    }
+    .payment-card::before{
+      content:'';
+      position:absolute;
+      top:0;
+      left:0;
+      right:0;
+      bottom:0;
+      background:linear-gradient(135deg,rgba(14,165,233,0.05) 0%,rgba(6,182,212,0.05) 100%);
+      opacity:0;
+      transition:opacity .25s ease;
+    }
+    .payment-card:hover{
+      border-color:#0ea5e9;
+      transform:translateY(-2px);
+      box-shadow:0 12px 30px rgba(0,0,0,0.3),0 0 0 1px rgba(14,165,233,0.2);
+    }
+    .payment-card:hover::before{opacity:1}
+    .payment-radio:checked + .payment-card{
+      border-color:#0ea5e9;
+      background:rgba(14,165,233,0.12);
+      box-shadow:0 8px 20px rgba(14,165,233,0.3);
+    }
+    .payment-radio:checked + .payment-card::after{
+      content:'✓';
+      position:absolute;
+      top:8px;
+      right:8px;
+      width:20px;
+      height:20px;
+      background:linear-gradient(135deg,#0ea5e9,#06b6d4);
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      font-weight:900;
+      color:#fff;
+      box-shadow:0 4px 12px rgba(14,165,233,0.4);
+    }
+    
+    .payment-icon{
+      width:48px;
+      height:48px;
+      border-radius:12px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:22px;
+      box-shadow:0 6px 16px rgba(0,0,0,0.3);
+      position:relative;
+      z-index:1;
+    }
+    .badge-qris{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
+    .badge-dana{background:linear-gradient(135deg,#3b82f6,#0ea5e9);color:#fff}
+    .badge-ovo{background:linear-gradient(135deg,#a855f7,#6366f1);color:#fff}
+    .badge-shopee{background:linear-gradient(135deg,#f97316,#f43f5e);color:#fff}
+    .badge-linkaja{background:linear-gradient(135deg,#ef4444,#f43f5e);color:#fff}
+    .badge-gopay{background:linear-gradient(135deg,#22c55e,#10b981);color:#fff}
+    .badge-bank{background:linear-gradient(135deg,#1e293b,#334155);color:#e2e8f0}
+    
+    .payment-name{
+      font-size:13px;
+      font-weight:700;
+      color:#f1f5f9;
+      line-height:1.3;
+      position:relative;
+      z-index:1;
+    }
+    .payment-fee{
+      font-size:10px;
+      color:#64748b;
+      font-weight:600;
+      position:relative;
+      z-index:1;
+    }
+    
+    @media(max-width:576px){
+      .payment-card{padding:12px 10px;gap:6px}
+      .payment-icon{width:42px;height:42px;font-size:20px}
+      .payment-name{font-size:12px}
+      .payment-fee{font-size:9px}
+    }
   </style>
 </head>
 <body>
@@ -113,8 +223,64 @@
             <input type="number" name="amount" id="amountInput" min="10000" step="1000" placeholder="0" required>
           </div>
 
+          <% if (paymentChannels && paymentChannels.length > 0) { %>
+            <div class="form-group">
+              <label>Pilih Metode Pembayaran</label>
+              <div class="payment-grid">
+                <% paymentChannels.forEach((ch, idx) => {
+                  const code = String(ch.code || '').toUpperCase();
+                  const name = ch.name || code;
+                  const group = String(ch.group || '').toLowerCase();
+                  let icon = 'bi-wallet2';
+                  let badgeClass = 'badge-bank';
+                  
+                  if (code === 'QRIS' || code.includes('QRIS')) {
+                    icon = 'bi-qr-code-scan';
+                    badgeClass = 'badge-qris';
+                  } else if (code.includes('DANA')) {
+                    icon = 'bi-wallet2';
+                    badgeClass = 'badge-dana';
+                  } else if (code.includes('OVO')) {
+                    icon = 'bi-wallet2';
+                    badgeClass = 'badge-ovo';
+                  } else if (code.includes('SHOPEE')) {
+                    icon = 'bi-wallet2';
+                    badgeClass = 'badge-shopee';
+                  } else if (code.includes('LINKAJA')) {
+                    icon = 'bi-wallet2';
+                    badgeClass = 'badge-linkaja';
+                  } else if (code.includes('GOPAY')) {
+                    icon = 'bi-wallet2';
+                    badgeClass = 'badge-gopay';
+                  } else if (code.includes('VA') || group.includes('virtual')) {
+                    icon = 'bi-bank';
+                    badgeClass = 'badge-bank';
+                  } else if (code.includes('SNAP') || code.includes('XENDIT') || code.includes('DUITKU')) {
+                    icon = 'bi-credit-card';
+                    badgeClass = 'badge-bank';
+                  }
+                %>
+                  <input type="radio" name="method" id="method_<%= idx %>" value="<%= code %>" <%= idx === 0 ? 'checked' : '' %> class="payment-radio">
+                  <label for="method_<%= idx %>" class="payment-card">
+                    <div class="payment-icon <%= badgeClass %>">
+                      <% if (ch.icon_url) { %>
+                        <img src="<%= ch.icon_url %>" alt="<%= name %>" style="width:100%;height:100%;object-fit:contain;padding:6px">
+                      <% } else { %>
+                        <i class="<%= icon %>"></i>
+                      <% } %>
+                    </div>
+                    <div class="payment-name"><%= name %></div>
+                    <% if (ch.total_fee && ch.total_fee.flat) { %>
+                      <div class="payment-fee">Fee: Rp <%= Number(ch.total_fee.flat).toLocaleString('id-ID') %></div>
+                    <% } %>
+                  </label>
+                <% }) %>
+              </div>
+            </div>
+          <% } %>
+
           <button type="submit" class="btn-submit" id="btnSubmit">
-            <i class="bi bi-qr-code-scan"></i> Buat Pembayaran QRIS/VA
+            <i class="bi bi-qr-code-scan"></i> Buat Pembayaran
           </button>
           <p style="text-align:center;font-size:12px;color:#64748b;margin-top:12px">Anda akan diarahkan ke gerbang pembayaran aman untuk menyelesaikan pengisian saldo.</p>
         </form>
