@@ -1685,8 +1685,10 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
     }
 
     const gateway = settings.default_gateway || 'tripay';
-    const method = 'QRIS';
+    const method = req.query.method || 'QRIS';
     const cust = customerSvc.getCustomerById(inv.customer_id);
+    
+    logger.info(`[Payment] Creating payment for INV-${inv.id}, Gateway: ${gateway}, Method: ${method}`);
     
     // Tentukan base URL aplikasi untuk callback
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;

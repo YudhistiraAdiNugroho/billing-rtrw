@@ -27,25 +27,25 @@ const commandCooldownStore = new Map(); // Format: { phone: lastCommandTimestamp
 function checkRateLimit(phone) {
   const now = Date.now();
   const userLimit = rateLimitStore.get(phone);
-  
+
   if (!userLimit) {
     rateLimitStore.set(phone, { count: 1, lastReset: now });
     return { allowed: true, remaining: MAX_COMMANDS_PER_MINUTE - 1 };
   }
-  
+
   // Reset counter setiap menit
   if (now - userLimit.lastReset >= 60000) {
     rateLimitStore.set(phone, { count: 1, lastReset: now });
     return { allowed: true, remaining: MAX_COMMANDS_PER_MINUTE - 1 };
   }
-  
+
   // Cek limit
   if (userLimit.count >= MAX_COMMANDS_PER_MINUTE) {
     const resetTime = userLimit.lastReset + 60000;
     const waitTime = Math.ceil((resetTime - now) / 1000);
     return { allowed: false, waitTime };
   }
-  
+
   // Increment counter
   userLimit.count++;
   return { allowed: true, remaining: MAX_COMMANDS_PER_MINUTE - userLimit.count };
@@ -54,18 +54,18 @@ function checkRateLimit(phone) {
 function checkCommandCooldown(phone) {
   const now = Date.now();
   const lastCommand = commandCooldownStore.get(phone);
-  
+
   if (!lastCommand) {
     commandCooldownStore.set(phone, now);
     return { allowed: true };
   }
-  
+
   const elapsed = now - lastCommand;
   if (elapsed < COMMAND_COOLDOWN_MS) {
     const waitTime = Math.ceil((COMMAND_COOLDOWN_MS - elapsed) / 1000);
     return { allowed: false, waitTime };
   }
-  
+
   commandCooldownStore.set(phone, now);
   return { allowed: true };
 }
@@ -74,20 +74,20 @@ function getPhoneFromKey(key) {
   if (!key) return null;
   const remoteJid = key.remoteJid || key;
   if (!remoteJid) return null;
-  
+
   // Extract phone number from JID
   const [user, host] = remoteJid.split('@');
   if (!user || !host) return null;
-  
+
   // Remove non-digits
   const phone = user.replace(/\D/g, '');
   if (!phone) return null;
-  
+
   // Convert 0 to 62
   if (phone.startsWith('0')) {
     return '62' + phone.slice(1);
   }
-  
+
   return phone;
 }
 
@@ -241,11 +241,11 @@ function formatInfo(data) {
 function formatCekTerhubung(data) {
   if (!data) return waWrap('👥 *PERANGKAT TERHUBUNG*', '❌ Data tidak tersedia.');
   const list = data.connectedUsers || [];
-  
+
   if (list.length === 0) {
     return waWrap('👥 *PERANGKAT TERHUBUNG*', '⚠️ Tidak ada entri host/perangkat terhubung di data ONU.');
   }
-  
+
   const content = `📊 *${list.length} perangkat tercatat:*\n`;
   const rows = list.slice(0, 25).map((u, i) => {
     const num = String(i + 1).padStart(2, '0');
@@ -261,24 +261,24 @@ function formatBillingSummary(stats) {
   return waWrap(
     '💰 *RINGKASAN BILLING*',
     `📈 *Total Pendapatan:* ${formatter.format(stats.totalRevenue)}\n` +
-      `📅 *Bulan Ini:* ${formatter.format(stats.thisMonth)}\n` +
-      `⏳ *Piutang (Pending):* ${formatter.format(stats.pendingAmount)}\n` +
-      `🧾 *Tagihan Belum Lunas:* ${stats.unpaidCount} invoice\n\n` +
-      `💡 _Gunakan perintah lain untuk detail._`
+    `📅 *Bulan Ini:* ${formatter.format(stats.thisMonth)}\n` +
+    `⏳ *Piutang (Pending):* ${formatter.format(stats.pendingAmount)}\n` +
+    `🧾 *Tagihan Belum Lunas:* ${stats.unpaidCount} invoice\n\n` +
+    `💡 _Gunakan perintah lain untuk detail._`
   );
 }
 
 function formatCustomerInvoices(invoices, name) {
   const title = `🧾 *STATUS TAGIHAN*\n👤 *${name}*`;
   if (!invoices || invoices.length === 0) return waWrap(title, "✅ Tidak ada tagihan. Terima kasih!");
-  
+
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 });
-  
+
   const list = invoices.map(inv => {
     const status = inv.status === 'paid' ? '✅ LUNAS' : '❌ BELUM BAYAR';
     return `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n💰 *Total:* ${formatter.format(inv.amount)}\n📌 *Status:* ${status}\n🆔 *ID:* ${inv.id}`;
   }).join('\n\n');
-  
+
   return waWrap(title, list + `\n\n💡 _Gunakan ID Tagihan saat konfirmasi pembayaran_`);
 }
 
@@ -410,18 +410,18 @@ function parseCommand(text, isAdmin) {
 
 async function resolveTargetTagForAdmin(tagToken) {
   if (!tagToken) return null;
-  
+
   // 1. Coba cari di database billing dulu (by name, pppoe, phone, etc)
   const cust = customerSvc.findCustomerByAny(tagToken);
   if (cust) return cust.genieacs_tag || cust.pppoe_username || cust.phone || tagToken;
-  
+
   return tagToken;
 }
 
 function formatListOnu(devices) {
   const companyHeader = getSetting('company_header', 'ALIJAYA WEBPORTAL');
   const footerInfo = getSetting('footer_info', 'Internet Tanpa Batas');
-  
+
   const header = `📱 *DAFTAR ONU BER-TAG*
 ${'─'.repeat(30)}
 📊 *${companyHeader}*
@@ -430,11 +430,11 @@ ${'─'.repeat(30)}
   const footer = `
 ${'─'.repeat(30)}
 ${footerInfo}`;
-  
+
   if (!devices || devices.length === 0) {
     return header + `❌ Tidak ada perangkat dengan tag.` + footer;
   }
-  
+
   const content = `📊 *${devices.length} perangkat ditemukan:*
 `;
   const lines = devices.map((d, i) => {
@@ -446,7 +446,7 @@ ${footerInfo}`;
    � PPPoE: ${pppoeUsername}
    ⏱️ Last inform: ${li}`;
   }).join('\n\n');
-  
+
   return header + content + lines + footer;
 }
 
@@ -637,7 +637,7 @@ export async function startWhatsAppBot() {
     version,
     auth: state,
     printQRInTerminal: false,
-    browser: ['ALIJAYA WEBPORTAL', 'Chrome', '1.0.0'],
+    browser: ['ALIJAYA BILLING', 'Chrome', '1.0.0'],
     syncFullHistory: false,
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
@@ -652,7 +652,7 @@ export async function startWhatsAppBot() {
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
     whatsappStatus.lastUpdate = getCurrentDateInTimezone();
-    
+
     if (qr) {
       whatsappStatus.qr = qr;
       whatsappStatus.connection = 'qr';
@@ -661,23 +661,23 @@ export async function startWhatsAppBot() {
       logger.info(`[WA] QR Code Baru Dihasilkan: ${qr.slice(0, 20)}...`);
       qrcode.generate(qr, { small: true });
     }
-    
+
     if (connection) {
       logger.info(`[WA] Connection Update: ${connection}`);
     }
-    
+
     if (connection === 'close') {
       whatsappStatus.qr = null;
       whatsappStatus.user = null;
       const code = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = code !== DisconnectReason.loggedOut;
       whatsappStatus.connection = code === DisconnectReason.loggedOut ? 'loggedOut' : 'connecting';
-      
+
       logger.warn(
         `WhatsApp terputus (kode ${code}). ` +
-          (code === DisconnectReason.loggedOut
-            ? 'Sesi logout — hapus folder auth dan pindai QR lagi.'
-            : 'Mencoba reconnect dalam 3 detik...')
+        (code === DisconnectReason.loggedOut
+          ? 'Sesi logout — hapus folder auth dan pindai QR lagi.'
+          : 'Mencoba reconnect dalam 3 detik...')
       );
       if (shouldReconnect) {
         setTimeout(() => startWhatsAppBot(), 3000);
@@ -703,7 +703,7 @@ export async function startWhatsAppBot() {
           const msg = waWrap('🤖 *WHATSAPP BOT AKTIF*', body);
           for (const digits of toList) {
             const jid = `${digits}@s.whatsapp.net`;
-            sock.sendMessage(jid, { text: msg }).catch(() => {});
+            sock.sendMessage(jid, { text: msg }).catch(() => { });
           }
         }
         qrShownSinceStart = false;
@@ -880,14 +880,14 @@ export async function startWhatsAppBot() {
             const now = getCurrentDateInTimezone();
             const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
             const comment = `vc ${code} ${dateStr}`;
-            
-            await mikrotikSvc.addHotspotUser({ 
-              name: code, 
-              password: code, 
+
+            await mikrotikSvc.addHotspotUser({
+              name: code,
+              password: code,
               profile: profile,
               comment: comment
             });
-            
+
             await reply(`✅ Voucher Hotspot *${code}* berhasil dibuat.\n\n👤 User: *${code}*\n🔑 Pass: *${code}*\n🏷️ Profile: *${profile}*\n📝 Comment: *${comment}*`);
           } catch (e) {
             await reply('❌ Gagal buat voucher: ' + e.message);
@@ -921,7 +921,7 @@ export async function startWhatsAppBot() {
           try {
             let targetInvId = parsed.targetId;
             let targetInv = billingSvc.getInvoiceById(targetInvId);
-            
+
             // If not found by ID, try find customer and their oldest unpaid invoice
             if (!targetInv) {
               const cust = customerSvc.findCustomerByAny(parsed.targetId);
@@ -937,9 +937,9 @@ export async function startWhatsAppBot() {
             }
 
             if (!targetInv) return await reply(`❌ Tagihan atau Pelanggan *${parsed.targetId}* tidak ditemukan.`);
-            
+
             billingSvc.markAsPaid(targetInvId, 'WA Bot Admin', 'Paid via WhatsApp Command');
-            
+
             const customer = customerSvc.getCustomerById(targetInv.customer_id);
             if (customer && customer.status === 'suspended') {
               const freshCustomer = customerSvc.getAllCustomers().find(c => c.id === targetInv.customer_id);
@@ -1301,7 +1301,7 @@ export async function startWhatsAppBot() {
         if (!ctx) {
           await reply(
             '❌ Nomor/tag Anda belum dikenali (sering terjadi jika WA memakai @lid).\n\n' +
-              'Kirim sekali:\n\`daftar NOMORATAUTAG\`\n(sama persis dengan tag di GenieACS), lalu ulangi perintah.'
+            'Kirim sekali:\n\`daftar NOMORATAUTAG\`\n(sama persis dengan tag di GenieACS), lalu ulangi perintah.'
           );
           continue;
         }

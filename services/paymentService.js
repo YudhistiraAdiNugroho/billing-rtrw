@@ -409,15 +409,27 @@ async function getTripayChannels() {
   const apiKey = settings.tripay_api_key;
   const isLive = settings.tripay_mode === 'live' || settings.tripay_mode === 'production';
   
-  const baseUrl = isLive 
-    ? 'https://tripay.co.id/api/merchant/payment-channel' 
+  const baseUrl = isLive
+    ? 'https://tripay.co.id/api/merchant/payment-channel'
     : 'https://tripay.co.id/api-sandbox/merchant/payment-channel';
 
   try {
     const res = await axios.get(baseUrl, {
       headers: { Authorization: `Bearer ${apiKey}` }
     });
-    return res.data.success ? res.data.data : [];
+    
+    if (!res.data.success) {
+      logger.error('[Tripay] Response tidak success:', res.data);
+      return [];
+    }
+    
+    // Filter hanya channel yang aktif (active === true)
+    const allChannels = res.data.data || [];
+    const activeChannels = allChannels.filter(ch => ch.active === true);
+    
+    logger.info(`[Tripay] Total channels: ${allChannels.length}, Active: ${activeChannels.length}`);
+    
+    return activeChannels;
   } catch (error) {
     logger.error('[Tripay] Gagal ambil channel:', error.message);
     return [];
