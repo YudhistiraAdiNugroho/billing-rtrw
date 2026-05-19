@@ -1021,6 +1021,9 @@ router.use((req, res, next) => {
 });
 
 router.get('/dashboard', async (req, res) => {
+  // Debug logging
+  logger.info(`[Dashboard] Session ID: ${req.sessionID}, Phone: ${req.session?.phone || 'TIDAK ADA'}`);
+  
   const loginId = req.session && req.session.phone;
   if (!loginId) return res.redirect('/customer/login');
   
@@ -2025,10 +2028,21 @@ function adjustCustomerBalance(customerId, delta, note = '') {
 // Halaman PPOB & saldo untuk pelanggan (wajib login)
 router.get('/ppob', (req, res) => {
   const settings = getSettingsWithCache();
-  if (!req.session.phone) return res.redirect('/customer/login?next=/customer/ppob');
+  
+  // Debug logging
+  logger.info(`[PPOB] Session ID: ${req.sessionID}, Phone: ${req.session?.phone || 'TIDAK ADA'}`);
+  logger.info(`[PPOB] Session object: ${JSON.stringify(req.session)}`);
+  
+  if (!req.session.phone) {
+    logger.warn('[PPOB] Session phone tidak ditemukan, redirect ke login');
+    return res.redirect('/customer/login?next=/customer/ppob');
+  }
 
   const customer = customerSvc.findCustomerByAny(req.session.phone);
-  if (!customer) return res.redirect('/customer/login');
+  if (!customer) {
+    logger.warn('[PPOB] Customer tidak ditemukan untuk phone: ' + req.session.phone);
+    return res.redirect('/customer/login');
+  }
 
   const digiflazzConfigured = Boolean(
     String(settings.digiflazz_username || '').trim() &&
