@@ -65,7 +65,7 @@ router.get('/logout', (req, res) => {
   res.redirect('/agent/login');
 });
 
-router.get('/', requireAgentSession, (req, res) => {
+router.get('/', requireAgentSession, async (req, res) => {
   const agentId = req.session.agentId;
   const agent = agentSvc.getAgentById(agentId);
   const q = String(req.query.q || '').trim();
@@ -112,6 +112,51 @@ router.get('/', requireAgentSession, (req, res) => {
   const digiflazzBrandsData = Array.from(digiflazzBrandsMap.values());
   const digiflazzCategories = Array.from(new Set((digiflazzCatalogProducts || []).map(p => String(p.category || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
+  // Fetch payment channels
+  let paymentChannels = [];
+  try {
+    const settings = getSettings();
+    const gateway = settings.default_gateway || 'tripay';
+    if (gateway === 'tripay' && isEnabledFlag(settings.tripay_enabled)) {
+      paymentChannels = await paymentSvc.getTripayChannels();
+      const qris = paymentChannels.find(c => String(c.code||'').toUpperCase()==='QRIS');
+      const others = paymentChannels.filter(c => String(c.code||'').toUpperCase()!=='QRIS');
+      paymentChannels = [...(qris?[qris]:[]), ...others];
+    } else if (gateway === 'midtrans' && isEnabledFlag(settings.midtrans_enabled)) {
+      paymentChannels = [
+        { code: 'SNAP', name: 'Semua Metode (Snap)', group: 'E-Wallet', active: true },
+        { code: 'QRIS', name: 'QRIS', group: 'E-Wallet', active: true },
+        { code: 'BCAVA', name: 'BCA Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'BNIVA', name: 'BNI Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'BRIVA', name: 'BRI Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'PERMATAVA', name: 'Permata Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'MANDIRIVA', name: 'Mandiri Virtual Account', group: 'Virtual Account', active: true }
+      ];
+    } else if (gateway === 'xendit' && isEnabledFlag(settings.xendit_enabled)) {
+      paymentChannels = [
+        { code: 'XENDIT', name: 'Semua Metode', group: 'E-Wallet', active: true },
+        { code: 'QRIS', name: 'QRIS', group: 'E-Wallet', active: true },
+        { code: 'BCAVA', name: 'BCA Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'BNIVA', name: 'BNI Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'BRIVA', name: 'BRI Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'PERMATAVA', name: 'Permata Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'MANDIRIVA', name: 'Mandiri Virtual Account', group: 'Virtual Account', active: true }
+      ];
+    } else if (gateway === 'duitku' && isEnabledFlag(settings.duitku_enabled)) {
+      paymentChannels = [
+        { code: 'DUITKU', name: 'Semua Metode', group: 'E-Wallet', active: true },
+        { code: 'QRIS', name: 'QRIS', group: 'E-Wallet', active: true },
+        { code: 'BCAVA', name: 'BCA Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'BNIVA', name: 'BNI Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'BRIVA', name: 'BRI Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'PERMATAVA', name: 'Permata Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'MANDIRIVA', name: 'Mandiri Virtual Account', group: 'Virtual Account', active: true }
+      ];
+    }
+  } catch(e) {
+    paymentChannels = [];
+  }
+
   res.render('agent/dashboard', {
     title: 'Dashboard Agent',
     company: company(),
@@ -124,6 +169,7 @@ router.get('/', requireAgentSession, (req, res) => {
     digiflazzConfigured,
     digiflazzCategories,
     digiflazzBrandsData,
+    paymentChannels,
     msg: flashMsg(req),
     receipt: popReceipt(req)
   });
@@ -136,6 +182,7 @@ router.post('/topup/create', requireAgentSession, express.urlencoded({ extended:
   if (!agent) return res.redirect('/agent/login');
 
   const amount = parseInt(req.body.amount || '0');
+  const method = String(req.body.method || 'QRIS').toUpperCase();
   if (!amount || amount < 10000) {
     req.session._msg = { type: 'error', text: 'Minimal top-up Rp 10.000' };
     return res.redirect('/agent');
@@ -168,10 +215,10 @@ router.post('/topup/create', requireAgentSession, express.urlencoded({ extended:
     const returnPath = `/agent?info=topup_pending`;
 
     let result;
-    if (gateway === 'midtrans') result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, 'snap', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
-    else if (gateway === 'xendit') result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, 'xendit', appUrl, { returnPath, orderPrefix: 'AGTOP', description: invoiceLike.item_name });
-    else if (gateway === 'duitku') result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, 'duitku', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
-    else result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, 'QRIS', appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
+    if (gateway === 'midtrans') result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, method === 'SNAP' ? 'snap' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+    else if (gateway === 'xendit') result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, method === 'XENDIT' ? 'xendit' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', description: invoiceLike.item_name });
+    else if (gateway === 'duitku') result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, method === 'DUITKU' ? 'duitku' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+    else result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
 
     if (!result.success) throw new Error(result.message || 'Gagal membuat transaksi');
 
