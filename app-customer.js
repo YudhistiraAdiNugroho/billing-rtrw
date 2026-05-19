@@ -59,8 +59,10 @@ app.use(session({
     secure: Boolean(cookieSecure),
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000
-  }
+    maxAge: 24 * 60 * 60 * 1000,
+    path: '/'
+  },
+  name: 'customer.sid'
 }));
 
 // i18n middleware (aman: hanya teks UI, tidak mengubah logic fitur)
