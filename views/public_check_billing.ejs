@@ -43,6 +43,7 @@
     .p-icon{width:42px;height:42px;background: rgba(30, 41, 59, 0.9);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#6366f1;box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);overflow:hidden;flex:0 0 auto}
     .p-logo{width:100%;height:100%;object-fit:contain;padding:7px;background: rgba(255, 255, 255, 0.95)}
     .p-badge{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:.2px;text-transform:uppercase}
+    .pb-qris{background: linear-gradient(135deg, rgba(99,102,241,0.95), rgba(139,92,246,0.95));color:#0b1220}
     .pb-dana{background: linear-gradient(135deg, rgba(59,130,246,0.95), rgba(14,165,233,0.95));color:#0b1220}
     .pb-ovo{background: linear-gradient(135deg, rgba(168,85,247,0.95), rgba(99,102,241,0.95));color:#0b1220}
     .pb-shopeepay{background: linear-gradient(135deg, rgba(249,115,22,0.95), rgba(244,63,94,0.95));color:#0b1220}
@@ -223,22 +224,96 @@
 
               <form id="payForm" method="POST" action="/customer/public/payment/create/0" class="d-grid gap-2">
                 <input type="hidden" name="token" id="pay_token" value="">
+                <input type="hidden" name="method" id="pay_method" value="">
 
-                <input type="hidden" name="method" value="QRIS">
-                <div class="payment-methods-grid">
-                  <div class="pay-method-item" style="cursor: default">
-                    <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
-                    <div class="p-info">
-                      <span class="p-name">QRIS / E-Wallet</span>
-                      <span class="p-sub">
-                        <span class="p-chip">DANA</span>
-                        <span class="p-chip">OVO</span>
-                        <span class="p-chip">ShopeePay</span>
-                        <span class="p-chip">LinkAja</span>
-                      </span>
+                <% if (paymentChannels && paymentChannels.length > 0) { %>
+                  <div class="pay-scroll">
+                    <div class="payment-methods-grid">
+                      <% paymentChannels.forEach((ch, idx) => {
+                        const code = String(ch.code || '').toUpperCase();
+                        const name = String(ch.name || code);
+                        const group = String(ch.group || '').toLowerCase();
+                        const fee = Number(ch.total_fee?.flat || 0);
+                        const feePercent = Number(ch.total_fee?.percent || 0);
+                        const iconUrl = String(ch.icon_url || '');
+                        
+                        let badgeClass = 'pb-bank';
+                        let iconHtml = '<i class="bi bi-credit-card"></i>';
+                        
+                        if (code === 'QRIS') {
+                          badgeClass = 'pb-qris';
+                          iconHtml = '<i class="bi bi-qr-code-scan"></i>';
+                        } else if (group.includes('e-wallet') || group.includes('ewallet')) {
+                          if (name.toLowerCase().includes('dana')) {
+                            badgeClass = 'pb-dana';
+                            iconHtml = '<span class="p-badge pb-dana">DANA</span>';
+                          } else if (name.toLowerCase().includes('ovo')) {
+                            badgeClass = 'pb-ovo';
+                            iconHtml = '<span class="p-badge pb-ovo">OVO</span>';
+                          } else if (name.toLowerCase().includes('shopee')) {
+                            badgeClass = 'pb-shopeepay';
+                            iconHtml = '<span class="p-badge pb-shopeepay">SPay</span>';
+                          } else if (name.toLowerCase().includes('linkaja')) {
+                            badgeClass = 'pb-linkaja';
+                            iconHtml = '<span class="p-badge pb-linkaja">LinkAja</span>';
+                          } else if (name.toLowerCase().includes('gopay')) {
+                            badgeClass = 'pb-gopay';
+                            iconHtml = '<span class="p-badge pb-gopay">GoPay</span>';
+                          } else {
+                            iconHtml = '<i class="bi bi-wallet2"></i>';
+                          }
+                        } else if (group.includes('virtual') || group.includes('bank')) {
+                          iconHtml = '<i class="bi bi-bank"></i>';
+                        }
+                      %>
+                        <label style="cursor: pointer">
+                          <input
+                            class="pm-radio"
+                            type="radio"
+                            name="payment_method"
+                            value="<%= code %>"
+                            data-code="<%= code %>"
+                            <%= idx === 0 ? 'checked' : '' %>
+                            required
+                          >
+                          <div class="pay-method-item">
+                            <div class="p-icon">
+                              <% if (iconUrl) { %>
+                                <img src="<%= iconUrl %>" alt="<%= name %>" class="p-logo">
+                              <% } else { %>
+                                <%- iconHtml %>
+                              <% } %>
+                            </div>
+                            <div class="p-info">
+                              <span class="p-name"><%= name %></span>
+                              <span class="p-sub">
+                                <% if (fee > 0 || feePercent > 0) { %>
+                                  <span class="p-chip">
+                                    <% if (feePercent > 0) { %>
+                                      +<%= feePercent %>%
+                                    <% } %>
+                                    <% if (fee > 0) { %>
+                                      <%= feePercent > 0 ? ' + ' : '+' %>Rp <%= fee.toLocaleString('id-ID') %>
+                                    <% } %>
+                                  </span>
+                                <% } else { %>
+                                  <span class="p-chip">Gratis</span>
+                                <% } %>
+                                <% if (ch.active === false) { %>
+                                  <span class="p-chip" style="background: rgba(248, 81, 73, .12); color:#fca5a5">Nonaktif</span>
+                                <% } %>
+                              </span>
+                            </div>
+                          </div>
+                        </label>
+                      <% }) %>
                     </div>
                   </div>
-                </div>
+                <% } else { %>
+                  <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Metode pembayaran tidak tersedia saat ini.
+                  </div>
+                <% } %>
 
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" value="1" id="tos_pay" name="tos" required>
@@ -255,29 +330,45 @@
 
             <script>
               (function () {
-                const radios = Array.from(document.querySelectorAll('.inv-radio'));
+                const invRadios = Array.from(document.querySelectorAll('.inv-radio'));
+                const payMethodRadios = Array.from(document.querySelectorAll('input[name="payment_method"]'));
                 const payForm = document.getElementById('payForm');
                 const payToken = document.getElementById('pay_token');
+                const payMethod = document.getElementById('pay_method');
                 const payBtn = document.getElementById('payBtn');
                 const invText = document.getElementById('pay_inv_text');
                 const amtText = document.getElementById('pay_amount_text');
 
-                function setSelected(r) {
-                  if (!r || !payForm || !payToken || !payBtn) return;
-                  const invId = String(r.dataset.invId || r.value || '').trim();
-                  const token = String(r.dataset.token || '').trim();
-                  const amount = Number(r.dataset.amount || 0) || 0;
+                function updatePaymentForm() {
+                  if (!payForm || !payToken || !payMethod || !payBtn) return;
+                  
+                  const selectedInv = invRadios.find(r => r.checked);
+                  const selectedMethod = payMethodRadios.find(r => r.checked);
+                  
+                  if (!selectedInv) {
+                    payBtn.disabled = true;
+                    return;
+                  }
+
+                  const invId = String(selectedInv.dataset.invId || selectedInv.value || '').trim();
+                  const token = String(selectedInv.dataset.token || '').trim();
+                  const amount = Number(selectedInv.dataset.amount || 0) || 0;
+                  const methodCode = selectedMethod ? String(selectedMethod.dataset.code || selectedMethod.value || '').trim() : '';
 
                   payForm.action = `/customer/public/payment/create/${encodeURIComponent(invId)}`;
                   payToken.value = token;
+                  payMethod.value = methodCode;
+                  
                   if (invText) invText.textContent = invId ? `INV-${invId} • ` : '';
                   if (amtText) amtText.textContent = amount ? `Rp ${amount.toLocaleString('id-ID')}` : '';
-                  payBtn.disabled = !invId || !token;
+                  
+                  payBtn.disabled = !invId || !token || !methodCode;
                 }
 
-                radios.forEach(r => r.addEventListener('change', () => setSelected(r)));
-                const first = radios.find(r => r.checked) || radios[0];
-                if (first) setSelected(first);
+                invRadios.forEach(r => r.addEventListener('change', updatePaymentForm));
+                payMethodRadios.forEach(r => r.addEventListener('change', updatePaymentForm));
+                
+                updatePaymentForm();
               })();
             </script>
           <% } %>
