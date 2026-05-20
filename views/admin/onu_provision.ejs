@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ONU Provision | <%= company %></title>
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="/admin/manifest.webmanifest">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+  <style>
+    .onu-card {
+      background: rgba(30,41,59,.6);
+      border: 1px solid rgba(71,85,105,.4);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      transition: all 0.2s;
+    }
+    .onu-card:hover {
+      background: rgba(30,41,59,.8);
+      border-color: rgba(71,85,105,.6);
+    }
+    .onu-status {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .onu-status.online {
+      background: rgba(34,197,94,.18);
+      color: #bbf7d0;
+    }
+    .onu-status.offline {
+      background: rgba(239,68,68,.18);
+      color: #fca5a5;
+    }
+    .onu-status.unconfigured {
+      background: rgba(245,158,11,.18);
+      color: #fde68a;
+    }
+    .vendor-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .vendor-zte {
+      background: rgba(59,130,246,.18);
+      color: #93c5fd;
+    }
+    .vendor-huawei {
+      background: rgba(239,68,68,.18);
+      color: #fca5a5;
+    }
+    .tab-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid rgba(71,85,105,.3);
+      padding-bottom: 0;
+    }
+    .tab-btn {
+      padding: 12px 20px;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-weight: 600;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      margin-bottom: -2px;
+    }
+    .tab-btn:hover {
+      color: #e2e8f0;
+    }
+    .tab-btn.active {
+      color: #3b82f6;
+      border-bottom-color: #3b82f6;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<%- include('partials/sidebar', { activePage: 'onu_provision', company }) %>
+<div class="mw">
+  <div class="topbar">
+    <div class="tb-title">
+      <button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+      <i class="bi bi-hdd-network-fill"></i> ONU Provision
+    </div>
+    <div class="tb-right">
+      <span class="adm-badge"><i class="bi bi-router"></i> ZTE & Huawei</span>
+      <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i> Logout</a>
+    </div>
+  </div>
+
+  <div class="page">
+    <% if (msg) { %>
+      <div class="alert alert-<%= msg.type === 'success' ? 's' : 'd' %>">
+        <i class="bi bi-<%= msg.type === 'success' ? 'check-circle' : 'exclamation-circle' %>"></i>
+        <%= msg.text %>
+      </div>
+    <% } %>
+
+    <!-- OLT Configuration -->
+    <div class="card">
+      <div class="card-hd">
+        <h6 style="margin:0"><i class="bi bi-gear"></i> Konfigurasi OLT</h6>
+      </div>
+      <div class="card-bd">
+        <form method="POST" action="/admin/onu-provision/configure-olt">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <div class="fg">
+              <label class="fl">Vendor OLT</label>
+              <select class="fs" name="vendor" id="oltVendor" required onchange="toggleVendorFields()">
+                <option value="">Pilih Vendor</option>
+                <option value="ZTE" <%= oltConfig?.vendor === 'ZTE' ? 'selected' : '' %>>ZTE C300/C320</option>
+                <option value="Huawei" <%= oltConfig?.vendor === 'Huawei' ? 'selected' : '' %>>Huawei MA5800</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Host/IP OLT</label>
+              <input type="text" class="fc" name="host" value="<%= oltConfig?.host || '' %>" placeholder="192.168.1.1" required>
+            </div>
+            <div class="fg">
+              <label class="fl">Port SSH</label>
+              <input type="number" class="fc" name="port" value="<%= oltConfig?.port || 22 %>" placeholder="22" required>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:16px">
+            <div class="fg">
+              <label class="fl">Username</label>
+              <input type="text" class="fc" name="username" value="<%= oltConfig?.username || '' %>" placeholder="admin" required>
+            </div>
+            <div class="fg">
+              <label class="fl">Password</label>
+              <input type="password" class="fc" name="password" value="<%= oltConfig?.password || '' %>" placeholder="••••••" required>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+            <button type="submit" name="action" value="test" class="btn btn-g">
+              <i class="bi bi-plug"></i> Test Koneksi
+            </button>
+            <button type="submit" name="action" value="save" class="btn btn-p">
+              <i class="bi bi-save"></i> Simpan Konfigurasi
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <% if (oltConfig && oltConfig.host) { %>
+    <!-- Tabs -->
+    <div class="tab-buttons">
+      <button class="tab-btn active" onclick="switchTab('unconfigured')">
+        <i class="bi bi-exclamation-triangle"></i> ONU Belum Terkonfigurasi
+      </button>
+      <button class="tab-btn" onclick="switchTab('configured')">
+        <i class="bi bi-check-circle"></i> ONU Terkonfigurasi
+      </button>
+      <button class="tab-btn" onclick="switchTab('provision')">
+        <i class="bi bi-plus-circle"></i> Provision Manual
+      </button>
+    </div>
+
+    <!-- Tab: Unconfigured ONUs -->
+    <div id="tab-unconfigured" class="tab-content active">
+      <div class="card">
+        <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+          <h6 style="margin:0"><i class="bi bi-search"></i> Scan ONU Belum Terkonfigurasi</h6>
+          <button onclick="scanUnconfiguredONUs()" class="btn btn-p btn-sm">
+            <i class="bi bi-arrow-clockwise"></i> Scan Ulang
+          </button>
+        </div>
+        <div class="card-bd">
+          <% if (oltConfig.vendor === 'ZTE') { %>
+            <div class="fg">
+              <label class="fl">PON Interface (contoh: 1/1/1)</label>
+              <input type="text" class="fc" id="scanPon" placeholder="1/1/1">
+            </div>
+          <% } else { %>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+              <div class="fg">
+                <label class="fl">Frame</label>
+                <input type="number" class="fc" id="scanFrame" value="0" min="0">
+              </div>
+              <div class="fg">
+                <label class="fl">Slot</label>
+                <input type="number" class="fc" id="scanSlot" value="0" min="0">
+              </div>
+              <div class="fg">
+                <label class="fl">PON</label>
+                <input type="number" class="fc" id="scanPonNum" value="0" min="0">
+              </div>
+            </div>
+          <% } %>
+          
+          <div id="unconfiguredList" style="margin-top:20px">
+            <div class="hint" style="text-align:center;padding:40px">
+              <i class="bi bi-info-circle" style="font-size:32px;opacity:0.5"></i>
+              <p>Klik "Scan Ulang" untuk mencari ONU yang belum terkonfigurasi</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Configured ONUs -->
+    <div id="tab-configured" class="tab-content">
+      <div class="card">
+        <div class="card-hd">
+          <h6 style="margin:0"><i class="bi bi-list-check"></i> Daftar ONU Terkonfigurasi</h6>
+        </div>
+        <div class="card-bd">
+          <div class="hint" style="text-align:center;padding:40px">
+            <i class="bi bi-info-circle" style="font-size:32px;opacity:0.5"></i>
+            <p>Fitur ini akan menampilkan daftar ONU yang sudah terkonfigurasi</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Manual Provision -->
+    <div id="tab-provision" class="tab-content">
+      <div class="card">
+        <div class="card-hd">
+          <h6 style="margin:0"><i class="bi bi-plus-circle"></i> Provision ONU Manual</h6>
+        </div>
+        <div class="card-bd">
+          <form method="POST" action="/admin/onu-provision/provision">
+            <input type="hidden" name="vendor" value="<%= oltConfig.vendor %>">
+            
+            <% if (oltConfig.vendor === 'ZTE') { %>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+                <div class="fg">
+                  <label class="fl">PON Interface</label>
+                  <input type="text" class="fc" name="pon" placeholder="1/1/1" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">ONU ID</label>
+                  <input type="number" class="fc" name="onuId" placeholder="1" min="1" max="128" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">Serial Number</label>
+                  <input type="text" class="fc" name="sn" placeholder="ZTEGC1234567" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">Nama ONU</label>
+                  <input type="text" class="fc" name="name" placeholder="Customer-001" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">VLAN ID</label>
+                  <input type="number" class="fc" name="vlan" placeholder="100" min="1" max="4094" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">Bandwidth Profile</label>
+                  <input type="text" class="fc" name="bandwidth" placeholder="default" value="default">
+                </div>
+                <div class="fg">
+                  <label class="fl">ONU Type</label>
+                  <input type="text" class="fc" name="onuType" placeholder="F660" value="F660">
+                </div>
+              </div>
+            <% } else { %>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+                <div class="fg">
+                  <label class="fl">Frame</label>
+                  <input type="number" class="fc" name="frame" value="0" min="0" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">Slot</label>
+                  <input type="number" class="fc" name="slot" value="0" min="0" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">PON</label>
+                  <input type="number" class="fc" name="pon" value="0" min="0" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">ONU ID</label>
+                  <input type="number" class="fc" name="onuId" placeholder="1" min="0" max="127" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">Serial Number</label>
+                  <input type="text" class="fc" name="sn" placeholder="48575443ABCD1234" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">Nama ONU</label>
+                  <input type="text" class="fc" name="name" placeholder="Customer-001" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">VLAN ID</label>
+                  <input type="number" class="fc" name="vlan" placeholder="100" min="1" max="4094" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">Line Profile ID</label>
+                  <input type="number" class="fc" name="lineProfile" value="1" min="1" required>
+                </div>
+                <div class="fg">
+                  <label class="fl">Service Profile ID</label>
+                  <input type="number" class="fc" name="srvProfile" value="1" min="1" required>
+                </div>
+              </div>
+            <% } %>
+            
+            <!-- Advanced Configuration with Toggle Cards -->
+            <div style="margin-top:24px;padding-top:24px;border-top:2px solid rgba(71,85,105,.3)">
+              <h6 style="margin:0 0 16px 0;color:#e2e8f0"><i class="bi bi-gear-fill"></i> Konfigurasi Lanjutan</h6>
+              
+              <!-- WiFi Configuration Card -->
+              <div style="background:rgba(30,41,59,.4);border:1px solid rgba(71,85,105,.4);border-radius:12px;padding:16px;margin-bottom:12px">
+                <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:12px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <i class="bi bi-wifi" style="font-size:20px;color:#3b82f6"></i>
+                    <div>
+                      <div style="font-weight:700;color:#e2e8f0">Konfigurasi WiFi</div>
+                      <div class="hint" style="font-size:12px;margin-top:2px">Set SSID dan password WiFi ONU</div>
+                    </div>
+                  </div>
+                  <input type="checkbox" id="enableWifi" onchange="toggleWifiFields()" style="width:20px;height:20px;cursor:pointer">
+                </label>
+                <div id="wifiFields" style="display:none;padding-top:12px;border-top:1px solid rgba(71,85,105,.3)">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="fg" style="margin:0">
+                      <label class="fl">WiFi SSID</label>
+                      <input type="text" class="fc" name="wifiSsid" placeholder="MyWiFi-Network">
+                    </div>
+                    <div class="fg" style="margin:0">
+                      <label class="fl">WiFi Password</label>
+                      <input type="password" class="fc" name="wifiPassword" placeholder="••••••••" minlength="8">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LAN Mode Card -->
+              <div style="background:rgba(30,41,59,.4);border:1px solid rgba(71,85,105,.4);border-radius:12px;padding:16px;margin-bottom:12px">
+                <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:12px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <i class="bi bi-ethernet" style="font-size:20px;color:#10b981"></i>
+                    <div>
+                      <div style="font-weight:700;color:#e2e8f0">Mode LAN</div>
+                      <div class="hint" style="font-size:12px;margin-top:2px">Bridge (MikroTik dial) atau Router (ONU dial)</div>
+                    </div>
+                  </div>
+                  <input type="checkbox" id="enableLanMode" onchange="toggleLanModeFields()" style="width:20px;height:20px;cursor:pointer">
+                </label>
+                <div id="lanModeFields" style="display:none;padding-top:12px;border-top:1px solid rgba(71,85,105,.3)">
+                  <div class="fg" style="margin:0 0 12px 0">
+                    <label class="fl">Pilih Mode</label>
+                    <select class="fs" name="lanMode" id="lanMode" onchange="togglePPPoEFields()">
+                      <option value="bridge">Bridge (Default)</option>
+                      <option value="router">Router (PPPoE)</option>
+                    </select>
+                  </div>
+                  <!-- PPPoE for Router Mode -->
+                  <div id="onuPppoeFields" style="display:none">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                      <div class="fg" style="margin:0">
+                        <label class="fl">PPPoE Username</label>
+                        <input type="text" class="fc" name="pppoeUsername" placeholder="user@internet">
+                      </div>
+                      <div class="fg" style="margin:0">
+                        <label class="fl">PPPoE Password</label>
+                        <input type="password" class="fc" name="pppoePassword" placeholder="••••••••">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- MikroTik Integration Card -->
+              <div id="mikrotikCard" style="background:rgba(30,41,59,.4);border:1px solid rgba(71,85,105,.4);border-radius:12px;padding:16px">
+                <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:12px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <i class="bi bi-router" style="font-size:20px;color:#f59e0b"></i>
+                    <div>
+                      <div style="font-weight:700;color:#e2e8f0">Integrasi MikroTik</div>
+                      <div class="hint" style="font-size:12px;margin-top:2px">Auto-create PPPoE secret di MikroTik</div>
+                    </div>
+                  </div>
+                  <input type="checkbox" name="createMikrotikPPPoE" id="createMikrotikPPPoE" onchange="toggleMikrotikFields()" style="width:20px;height:20px;cursor:pointer">
+                </label>
+                <div id="mikrotikPPPoEFields" style="display:none;padding-top:12px;border-top:1px solid rgba(71,85,105,.3)">
+                  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+                    <div class="fg" style="margin:0">
+                      <label class="fl">PPPoE Username</label>
+                      <input type="text" class="fc" name="mikrotikPppoeUsername" placeholder="customer001@internet">
+                    </div>
+                    <div class="fg" style="margin:0">
+                      <label class="fl">PPPoE Password</label>
+                      <input type="password" class="fc" name="mikrotikPppoePassword" placeholder="••••••••">
+                    </div>
+                    <div class="fg" style="margin:0">
+                      <label class="fl">Bandwidth Profile</label>
+                      <input type="text" class="fc" name="mikrotikProfile" placeholder="20Mbps">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:24px;flex-wrap:wrap">
+              <button type="button" class="btn btn-g" onclick="resetForm()">
+                <i class="bi bi-arrow-counterclockwise"></i> Reset Form
+              </button>
+              <button type="submit" class="btn btn-p">
+                <i class="bi bi-check-circle"></i> Provision ONU
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <% } %>
+
+  </div>
+</div>
+
+<script>
+function switchTab(tabName) {
+  // Hide all tabs
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  
+  // Show selected tab
+  document.getElementById('tab-' + tabName).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function toggleVendorFields() {
+  const vendor = document.getElementById('oltVendor').value;
+  // Additional logic if needed
+}
+
+async function scanUnconfiguredONUs() {
+  const vendor = '<%= oltConfig && oltConfig.vendor ? oltConfig.vendor : "" %>';
+  let params = {};
+  
+  if (vendor === 'ZTE') {
+    const pon = document.getElementById('scanPon').value;
+    if (!pon) {
+      alert('Masukkan PON interface (contoh: 1/1/1)');
+      return;
+    }
+    params.pon = pon;
+  } else if (vendor === 'Huawei') {
+    params.frame = document.getElementById('scanFrame').value;
+    params.slot = document.getElementById('scanSlot').value;
+    params.pon = document.getElementById('scanPonNum').value;
+  }
+  
+  const listDiv = document.getElementById('unconfiguredList');
+  listDiv.innerHTML = '<div class="hint" style="text-align:center;padding:40px"><i class="bi bi-hourglass-split" style="font-size:32px"></i><p>Scanning...</p></div>';
+  
+  try {
+    const response = await fetch('/admin/onu-provision/scan-unconfigured', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    
+    const data = await response.json();
+    
+    if (data.success && data.onus && data.onus.length > 0) {
+      let html = '';
+      data.onus.forEach(onu => {
+        html += `
+          <div class="onu-card">
+            <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px">
+              <div>
+                <span class="vendor-badge vendor-${onu.vendor.toLowerCase()}">${onu.vendor}</span>
+                <span class="onu-status unconfigured">Belum Terkonfigurasi</span>
+              </div>
+              <button onclick="provisionONU('${JSON.stringify(onu).replace(/"/g, '"')}')" class="btn btn-p btn-sm">
+                <i class="bi bi-plus-circle"></i> Provision
+              </button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+              <div>
+                <div class="hint" style="font-size:11px">Serial Number</div>
+                <div style="font-weight:700;font-family:monospace">${onu.sn}</div>
+              </div>
+              <div>
+                <div class="hint" style="font-size:11px">Model</div>
+                <div style="font-weight:600">${onu.model}</div>
+              </div>
+              <div>
+                <div class="hint" style="font-size:11px">PON Interface</div>
+                <div style="font-weight:600">${onu.pon || onu.frame + '/' + onu.slot + '/' + onu.pon}</div>
+              </div>
+              <div>
+                <div class="hint" style="font-size:11px">ONU ID</div>
+                <div style="font-weight:600">${onu.onuId}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      listDiv.innerHTML = html;
+    } else {
+      listDiv.innerHTML = '<div class="hint" style="text-align:center;padding:40px"><i class="bi bi-check-circle" style="font-size:32px;color:#22c55e"></i><p>Tidak ada ONU yang belum terkonfigurasi</p></div>';
+    }
+  } catch (error) {
+    listDiv.innerHTML = '<div class="alert alert-d"><i class="bi bi-exclamation-circle"></i> Error: ' + error.message + '</div>';
+  }
+}
+
+function provisionONU(onuDataStr) {
+  const onu = JSON.parse(onuDataStr.replace(/"/g, '"'));
+  // Switch to provision tab and fill form
+  switchTab('provision');
+  
+  // Fill form based on vendor
+  if (onu.vendor === 'ZTE') {
+    document.querySelector('[name="pon"]').value = onu.pon;
+    document.querySelector('[name="onuId"]').value = onu.onuId;
+    document.querySelector('[name="sn"]').value = onu.sn;
+  } else {
+    document.querySelector('[name="frame"]').value = onu.frame;
+    document.querySelector('[name="slot"]').value = onu.slot;
+    document.querySelector('[name="pon"]').value = onu.pon;
+    document.querySelector('[name="onuId"]').value = onu.onuId;
+    document.querySelector('[name="sn"]').value = onu.sn;
+  }
+  
+  // Scroll to form
+  document.getElementById('tab-provision').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Toggle WiFi configuration fields
+function toggleWifiFields() {
+  const checkbox = document.getElementById('enableWifi');
+  const fields = document.getElementById('wifiFields');
+  
+  if (checkbox.checked) {
+    fields.style.display = 'block';
+  } else {
+    fields.style.display = 'none';
+    // Clear fields when disabled
+    document.querySelector('[name="wifiSsid"]').value = '';
+    document.querySelector('[name="wifiPassword"]').value = '';
+  }
+}
+
+// Toggle LAN Mode configuration fields
+function toggleLanModeFields() {
+  const checkbox = document.getElementById('enableLanMode');
+  const fields = document.getElementById('lanModeFields');
+  const mikrotikCard = document.getElementById('mikrotikCard');
+  
+  if (checkbox.checked) {
+    fields.style.display = 'block';
+    // Check current mode to show/hide MikroTik card
+    togglePPPoEFields();
+  } else {
+    fields.style.display = 'none';
+    document.getElementById('onuPppoeFields').style.display = 'none';
+    // Show MikroTik card when LAN mode is disabled (default bridge)
+    mikrotikCard.style.display = 'block';
+  }
+}
+
+// Toggle PPPoE fields based on LAN mode selection
+function togglePPPoEFields() {
+  const lanMode = document.getElementById('lanMode').value;
+  const onuPppoeFields = document.getElementById('onuPppoeFields');
+  const mikrotikCard = document.getElementById('mikrotikCard');
+  
+  if (lanMode === 'router') {
+    // Show PPPoE fields for ONU, hide MikroTik card
+    onuPppoeFields.style.display = 'block';
+    mikrotikCard.style.display = 'none';
+    // Uncheck and hide MikroTik fields
+    document.getElementById('createMikrotikPPPoE').checked = false;
+    document.getElementById('mikrotikPPPoEFields').style.display = 'none';
+  } else {
+    // Hide ONU PPPoE fields, show MikroTik card
+    onuPppoeFields.style.display = 'none';
+    mikrotikCard.style.display = 'block';
+    // Clear ONU PPPoE fields
+    document.querySelector('[name="pppoeUsername"]').value = '';
+    document.querySelector('[name="pppoePassword"]').value = '';
+  }
+}
+
+// Toggle MikroTik PPPoE fields
+function toggleMikrotikFields() {
+  const checkbox = document.getElementById('createMikrotikPPPoE');
+  const fields = document.getElementById('mikrotikPPPoEFields');
+  
+  if (checkbox.checked) {
+    fields.style.display = 'block';
+  } else {
+    fields.style.display = 'none';
+  }
+}
+
+// Reset form
+function resetForm() {
+  if (confirm('Reset semua field form?')) {
+    document.querySelector('form[action="/admin/onu-provision/provision"]').reset();
+    
+    // Reset all toggle states
+    document.getElementById('enableWifi').checked = false;
+    document.getElementById('wifiFields').style.display = 'none';
+    
+    document.getElementById('enableLanMode').checked = false;
+    document.getElementById('lanModeFields').style.display = 'none';
+    document.getElementById('onuPppoeFields').style.display = 'none';
+    
+    document.getElementById('createMikrotikPPPoE').checked = false;
+    document.getElementById('mikrotikPPPoEFields').style.display = 'none';
+    document.getElementById('mikrotikCard').style.display = 'block';
+  }
+}
+</script>
+</body>
+</html>
