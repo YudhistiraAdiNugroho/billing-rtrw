@@ -4917,5 +4917,228 @@ router.use('/acs', acsPortal);
 
 // Mount Finance Portal
 router.use('/finance', require('./financePortal'));
+// ─── ONU PROVISION ─────────────────────────────────────────────────────────
+const onuProvisionSvc = require('../services/onuProvisionService');
+
+router.get('/onu-provision', requireAdminSession, restrictToAdmin, (req, res) => {
+  const oltConfig = {
+    vendor: getSetting('olt_vendor', ''),
+    host: getSetting('olt_host', ''),
+    port: getSetting('olt_port', 22),
+    username: getSetting('olt_username', ''),
+    password: getSetting('olt_password', '')
+  };
+  
+  res.render('admin/onu_provision', {
+    title: 'ONU Provision',
+    company: company(),
+    activePage: 'onu_provision',
+    msg: flashMsg(req),
+    oltConfig,
+    lang: req.session?.lang || 'id'
+  });
+});
+
+router.post('/onu-provision/configure-olt', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const { vendor, host, port, username, password, action } = req.body;
+    
+    if (action === 'test') {
+      // Test connection
+      const oltConfig = { vendor, host, port: parseInt(port), username, password };
+      
+      try {
+        const conn = await onuProvisionSvc.connectSSH(oltConfig);
+        conn.end();
+        req.session._msg = { type: 'success', text: `Koneksi ke OLT ${vendor} berhasil!` };
+      } catch (error) {
+        req.session._msg = { type: 'error', text: `Gagal koneksi: ${error.message}` };
+      }
+    } else if (action === 'save') {
+      // Save configuration
+      const currentSettings = getSettings();
+      const success = saveSettings({
+        ...currentSettings,
+        olt_vendor: vendor,
+        olt_host: host,
+        olt_port: parseInt(port),
+        olt_username: username,
+        olt_password: password
+      });
+      
+      if (success) {
+        req.session._msg = { type: 'success', text: 'Konfigurasi OLT berhasil disimpan.' };
+      } else {
+        req.session._msg = { type: 'error', text: 'Gagal menyimpan konfigurasi OLT.' };
+      }
+    }
+  } catch (error) {
+    req.session._msg = { type: 'error', text: 'Error: ' + error.message };
+  }
+  
+  res.redirect('/admin/onu-provision');
+});
+
+router.post('/onu-provision/scan-unconfigured', requireAdminSession, restrictToAdmin, express.json(), async (req, res) => {
+  try {
+    const oltConfig = {
+      vendor: getSetting('olt_vendor', ''),
+      host: getSetting('olt_host', ''),
+      port: getSetting('olt_port', 22),
+      username: getSetting('olt_username', ''),
+      password: getSetting('olt_password', '')
+    };
+    
+    if (!oltConfig.host) {
+      return res.json({ success: false, error: 'OLT belum dikonfigurasi' });
+    }
+    
+    let onus = [];
+    
+    if (oltConfig.vendor === 'ZTE') {
+      const { pon } = req.body;
+      if (!pon) {
+        return res.json({ success: false, error: 'PON interface harus diisi' });
+      }
+      onus = await onuProvisionSvc.zteGetUnconfiguredONUs(oltConfig, pon);
+    } else if (oltConfig.vendor === 'Huawei') {
+      const { frame, slot, pon } = req.body;
+      onus = await onuProvisionSvc.huaweiGetUnconfiguredONUs(oltConfig, frame, slot, pon);
+    } else {
+      return res.json({ success: false, error: 'Vendor OLT tidak didukung' });
+    }
+    
+    res.json({ success: true, onus });
+  } catch (error) {
+    logger.error('Scan unconfigured ONUs error:', error);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+router.post('/onu-provision/provision', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const oltConfig = {
+      vendor: getSetting('olt_vendor', ''),
+      host: getSetting('olt_host', ''),
+      port: getSetting('olt_port', 22),
+      username: getSetting('olt_username', ''),
+      password: getSetting('olt_password', '')
+    };
+    
+    if (!oltConfig.host) {
+      throw new Error('OLT belum dikonfigurasi');
+    }
+    
+    const { vendor, createMikrotikPPPoE, mikrotikPppoeUsername, mikrotikPppoePassword, mikrotikProfile } = req.body;
+    let result;
+    let messages = [];
+    
+    // Check if need to create MikroTik PPPoE
+    if (createMikrotikPPPoE === 'on' && mikrotikPppoeUsername && mikrotikPppoePassword) {
+      // Use full provision with MikroTik integration
+      const mikrotikConfig = {
+        host: getSetting('mikrotik_host', ''),
+        user: getSetting('mikrotik_user', ''),
+        password: getSetting('mikrotik_password', ''),
+        port: getSetting('mikrotik_port', 8728)
+      };
+      
+      if (mikrotikConfig.host) {
+        // Prepare params for full provision
+        const provisionParams = {
+          ...req.body,
+          pppoeUsername: mikrotikPppoeUsername,
+          pppoePassword: mikrotikPppoePassword,
+          bandwidth: mikrotikProfile || req.body.bandwidth
+        };
+        
+        result = await onuProvisionSvc.fullProvision(oltConfig, mikrotikConfig, provisionParams);
+        
+        if (result.results.onu) {
+          messages.push(`✅ ONU ${req.body.name} berhasil di-provision`);
+        }
+        if (result.results.pppoe) {
+          messages.push(`✅ PPPoE ${mikrotikPppoeUsername} berhasil dibuat di MikroTik`);
+        }
+        if (result.results.errors && result.results.errors.length > 0) {
+          messages.push(`⚠️ ${result.results.errors.join(', ')}`);
+        }
+      } else {
+        throw new Error('MikroTik belum dikonfigurasi di settings');
+      }
+    } else {
+      // Standard provision (ONU only)
+      if (vendor === 'ZTE') {
+        result = await onuProvisionSvc.zteProvisionONU(oltConfig, req.body);
+      } else if (vendor === 'Huawei') {
+        result = await onuProvisionSvc.huaweiProvisionONU(oltConfig, req.body);
+      } else {
+        throw new Error('Vendor tidak didukung');
+      }
+      
+      messages.push(`✅ ONU ${req.body.name} berhasil di-provision`);
+    }
+    
+    if (auditSvc && typeof auditSvc.logAuditTrail === 'function') {
+      auditSvc.logAuditTrail({
+        action: 'CREATE',
+        entity_type: 'onu_provision',
+        entity_id: req.body.sn,
+        actor_type: 'admin',
+        actor_id: String(req.session?.adminUser || ''),
+        actor_name: req.session?.adminUser || 'Admin',
+        details: {
+          vendor,
+          params: req.body,
+          mikrotikIntegration: createMikrotikPPPoE === 'on'
+        },
+        ip_address: req.ip,
+        user_agent: req.get('user-agent')
+      });
+    }
+    
+    req.session._msg = { type: 'success', text: messages.join(' | ') };
+  } catch (error) {
+    logger.error('Provision ONU error:', error);
+    req.session._msg = { type: 'error', text: 'Gagal provision ONU: ' + error.message };
+  }
+  
+  res.redirect('/admin/onu-provision');
+});
+
+router.post('/onu-provision/delete', requireAdminSession, restrictToAdmin, express.json(), async (req, res) => {
+  try {
+    const oltConfig = {
+      vendor: getSetting('olt_vendor', ''),
+      host: getSetting('olt_host', ''),
+      port: getSetting('olt_port', 22),
+      username: getSetting('olt_username', ''),
+      password: getSetting('olt_password', '')
+    };
+    
+    const { vendor, params } = req.body;
+    const result = await onuProvisionSvc.deleteONU(oltConfig, vendor, params);
+    
+    if (auditSvc && typeof auditSvc.logAuditTrail === 'function') {
+      auditSvc.logAuditTrail({
+        action: 'DELETE',
+        entity_type: 'onu_provision',
+        entity_id: params.sn || 'unknown',
+        actor_type: 'admin',
+        actor_id: String(req.session?.adminUser || ''),
+        actor_name: req.session?.adminUser || 'Admin',
+        details: { vendor, params },
+        ip_address: req.ip,
+        user_agent: req.get('user-agent')
+      });
+    }
+    
+    res.json({ success: true, message: result.message });
+  } catch (error) {
+    logger.error('Delete ONU error:', error);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 
 module.exports = router;
