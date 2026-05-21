@@ -1204,21 +1204,191 @@
                   <div id="collapsePpob" class="accordion-collapse collapse" aria-labelledby="headingPpob"
                     data-bs-parent="#customerAccordion">
                     <div class="accordion-body">
+                      <!-- Saldo PPOB -->
                       <div class="section-block">
                         <div class="alert alert-info mb-0 py-2" style="background: rgba(14, 165, 233, 0.10); border-color: rgba(14, 165, 233, 0.35); color: rgba(226, 232, 240, 0.95);">
                           <i class="bi bi-wallet2 me-2"></i>Saldo PPOB: <strong>Rp <%= Number((typeof customerBalance !== 'undefined' ? customerBalance : 0) || 0).toLocaleString('id-ID') %></strong>
                         </div>
                       </div>
+
+                      <!-- Top-Up Saldo Button -->
                       <div class="section-block">
-                        <div class="d-grid gap-2">
-                          <a href="/customer/topup" class="btn btn-action btn-ssid w-100">
-                            <i class="bi bi-plus-circle me-2"></i>Isi Saldo (Top-Up)
-                          </a>
-                          <a href="/customer/ppob" class="btn btn-action btn-ssid w-100">
-                            <i class="bi bi-phone me-2"></i>Beli Pulsa / PPOB
-                          </a>
+                        <a href="/customer/topup" class="btn btn-action btn-ssid w-100" style="background: linear-gradient(135deg, #10b981, #059669); border: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                          <i class="bi bi-plus-circle-fill me-2"></i>Isi Saldo (Top-Up)
+                        </a>
+                      </div>
+
+                      <!-- PPOB Category Cards -->
+                      <div class="section-block">
+                        <h6 class="text-muted mb-3" style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                          <i class="bi bi-grid-3x3-gap me-1"></i>Kategori Layanan
+                        </h6>
+                        <div class="row g-3">
+                          <!-- Pulsa -->
+                          <div class="col-6 col-md-4">
+                            <a href="/customer/ppob?category=Pulsa" class="ppob-category-card" style="text-decoration: none;">
+                              <div class="ppob-card-inner">
+                                <div class="ppob-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
+                                  <i class="bi bi-phone-fill"></i>
+                                </div>
+                                <div class="ppob-label">Pulsa</div>
+                              </div>
+                            </a>
+                          </div>
+
+                          <!-- Paket Data -->
+                          <div class="col-6 col-md-4">
+                            <a href="/customer/ppob?category=Data" class="ppob-category-card" style="text-decoration: none;">
+                              <div class="ppob-card-inner">
+                                <div class="ppob-icon" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
+                                  <i class="bi bi-reception-4"></i>
+                                </div>
+                                <div class="ppob-label">Paket Data</div>
+                              </div>
+                            </a>
+                          </div>
+
+                          <!-- E-Money -->
+                          <div class="col-6 col-md-4">
+                            <a href="/customer/ppob?category=E-Money" class="ppob-category-card" style="text-decoration: none;">
+                              <div class="ppob-card-inner">
+                                <div class="ppob-icon" style="background: linear-gradient(135deg, #06b6d4, #0891b2);">
+                                  <i class="bi bi-wallet2"></i>
+                                </div>
+                                <div class="ppob-label">E-Money</div>
+                              </div>
+                            </a>
+                          </div>
+
+                          <!-- Token PLN -->
+                          <div class="col-6 col-md-4">
+                            <a href="/customer/ppob?category=PLN" class="ppob-category-card" style="text-decoration: none;">
+                              <div class="ppob-card-inner">
+                                <div class="ppob-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                                  <i class="bi bi-lightning-charge-fill"></i>
+                                </div>
+                                <div class="ppob-label">Token PLN</div>
+                              </div>
+                            </a>
+                          </div>
+
+                          <!-- Voucher Game -->
+                          <div class="col-6 col-md-4">
+                            <a href="/customer/ppob?category=Games" class="ppob-category-card" style="text-decoration: none;">
+                              <div class="ppob-card-inner">
+                                <div class="ppob-icon" style="background: linear-gradient(135deg, #ec4899, #db2777);">
+                                  <i class="bi bi-controller"></i>
+                                </div>
+                                <div class="ppob-label">Voucher Game</div>
+                              </div>
+                            </a>
+                          </div>
+
+                          <!-- Semua Produk -->
+                          <div class="col-6 col-md-4">
+                            <a href="/customer/ppob" class="ppob-category-card" style="text-decoration: none;">
+                              <div class="ppob-card-inner">
+                                <div class="ppob-icon" style="background: linear-gradient(135deg, #64748b, #475569);">
+                                  <i class="bi bi-grid-fill"></i>
+                                </div>
+                                <div class="ppob-label">Semua Produk</div>
+                              </div>
+                            </a>
+                          </div>
                         </div>
                       </div>
+
+                      <style>
+                        .ppob-category-card {
+                          display: block;
+                          background: rgba(30, 41, 59, 0.6);
+                          border: 1px solid rgba(51, 65, 85, 0.8);
+                          border-radius: 16px;
+                          padding: 0;
+                          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                          overflow: hidden;
+                          position: relative;
+                        }
+
+                        .ppob-category-card::before {
+                          content: '';
+                          position: absolute;
+                          top: 0;
+                          left: 0;
+                          right: 0;
+                          bottom: 0;
+                          background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
+                          opacity: 0;
+                          transition: opacity 0.3s ease;
+                        }
+
+                        .ppob-category-card:hover {
+                          transform: translateY(-4px);
+                          border-color: rgba(99, 102, 241, 0.5);
+                          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(99, 102, 241, 0.3);
+                        }
+
+                        .ppob-category-card:hover::before {
+                          opacity: 1;
+                        }
+
+                        .ppob-category-card:active {
+                          transform: translateY(-2px);
+                        }
+
+                        .ppob-card-inner {
+                          padding: 20px 16px;
+                          display: flex;
+                          flex-direction: column;
+                          align-items: center;
+                          gap: 12px;
+                          position: relative;
+                          z-index: 1;
+                        }
+
+                        .ppob-icon {
+                          width: 56px;
+                          height: 56px;
+                          border-radius: 14px;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          font-size: 26px;
+                          color: #ffffff;
+                          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+                          transition: all 0.3s ease;
+                        }
+
+                        .ppob-category-card:hover .ppob-icon {
+                          transform: scale(1.1) rotate(5deg);
+                          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+                        }
+
+                        .ppob-label {
+                          font-size: 13px;
+                          font-weight: 600;
+                          color: #e2e8f0;
+                          text-align: center;
+                          line-height: 1.3;
+                        }
+
+                        @media (max-width: 576px) {
+                          .ppob-card-inner {
+                            padding: 16px 12px;
+                            gap: 10px;
+                          }
+
+                          .ppob-icon {
+                            width: 48px;
+                            height: 48px;
+                            font-size: 22px;
+                          }
+
+                          .ppob-label {
+                            font-size: 12px;
+                          }
+                        }
+                      </style>
                     </div>
                   </div>
                 </div>

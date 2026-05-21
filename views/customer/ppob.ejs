@@ -96,16 +96,54 @@
 
     @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
     
+    /* PPOB Category Grid */
+    .ppob-category-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:16px}
+    .ppob-category-card{display:block;background:rgba(30,41,59,0.6);border:1px solid rgba(51,65,85,0.8);border-radius:16px;padding:0;transition:all .3s cubic-bezier(0.4,0,0.2,1);overflow:hidden;position:relative;text-decoration:none}
+    .ppob-category-card::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.05));opacity:0;transition:opacity .3s ease}
+    .ppob-category-card:hover{transform:translateY(-4px);border-color:rgba(99,102,241,0.5);box-shadow:0 12px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(99,102,241,0.3)}
+    .ppob-category-card:hover::before{opacity:1}
+    .ppob-category-card:active{transform:translateY(-2px)}
+    .ppob-card-inner{padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;z-index:1}
+    .ppob-icon{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;color:#fff;box-shadow:0 8px 20px rgba(0,0,0,0.3);transition:all .3s ease}
+    .ppob-category-card:hover .ppob-icon{transform:scale(1.1) rotate(5deg);box-shadow:0 12px 28px rgba(0,0,0,0.4)}
+    .ppob-label{font-size:13px;font-weight:600;color:#e2e8f0;text-align:center;line-height:1.3}
+    
+    /* Gradient Classes */
+    .gradient-blue{background:linear-gradient(135deg,#3b82f6,#2563eb)}
+    .gradient-purple{background:linear-gradient(135deg,#8b5cf6,#7c3aed)}
+    .gradient-cyan{background:linear-gradient(135deg,#06b6d4,#0891b2)}
+    .gradient-orange{background:linear-gradient(135deg,#f59e0b,#d97706)}
+    .gradient-pink{background:linear-gradient(135deg,#ec4899,#db2777)}
+    .gradient-green{background:linear-gradient(135deg,#10b981,#059669)}
+    .gradient-teal{background:linear-gradient(135deg,#14b8a6,#0d9488)}
+    .gradient-red{background:linear-gradient(135deg,#f97316,#ea580c)}
+    .gradient-violet{background:linear-gradient(135deg,#a855f7,#9333ea)}
+    .gradient-gray{background:linear-gradient(135deg,#64748b,#475569)}
+    
     @media(max-width:768px){
       .page-layout{grid-template-columns:1fr}
       .order-form{position:static;margin-top:24px}
+    }
+    
+    @media(max-width:576px){
+      .ppob-category-grid{grid-template-columns:repeat(2,1fr);gap:12px}
+      .ppob-card-inner{padding:16px 12px;gap:10px}
+      .ppob-icon{width:48px;height:48px;font-size:22px}
+      .ppob-label{font-size:12px}
     }
   </style>
 </head>
 <body>
   <div class="topbar">
     <a href="/customer/dashboard"><i class="bi bi-arrow-left"></i> Kembali</a>
-    <h1><i class="bi bi-phone" style="color:#0ea5e9"></i> Beli Pulsa & PPOB</h1>
+    <h1>
+      <i class="bi bi-phone" style="color:#0ea5e9"></i>
+      <% if (selectedCategory) { %>
+        <%= selectedCategory %>
+      <% } else { %>
+        Beli Pulsa & PPOB
+      <% } %>
+    </h1>
     <span class="badge">Sistem Saldo</span>
   </div>
 
@@ -138,30 +176,65 @@
     </div>
     <% } else { %>
 
-    <!-- Filter Kategori -->
-    <div class="cat-tabs">
-      <button class="cat-tab active" onclick="filterCat(this, 'all')">Semua</button>
-      <% digiflazzCategories.forEach(cat => { %>
-      <button class="cat-tab" data-cat="<%= cat %>" onclick="filterCat(this, this.getAttribute('data-cat'))"><%= cat %></button>
-      <% }) %>
+    <% if (!selectedCategory) { %>
+    <!-- Tampilan Card Kategori (ketika tidak ada filter) -->
+    <div style="margin-bottom:32px">
+      <h6 class="section-title" style="margin-bottom:16px">
+        <i class="bi bi-grid-3x3-gap"></i> Pilih Kategori Layanan
+      </h6>
+      <div class="ppob-category-grid">
+        <%
+        const categoryIcons = {
+          'Pulsa': { icon: 'bi-phone-fill', gradientClass: 'gradient-blue' },
+          'Data': { icon: 'bi-reception-4', gradientClass: 'gradient-purple' },
+          'E-Money': { icon: 'bi-wallet2', gradientClass: 'gradient-cyan' },
+          'PLN': { icon: 'bi-lightning-charge-fill', gradientClass: 'gradient-orange' },
+          'Games': { icon: 'bi-controller', gradientClass: 'gradient-pink' },
+          'Voucher': { icon: 'bi-gift-fill', gradientClass: 'gradient-green' },
+          'Paket SMS & Telpon': { icon: 'bi-chat-dots-fill', gradientClass: 'gradient-teal' },
+          'Masa Aktif': { icon: 'bi-calendar-check-fill', gradientClass: 'gradient-red' },
+          'TV': { icon: 'bi-tv-fill', gradientClass: 'gradient-violet' }
+        };
+        
+        digiflazzCategories.forEach(cat => {
+          const catInfo = categoryIcons[cat] || { icon: 'bi-grid-fill', gradientClass: 'gradient-gray' };
+        %>
+        <a href="/customer/ppob?category=<%= encodeURIComponent(cat) %>" class="ppob-category-card">
+          <div class="ppob-card-inner">
+            <div class="ppob-icon <%= catInfo.gradientClass %>">
+              <i class="bi <%= catInfo.icon %>"></i>
+            </div>
+            <div class="ppob-label"><%= cat %></div>
+          </div>
+        </a>
+        <% }) %>
+      </div>
+    </div>
+    <% } else { %>
+    <!-- Tampilan Produk (ketika ada filter kategori) -->
+    <div style="margin-bottom:20px">
+      <a href="/customer/ppob" class="btn" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:8px 16px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px">
+        <i class="bi bi-arrow-left"></i> Kembali ke Kategori
+      </a>
+      <span style="margin-left:12px;color:#64748b;font-size:13px">Kategori: <strong style="color:#0ea5e9"><%= selectedCategory %></strong></span>
     </div>
 
     <div class="page-layout">
       <!-- Kiri: Katalog Produk -->
       <div>
-        <p class="section-title">Katalog Produk</p>
+        <p class="section-title">Produk <%= selectedCategory %></p>
         <div class="brand-grid" id="brandGrid">
           <% digiflazzBrandsData.forEach(brand => { %>
           <div class="brand-card" data-category="<%= brand.category %>">
             <div class="brand-head" onclick="toggleBrand(this)">
-              <span><i class="bi bi-phone-vibrate icon"></i> <%= brand.name %> <small style="color:#64748b;font-weight:400;font-size:11px">(<%= brand.category %>)</small></span>
+              <span><i class="bi bi-phone-vibrate icon"></i> <%= brand.name %></span>
               <i class="bi bi-chevron-down" style="color:#64748b;font-size:12px"></i>
             </div>
             <div class="brand-items">
               <% brand.items.forEach(item => { %>
-              <div class="prod-item" 
-                   data-sku="<%= item.sku %>" 
-                   data-name="<%= item.product_name %>" 
+              <div class="prod-item"
+                   data-sku="<%= item.sku %>"
+                   data-name="<%= item.product_name %>"
                    data-price="<%= item.price_sell || item.price_modal %>"
                    onclick="selectProduct(this)">
                 <span class="prod-name"><%= item.product_name %></span>
@@ -203,6 +276,7 @@
         </div>
       </div>
     </div>
+    <% } %>
 
     <!-- Riwayat Transaksi -->
     <div class="history-card">
@@ -256,18 +330,6 @@
 
   <script>
     let selectedSku = null;
-
-    function filterCat(btn, cat) {
-      document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('.brand-card').forEach(card => {
-        if (cat === 'all' || card.dataset.category === cat) {
-          card.style.display = '';
-        } else {
-          card.style.display = 'none';
-        }
-      });
-    }
 
     function toggleBrand(head) {
       const items = head.nextElementSibling;
