@@ -2046,6 +2046,9 @@ router.get('/ppob', (req, res) => {
     return res.redirect('/customer/login');
   }
 
+  // Get category filter from URL parameter
+  const categoryFilter = String(req.query.category || '').trim();
+
   const digiflazzConfigured = Boolean(
     String(settings.digiflazz_username || '').trim() &&
     String(settings.digiflazz_api_key || '').trim()
@@ -2053,8 +2056,14 @@ router.get('/ppob', (req, res) => {
   const products = digiflazzConfigured
     ? agentSvc.listDigiflazzProducts({ include_inactive: false, limit: 3000 })
     : [];
+  
+  // Filter products by category if specified
+  const filteredProducts = categoryFilter
+    ? products.filter(p => String(p.category || '').trim() === categoryFilter)
+    : products;
+  
   const brandsMap = new Map();
-  for (const p of products) {
+  for (const p of filteredProducts) {
     const brand = String(p.brand || '').trim() || '-';
     const cat = String(p.category || '').trim() || '-';
     const key = `${cat}__${brand}`;
@@ -2069,6 +2078,7 @@ router.get('/ppob', (req, res) => {
     digiflazzConfigured,
     digiflazzCategories: [...new Set(products.map(p => String(p.category||'').trim()).filter(Boolean))].sort(),
     digiflazzBrandsData: Array.from(brandsMap.values()),
+    selectedCategory: categoryFilter || null,
     history,
     error: req.query.err ? String(req.query.err) : null,
     info: req.query.info ? String(req.query.info) : null,
