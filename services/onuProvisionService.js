@@ -4,7 +4,12 @@ const { getSetting } = require('../config/settingsManager');
 
 /**
  * ONU Provision Service
- * Support untuk ZTE C300/C320 dan Huawei MA5800 Series
+ * Support untuk:
+ * - ZTE C300/C320
+ * - Huawei MA5800 Series
+ * - Fiberhome AN5516 Series
+ * - VSOL V1600/V2400 Series
+ * - C-Data FD1600/FD1800 Series
  */
 
 class ONUProvisionService {
@@ -143,7 +148,7 @@ class ONUProvisionService {
       await this.executeCommand(conn, 'enable', '#');
       await this.executeCommand(conn, 'configure terminal', '#');
       
-      const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword } = params;
+      const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
       // Add ONU
       let cmd = `interface gpon-olt_${pon}\n`;
@@ -173,6 +178,24 @@ class ONUProvisionService {
         cmd += `wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
       }
       
+      // TR069/CWMP Configuration
+      if (tr069AcsUrl) {
+        cmd += `tr069 enable\n`;
+        cmd += `tr069 acs url ${tr069AcsUrl}\n`;
+        
+        if (tr069AcsUsername && tr069AcsPassword) {
+          cmd += `tr069 acs username ${tr069AcsUsername}\n`;
+          cmd += `tr069 acs password ${tr069AcsPassword}\n`;
+        }
+        
+        if (tr069PeriodicInform) {
+          cmd += `tr069 periodic-inform interval ${tr069PeriodicInform}\n`;
+          cmd += `tr069 periodic-inform enable\n`;
+        }
+        
+        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
+      }
+      
       cmd += `exit\n`;
       
       // Service port
@@ -185,7 +208,15 @@ class ONUProvisionService {
       
       conn.end();
       
-      return { success: true, message: 'ONU provisioned successfully with WiFi and advanced config' };
+      const features = [];
+      if (wifiSsid) features.push('WiFi');
+      if (lanMode) features.push(`LAN Mode: ${lanMode}`);
+      if (tr069AcsUrl) features.push('TR069');
+      
+      return {
+        success: true,
+        message: `ONU provisioned successfully${features.length > 0 ? ' with ' + features.join(', ') : ''}`
+      };
     } catch (error) {
       if (conn) conn.end();
       logger.error('ZTE provision ONU error:', error);
@@ -257,7 +288,7 @@ class ONUProvisionService {
       await this.executeCommand(conn, 'enable', '#');
       await this.executeCommand(conn, 'config', '#');
       
-      const { frame, slot, pon, onuId, sn, name, vlan, bandwidth, lineProfile, srvProfile, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword } = params;
+      const { frame, slot, pon, onuId, sn, name, vlan, bandwidth, lineProfile, srvProfile, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
       // Add ONU
       let cmd = `interface gpon ${frame}/${slot}\n`;
@@ -278,6 +309,24 @@ class ONUProvisionService {
         cmd += `ont wan-config ${pon} ${onuId} pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
       }
       
+      // TR069/CWMP Configuration
+      if (tr069AcsUrl) {
+        cmd += `ont tr069-server ${pon} ${onuId} url ${tr069AcsUrl}\n`;
+        
+        if (tr069AcsUsername && tr069AcsPassword) {
+          cmd += `ont tr069-server ${pon} ${onuId} username ${tr069AcsUsername} password ${tr069AcsPassword}\n`;
+        }
+        
+        if (tr069PeriodicInform) {
+          cmd += `ont tr069-server ${pon} ${onuId} periodic-inform interval ${tr069PeriodicInform}\n`;
+          cmd += `ont tr069-server ${pon} ${onuId} periodic-inform enable\n`;
+        }
+        
+        cmd += `ont tr069-server ${pon} ${onuId} enable\n`;
+        
+        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
+      }
+      
       cmd += `quit\n`;
       
       // Service port
@@ -287,13 +336,276 @@ class ONUProvisionService {
       
       conn.end();
       
-      return { success: true, message: 'ONU provisioned successfully' };
+      const features = [];
+      if (wifiSsid) features.push('WiFi');
+      if (lanMode) features.push(`LAN Mode: ${lanMode}`);
+      if (tr069AcsUrl) features.push('TR069');
+      
+      return {
+        success: true,
+        message: `ONU provisioned successfully${features.length > 0 ? ' with ' + features.join(', ') : ''}`
+      };
     } catch (error) {
       if (conn) conn.end();
       logger.error('Huawei provision ONU error:', error);
       throw error;
     }
   }
+
+  /**
+   * Fiberhome AN5516 - Provision ONU
+   */
+  async fiberhomeProvisionONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      
+      // Enable and config mode
+      await this.executeCommand(conn, 'enable', '#');
+      await this.executeCommand(conn, 'config', '#');
+      
+      const { frame, slot, pon, onuId, sn, name, vlan, lineProfile, srvProfile, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
+      
+      // Add ONU
+      let cmd = `interface gpon ${frame}/${slot}\n`;
+      cmd += `ont add ${pon} ${onuId} sn-auth ${sn} ont-lineprofile-id ${lineProfile || 1} ont-srvprofile-id ${srvProfile || 1} desc ${name}\n`;
+      
+      // WiFi Configuration
+      if (wifiSsid && wifiPassword) {
+        cmd += `ont wlan ssid ${pon} ${onuId} 1 ${wifiSsid}\n`;
+        cmd += `ont wlan security ${pon} ${onuId} 1 wpa2-psk aes ${wifiPassword}\n`;
+        cmd += `ont wlan enable ${pon} ${onuId} 1\n`;
+      }
+      
+      // LAN Mode Configuration
+      if (lanMode) {
+        cmd += `ont port vlan ${pon} ${onuId} eth 1 mode tag vlan ${vlan}\n`;
+      }
+      
+      // PPPoE Configuration (if router mode)
+      if (lanMode === 'router' && pppoeUsername && pppoePassword) {
+        cmd += `ont wan ${pon} ${onuId} pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
+      }
+      
+      // TR069/CWMP Configuration
+      if (tr069AcsUrl) {
+        cmd += `ont cwmp ${pon} ${onuId} acs-url ${tr069AcsUrl}\n`;
+        
+        if (tr069AcsUsername && tr069AcsPassword) {
+          cmd += `ont cwmp ${pon} ${onuId} acs-username ${tr069AcsUsername}\n`;
+          cmd += `ont cwmp ${pon} ${onuId} acs-password ${tr069AcsPassword}\n`;
+        }
+        
+        if (tr069PeriodicInform) {
+          cmd += `ont cwmp ${pon} ${onuId} periodic-inform-interval ${tr069PeriodicInform}\n`;
+          cmd += `ont cwmp ${pon} ${onuId} periodic-inform enable\n`;
+        }
+        
+        cmd += `ont cwmp ${pon} ${onuId} enable\n`;
+        
+        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
+      }
+      
+      cmd += `quit\n`;
+      
+      // Service port
+      cmd += `service-port ${vlan} vlan ${vlan} gpon ${frame}/${slot}/${pon} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}\n`;
+      
+      await this.executeCommand(conn, cmd, '#');
+      
+      conn.end();
+      
+      const features = [];
+      if (wifiSsid) features.push('WiFi');
+      if (lanMode) features.push(`LAN Mode: ${lanMode}`);
+      if (tr069AcsUrl) features.push('TR069');
+      
+      return { 
+        success: true, 
+        message: `ONU provisioned successfully${features.length > 0 ? ' with ' + features.join(', ') : ''}` 
+      };
+    } catch (error) {
+      if (conn) conn.end();
+      logger.error('Fiberhome provision ONU error:', error);
+      throw error;
+    }
+  }
+  /**
+   * VSOL V1600/V2400 - Provision ONU (Similar to ZTE)
+   */
+  async vsolProvisionONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      
+      // Enable and config mode
+      await this.executeCommand(conn, 'enable', '#');
+      await this.executeCommand(conn, 'configure terminal', '#');
+      
+      const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
+      
+      // Add ONU
+      let cmd = `interface gpon-olt_${pon}\n`;
+      cmd += `onu ${onuId} type ${params.onuType || 'V2802RGW'} sn ${sn}\n`;
+      cmd += `exit\n`;
+      
+      // Configure ONU
+      cmd += `interface gpon-onu_${pon}:${onuId}\n`;
+      cmd += `name ${name}\n`;
+      cmd += `tcont 1 profile ${bandwidth || 'default'}\n`;
+      cmd += `gemport 1 tcont 1\n`;
+      
+      // WiFi Configuration
+      if (wifiSsid && wifiPassword) {
+        cmd += `ssid 1 ${wifiSsid}\n`;
+        cmd += `security 1 wpa2-psk AES ${wifiPassword}\n`;
+        cmd += `wifi enable 1\n`;
+      }
+      
+      // LAN Mode Configuration
+      if (lanMode) {
+        cmd += `lan-mode ${lanMode}\n`;
+      }
+      
+      // PPPoE Configuration (if router mode)
+      if (lanMode === 'router' && pppoeUsername && pppoePassword) {
+        cmd += `wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
+      }
+      
+      // TR069/CWMP Configuration
+      if (tr069AcsUrl) {
+        cmd += `tr069 enable\n`;
+        cmd += `tr069 acs url ${tr069AcsUrl}\n`;
+        
+        if (tr069AcsUsername && tr069AcsPassword) {
+          cmd += `tr069 acs username ${tr069AcsUsername}\n`;
+          cmd += `tr069 acs password ${tr069AcsPassword}\n`;
+        }
+        
+        if (tr069PeriodicInform) {
+          cmd += `tr069 periodic-inform interval ${tr069PeriodicInform}\n`;
+          cmd += `tr069 periodic-inform enable\n`;
+        }
+        
+        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
+      }
+      
+      cmd += `exit\n`;
+      
+      // Service port
+      cmd += `pon-onu-mng gpon-onu_${pon}:${onuId}\n`;
+      cmd += `service 1 gemport 1 vlan ${vlan}\n`;
+      cmd += `vlan port eth_0/1 mode tag vlan ${vlan}\n`;
+      cmd += `exit\n`;
+      
+      await this.executeCommand(conn, cmd, '#');
+      
+      conn.end();
+      
+      const features = [];
+      if (wifiSsid) features.push('WiFi');
+      if (lanMode) features.push(`LAN Mode: ${lanMode}`);
+      if (tr069AcsUrl) features.push('TR069');
+      
+      return { 
+        success: true, 
+        message: `ONU provisioned successfully${features.length > 0 ? ' with ' + features.join(', ') : ''}` 
+      };
+    } catch (error) {
+      if (conn) conn.end();
+      logger.error('VSOL provision ONU error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * C-Data FD1600/FD1800 - Provision ONU (Similar to ZTE)
+   */
+  async cdataProvisionONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      
+      // Enable and config mode
+      await this.executeCommand(conn, 'enable', '#');
+      await this.executeCommand(conn, 'configure terminal', '#');
+      
+      const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
+      
+      // Add ONU
+      let cmd = `interface gpon-olt_${pon}\n`;
+      cmd += `onu ${onuId} type ${params.onuType || 'FD1104S'} sn ${sn}\n`;
+      cmd += `exit\n`;
+      
+      // Configure ONU
+      cmd += `interface gpon-onu_${pon}:${onuId}\n`;
+      cmd += `name ${name}\n`;
+      cmd += `tcont 1 profile ${bandwidth || 'default'}\n`;
+      cmd += `gemport 1 tcont 1\n`;
+      
+      // WiFi Configuration
+      if (wifiSsid && wifiPassword) {
+        cmd += `ssid 1 ${wifiSsid}\n`;
+        cmd += `security 1 wpa2-psk AES ${wifiPassword}\n`;
+        cmd += `wifi enable 1\n`;
+      }
+      
+      // LAN Mode Configuration
+      if (lanMode) {
+        cmd += `lan-mode ${lanMode}\n`;
+      }
+      
+      // PPPoE Configuration (if router mode)
+      if (lanMode === 'router' && pppoeUsername && pppoePassword) {
+        cmd += `wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
+      }
+      
+      // TR069/CWMP Configuration
+      if (tr069AcsUrl) {
+        cmd += `cwmp enable\n`;
+        cmd += `cwmp acs url ${tr069AcsUrl}\n`;
+        
+        if (tr069AcsUsername && tr069AcsPassword) {
+          cmd += `cwmp acs username ${tr069AcsUsername}\n`;
+          cmd += `cwmp acs password ${tr069AcsPassword}\n`;
+        }
+        
+        if (tr069PeriodicInform) {
+          cmd += `cwmp periodic-inform interval ${tr069PeriodicInform}\n`;
+          cmd += `cwmp periodic-inform enable\n`;
+        }
+        
+        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
+      }
+      
+      cmd += `exit\n`;
+      
+      // Service port
+      cmd += `pon-onu-mng gpon-onu_${pon}:${onuId}\n`;
+      cmd += `service 1 gemport 1 vlan ${vlan}\n`;
+      cmd += `vlan port eth_0/1 mode tag vlan ${vlan}\n`;
+      cmd += `exit\n`;
+      
+      await this.executeCommand(conn, cmd, '#');
+      
+      conn.end();
+      
+      const features = [];
+      if (wifiSsid) features.push('WiFi');
+      if (lanMode) features.push(`LAN Mode: ${lanMode}`);
+      if (tr069AcsUrl) features.push('TR069');
+      
+      return { 
+        success: true, 
+        message: `ONU provisioned successfully${features.length > 0 ? ' with ' + features.join(', ') : ''}` 
+      };
+    } catch (error) {
+      if (conn) conn.end();
+      logger.error('C-Data provision ONU error:', error);
+      throw error;
+    }
+  }
+
 
   /**
    * Get ONU details (works for both ZTE and Huawei)
@@ -543,11 +855,17 @@ class ONUProvisionService {
         results.onu = await this.zteProvisionONU(oltConfig, params);
       } else if (vendor === 'Huawei') {
         results.onu = await this.huaweiProvisionONU(oltConfig, params);
+      } else if (vendor === 'Fiberhome') {
+        results.onu = await this.fiberhomeProvisionONU(oltConfig, params);
+      } else if (vendor === 'VSOL') {
+        results.onu = await this.vsolProvisionONU(oltConfig, params);
+      } else if (vendor === 'CData') {
+        results.onu = await this.cdataProvisionONU(oltConfig, params);
       } else {
-        throw new Error('Unsupported vendor');
+        throw new Error(`Unsupported vendor: ${vendor}`);
       }
       
-      logger.info(`ONU provisioned: ${params.name}`);
+      logger.info(`ONU provisioned: ${params.name} (${vendor})`);
       
       // 2. Create PPPoE in MikroTik (if credentials provided)
       if (params.pppoeUsername && params.pppoePassword && mikrotikConfig) {
