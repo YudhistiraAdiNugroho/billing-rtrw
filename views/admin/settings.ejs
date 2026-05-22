@@ -314,6 +314,7 @@
           <div class="fg">
             <label class="fl">Nomor Admin WA (Pisahkan dengan koma)</label>
             <input class="fc" name="whatsapp_admin_numbers" value="<%= (settings.whatsapp_admin_numbers || []).join(', ') %>" placeholder="6281xxx, 6282xxx">
+            <div style="font-size:10px; color:var(--muted); margin-top:4px">Nomor admin akan menerima notifikasi monitoring sistem. Nomor teknisi diambil otomatis dari <a href="/admin/technicians" style="color:var(--brand);font-weight:600">Data Teknisi</a>.</div>
           </div>
           <div class="fg">
             <label class="fl">Jeda Antar Pesan Broadcast (Detik)</label>
