@@ -3,9 +3,18 @@ require('dotenv').config();
 const { logger } = require('./logger');
 const db = require('./database');
 const { getSetting } = require('./settingsManager');
-// const { sendTechnicianMessage } = require('./sendMessage');
-// const mikrotik = require('./mikrotik');
-// const { getMikrotikConnection } = require('./mikrotik');
+
+// Import WhatsApp notification function
+let sendMonitoringAlert = null;
+(async () => {
+  try {
+    const whatsappBot = await import('../services/whatsappBot.mjs');
+    sendMonitoringAlert = whatsappBot.sendMonitoringAlert;
+    logger.info('[GenieACS] WhatsApp monitoring alert integration loaded');
+  } catch (error) {
+    logger.warn('[GenieACS] WhatsApp bot not available for monitoring alerts');
+  }
+})();
 
 // Konfigurasi GenieACS API (Legacy - untuk backward compatibility)
 const GENIEACS_URL = process.env.GENIEACS_URL || 'http://localhost:7557';
@@ -569,21 +578,35 @@ async function monitorRXPower(threshold = -27) {
         // Jika ada perangkat dengan RXPower di bawah threshold
         if (criticalDevices.length > 0) {
             // Buat pesan peringatan
-            let message = `⚠️ *PERINGATAN: REDAMAN TINGGI* ⚠️\n\n`;
-            message += `${criticalDevices.length} perangkat memiliki nilai RXPower di atas ${threshold} dBm:\n\n`;
+            let message = `*PERINGATAN: REDAMAN TINGGI*\n\n`;
+            message += `${criticalDevices.length} perangkat memiliki nilai RXPower di bawah ${threshold} dBm:\n\n`;
             
             criticalDevices.forEach((device, index) => {
-                message += `${index + 1}. ID: ${device.id.split('-')[2] || device.id}\n`;
-                message += `   S/N: ${device.serialNumber}\n`;
-                message += `   PPPoE: ${device.pppoeUsername}\n`;
-                message += `   RXPower: ${device.rxPower} dBm\n`;
-                message += `   Last Inform: ${new Date(device.lastInform).toLocaleString()}\n\n`;
+                message += `${index + 1}. *Device ID:* ${device.id.split('-')[2] || device.id}\n`;
+                message += `   📱 *S/N:* ${device.serialNumber}\n`;
+                message += `   👤 *PPPoE:* ${device.pppoeUsername}\n`;
+                message += `   📡 *RX Power:* ${device.rxPower} dBm\n`;
+                message += `   🕒 *Last Inform:* ${new Date(device.lastInform).toLocaleString('id-ID')}\n\n`;
             });
             
-            message += `Mohon segera dicek untuk menghindari koneksi terputus.`;
+            message += `⚠️ *Mohon segera dicek untuk menghindari koneksi terputus.*`;
             
-            // Kirim pesan ke grup teknisi dengan prioritas tinggi
-            // await sendTechnicianMessage(message, 'high'); // Removed sendTechnicianMessage
+            // Kirim notifikasi WhatsApp jika tersedia
+            if (sendMonitoringAlert) {
+                try {
+                    const result = await sendMonitoringAlert(message, 'high');
+                    if (result.success) {
+                        logger.info(`[RXPower] Notifikasi WhatsApp terkirim: ${result.message}`);
+                    } else {
+                        logger.warn(`[RXPower] Gagal mengirim notifikasi WhatsApp: ${result.message}`);
+                    }
+                } catch (error) {
+                    logger.error(`[RXPower] Error mengirim notifikasi WhatsApp: ${error.message}`);
+                }
+            } else {
+                logger.warn('[RXPower] WhatsApp bot tidak tersedia untuk mengirim notifikasi');
+            }
+            
             logger.info(`[RXPower] Pesan peringatan dibuat untuk ${criticalDevices.length} perangkat`);
         } else {
             logger.info('[RXPower] Tidak ada perangkat dengan nilai RXPower di bawah threshold');
@@ -712,21 +735,35 @@ async function monitorOfflineDevices(thresholdHours = 24) {
         // Jika ada perangkat yang offline
         if (offlineDevices.length > 0) {
             // Buat pesan peringatan
-            let message = `⚠️ *PERINGATAN: PERANGKAT OFFLINE* ⚠️\n\n`;
+            let message = `*PERINGATAN: PERANGKAT OFFLINE*\n\n`;
             message += `${offlineDevices.length} perangkat offline lebih dari ${thresholdHours} jam:\n\n`;
             
             offlineDevices.forEach((device, index) => {
-                message += `${index + 1}. ID: ${device.id.split('-')[2] || device.id}\n`;
-                message += `   S/N: ${device.serialNumber}\n`;
-                message += `   Offline selama: ${device.offlineHours} jam\n`;
-                message += `   Last Inform: ${new Date(device.lastInform).toLocaleString()}\n\n`;
+                message += `${index + 1}. *Device ID:* ${device.id.split('-')[2] || device.id}\n`;
+                message += `   📱 *S/N:* ${device.serialNumber}\n`;
+                message += `   ⏱️ *Offline:* ${device.offlineHours} jam\n`;
+                message += `   🕒 *Last Inform:* ${new Date(device.lastInform).toLocaleString('id-ID')}\n\n`;
             });
             
-            message += `Mohon segera ditindaklanjuti.`;
+            message += `⚠️ *Mohon segera ditindaklanjuti.*`;
             
-            // Kirim pesan ke grup teknisi dengan prioritas medium
-            // await sendTechnicianMessage(message, 'medium'); // Removed sendTechnicianMessage
-            console.log(`Pesan peringatan perangkat offline terkirim untuk ${offlineDevices.length} perangkat`);
+            // Kirim notifikasi WhatsApp jika tersedia
+            if (sendMonitoringAlert) {
+                try {
+                    const result = await sendMonitoringAlert(message, 'medium');
+                    if (result.success) {
+                        logger.info(`[Offline] Notifikasi WhatsApp terkirim: ${result.message}`);
+                    } else {
+                        logger.warn(`[Offline] Gagal mengirim notifikasi WhatsApp: ${result.message}`);
+                    }
+                } catch (error) {
+                    logger.error(`[Offline] Error mengirim notifikasi WhatsApp: ${error.message}`);
+                }
+            } else {
+                logger.warn('[Offline] WhatsApp bot tidak tersedia untuk mengirim notifikasi');
+            }
+            
+            logger.info(`[Offline] Pesan peringatan perangkat offline terkirim untuk ${offlineDevices.length} perangkat`);
         } else {
             console.log('Tidak ada perangkat yang offline lebih dari threshold');
         }

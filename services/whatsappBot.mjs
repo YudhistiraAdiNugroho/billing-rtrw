@@ -591,6 +591,74 @@ function loadWhatsappAdminSendList() {
   return out;
 }
 
+/**
+ * Send monitoring alert to admin and technicians
+ * @param {string} message - Alert message to send
+ * @param {string} priority - Priority level: 'high', 'medium', 'low'
+ */
+export async function sendMonitoringAlert(message, priority = 'medium') {
+  if (!currentSock) {
+    logger.warn('[WhatsApp] Bot belum siap, tidak dapat mengirim alert monitoring');
+    return { success: false, message: 'Bot belum siap' };
+  }
+
+  try {
+    const priorityIcon = priority === 'high' ? '🚨' : priority === 'medium' ? '⚠️' : 'ℹ️';
+    const formattedMessage = `${priorityIcon} *MONITORING ALERT*\n\n${message}`;
+    
+    // Get admin numbers from settings
+    const adminNumbers = getWhatsappAdminNumbers();
+    
+    // Get technician numbers from database (active technicians only)
+    const techSvc = require('./techService');
+    const technicians = techSvc.getAllTechnicians();
+    const techNumbers = technicians
+      .filter(tech => tech.is_active === 1 && tech.phone)
+      .map(tech => {
+        let phone = String(tech.phone || '').replace(/\D/g, '');
+        // Convert 08xxx to 628xxx
+        if (phone.startsWith('0')) {
+          phone = '62' + phone.slice(1);
+        }
+        return phone;
+      })
+      .filter(Boolean);
+    
+    // Combine all recipients (remove duplicates)
+    const recipients = [...new Set([...adminNumbers, ...techNumbers])];
+    
+    if (recipients.length === 0) {
+      logger.warn('[WhatsApp] Tidak ada nomor penerima alert monitoring yang dikonfigurasi');
+      return { success: false, message: 'Tidak ada penerima yang dikonfigurasi' };
+    }
+    
+    logger.info(`[WhatsApp] Mengirim alert monitoring ke ${recipients.length} penerima (${adminNumbers.length} admin, ${techNumbers.length} teknisi)`);
+    
+    const results = [];
+    for (const number of recipients) {
+      try {
+        const jid = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+        await currentSock.sendMessage(jid, { text: formattedMessage });
+        results.push({ number, success: true });
+        logger.info(`[WhatsApp] Alert monitoring terkirim ke ${number}`);
+      } catch (error) {
+        results.push({ number, success: false, error: error.message });
+        logger.error(`[WhatsApp] Gagal mengirim alert ke ${number}: ${error.message}`);
+      }
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    return {
+      success: successCount > 0,
+      message: `Alert terkirim ke ${successCount}/${recipients.length} penerima (${adminNumbers.length} admin, ${techNumbers.length} teknisi)`,
+      results
+    };
+  } catch (error) {
+    logger.error(`[WhatsApp] Error mengirim monitoring alert: ${error.message}`);
+    return { success: false, message: error.message };
+  }
+}
+
 export async function sendWA(to, text) {
   if (!currentSock) {
     logger.warn('WhatsApp: Gagal kirim pesan, bot belum terhubung.');

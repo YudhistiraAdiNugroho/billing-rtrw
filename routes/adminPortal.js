@@ -2851,6 +2851,7 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     if (typeof newSettings.whatsapp_admin_numbers === 'string') {
       newSettings.whatsapp_admin_numbers = newSettings.whatsapp_admin_numbers.split(',').map(n => n.trim()).filter(Boolean);
     }
+    // whatsapp_tech_numbers removed - now automatically fetched from technicians table
     if (newSettings.server_port) newSettings.server_port = parseInt(newSettings.server_port);
     if (newSettings.mikrotik_port) newSettings.mikrotik_port = parseInt(newSettings.mikrotik_port);
     if (newSettings.whatsapp_broadcast_delay) newSettings.whatsapp_broadcast_delay = parseInt(newSettings.whatsapp_broadcast_delay);
