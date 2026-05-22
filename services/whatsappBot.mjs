@@ -624,33 +624,44 @@ export async function sendMonitoringAlert(message, priority = 'medium') {
       })
       .filter(Boolean);
     
-    // Combine all recipients (remove duplicates)
-    const recipients = [...new Set([...adminNumbers, ...techNumbers])];
+    const toJid = (raw) => {
+      const s = String(raw || '').trim();
+      if (!s) return '';
+      if (s.includes('@')) return s;
+      let digits = s.replace(/\D/g, '');
+      if (!digits) return '';
+      if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+      if (digits.length < 8) return '';
+      return `${digits}@s.whatsapp.net`;
+    };
+
+    const adminJids = Array.from(new Set((adminNumbers || []).map(toJid).filter(Boolean)));
+    const techJids = Array.from(new Set((techNumbers || []).map(toJid).filter(Boolean)));
+    const recipients = Array.from(new Set([...adminJids, ...techJids]));
     
     if (recipients.length === 0) {
       logger.warn('[WhatsApp] Tidak ada nomor penerima alert monitoring yang dikonfigurasi');
       return { success: false, message: 'Tidak ada penerima yang dikonfigurasi' };
     }
     
-    logger.info(`[WhatsApp] Mengirim alert monitoring ke ${recipients.length} penerima (${adminNumbers.length} admin, ${techNumbers.length} teknisi)`);
+    logger.info(`[WhatsApp] Mengirim alert monitoring ke ${recipients.length} penerima (${adminJids.length} admin, ${techJids.length} teknisi)`);
     
     const results = [];
-    for (const number of recipients) {
+    for (const jid of recipients) {
       try {
-        const jid = number.includes('@') ? number : `${number}@s.whatsapp.net`;
         await currentSock.sendMessage(jid, { text: formattedMessage });
-        results.push({ number, success: true });
-        logger.info(`[WhatsApp] Alert monitoring terkirim ke ${number}`);
+        results.push({ jid, success: true });
+        logger.info(`[WhatsApp] Alert monitoring terkirim ke ${jid}`);
       } catch (error) {
-        results.push({ number, success: false, error: error.message });
-        logger.error(`[WhatsApp] Gagal mengirim alert ke ${number}: ${error.message}`);
+        results.push({ jid, success: false, error: error.message });
+        logger.error(`[WhatsApp] Gagal mengirim alert ke ${jid}: ${error.message}`);
       }
     }
     
     const successCount = results.filter(r => r.success).length;
     return {
       success: successCount > 0,
-      message: `Alert terkirim ke ${successCount}/${recipients.length} penerima (${adminNumbers.length} admin, ${techNumbers.length} teknisi)`,
+      message: `Alert terkirim ke ${successCount}/${recipients.length} penerima (${adminJids.length} admin, ${techJids.length} teknisi)`,
       results
     };
   } catch (error) {
