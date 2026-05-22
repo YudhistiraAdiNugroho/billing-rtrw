@@ -579,7 +579,7 @@ async function monitorRXPower(threshold = -27) {
         if (criticalDevices.length > 0) {
             // Buat pesan peringatan
             let message = `*PERINGATAN: REDAMAN TINGGI*\n\n`;
-            message += `${criticalDevices.length} perangkat memiliki nilai RXPower di bawah ${threshold} dBm:\n\n`;
+            message += `${criticalDevices.length} perangkat memiliki nilai RX Power lebih buruk dari ${threshold} dBm (semakin negatif = semakin buruk):\n\n`;
             
             criticalDevices.forEach((device, index) => {
                 message += `${index + 1}. *Device ID:* ${device.id.split('-')[2] || device.id}\n`;
