@@ -17,7 +17,7 @@ async function getAvailablePaymentMethods() {
 
   try {
     // Tripay methods
-    if (settings.tripay_enabled && settings.tripay_api_key) {
+    if (settings.tripay_enabled && settings.tripay_api_key && settings.tripay_private_key && settings.tripay_merchant_code) {
       const tripayMethods = await getTripayPaymentMethods(settings);
       methods.push(...tripayMethods);
     }
@@ -35,7 +35,7 @@ async function getAvailablePaymentMethods() {
     }
 
     // Duitku methods
-    if (settings.duitku_enabled && settings.duitku_api_key) {
+    if (settings.duitku_enabled && settings.duitku_api_key && settings.duitku_merchant_code) {
       const duitkuMethods = await getDuitkuPaymentMethods(settings);
       methods.push(...duitkuMethods);
     }
@@ -286,14 +286,21 @@ async function createXenditPayment(invoice, customer, method, appUrl, opts) {
     external_id: invoiceId,
     amount: invoice.amount,
     description: opts.itemName,
+    invoice_duration: 86400,
     customer: {
       given_names: customer.name,
       email: customer.email || `voucher${invoice.id}@alijaya.net`,
       mobile_number: customer.phone
     },
+    currency: 'IDR',
+    items: [{
+      name: opts.itemName,
+      quantity: 1,
+      price: invoice.amount
+    }],
     payment_methods: [method],
-    callback_url: finalAppUrl ? `${finalAppUrl}${opts.callbackPath}` : undefined,
-    redirect_url: finalAppUrl ? `${finalAppUrl}${opts.returnPath}` : undefined
+    success_redirect_url: finalAppUrl ? `${finalAppUrl}${opts.returnPath}` : undefined,
+    failure_redirect_url: finalAppUrl ? `${finalAppUrl}${opts.returnPath}` : undefined
   };
 
   try {
@@ -330,14 +337,15 @@ async function createDuitkuPayment(invoice, customer, method, appUrl, opts) {
   const isLive = settings.duitku_mode === 'live' || settings.duitku_mode === 'production';
 
   const baseUrl = isLive
-    ? 'https://api-prod.duitku.com/api/merchant/v2/inquiry'
-    : 'https://api-sandbox.duitku.com/api/merchant/v2/inquiry';
+    ? 'https://passport.duitku.com/webapi/api/merchant/v2/inquiry'
+    : 'https://passport-sandbox.duitku.com/webapi/api/merchant/v2/inquiry';
 
   const invoiceId = `VOUCHER${invoice.id}${Date.now()}`;
   const finalAppUrl = appUrl || settings.app_url || '';
 
   const signature = crypto
-    .md5(merchantCode + invoiceId + invoice.amount + apiKey)
+    .createHash('md5')
+    .update(merchantCode + invoiceId + invoice.amount + apiKey)
     .digest('hex');
 
   const payload = {

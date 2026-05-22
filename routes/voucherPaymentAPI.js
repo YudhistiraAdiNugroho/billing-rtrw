@@ -100,9 +100,23 @@ router.post('/create-payment', async (req, res) => {
     // Update voucher order dengan payment info
     db.prepare(`
       UPDATE public_voucher_orders
-      SET payment_gateway = ?, payment_order_id = ?, payment_method = ?, updated_at = CURRENT_TIMESTAMP
+      SET payment_gateway = ?,
+          payment_order_id = ?,
+          payment_link = ?,
+          payment_reference = ?,
+          payment_method = ?,
+          payment_payload = ?,
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(result.gateway, result.reference, paymentMethod.code, voucherOrderId);
+    `).run(
+      result.gateway,
+      result.orderId || '',
+      result.link || '',
+      result.reference || '',
+      paymentMethod.code,
+      result.payload ? JSON.stringify(result.payload) : null,
+      voucherOrderId
+    );
 
     logger.info(`[VoucherPaymentAPI] Payment created for voucher order ${voucherOrderId}`, {
       gateway: result.gateway,

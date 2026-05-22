@@ -2846,6 +2846,12 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     if (newSettings.midtrans_enabled === 'true') newSettings.midtrans_enabled = true;
     else if (newSettings.midtrans_enabled === 'false') newSettings.midtrans_enabled = false;
 
+    if (newSettings.xendit_enabled === 'true') newSettings.xendit_enabled = true;
+    else if (newSettings.xendit_enabled === 'false') newSettings.xendit_enabled = false;
+
+    if (newSettings.duitku_enabled === 'true') newSettings.duitku_enabled = true;
+    else if (newSettings.duitku_enabled === 'false') newSettings.duitku_enabled = false;
+
     if (newSettings.default_gateway) newSettings.default_gateway = newSettings.default_gateway.toLowerCase();
 
     if (typeof newSettings.whatsapp_admin_numbers === 'string') {

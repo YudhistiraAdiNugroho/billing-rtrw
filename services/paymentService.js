@@ -46,6 +46,9 @@ async function createTripayTransaction(invoice, customer, method = 'QRIS', appUr
   const prefix = String(opts.orderPrefix || 'INV').toUpperCase();
   const merchantRef = `${prefix}-${invoice.id}-${Date.now()}`;
   const amount = Number(invoice.amount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Tripay Error: amount tidak valid');
+  }
 
   const signature = crypto.createHmac('sha256', privateKey)
     .update(merchantCode + merchantRef + amount)
@@ -335,20 +338,16 @@ async function createDuitkuTransaction(invoice, customer, method = 'duitku', app
     expiryPeriod: 1440 // 24 jam
   };
 
-  // Jika user memilih metode spesifik di Duitku
-  if (method !== 'duitku') {
-    const methodMap = {
-      'QRIS': 'DQ',
-      'MANDIRIVA': 'M2',
-      'BRIVA': 'BR',
-      'BNIVA': 'I1',
-      'BCAVA': 'BC',
-      'PERMATAVA': 'BT'
-    };
-    if (methodMap[method]) {
-      payload.paymentMethod = methodMap[method];
-    }
-  }
+  const methodMap = {
+    'QRIS': 'DQ',
+    'MANDIRIVA': 'M2',
+    'BRIVA': 'BR',
+    'BNIVA': 'I1',
+    'BCAVA': 'BC',
+    'PERMATAVA': 'BT'
+  };
+  const methodKey = String(method || '').trim().toUpperCase();
+  payload.paymentMethod = methodMap[methodKey] || 'DQ';
 
   try {
     const res = await axios.post(baseUrl, payload);
