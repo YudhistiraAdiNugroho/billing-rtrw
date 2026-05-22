@@ -1907,12 +1907,18 @@ router.get('/payment/callback', (req, res) => {
   res.json({ success: true, message: 'OK. Use POST for gateway notifications.' });
 });
 router.head('/payment/callback', (req, res) => res.status(200).end());
-router.post('/payment/callback', express.json(), async (req, res) => {
+router.post('/payment/callback', express.json({
+  verify: (req, res, buf) => {
+    try {
+      req.rawBody = buf.toString('utf8');
+    } catch {}
+  }
+}), async (req, res) => {
   const settings = getSettingsWithCache();
   const tripaySignature = req.headers['x-callback-signature'];
   const midtransSignature = req.headers['x-callback-token']; // Midtrans usually uses Basic Auth or IP whitelist, but let's check payload
   
-  const jsonBody = JSON.stringify(req.body);
+  const jsonBody = req.rawBody || JSON.stringify(req.body);
   let gatewayOrderId = null;
   let invoiceIdCandidate = null;
   let status = null;
@@ -1951,7 +1957,18 @@ router.post('/payment/callback', express.json(), async (req, res) => {
   else if (req.body.external_id && req.body.status && !tripaySignature) {
     // Xendit callback usually includes x-callback-token in headers
     const xenditToken = req.headers['x-callback-token'];
-    if (xenditToken === settings.xendit_callback_token || !settings.xendit_callback_token) {
+    const configuredToken = String(settings.xendit_callback_token || '').trim();
+    const xenditConfigured = Boolean(
+      settings.xendit_enabled &&
+      String(settings.xendit_api_key || '').trim()
+    );
+
+    if (xenditConfigured && !configuredToken) {
+      logger.error('[Webhook] Callback Token Xendit belum diatur');
+      return res.status(401).json({ success: false, message: 'Xendit callback token not configured' });
+    }
+
+    if (configuredToken && xenditToken === configuredToken) {
       const { external_id, status: xStatus } = req.body;
       const parts = String(external_id || '').split('-');
       gatewayOrderId = String(external_id || '') || null;
