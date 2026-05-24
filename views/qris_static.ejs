@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="<%= lang || 'id' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QRIS | <%= settings.company_header || 'Portal ISP' %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/img/logo.png">
+  <style>
+    body{
+      background: radial-gradient(1200px 600px at 10% 0%, rgba(99, 102, 241, 0.22) 0%, rgba(15, 23, 42, 0) 60%),
+        radial-gradient(900px 450px at 100% 0%, rgba(59, 130, 246, 0.18) 0%, rgba(15, 23, 42, 0) 55%),
+        #0f172a;
+      color:#e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px}
+    .cardx{background: rgba(30, 41, 59, 0.92);backdrop-filter: blur(10px);border: 1px solid #334155;border-radius: 20px;box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);overflow:hidden;max-width: 720px;width:100%}
+    .head{background: linear-gradient(135deg, rgba(99, 102, 241, 0.28) 0%, rgba(59, 130, 246, 0.2) 100%);padding:22px 20px;border-bottom:1px solid rgba(148,163,184,.18)}
+    .body{padding:22px 20px}
+    .muted{color: rgba(148, 163, 184, 0.9)}
+    .btnx{border-radius:12px;font-weight:700}
+    .btn-primary{background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);border:none}
+    .qris-box{background: rgba(15, 23, 42, 0.55);border: 1px solid rgba(148, 163, 184, 0.16);border-radius: 18px;padding:16px}
+    .qrimg{width:100%;max-width:320px;border-radius:16px;background:#fff;padding:10px;box-shadow:0 12px 30px rgba(0,0,0,.45)}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid rgba(148,163,184,.18)}
+    .pill-u{background: rgba(99,102,241,.12);color:#c7d2fe;border-color: rgba(99,102,241,.28)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="cardx">
+      <div class="head">
+        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+          <div>
+            <div class="fw-bold" style="font-size:18px">QRIS Statis</div>
+            <div class="muted small"><%= settings.company_header || 'Portal ISP' %></div>
+          </div>
+          <% if (backUrl) { %>
+            <a class="btn btn-outline-light btn-sm btnx" href="<%= backUrl %>">
+              <i class="bi bi-arrow-left me-1"></i> Kembali
+            </a>
+          <% } %>
+        </div>
+      </div>
+      <div class="body">
+        <% if (error) { %>
+          <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle me-2"></i><%= error %>
+          </div>
+        <% } else { %>
+          <% if (info) { %>
+            <div class="alert alert-success">
+              <i class="bi bi-check-circle me-2"></i><%= info %>
+            </div>
+          <% } %>
+          <%
+            const kindSafe = String(kind || 'invoice').toLowerCase();
+            const isVoucher = kindSafe === 'voucher';
+            const refPrefix = isVoucher ? 'VOUCHER' : 'INV';
+          %>
+          <div class="mb-3">
+            <div class="fw-bold"><%= customerName || (isVoucher ? 'Pembeli Voucher' : 'Pelanggan') %></div>
+            <div class="muted small">
+              <%= refPrefix %>-<%= invoiceId %>
+              <% if (periodText) { %> • <%= periodText %><% } %>
+            </div>
+          </div>
+
+          <div class="qris-box">
+            <div class="d-flex flex-column align-items-center text-center gap-3">
+              <% if (qrisQrUrl) { %>
+                <img class="qrimg" src="<%= qrisQrUrl %>" alt="QRIS">
+              <% } else { %>
+                <div class="alert alert-warning mb-0 w-100">
+                  QRIS belum diatur oleh admin.
+                </div>
+              <% } %>
+
+              <div class="w-100">
+                <div class="muted small mb-1">Nominal yang harus dibayar (WAJIB tepat)</div>
+                <div class="d-flex align-items-center justify-content-center gap-2 flex-wrap">
+                  <span class="fw-bold" style="font-size:22px">Rp <%= Number(amountUnique || 0).toLocaleString('id-ID') %></span>
+                  <% if (uniqueCode) { %>
+                    <span class="pill pill-u">Kode <span class="mono"><%= String(uniqueCode).padStart(3, '0') %></span></span>
+                  <% } %>
+                </div>
+                <div class="mt-2 d-flex justify-content-center gap-2 flex-wrap">
+                  <button class="btn btn-outline-light btn-sm btnx" type="button" id="copyAmountBtn">
+                    <i class="bi bi-clipboard me-1"></i> Salin Nominal
+                  </button>
+                  <% if (qrisQrUrl) { %>
+                    <button class="btn btn-outline-light btn-sm btnx" type="button" id="downloadQrBtn">
+                      <i class="bi bi-download me-1"></i> Download QRIS
+                    </button>
+                  <% } %>
+                </div>
+              </div>
+
+              <div class="muted small">
+                Scan QRIS di atas (DANA/OVO/ShopeePay/LinkAja/GoPay, dll), lalu masukkan nominal sesuai yang tertera.
+                Status lunas akan terverifikasi setelah pembayaran terdeteksi.
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 qris-box">
+            <div class="d-flex flex-column gap-2">
+              <div class="fw-bold">Konfirmasi Pembayaran</div>
+              <div class="muted small">Jika pembayaran belum otomatis terdeteksi, kirim bukti transfer ke admin.</div>
+
+              <% const proofAction = String(proofActionUrl || `/customer/payment/proof/${invoiceId}`); %>
+              <form method="POST" action="<%= proofAction %>" enctype="multipart/form-data" class="d-flex flex-column gap-2">
+                <% if (publicToken) { %>
+                  <input type="hidden" name="token" value="<%= publicToken %>">
+                <% } %>
+                <input class="form-control" type="file" name="proof" accept="image/png,image/jpeg,image/jpg,image/webp" required>
+                <button class="btn btn-primary btnx" type="submit">
+                  <i class="bi bi-cloud-upload me-1"></i> Upload Bukti
+                </button>
+              </form>
+
+              <% if (proofUrl) { %>
+                <div class="muted small">
+                  Bukti tersimpan: <a href="<%= proofUrl %>" target="_blank" rel="noopener"><%= proofUrl %></a>
+                </div>
+              <% } %>
+
+              <%
+                const adminWa = String(adminWaDigits || '').trim();
+                const msgLines = [
+                  isVoucher ? 'Konfirmasi pembayaran Voucher (QRIS Statis)' : 'Konfirmasi pembayaran QRIS Statis',
+                  `${refPrefix}-${invoiceId}${periodText ? ' • ' + periodText : ''}`,
+                  `Nama: ${customerName || (isVoucher ? 'Pembeli Voucher' : 'Pelanggan')}`,
+                  `Nominal: Rp ${Number(amountUnique || 0).toLocaleString('id-ID')} (kode ${String(uniqueCode || 0).padStart(3, '0')})`,
+                  proofUrl ? `Bukti: ${proofUrl}` : 'Bukti: (sudah diupload / akan dikirim)',
+                ];
+                const waText = msgLines.join('\n');
+                const waLink = adminWa ? `https://wa.me/${adminWa}?text=${encodeURIComponent(waText)}` : '';
+              %>
+
+              <% if (waLink) { %>
+                <a class="btn btn-outline-light btnx" href="<%= waLink %>" target="_blank" rel="noopener">
+                  <i class="bi bi-whatsapp me-1"></i> Kirim WhatsApp ke Admin
+                </a>
+              <% } else { %>
+                <div class="alert alert-warning mb-0">
+                  Nomor admin WhatsApp belum diatur.
+                </div>
+              <% } %>
+            </div>
+          </div>
+
+          <% if (helpText) { %>
+            <div class="alert alert-info mt-3 mb-0">
+              <i class="bi bi-info-circle me-2"></i><%= helpText %>
+            </div>
+          <% } %>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* eslint-disable */
+    (function () {
+      var amount = <%= Number(amountUnique || 0) || 0 %>;
+      var qrSrc = <%- JSON.stringify(String(qrisQrUrl || '')) %>;
+      var kindSafe = <%- JSON.stringify(String(kind || 'invoice').toLowerCase()) %>;
+      var refPrefix = kindSafe === 'voucher' ? 'VOUCHER' : 'INV';
+      var refId = <%= Number(invoiceId || 0) || 0 %>;
+      var copy = async function (text) {
+        try {
+          if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(String(text));
+            return true;
+          }
+        } catch (e) {
+          // Clipboard API not available
+        }
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = String(text);
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return ok;
+        } catch (e) {
+          return false;
+        }
+      };
+
+      var aBtn = document.getElementById('copyAmountBtn');
+      if (aBtn) aBtn.addEventListener('click', async function () {
+        if (!amount) return;
+        await copy(amount);
+      });
+
+      var dBtn = document.getElementById('downloadQrBtn');
+      if (dBtn) dBtn.addEventListener('click', async function () {
+        if (!qrSrc) return;
+        var fileName = 'QRIS-' + refPrefix + '-' + (refId || 'ref') + '.png';
+        try {
+          if (qrSrc.startsWith('data:image/')) {
+            var a = document.createElement('a');
+            a.href = qrSrc;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            return;
+          }
+          var res = await fetch(qrSrc, { credentials: 'same-origin' });
+          if (!res.ok) throw new Error('Fetch failed');
+          var blob = await res.blob();
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => {
+            try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+          }, 1200);
+        } catch (e) {
+          try { window.open(qrSrc, '_blank', 'noopener'); } catch (e2) { /* ignore */ }
+        }
+      });
+
+      // Auto-polling untuk cek status pembayaran
+      var pollInterval = 5000; // 5 detik
+      var maxPolls = 120; // Max 10 menit (120 x 5 detik)
+      var pollCount = 0;
+
+      var checkPaymentStatus = async function () {
+        if (pollCount >= maxPolls) {
+          console.log('Polling stopped: max attempts reached');
+          return;
+        }
+        pollCount++;
+
+        try {
+          var token = <%- JSON.stringify(String(publicToken || '')) %>;
+          var url = kindSafe === 'voucher'
+            ? '/customer/voucher/status/' + refId + '?t=' + encodeURIComponent(token)
+            : '/customer/payment/status/' + refId + '?t=' + encodeURIComponent(token);
+
+          var res = await fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+          });
+          
+          if (!res.ok) {
+            throw new Error('Status check failed');
+          }
+
+          var data = await res.json();
+
+          // Jika status sudah fulfilled/paid, redirect ke halaman status
+          if (data.status === 'fulfilled' || data.status === 'paid') {
+            var backUrl = <%- JSON.stringify(String(backUrl || '')) %>;
+            if (backUrl) {
+              window.location.href = backUrl;
+            } else {
+              var redirectUrl = kindSafe === 'voucher'
+                ? '/customer/voucher?order=' + refId + '&t=' + encodeURIComponent(token)
+                : '/customer/billing?invoice=' + refId;
+              window.location.href = redirectUrl;
+            }
+            return;
+          }
+
+          // Lanjutkan polling jika masih pending
+          setTimeout(checkPaymentStatus, pollInterval);
+        } catch (err) {
+          console.error('Payment status check error:', err);
+          // Retry meskipun error
+          setTimeout(checkPaymentStatus, pollInterval);
+        }
+      };
+
+      // Mulai polling setelah 3 detik (beri waktu user lihat QR dulu)
+      setTimeout(checkPaymentStatus, 3000);
+    })();
+    /* eslint-enable */
+  </script>
+</body>
+</html>

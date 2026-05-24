@@ -226,9 +226,33 @@
                 <input type="hidden" name="token" id="pay_token" value="">
                 <input type="hidden" name="method" id="pay_method" value="">
 
-                <% if (paymentChannels && paymentChannels.length > 0) { %>
+                <% const hasStaticQris = (String(settings.qris_static_qr_url || '').trim() || String(settings.qris_static_payload || '').trim()) && (settings.qris_static_enabled !== false && settings.qris_static_enabled !== 'false' && settings.qris_static_enabled !== 0 && settings.qris_static_enabled !== '0'); %>
+                <% if (hasStaticQris || (paymentChannels && paymentChannels.length > 0)) { %>
                   <div class="pay-scroll">
                     <div class="payment-methods-grid">
+                      <% if (hasStaticQris) { %>
+                        <label style="cursor: pointer">
+                          <input
+                            class="pm-radio"
+                            type="radio"
+                            name="payment_method"
+                            value="QRIS_STATIC"
+                            data-code="QRIS_STATIC"
+                            checked
+                            required
+                          >
+                          <div class="pay-method-item">
+                            <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
+                            <div class="p-info">
+                              <span class="p-name">QRIS Statis (Scan)</span>
+                              <span class="p-sub">
+                                <span class="p-chip">Nominal unik</span>
+                                <span class="p-chip">E-Wallet</span>
+                              </span>
+                            </div>
+                          </div>
+                        </label>
+                      <% } %>
                       <% paymentChannels.forEach((ch, idx) => {
                         const code = String(ch.code || '').toUpperCase();
                         const name = String(ch.name || code);
@@ -273,7 +297,7 @@
                             name="payment_method"
                             value="<%= code %>"
                             data-code="<%= code %>"
-                            <%= idx === 0 ? 'checked' : '' %>
+                            <%= (!hasStaticQris && idx === 0) ? 'checked' : '' %>
                             required
                           >
                           <div class="pay-method-item">

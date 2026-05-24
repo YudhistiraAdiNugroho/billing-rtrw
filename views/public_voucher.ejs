@@ -266,6 +266,14 @@
                   <div class="fw-bold mb-1"><i class="bi bi-hourglass-split me-2"></i>Pembayaran Berhasil</div>
                   <div class="muted small">Voucher sedang dibuat di MikroTik. Halaman ini akan diperbarui otomatis.</div>
                 </div>
+              <% } else if (String(order.status) === 'pending' && (String(order.payment_gateway || '') === 'qris_static' || order.qris_amount_unique)) { %>
+                <% if (orderToken) { %>
+                  <a class="btn btn-primary btnx mt-3 w-100" href="/customer/voucher/qris/<%= order.id %>?t=<%= encodeURIComponent(orderToken) %>">
+                    <i class="bi bi-qr-code-scan me-1"></i> Buka QRIS Statis
+                  </a>
+                <% } else { %>
+                  <div class="alert alert-warning mt-3 mb-0">Link QRIS tidak tersedia.</div>
+                <% } %>
               <% } else if (String(order.status) === 'pending' && order.payment_link) { %>
                 <a class="btn btn-primary btnx mt-3 w-100" href="<%= order.payment_link %>">
                   <i class="bi bi-credit-card me-1"></i> Lanjutkan Pembayaran
@@ -315,7 +323,8 @@
 
             <div class="col-12 col-lg-5">
               <label class="muted small mb-1">Metode Pembayaran</label>
-              <% if (!paymentChannels || paymentChannels.length === 0) { %>
+              <% const hasStaticQris = (String(settings.qris_static_qr_url || '').trim() || String(settings.qris_static_payload || '').trim()) && (settings.qris_static_enabled !== false && settings.qris_static_enabled !== 'false' && settings.qris_static_enabled !== 0 && settings.qris_static_enabled !== '0'); %>
+              <% if (!hasStaticQris && (!paymentChannels || paymentChannels.length === 0)) { %>
                 <input type="hidden" name="method" value="QRIS">
                 <div class="payment-methods-grid mt-1">
                   <div class="pay-method-item" style="cursor: default">
@@ -333,6 +342,27 @@
                 </div>
               <% } else { %>
                 <div class="payment-methods-grid mt-1">
+                  <% if (hasStaticQris) { %>
+                    <input
+                      class="pm-radio"
+                      type="radio"
+                      name="method"
+                      id="pm_static"
+                      value="QRIS_STATIC"
+                      checked
+                      style="position:absolute;opacity:0;pointer-events:none"
+                    >
+                    <label class="pay-method-item" for="pm_static">
+                      <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
+                      <div class="p-info">
+                        <span class="p-name">QRIS Statis (Scan)</span>
+                        <span class="p-sub">
+                          <span class="p-chip">Nominal unik</span>
+                          <span class="p-chip">E-Wallet</span>
+                        </span>
+                      </div>
+                    </label>
+                  <% } %>
                   <% paymentChannels.forEach((ch, idx) => {
                     const code = String(ch.code || '').toUpperCase();
                     const name = ch.name || code;
@@ -372,7 +402,7 @@
                       name="method"
                       id="pm_<%= idx %>"
                       value="<%= code %>"
-                      <%= idx === 0 ? 'checked' : '' %>
+                      <%= (!hasStaticQris && idx === 0) ? 'checked' : '' %>
                       style="position:absolute;opacity:0;pointer-events:none"
                     >
                     <label class="pay-method-item" for="pm_<%= idx %>">

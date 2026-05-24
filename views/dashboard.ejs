@@ -1097,6 +1097,7 @@
                           <% if (unpaidInvoices && unpaidInvoices.length > 0) { %>
                             <div class="mt-3">
                               <div class="fw-bold mb-2"><i class="bi bi-wallet2 me-2" style="color:#6366f1"></i><%= t('customer.billing.pay_online', 'BAYAR ONLINE') %></div>
+                              <% const hasStaticQris = (String(settings.qris_static_qr_url || '').trim() || String(settings.qris_static_payload || '').trim()) && (settings.qris_static_enabled !== false && settings.qris_static_enabled !== 'false' && settings.qris_static_enabled !== 0 && settings.qris_static_enabled !== '0'); %>
                               <div class="row g-2">
                                 <% unpaidInvoices.forEach(function(uinv) { %>
                                   <div class="col-12 col-md-6">
@@ -1115,6 +1116,12 @@
                                         onclick="openPaymentModal('<%= uinv.id %>', '<%= uinv.amount %>')">
                                         <i class="bi bi-wallet2 me-2"></i><%= t('customer.billing.pay_online', 'BAYAR ONLINE') %>
                                       </button>
+                                      <% if (hasStaticQris) { %>
+                                        <button type="button" class="btn btn-outline-light btn-nav w-100 mt-2"
+                                          onclick="window.location.href='/customer/payment/create/<%= uinv.id %>?method=QRIS_STATIC'">
+                                          <i class="bi bi-qr-code-scan me-2"></i>QRIS Statis (Scan)
+                                        </button>
+                                      <% } %>
                                     </div>
                                   </div>
                                   <% }) %>
@@ -1553,6 +1560,19 @@
               id="pay_amount_text" style="color:#60a5fa"></strong></p>
 
           <div class="payment-methods-grid">
+            <% const hasStaticQris = (String(settings.qris_static_qr_url || '').trim() || String(settings.qris_static_payload || '').trim()) && (settings.qris_static_enabled !== false && settings.qris_static_enabled !== 'false' && settings.qris_static_enabled !== 0 && settings.qris_static_enabled !== '0'); %>
+            <% if (hasStaticQris) { %>
+              <div class="pay-method-item" onclick="submitPayment('QRIS_STATIC')">
+                <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
+                <div class="p-info">
+                  <span class="p-name">QRIS Statis (Scan)</span>
+                  <span class="p-sub">
+                    <span class="p-chip">Nominal unik</span>
+                    <span class="p-chip">E-Wallet</span>
+                  </span>
+                </div>
+              </div>
+            <% } %>
             <% if (!paymentChannels || paymentChannels.length === 0) { %>
               <div class="pay-method-item" onclick="submitPayment('QRIS')">
                 <div class="p-icon"><i class="bi bi-qr-code-scan"></i></div>
