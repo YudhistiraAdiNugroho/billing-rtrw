@@ -778,29 +778,28 @@ class ONUProvisionService {
     try {
       const { username, password, profile, comment, localAddress, remoteAddress } = params;
       
-      // Connect to MikroTik
-      const conn = await mikrotikService.connect(mikrotikConfig);
+      // Use the existing createPppoeSecret function
+      const secretData = {
+        name: username,
+        password: password,
+        service: 'pppoe',
+        profile: profile || 'default'
+      };
       
-      // Add PPP Secret
-      const command = [
-        '/ppp/secret/add',
-        `=name=${username}`,
-        `=password=${password}`,
-        `=service=pppoe`,
-        `=profile=${profile || 'default'}`,
-        `=comment=${comment || ''}`,
-      ];
+      if (comment) {
+        secretData.comment = comment;
+      }
       
       if (localAddress) {
-        command.push(`=local-address=${localAddress}`);
+        secretData['local-address'] = localAddress;
       }
       
       if (remoteAddress) {
-        command.push(`=remote-address=${remoteAddress}`);
+        secretData['remote-address'] = remoteAddress;
       }
       
-      await conn.write(command);
-      conn.close();
+      // Use addPppoeSecret which already exists in mikrotikService
+      await mikrotikService.addPppoeSecret(secretData, null);
       
       logger.info(`PPPoE secret created in MikroTik: ${username}`);
       return { success: true, message: 'PPPoE secret created successfully' };

@@ -1509,21 +1509,30 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
     if (connectionType === 'pppoe') {
       const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
+      const password = String(req.body.pppoe_password || '').trim();
+      const remoteAddress = String(req.body.pppoe_remote_address || '').trim();
+      
       req.body.pppoe_username = username;
+      req.body.pppoe_password = password;
+      req.body.pppoe_remote_address = remoteAddress;
+      
       if (!username) throw new Error('PPPoE Username tidak boleh kosong');
       const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? LIMIT 1').get(routerId, username);
       if (existing) throw new Error(`PPPoE Username sudah dipakai pelanggan lain: ${existing.name}`);
 
-      let conn = null;
-      try {
-        conn = await mikrotikService.getConnection(routerId);
-        const results = await conn.client.menu('/ppp/secret')
-          .where('service', 'pppoe')
-          .where('name', username)
-          .get();
-        if (!Array.isArray(results) || results.length === 0) throw new Error('PPPoE Username tidak ditemukan di MikroTik');
-      } finally {
-        if (conn && conn.api) conn.api.close();
+      // Only validate against MikroTik if password is not provided (meaning it's from MikroTik list)
+      if (!password) {
+        let conn = null;
+        try {
+          conn = await mikrotikService.getConnection(routerId);
+          const results = await conn.client.menu('/ppp/secret')
+            .where('service', 'pppoe')
+            .where('name', username)
+            .get();
+          if (!Array.isArray(results) || results.length === 0) throw new Error('PPPoE Username tidak ditemukan di MikroTik');
+        } finally {
+          if (conn && conn.api) conn.api.close();
+        }
       }
     }
 
@@ -1555,18 +1564,47 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
     
     // Sync to MikroTik if username provided
     if (connectionType === 'pppoe' && req.body.pppoe_username) {
-      let targetProfile = '';
-      if (req.body.status === 'suspended') {
-        targetProfile = req.body.isolir_profile || 'isolir';
-      } else if (req.body.package_id) {
-        const pkg = customerSvc.getPackageById(req.body.package_id);
-        if (pkg) targetProfile = pkg.name;
-      }
-      if (targetProfile) {
-        try {
-          await mikrotikService.setPppoeProfile(req.body.pppoe_username, targetProfile, req.body.router_id);
-        } catch (mErr) {
-          console.error('Mikrotik sync error (create):', mErr);
+      const password = String(req.body.pppoe_password || '').trim();
+      const remoteAddress = String(req.body.pppoe_remote_address || '').trim();
+      
+      // If manual input (password provided), create PPPoE secret in MikroTik
+      if (password) {
+        let targetProfile = '';
+        if (req.body.status === 'suspended') {
+          targetProfile = req.body.isolir_profile || 'isolir';
+        } else if (req.body.package_id) {
+          const pkg = customerSvc.getPackageById(req.body.package_id);
+          if (pkg) targetProfile = pkg.name;
+        }
+        
+        if (targetProfile) {
+          try {
+            await mikrotikService.createPppoeSecret({
+              username: req.body.pppoe_username,
+              password: password,
+              profile: targetProfile,
+              remoteAddress: remoteAddress,
+              routerId: req.body.router_id
+            });
+          } catch (mErr) {
+            console.error('Mikrotik create PPPoE secret error:', mErr);
+          }
+        }
+      } else {
+        // If from MikroTik list, just update profile
+        let targetProfile = '';
+        if (req.body.status === 'suspended') {
+          targetProfile = req.body.isolir_profile || 'isolir';
+        } else if (req.body.package_id) {
+          const pkg = customerSvc.getPackageById(req.body.package_id);
+          if (pkg) targetProfile = pkg.name;
+        }
+        if (targetProfile) {
+          try {
+            await mikrotikService.setPppoeProfile(req.body.pppoe_username, targetProfile, req.body.router_id);
+          } catch (mErr) {
+            console.error('Mikrotik sync error (create):', mErr);
+          }
         }
       }
     }
@@ -5250,6 +5288,14 @@ router.post('/onu-provision/provision', requireAdminSession, restrictToAdmin, ex
     
     // Check if need to create MikroTik PPPoE
     if (createMikrotikPPPoE === 'on' && mikrotikPppoeUsername && mikrotikPppoePassword) {
+      // Validate PPPoE username not already in use
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
+      const existingCustomer = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? LIMIT 1').get(routerId, mikrotikPppoeUsername);
+      
+      if (existingCustomer) {
+        throw new Error(`PPPoE Username "${mikrotikPppoeUsername}" sudah digunakan oleh pelanggan: ${existingCustomer.name}`);
+      }
+      
       // Use full provision with MikroTik integration
       const mikrotikConfig = {
         host: getSetting('mikrotik_host', ''),

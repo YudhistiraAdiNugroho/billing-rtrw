@@ -568,6 +568,35 @@ async function deletePppoeSecret(id, routerId = null) {
   }
 }
 
+async function createPppoeSecret({ username, password, profile, remoteAddress, routerId = null }) {
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const secretData = {
+      name: username,
+      password: password,
+      service: 'pppoe',
+      profile: profile
+    };
+    
+    // Add remote address if provided
+    if (remoteAddress && remoteAddress.trim()) {
+      secretData['remote-address'] = remoteAddress.trim();
+    }
+    
+    const res = await conn.client.menu('/ppp/secret').add(secretData);
+    listCache.delete(cacheKey(routerId, 'pppoeSecrets'));
+    listCache.delete(cacheKey(routerId, 'pppoeActive'));
+    logger.info(`[MikroTik] Created PPPoE secret: ${username} with profile ${profile}`);
+    return res;
+  } catch (e) {
+    logger.error(`Error creating PPPoE secret for ${username}:`, e);
+    throw e;
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
 async function getPppoeActive(routerId = null) {
   const ck = cacheKey(routerId, 'pppoeActive');
   const cached = getCachedList(ck, 2000); // Very short cache (2s) for real-time active sessions
@@ -1546,6 +1575,7 @@ module.exports = {
   setPppoeProfile,
   getPppoeSecrets,
   addPppoeSecret,
+  createPppoeSecret,
   updatePppoeSecret,
   deletePppoeSecret,
   getHotspotUsers,
