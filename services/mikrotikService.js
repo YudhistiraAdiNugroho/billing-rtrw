@@ -475,19 +475,57 @@ async function kickHotspotUser(username, routerId = null) {
 
 async function getPppoeSecrets(routerId = null) {
   const ck = cacheKey(routerId, 'pppoeSecrets');
-  const cached = getCachedList(ck, 8000);
+  const cached = getCachedList(ck, 5000); // Reduced cache to 5s for real-time consistency
   if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    const rows = await conn.client.menu('/ppp/secret').get();
-    setCachedList(ck, rows);
-    return rows;
+    // Use proplist to only fetch needed fields for better performance
+    let rows;
+    try {
+      rows = await withTimeout(
+        conn.api.send([
+          '/ppp/secret/print',
+          '?service=pppoe', // Only get PPPoE service
+          '=.proplist=.id,name,profile,local-address,remote-address,disabled,service'
+        ]),
+        15000, // Increased timeout to 15s for slow routers
+        'getPppoeSecrets'
+      );
+    } catch (timeoutErr) {
+      // Fallback: try without proplist if timeout occurs
+      logger.warn(`[MikroTik] Timeout with proplist, trying full query: ${timeoutErr.message}`);
+      const allRows = await withTimeout(
+        conn.client.menu('/ppp/secret').get(),
+        20000, // 20 second timeout for fallback
+        'getPppoeSecrets-fallback'
+      );
+      // Filter only pppoe service
+      rows = Array.isArray(allRows) ? allRows.filter(r => {
+        const svc = String(r?.service || '').toLowerCase();
+        return svc === 'pppoe' || svc === 'any' || !svc;
+      }) : [];
+    }
+    const mapped = Array.isArray(rows) ? rows.map(augmentRow) : [];
+    setCachedList(ck, mapped);
+    return mapped;
   } catch (e) {
     logger.error('Error getting PPPoE secrets:', e);
+    // Return cached data if available, even if expired
+    const staleCache = listCache.get(ck);
+    if (staleCache && staleCache.data) {
+      logger.warn('[MikroTik] Returning stale cache due to error');
+      return staleCache.data;
+    }
     return [];
   } finally {
-    if (conn && conn.api) conn.api.close();
+    if (conn && conn.api) {
+      try {
+        conn.api.close();
+      } catch (closeErr) {
+        // Ignore close errors
+      }
+    }
   }
 }
 
@@ -532,19 +570,51 @@ async function deletePppoeSecret(id, routerId = null) {
 
 async function getPppoeActive(routerId = null) {
   const ck = cacheKey(routerId, 'pppoeActive');
-  const cached = getCachedList(ck, 3000);
+  const cached = getCachedList(ck, 2000); // Very short cache (2s) for real-time active sessions
   if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    const rows = await conn.client.menu('/ppp/active').get();
-    setCachedList(ck, rows);
-    return rows;
+    // Use proplist to only fetch needed fields for better performance
+    let rows;
+    try {
+      rows = await withTimeout(
+        conn.api.send([
+          '/ppp/active/print',
+          '=.proplist=.id,name,address,uptime,caller-id,service'
+        ]),
+        10000, // Increased timeout to 10s
+        'getPppoeActive'
+      );
+    } catch (timeoutErr) {
+      // Fallback: try without proplist if timeout occurs
+      logger.warn(`[MikroTik] Timeout with proplist for active PPPoE, trying full query: ${timeoutErr.message}`);
+      rows = await withTimeout(
+        conn.client.menu('/ppp/active').get(),
+        15000, // 15 second timeout for fallback
+        'getPppoeActive-fallback'
+      );
+    }
+    const mapped = Array.isArray(rows) ? rows.map(augmentRow) : [];
+    setCachedList(ck, mapped);
+    return mapped;
   } catch (e) {
     logger.error('Error getting active PPPoE sessions:', e);
-    throw e;
+    // Return cached data if available, even if expired
+    const staleCache = listCache.get(ck);
+    if (staleCache && staleCache.data) {
+      logger.warn('[MikroTik] Returning stale active sessions cache due to error');
+      return staleCache.data;
+    }
+    return [];
   } finally {
-    if (conn && conn.api) conn.api.close();
+    if (conn && conn.api) {
+      try {
+        conn.api.close();
+      } catch (closeErr) {
+        // Ignore close errors
+      }
+    }
   }
 }
 
@@ -819,23 +889,46 @@ async function deleteHotspotUserProfile(id, routerId = null) {
 
 async function getHotspotUsers(routerId = null) {
   const ck = cacheKey(routerId, 'hotspotUsers');
-  const cached = getCachedList(ck, 15000); // Increased cache from 8s to 15s for better performance
+  const cached = getCachedList(ck, 10000); // Reduced cache to 10s for more consistent data
   if (cached) return cached;
   let conn = null;
   try {
     conn = await getConnection(routerId);
-    const rows = await withTimeout(
-      conn.client.menu('/ip/hotspot/user').get(),
-      10000, // 10 second timeout
-      'getHotspotUsers'
-    );
-    setCachedList(ck, rows);
-    return rows;
+    // Use proplist to only fetch needed fields for better performance
+    let rows;
+    try {
+      rows = await withTimeout(
+        conn.api.send([
+          '/ip/hotspot/user/print',
+          '=.proplist=.id,name,profile,mac-address,disabled,comment'
+        ]),
+        10000, // Increased timeout from 8s to 10s
+        'getHotspotUsers'
+      );
+    } catch (timeoutErr) {
+      // Fallback: try without proplist if timeout occurs
+      logger.warn(`[MikroTik] Timeout with proplist for hotspot users, trying full query: ${timeoutErr.message}`);
+      rows = await withTimeout(
+        conn.client.menu('/ip/hotspot/user').get(),
+        12000, // 12 second timeout for fallback
+        'getHotspotUsers-fallback'
+      );
+    }
+    const mapped = Array.isArray(rows) ? rows.map(augmentRow) : [];
+    setCachedList(ck, mapped);
+    return mapped;
   } catch (e) {
     logger.error('Error getting Hotspot users:', e.message);
-    throw e;
+    // Return empty array instead of throwing to prevent page crash
+    return [];
   } finally {
-    if (conn && conn.api) conn.api.close();
+    if (conn && conn.api) {
+      try {
+        conn.api.close();
+      } catch (closeErr) {
+        // Ignore close errors
+      }
+    }
   }
 }
 
