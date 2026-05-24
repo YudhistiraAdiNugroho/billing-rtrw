@@ -21,6 +21,7 @@ const { spawnSync } = require('child_process');
 const XLSX = require('xlsx');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
+const qrisUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 const backupSvc = require('../services/backupService');
 const monitoringSvc = require('../services/monitoringService');
 const inventorySvc = require('../services/inventoryService');
@@ -31,6 +32,9 @@ const payrollSvc = require('../services/payrollService');
 const sidebarMenuSvc = require('../services/sidebarMenuService');
 const axios = require('axios');
 const crypto = require('crypto');
+const Jimp = require('jimp');
+const jsQR = require('jsqr');
+const { MultiFormatReader, BarcodeFormat, DecodeHintType, BinaryBitmap, HybridBinarizer, RGBLuminanceSource } = require('@zxing/library');
 const acsPortal = require('./acsPortal');
 const { uploadAttendance, removeAttendanceFile } = require('../middleware/attendanceUpload');
 
@@ -56,6 +60,95 @@ function digiflazzSign(refId) {
   const { username, apiKey } = digiflazzCreds();
   if (!username || !apiKey) throw new Error('Digiflazz belum dikonfigurasi');
   return crypto.createHash('md5').update(username + apiKey + String(refId || '')).digest('hex');
+}
+
+async function extractQrTextFromImageBuffer(buffer) {
+  const buf = buffer && Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || []);
+  if (!buf.length) return '';
+  const baseImg = await Jimp.read(buf);
+
+  const decodeFrom = (img) => {
+    const width = Number(img.bitmap?.width || 0);
+    const height = Number(img.bitmap?.height || 0);
+    const data = img.bitmap?.data;
+    if (!width || !height || !data) return '';
+    try {
+      const hints = new Map();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
+      hints.set(DecodeHintType.TRY_HARDER, true);
+      const reader = new MultiFormatReader();
+      const luminanceSource = new RGBLuminanceSource(new Uint8ClampedArray(data), width, height);
+      const binaryBitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource));
+      const res = reader.decode(binaryBitmap, hints);
+      const txt = res && typeof res.getText === 'function' ? res.getText() : '';
+      if (txt) return String(txt);
+    } catch {}
+    const decoded = jsQR(new Uint8ClampedArray(data), width, height, { inversionAttempts: 'attemptBoth' });
+    return decoded && decoded.data ? String(decoded.data) : '';
+  };
+
+  const makeCrops = (img) => {
+    const w = Number(img.bitmap?.width || 0);
+    const h = Number(img.bitmap?.height || 0);
+    const side = Math.floor(Math.min(w, h) * 0.78);
+    if (!w || !h || side < 120) return [];
+    const xMid = Math.max(0, Math.floor((w - side) / 2));
+    const yTop = Math.max(0, Math.floor((h - side) * 0.20));
+    const yMid = Math.max(0, Math.floor((h - side) * 0.40));
+    const yBot = Math.max(0, Math.floor((h - side) * 0.55));
+    const xs = [xMid];
+    const ys = [yMid, yBot, yTop];
+    const out = [];
+    for (const x of xs) {
+      for (const y of ys) {
+        try {
+          out.push(img.clone().crop(x, y, side, side));
+        } catch {}
+      }
+    }
+    return out;
+  };
+
+  const candidates = [];
+  candidates.push(baseImg);
+  candidates.push(baseImg.clone().greyscale());
+  candidates.push(baseImg.clone().greyscale().contrast(0.25));
+  candidates.push(baseImg.clone().greyscale().contrast(0.45));
+  candidates.push(baseImg.clone().greyscale().invert());
+  for (const img of [...candidates]) {
+    candidates.push(...makeCrops(img));
+  }
+
+  try {
+    const w = Number(baseImg.bitmap?.width || 0);
+    const h = Number(baseImg.bitmap?.height || 0);
+    const maxSide = Math.max(w, h);
+    if (maxSide > 0 && maxSide < 720) {
+      candidates.push(baseImg.clone().resize(w * 2, h * 2));
+      candidates.push(baseImg.clone().resize(w * 3, h * 3).greyscale().contrast(0.25));
+      try {
+        candidates.push(...makeCrops(baseImg.clone().resize(w * 2, h * 2)));
+        candidates.push(...makeCrops(baseImg.clone().resize(w * 3, h * 3).greyscale().contrast(0.25)));
+      } catch {}
+    }
+  } catch {}
+
+  let text = '';
+  for (const img of candidates) {
+    try {
+      text = decodeFrom(img);
+      if (text) break;
+    } catch {}
+  }
+
+  let s = String(text || '').replace(/[\r\n\t]+/g, '').trim();
+  const idx = s.indexOf('000201');
+  if (idx > 0) s = s.slice(idx);
+  const lastCrc = s.lastIndexOf('6304');
+  if (lastCrc >= 0 && s.length >= lastCrc + 8) {
+    s = s.slice(0, lastCrc + 8);
+  }
+  return s;
 }
 
 async function digiflazzCekSaldo() {
@@ -2177,9 +2270,51 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
       throw new Error('Bot WhatsApp belum terhubung. Silakan cek status WhatsApp di menu Admin.');
     }
 
-    const qrisAmountUnique = Number(inv.qris_amount_unique || 0) || 0;
-    const qrisCode = Number(inv.qris_unique_code || 0) || 0;
+    let qrisAmountUnique = Number(inv.qris_amount_unique || 0) || 0;
+    let qrisCode = Number(inv.qris_unique_code || 0) || 0;
     const qrisQrUrl = String(getSetting('qris_static_qr_url', '') || '').trim();
+    const qrisEnabledRaw = getSetting('qris_static_enabled', true);
+    const qrisEnabled = !(qrisEnabledRaw === false || qrisEnabledRaw === 'false' || qrisEnabledRaw === 0 || qrisEnabledRaw === '0');
+
+    if (qrisEnabled && qrisQrUrl && String(inv.status) === 'unpaid' && (!qrisAmountUnique || !qrisCode)) {
+      const invId = Number(inv.id);
+      const baseAmount = Number(inv.amount || 0);
+      if (Number.isFinite(invId) && invId > 0 && Number.isFinite(baseAmount) && baseAmount > 0) {
+        const exists = db.prepare('SELECT id FROM invoices WHERE status=? AND qris_amount_unique=? AND id!=? LIMIT 1');
+        const update = db.prepare(`
+          UPDATE invoices
+          SET qris_unique_code=?, qris_amount_unique=?, qris_assigned_at=CURRENT_TIMESTAMP
+          WHERE id=?
+        `);
+
+        let chosenCode = 0;
+        let chosenAmount = 0;
+        for (let i = 0; i < 50; i++) {
+          const code = 1 + Math.floor(Math.random() * 999);
+          const amount = baseAmount + code;
+          if (!exists.get('unpaid', amount, invId)) {
+            chosenCode = code;
+            chosenAmount = amount;
+            break;
+          }
+        }
+        if (!chosenAmount) {
+          for (let code = 1; code <= 999; code++) {
+            const amount = baseAmount + code;
+            if (!exists.get('unpaid', amount, invId)) {
+              chosenCode = code;
+              chosenAmount = amount;
+              break;
+            }
+          }
+        }
+        if (chosenAmount) {
+          update.run(chosenCode, chosenAmount, invId);
+          qrisAmountUnique = chosenAmount;
+          qrisCode = chosenCode;
+        }
+      }
+    }
 
     // Hitung Tagihan
     const unpaidInvoices = billingSvc.getUnpaidInvoicesByCustomerId(customer.id);
@@ -2531,6 +2666,69 @@ router.get('/settings', requireAdminSession, requireSidebarMenuAccess('settings'
   });
 });
 
+router.get('/ewallet-logs', requireAdminSession, requireSidebarMenuAccess('settings'), (req, res) => {
+  const settings = getSettings();
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  const baseUrl = (settings && settings.app_url ? String(settings.app_url) : `${protocol}://${host}`).replace(/\/+$/, '');
+  const digiflazzWebhookUrl = `${baseUrl}/webhook/digiflazz`;
+  const paymentWebhookUrl = `${baseUrl}/customer/payment/callback`;
+  res.render('admin/settings', {
+    title: 'Log Notifikasi E-Wallet (Webhook)', company: company(), activePage: 'ewallet_logs',
+    settings, msg: flashMsg(req),
+    digiflazzWebhookUrl,
+    paymentWebhookUrl,
+    viewMode: 'ewallet_logs'
+  });
+});
+
+router.post('/settings/qris-upload', requireAdminSession, qrisUpload.single('qris_file'), async (req, res) => {
+  try {
+    const f = req.file;
+    if (!f || !f.buffer || !f.originalname) throw new Error('File QRIS tidak ditemukan');
+
+    const ext = String(path.extname(f.originalname || '') || '').toLowerCase();
+    const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+    const allowedMime = new Set(['image/png', 'image/jpeg', 'image/webp']);
+    if (!allowedExt.has(ext) || !allowedMime.has(String(f.mimetype || '').toLowerCase())) {
+      throw new Error('Format file tidak didukung. Gunakan PNG/JPG/WebP');
+    }
+
+    const dir = path.join(__dirname, '../public/uploads/qris');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const name = `qris-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
+    const fullPath = path.join(dir, name);
+    fs.writeFileSync(fullPath, f.buffer);
+
+    const url = `/uploads/qris/${name}`;
+    let payload = '';
+    const payloadFromClient = String(req.body?.qris_payload || '').trim();
+    try {
+      if (payloadFromClient) {
+        payload = payloadFromClient.replace(/[\r\n\t]+/g, '').trim();
+      } else {
+        payload = await extractQrTextFromImageBuffer(f.buffer);
+      }
+      if (!payload.startsWith('000201')) payload = '';
+    } catch (e) {
+      payload = '';
+    }
+
+    const ok = saveSettings({ qris_static_qr_url: url, qris_static_enabled: true, ...(payload ? { qris_static_payload: payload } : {}) });
+    if (!ok) throw new Error('Gagal menyimpan pengaturan QRIS');
+
+    if (payload) {
+      req.session._msg = { type: 'success', text: 'QRIS berhasil di-upload. Payload QRIS berhasil terbaca otomatis.' };
+    } else {
+      req.session._msg = { type: 'success', text: 'QRIS berhasil di-upload, tetapi payload QRIS tidak terbaca otomatis. Silakan isi QRIS Static Payload (String) secara manual.' };
+    }
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal upload QRIS: ' + (e?.message || e) };
+  }
+  res.redirect('/admin/settings');
+});
+
 router.get('/digiflazz', requireAdminSession, requireSidebarMenuAccess('digiflazz'), restrictToAdmin, async (req, res) => {
   const settings = getSettings();
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -2839,6 +3037,9 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     const newSettings = { ...req.body };
     if (newSettings.whatsapp_enabled === 'true') newSettings.whatsapp_enabled = true;
     else if (newSettings.whatsapp_enabled === 'false') newSettings.whatsapp_enabled = false;
+
+    if (newSettings.qris_static_enabled === 'true') newSettings.qris_static_enabled = true;
+    else if (newSettings.qris_static_enabled === 'false') newSettings.qris_static_enabled = false;
     
     if (newSettings.tripay_enabled === 'true') newSettings.tripay_enabled = true;
     else if (newSettings.tripay_enabled === 'false') newSettings.tripay_enabled = false;
@@ -3450,7 +3651,7 @@ router.get('/api/webhook/payment-notif/logs', requireAdminSession, (req, res) =>
     }
 
     const sql = `
-      SELECT id, created_at, service, content, parsed_amount, parsed_ok, matched_invoice_id, ip
+      SELECT id, created_at, service, content, parsed_amount, parsed_ok, matched_invoice_id, matched_voucher_order_id, ip
       FROM webhook_payment_notifs
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY id DESC

@@ -416,6 +416,8 @@ db.exec(`
     content TEXT NOT NULL,
     parsed_amount INTEGER,
     parsed_ok INTEGER NOT NULL DEFAULT 0,
+    matched_invoice_id INTEGER,
+    matched_voucher_order_id INTEGER,
     ip TEXT DEFAULT '',
     user_agent TEXT DEFAULT '',
     created_at DATETIME DEFAULT (NOW_LOCAL())
@@ -636,6 +638,13 @@ try { db.exec("ALTER TABLE invoices ADD COLUMN qris_amount_unique INTEGER"); } c
 try { db.exec("ALTER TABLE invoices ADD COLUMN qris_assigned_at DATETIME"); } catch (e) {}
 try { db.exec("ALTER TABLE invoices ADD COLUMN qris_paid_notif_id INTEGER"); } catch (e) {}
 
+// Kolom untuk QRIS statis pada voucher publik
+try { db.exec("ALTER TABLE public_voucher_orders ADD COLUMN qris_unique_code INTEGER"); } catch (e) {}
+try { db.exec("ALTER TABLE public_voucher_orders ADD COLUMN qris_amount_unique INTEGER"); } catch (e) {}
+try { db.exec("ALTER TABLE public_voucher_orders ADD COLUMN qris_assigned_at DATETIME"); } catch (e) {}
+try { db.exec("ALTER TABLE public_voucher_orders ADD COLUMN qris_paid_notif_id INTEGER"); } catch (e) {}
+try { db.exec("ALTER TABLE public_voucher_orders ADD COLUMN proof_url TEXT DEFAULT ''"); } catch (e) {}
+
 // Kolom untuk Login OLT (Web/API)
 try { db.exec("ALTER TABLE olts ADD COLUMN web_user TEXT DEFAULT 'admin'"); } catch (e) {}
 try { db.exec("ALTER TABLE olts ADD COLUMN web_password TEXT DEFAULT 'admin'"); } catch (e) {}
@@ -652,6 +661,7 @@ try { db.exec("ALTER TABLE voucher_batches ADD COLUMN charset TEXT DEFAULT 'numb
 
 // Relasi notifikasi webhook → invoice (untuk audit)
 try { db.exec("ALTER TABLE webhook_payment_notifs ADD COLUMN matched_invoice_id INTEGER"); } catch (e) {}
+try { db.exec("ALTER TABLE webhook_payment_notifs ADD COLUMN matched_voucher_order_id INTEGER"); } catch (e) {}
 
 try { db.exec("ALTER TABLE agent_transactions ADD COLUMN provider TEXT DEFAULT ''"); } catch (e) {}
 try { db.exec("ALTER TABLE agent_transactions ADD COLUMN digi_sku TEXT DEFAULT ''"); } catch (e) {}
@@ -904,4 +914,3 @@ try {
 module.exports = db;
 module.exports.getAppSetting = getAppSetting;
 module.exports.saveAppSetting = saveAppSetting;
-

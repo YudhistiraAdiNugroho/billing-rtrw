@@ -605,10 +605,10 @@ export async function sendMonitoringAlert(message, priority = 'medium') {
   try {
     const priorityIcon = priority === 'high' ? '🚨' : priority === 'medium' ? '⚠️' : 'ℹ️';
     const formattedMessage = `${priorityIcon} *MONITORING ALERT*\n\n${message}`;
-    
+
     // Get admin numbers from settings
     const adminNumbers = getWhatsappAdminNumbers();
-    
+
     // Get technician numbers from database (active technicians only)
     const techSvc = require('./techService');
     const technicians = techSvc.getAllTechnicians();
@@ -623,7 +623,7 @@ export async function sendMonitoringAlert(message, priority = 'medium') {
         return phone;
       })
       .filter(Boolean);
-    
+
     const toJid = (raw) => {
       const s = String(raw || '').trim();
       if (!s) return '';
@@ -638,14 +638,14 @@ export async function sendMonitoringAlert(message, priority = 'medium') {
     const adminJids = Array.from(new Set((adminNumbers || []).map(toJid).filter(Boolean)));
     const techJids = Array.from(new Set((techNumbers || []).map(toJid).filter(Boolean)));
     const recipients = Array.from(new Set([...adminJids, ...techJids]));
-    
+
     if (recipients.length === 0) {
       logger.warn('[WhatsApp] Tidak ada nomor penerima alert monitoring yang dikonfigurasi');
       return { success: false, message: 'Tidak ada penerima yang dikonfigurasi' };
     }
-    
+
     logger.info(`[WhatsApp] Mengirim alert monitoring ke ${recipients.length} penerima (${adminJids.length} admin, ${techJids.length} teknisi)`);
-    
+
     const results = [];
     for (const jid of recipients) {
       try {
@@ -657,7 +657,7 @@ export async function sendMonitoringAlert(message, priority = 'medium') {
         logger.error(`[WhatsApp] Gagal mengirim alert ke ${jid}: ${error.message}`);
       }
     }
-    
+
     const successCount = results.filter(r => r.success).length;
     return {
       success: successCount > 0,

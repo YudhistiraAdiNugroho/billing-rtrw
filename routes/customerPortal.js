@@ -13,6 +13,7 @@ const db = require('../config/database');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const QRCode = require('qrcode');
 
 // Configure multer for customer photo uploads
 const storage = multer.diskStorage({
@@ -40,6 +41,35 @@ const uploadCustomer = multer({
       return cb(null, true);
     } else {
       cb(new Error('Hanya file gambar yang diperbolehkan (JPEG, PNG, GIF, WebP)'));
+    }
+  }
+});
+
+const proofStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../public/uploads/payment_proofs');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'proof-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const uploadProof = multer({
+  storage: proofStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = /jpeg|jpg|png|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Hanya file gambar yang diperbolehkan (JPEG, PNG, WebP)'));
     }
   }
 });
@@ -291,6 +321,263 @@ function tripayMethodCandidatesForAmount(tripayChannels, amount) {
     candidates.push(code);
   }
   return Array.from(new Set(candidates));
+}
+
+function getStaticQrisQrUrl(settings) {
+  const enabledRaw = settings?.qris_static_enabled;
+  if (enabledRaw === false || enabledRaw === 'false' || enabledRaw === 0 || enabledRaw === '0') return '';
+  const url = String(settings?.qris_static_qr_url || '').trim();
+  return url || '';
+}
+
+function getStaticQrisPayload(settings) {
+  const enabledRaw = settings?.qris_static_enabled;
+  if (enabledRaw === false || enabledRaw === 'false' || enabledRaw === 0 || enabledRaw === '0') return '';
+  const raw = String(settings?.qris_static_payload || '');
+  let s = raw.replace(/[\r\n\t]+/g, '').trim();
+  const idx = s.indexOf('000201');
+  if (idx > 0) s = s.slice(idx);
+  const lastCrc = s.lastIndexOf('6304');
+  if (lastCrc >= 0 && s.length >= lastCrc + 8) {
+    s = s.slice(0, lastCrc + 8);
+  }
+  return s;
+}
+
+function crc16CcittFalse(input) {
+  const s = String(input || '');
+  let crc = 0xffff;
+  for (let i = 0; i < s.length; i++) {
+    crc ^= (s.charCodeAt(i) & 0xff) << 8;
+    for (let b = 0; b < 8; b++) {
+      if (crc & 0x8000) crc = ((crc << 1) ^ 0x1021) & 0xffff;
+      else crc = (crc << 1) & 0xffff;
+    }
+  }
+  return crc & 0xffff;
+}
+
+function parseEmvTlvString(input) {
+  const raw = String(input || '').replace(/[\r\n\t]+/g, '').trim();
+  if (!raw) throw new Error('QRIS payload kosong');
+  if (raw.length < 8) throw new Error('QRIS payload terlalu pendek');
+
+  const items = [];
+  let i = 0;
+  while (i < raw.length) {
+    if (i + 4 > raw.length) throw new Error('QRIS payload TLV tidak valid');
+    const tag = raw.slice(i, i + 2);
+    const lenStr = raw.slice(i + 2, i + 4);
+    if (!/^\d{2}$/.test(lenStr)) throw new Error('QRIS payload TLV length tidak valid');
+    const len = Number(lenStr);
+    const start = i + 4;
+    const end = start + len;
+    if (end > raw.length) throw new Error('QRIS payload TLV length melebihi data');
+    const value = raw.slice(start, end);
+    items.push({ tag, value });
+    i = end;
+  }
+  return items;
+}
+
+function buildEmvTlvString(items) {
+  const list = Array.isArray(items) ? items : [];
+  let out = '';
+  for (const it of list) {
+    const tag = String(it?.tag || '');
+    const value = String(it?.value ?? '');
+    const len = value.length;
+    if (!/^\d{2}$/.test(tag)) throw new Error('Tag TLV tidak valid');
+    if (len > 99) throw new Error('TLV length > 99 tidak didukung');
+    out += tag + String(len).padStart(2, '0') + value;
+  }
+  return out;
+}
+
+function convertStaticQrisToDynamic(staticPayload, amount) {
+  const amt = Math.max(0, Math.floor(Number(amount || 0) || 0));
+  if (!amt) throw new Error('Nominal QRIS dinamis tidak valid');
+
+  const source = parseEmvTlvString(staticPayload)
+    .filter(x => x && x.tag)
+    .map(x => ({ tag: String(x.tag), value: String(x.value ?? '') }));
+
+  const managed = new Set(['54', '55', '56', '57', '63']);
+  const result = [];
+  let amountInserted = false;
+
+  for (const el of source) {
+    if (managed.has(el.tag)) continue;
+    if (el.tag === '01') {
+      result.push({ tag: '01', value: '12' });
+      continue;
+    }
+    if (el.tag === '58' && !amountInserted) {
+      result.push({ tag: '54', value: String(amt) });
+      amountInserted = true;
+    }
+    result.push(el);
+  }
+
+  if (!amountInserted) {
+    result.push({ tag: '54', value: String(amt) });
+  }
+
+  const body = buildEmvTlvString(result);
+  const partial = body + '6304';
+  const crc = crc16CcittFalse(partial).toString(16).toUpperCase().padStart(4, '0');
+  return partial + crc;
+}
+
+async function getStaticQrisQrUrlForAmount(settings, amountUnique) {
+  const payload = getStaticQrisPayload(settings);
+  if (payload) {
+    try {
+      const dynamic = convertStaticQrisToDynamic(payload, amountUnique);
+      return await QRCode.toDataURL(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 320 });
+    } catch (e) {
+      const msg = String(e?.message || e || '');
+      const head = payload.slice(0, 24);
+      const tail = payload.slice(Math.max(0, payload.length - 24));
+      logger.error(`[QRIS] Dynamic QR build failed: ${msg} (payload_len=${payload.length} head=${head} tail=${tail})`);
+    }
+  }
+  return getStaticQrisQrUrl(settings);
+}
+
+function getFirstAdminWaDigits(settings) {
+  const list = Array.isArray(settings?.whatsapp_admin_numbers) ? settings.whatsapp_admin_numbers : [];
+  for (const p of list) {
+    const digits = normalizeWaDigits(p);
+    if (digits) return digits;
+  }
+  return '';
+}
+
+function getBaseUrl(req, settings) {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  const base = settings?.app_url ? String(settings.app_url) : `${protocol}://${host}`;
+  return base.replace(/\/+$/, '');
+}
+
+function isQrisAmountAvailable(amount, opts = {}) {
+  const amt = Number(amount || 0);
+  if (!Number.isFinite(amt) || amt <= 0) return false;
+  const excludeInvoiceId = Number(opts.excludeInvoiceId || 0);
+  const excludeVoucherOrderId = Number(opts.excludeVoucherOrderId || 0);
+
+  const inv = db.prepare('SELECT id FROM invoices WHERE status=? AND qris_amount_unique=? AND id!=? LIMIT 1').get('unpaid', amt, excludeInvoiceId);
+  if (inv && inv.id) return false;
+
+  const ord = db.prepare('SELECT id FROM public_voucher_orders WHERE status=? AND qris_amount_unique=? AND id!=? LIMIT 1').get('pending', amt, excludeVoucherOrderId);
+  if (ord && ord.id) return false;
+
+  return true;
+}
+
+function ensureInvoiceQrisUnique(inv, force = false) {
+  const invId = Number(inv?.id || 0);
+  if (!Number.isFinite(invId) || invId <= 0) throw new Error('Invoice ID tidak valid');
+  if (String(inv?.status) !== 'unpaid') throw new Error('Hanya tagihan BELUM BAYAR yang bisa dibuat kode QRIS.');
+
+  const baseAmount = Number(inv?.amount || 0);
+  if (!Number.isFinite(baseAmount) || baseAmount <= 0) throw new Error('Nominal tagihan tidak valid');
+
+  const currentAmount = Number(inv?.qris_amount_unique || 0) || 0;
+  const currentCode = Number(inv?.qris_unique_code || 0) || 0;
+  if (!force && currentAmount > 0 && currentCode > 0) {
+    return { uniqueCode: currentCode, amountUnique: currentAmount };
+  }
+
+  const update = db.prepare(`
+    UPDATE invoices
+    SET qris_unique_code=?, qris_amount_unique=?, qris_assigned_at=CURRENT_TIMESTAMP
+    WHERE id=?
+  `);
+
+  let chosenCode = 0;
+  let chosenAmount = 0;
+
+  for (let i = 0; i < 50; i++) {
+    const code = 1 + Math.floor(Math.random() * 999);
+    const amount = baseAmount + code;
+    if (isQrisAmountAvailable(amount, { excludeInvoiceId: invId })) {
+      chosenCode = code;
+      chosenAmount = amount;
+      break;
+    }
+  }
+
+  if (!chosenAmount) {
+    for (let code = 1; code <= 999; code++) {
+      const amount = baseAmount + code;
+      if (isQrisAmountAvailable(amount, { excludeInvoiceId: invId })) {
+        chosenCode = code;
+        chosenAmount = amount;
+        break;
+      }
+    }
+  }
+
+  if (!chosenAmount) throw new Error('Gagal membuat nominal unik (slot 1-999 penuh).');
+  update.run(chosenCode, chosenAmount, invId);
+
+  return { uniqueCode: chosenCode, amountUnique: chosenAmount };
+}
+
+function ensureVoucherOrderQrisUnique(order, force = false) {
+  const orderId = Number(order?.id || 0);
+  if (!Number.isFinite(orderId) || orderId <= 0) throw new Error('Order ID tidak valid');
+  if (String(order?.status) !== 'pending') throw new Error('Hanya pesanan PENDING yang bisa dibuat kode QRIS.');
+
+  const baseAmount = Number(order?.price || 0);
+  if (!Number.isFinite(baseAmount) || baseAmount <= 0) throw new Error('Harga voucher tidak valid');
+
+  const currentAmount = Number(order?.qris_amount_unique || 0) || 0;
+  const currentCode = Number(order?.qris_unique_code || 0) || 0;
+  if (!force && currentAmount > 0 && currentCode > 0) {
+    return { uniqueCode: currentCode, amountUnique: currentAmount };
+  }
+
+  const update = db.prepare(`
+    UPDATE public_voucher_orders
+    SET qris_unique_code=?, qris_amount_unique=?, qris_assigned_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+    WHERE id=?
+  `);
+
+  let chosenCode = 0;
+  let chosenAmount = 0;
+
+  for (let i = 0; i < 50; i++) {
+    const code = 1 + Math.floor(Math.random() * 999);
+    const amount = baseAmount + code;
+    if (isQrisAmountAvailable(amount, { excludeVoucherOrderId: orderId })) {
+      chosenCode = code;
+      chosenAmount = amount;
+      break;
+    }
+  }
+
+  if (!chosenAmount) {
+    for (let code = 1; code <= 999; code++) {
+      const amount = baseAmount + code;
+      if (isQrisAmountAvailable(amount, { excludeVoucherOrderId: orderId })) {
+        chosenCode = code;
+        chosenAmount = amount;
+        break;
+      }
+    }
+  }
+
+  if (!chosenAmount) throw new Error('Gagal membuat nominal unik (slot 1-999 penuh).');
+  update.run(chosenCode, chosenAmount, orderId);
+
+  return { uniqueCode: chosenCode, amountUnique: chosenAmount };
+}
+
+function qrisDefaultExpiresAtIso() {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 }
 
 function resolvePaymentExpiresAt(gateway, result) {
@@ -651,12 +938,14 @@ router.get('/voucher', async (req, res) => {
   paymentChannels = await getVoucherPaymentChannels();
 
   let order = null;
+  let orderToken = null;
   const orderId = Number(req.query.order || 0);
   if (orderId) {
     const secret = settings.session_secret || 'rahasia-portal-pelanggan-default-ganti-ini';
     const payload = verifyPublicToken(req.query.t, secret);
     if (payload && Number(payload.voucherOrderId) === orderId) {
       order = db.prepare('SELECT * FROM public_voucher_orders WHERE id = ?').get(orderId) || null;
+      orderToken = String(req.query.t || '') || null;
     }
   }
 
@@ -665,10 +954,86 @@ router.get('/voucher', async (req, res) => {
     profiles,
     paymentChannels,
     order,
+    orderToken,
     error,
     info
   });
 });
+
+router.get('/voucher/qris/:orderId', async (req, res) => {
+  const settings = getSettingsWithCache();
+  const orderId = Number(req.params.orderId || 0);
+  const secret = settings.session_secret || 'rahasia-portal-pelanggan-default-ganti-ini';
+  const payload = verifyPublicToken(req.query.t, secret);
+  if (!payload || Number(payload.voucherOrderId) !== orderId) {
+    return res.redirect('/customer/voucher?err=' + encodeURIComponent('Link voucher tidak valid atau sudah kadaluarsa'));
+  }
+
+  try {
+    const order = db.prepare('SELECT * FROM public_voucher_orders WHERE id = ?').get(orderId);
+    if (!order) throw new Error('Order tidak ditemukan');
+    if (String(order.status) === 'fulfilled' && order.voucher_code) {
+      return res.redirect('/customer/voucher?order=' + encodeURIComponent(String(orderId)) + '&t=' + encodeURIComponent(String(req.query.t || '')));
+    }
+    if (String(order.status) !== 'pending') {
+      return res.redirect('/customer/voucher?order=' + encodeURIComponent(String(orderId)) + '&t=' + encodeURIComponent(String(req.query.t || '')));
+    }
+
+    const { uniqueCode, amountUnique } = ensureVoucherOrderQrisUnique(order, false);
+    const qrisQrUrl = await getStaticQrisQrUrlForAmount(settings, amountUnique);
+    if (!qrisQrUrl) throw new Error('QRIS statis belum diatur oleh admin');
+    const adminWaDigits = getFirstAdminWaDigits(settings);
+
+    return res.render('qris_static', {
+      settings,
+      backUrl: '/customer/voucher?order=' + encodeURIComponent(String(orderId)) + '&t=' + encodeURIComponent(String(req.query.t || '')),
+      error: null,
+      info: null,
+      kind: 'voucher',
+      invoiceId: Number(orderId),
+      periodText: `${order.profile_name || ''}${order.validity ? ' • ' + String(order.validity) : ''}`,
+      customerName: order.buyer_phone ? `WA: ${order.buyer_phone}` : 'Pembeli Voucher',
+      amountUnique,
+      uniqueCode,
+      qrisQrUrl,
+      helpText: 'Setelah transfer, sistem akan otomatis memproses voucher jika notifikasi masuk.',
+      adminWaDigits,
+      publicToken: String(req.query.t || ''),
+      proofUrl: String(order.proof_url || ''),
+      proofActionUrl: '/customer/voucher/proof/' + encodeURIComponent(String(orderId))
+    });
+  } catch (e) {
+    return res.redirect('/customer/voucher?order=' + encodeURIComponent(String(orderId)) + '&t=' + encodeURIComponent(String(req.query.t || '')) + '&err=' + encodeURIComponent(String(e?.message || e || 'Gagal')));
+  }
+});
+// API endpoint untuk cek status voucher order (untuk auto-polling di halaman QRIS)
+router.get('/voucher/status/:orderId', async (req, res) => {
+  const settings = getSettingsWithCache();
+  const orderId = Number(req.params.orderId || 0);
+  const secret = settings.session_secret || 'rahasia-portal-pelanggan-default-ganti-ini';
+  const payload = verifyPublicToken(req.query.t, secret);
+
+  if (!payload || Number(payload.voucherOrderId) !== orderId) {
+    return res.status(403).json({ error: 'Forbidden', status: 'error' });
+  }
+
+  try {
+    const order = db.prepare('SELECT id, status, voucher_code FROM public_voucher_orders WHERE id = ?').get(orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order tidak ditemukan', status: 'error' });
+    }
+
+    return res.json({
+      success: true,
+      status: String(order.status || 'pending'),
+      voucher_code: String(order.status) === 'fulfilled' ? order.voucher_code : null
+    });
+  } catch (e) {
+    logger.error(`[VOUCHER-STATUS] Error: ${e && e.message ? e.message : String(e)}`);
+    return res.status(500).json({ error: 'Internal error', status: 'error' });
+  }
+});
+
 
 router.post('/public/voucher/create-payment', async (req, res) => {
   const settings = getSettingsWithCache();
@@ -752,10 +1117,47 @@ router.post('/public/voucher/create-payment', async (req, res) => {
     const host = req.get('host');
     const appUrl = settings.app_url || `${protocol}://${host}`;
 
+    let method = String(req.body.method || 'QRIS').toUpperCase();
+    if (method === 'QRIS_STATIC') {
+      const hasStaticQris = !!(getStaticQrisQrUrl(settings) || getStaticQrisPayload(settings));
+      if (!hasStaticQris) throw new Error('QRIS statis belum diatur oleh admin');
+
+      const orderRow = db.prepare('SELECT * FROM public_voucher_orders WHERE id=?').get(orderId);
+      const { uniqueCode, amountUnique } = ensureVoucherOrderQrisUnique(orderRow, false);
+
+      const secret = settings.session_secret || 'rahasia-portal-pelanggan-default-ganti-ini';
+      const token = signPublicToken({ voucherOrderId: orderId, exp: Date.now() + 24 * 60 * 60 * 1000 }, secret);
+
+      db.prepare(`
+        UPDATE public_voucher_orders SET
+          payment_gateway = ?,
+          payment_order_id = ?,
+          payment_link = ?,
+          payment_reference = ?,
+          payment_payload = ?,
+          payment_expires_at = ?,
+          qris_unique_code = ?,
+          qris_amount_unique = ?,
+          qris_assigned_at = COALESCE(qris_assigned_at, CURRENT_TIMESTAMP),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+        'qris_static',
+        '',
+        '',
+        '',
+        null,
+        qrisDefaultExpiresAtIso(),
+        uniqueCode,
+        amountUnique,
+        orderId
+      );
+
+      return res.redirect('/customer/voucher/qris/' + encodeURIComponent(String(orderId)) + '?t=' + encodeURIComponent(token));
+    }
+
     const gateway = resolveConfiguredGatewayForAmount(settings, selected.price);
     if (!gateway) throw new Error('Payment gateway belum dikonfigurasi atau nominal terlalu kecil untuk gateway aktif');
-
-    let method = String(req.body.method || 'QRIS').toUpperCase();
     let tripayChannels = null;
     let tripayCandidates = null;
 
@@ -1577,6 +1979,32 @@ router.post('/public/payment/create/:invoiceId', async (req, res) => {
       return redirectBack(payload.lookup, '', 'Tagihan ini sudah lunas.');
     }
 
+    const selectedMethod = String(req.body.method || 'QRIS').toUpperCase();
+    if (selectedMethod === 'QRIS_STATIC') {
+      const { uniqueCode, amountUnique } = ensureInvoiceQrisUnique(inv, false);
+      const qrisQrUrl = await getStaticQrisQrUrlForAmount(settings, amountUnique);
+      if (!qrisQrUrl) throw new Error('QRIS statis belum diatur oleh admin');
+      const adminWaDigits = getFirstAdminWaDigits(settings);
+      return res.render('qris_static', {
+        settings,
+        backUrl: `/customer/check-billing?q=${encodeURIComponent(String(payload.lookup || ''))}`,
+        error: null,
+        info: null,
+        kind: 'invoice',
+        invoiceId: Number(inv.id),
+        periodText: `${inv.period_month}/${inv.period_year}`,
+        customerName: inv.customer_name || '',
+        amountUnique,
+        uniqueCode,
+        qrisQrUrl,
+        helpText: 'Pastikan nominal dibayar sama persis agar sistem dapat mendeteksi pembayaran.',
+        adminWaDigits,
+        publicToken: String(req.body.token || ''),
+        proofUrl: '',
+        proofActionUrl: '/customer/payment/proof/' + encodeURIComponent(String(inv.id))
+      });
+    }
+
     const force = String(req.query.force || '').toLowerCase() === '1' || String(req.query.force || '').toLowerCase() === 'true';
     if (!force && inv.payment_link) {
       let expiresAtMs = inv.payment_expires_at ? new Date(inv.payment_expires_at).getTime() : 0;
@@ -1611,7 +2039,7 @@ router.post('/public/payment/create/:invoiceId', async (req, res) => {
 
     const gateway = resolveConfiguredGatewayForAmount(settings, inv.amount);
     if (!gateway) throw new Error('Payment gateway belum dikonfigurasi atau nominal terlalu kecil untuk gateway aktif');
-    let method = String(req.body.method || 'QRIS').toUpperCase();
+    let method = selectedMethod;
     const cust = customerSvc.getCustomerById(inv.customer_id);
 
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -1774,6 +2202,37 @@ router.post('/tickets/create', uploadCustomer.array('photos', 5), async (req, re
 });
 
 // ─── PAYMENT ROUTES ────────────────────────────────────────────────────────
+// API endpoint untuk cek status invoice/payment (untuk auto-polling di halaman QRIS)
+router.get('/payment/status/:invoiceId', async (req, res) => {
+  const loginId = req.session && req.session.phone;
+  if (!loginId) {
+    return res.status(401).json({ error: 'Unauthorized', status: 'error' });
+  }
+
+  try {
+    const invoiceId = Number(req.params.invoiceId || 0);
+    const inv = billingSvc.getInvoiceById(invoiceId);
+
+    if (!inv) {
+      return res.status(404).json({ error: 'Invoice tidak ditemukan', status: 'error' });
+    }
+
+    const profile = findCustomerProfileByLoginId(loginId);
+    if (!profile || Number(inv.customer_id) !== Number(profile.id)) {
+      return res.status(403).json({ error: 'Forbidden', status: 'error' });
+    }
+
+    return res.json({
+      success: true,
+      status: String(inv.status || 'unpaid'),
+      paid_at: inv.paid_at || null
+    });
+  } catch (e) {
+    logger.error(`[PAYMENT-STATUS] Error: ${e && e.message ? e.message : String(e)}`);
+    return res.status(500).json({ error: 'Internal error', status: 'error' });
+  }
+});
+
 router.get('/payment/create/:invoiceId', async (req, res) => {
   const loginId = req.session && req.session.phone;
   if (!loginId) return res.redirect('/customer/login');
@@ -1784,6 +2243,34 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
     
     if (!inv) throw new Error('Tagihan tidak ditemukan');
     if (inv.status === 'paid') throw new Error('Tagihan ini sudah lunas.');
+    const profile = findCustomerProfileByLoginId(loginId);
+    if (!profile || Number(inv.customer_id) !== Number(profile.id)) throw new Error('Tagihan tidak valid');
+
+    const methodRaw = String(req.query.method || 'QRIS').toUpperCase();
+    if (methodRaw === 'QRIS_STATIC') {
+      const { uniqueCode, amountUnique } = ensureInvoiceQrisUnique(inv, false);
+      const qrisQrUrl = await getStaticQrisQrUrlForAmount(settings, amountUnique);
+      if (!qrisQrUrl) throw new Error('QRIS statis belum diatur oleh admin');
+      const adminWaDigits = getFirstAdminWaDigits(settings);
+      return res.render('qris_static', {
+        settings,
+        backUrl: '/customer/dashboard#billing-section',
+        error: null,
+        info: null,
+        kind: 'invoice',
+        invoiceId: Number(inv.id),
+        periodText: `${inv.period_month}/${inv.period_year}`,
+        customerName: profile?.name || inv.customer_name || '',
+        amountUnique,
+        uniqueCode,
+        qrisQrUrl,
+        helpText: 'Pastikan nominal dibayar sama persis agar sistem dapat mendeteksi pembayaran.',
+        adminWaDigits,
+        publicToken: '',
+        proofUrl: '',
+        proofActionUrl: '/customer/payment/proof/' + encodeURIComponent(String(inv.id))
+      });
+    }
 
     const force = String(req.query.force || '').toLowerCase() === '1' || String(req.query.force || '').toLowerCase() === 'true';
     if (!force && inv.payment_link) {
@@ -1819,7 +2306,6 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
 
     const gateway = resolveConfiguredGatewayForAmount(settings, inv.amount);
     if (!gateway) throw new Error('Payment gateway belum dikonfigurasi atau nominal terlalu kecil untuk gateway aktif');
-    const methodRaw = String(req.query.method || 'QRIS').toUpperCase();
     let method =
       gateway === 'midtrans' ? (methodRaw === 'SNAP' ? 'snap' : methodRaw) :
       gateway === 'xendit' ? (methodRaw === 'XENDIT' ? 'xendit' : methodRaw) :
@@ -1897,6 +2383,199 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
   } catch (error) {
     logger.error(`[Payment] Create Error: ${error.message}`);
     res.status(500).send(`Terjadi kesalahan: ${error.message}`);
+  }
+});
+
+router.post('/payment/proof/:invoiceId', uploadProof.single('proof'), async (req, res) => {
+  const settings = getSettingsWithCache();
+  const secret = settings.session_secret || 'rahasia-portal-pelanggan-default-ganti-ini';
+  const token = String(req.body && req.body.token ? req.body.token : '').trim();
+
+  let payload = null;
+  if (token) payload = verifyPublicToken(token, secret);
+
+  const loginId = req.session && req.session.phone;
+  const profile = payload ? null : findCustomerProfileByLoginId(loginId);
+
+  const invoiceId = Number(req.params.invoiceId);
+  if (!Number.isFinite(invoiceId) || invoiceId <= 0) return res.status(400).send('Invoice ID tidak valid');
+
+  try {
+    const inv = billingSvc.getInvoiceById(invoiceId);
+    if (!inv) throw new Error('Tagihan tidak ditemukan');
+    if (String(inv.status) !== 'unpaid') throw new Error('Tagihan sudah tidak bisa dikonfirmasi (status bukan unpaid).');
+
+    if (payload) {
+      if (Number(inv.customer_id) !== Number(payload.customerId)) throw new Error('Tagihan tidak valid');
+    } else {
+      if (!profile) throw new Error('Sesi tidak valid, silakan login ulang.');
+      if (Number(inv.customer_id) !== Number(profile.id)) throw new Error('Tagihan tidak valid');
+    }
+
+    const { uniqueCode, amountUnique } = ensureInvoiceQrisUnique(inv, false);
+    const qrisQrUrl = await getStaticQrisQrUrlForAmount(settings, amountUnique);
+    if (!qrisQrUrl) throw new Error('QRIS statis belum diatur oleh admin');
+
+    if (!req.file) throw new Error('Bukti transfer belum dipilih');
+    const relPath = '/uploads/payment_proofs/' + String(req.file.filename || '');
+    if (!relPath || relPath.endsWith('/')) throw new Error('Gagal menyimpan bukti');
+
+    const baseUrl = getBaseUrl(req, settings);
+    const proofUrl = `${baseUrl}${relPath}`;
+
+    try {
+      const noteLine = `Bukti bayar: ${proofUrl}`;
+      db.prepare(`
+        UPDATE invoices
+        SET notes=CASE
+          WHEN notes IS NULL OR TRIM(notes) = '' THEN ?
+          ELSE notes || '\n' || ?
+        END
+        WHERE id=?
+      `).run(noteLine, noteLine, invoiceId);
+    } catch (e) {
+      logger.error('[PaymentProof] Gagal simpan note: ' + (e?.message || e));
+    }
+
+    try {
+      const adminWaDigits = getFirstAdminWaDigits(settings);
+      if (settings.whatsapp_enabled && adminWaDigits) {
+        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+        if (whatsappStatus.connection === 'open') {
+          const who = payload ? (inv.customer_name || 'Pelanggan') : (profile?.name || inv.customer_name || 'Pelanggan');
+          const msg =
+            `🧾 *KONFIRMASI PEMBAYARAN (QRIS STATIS)*\n\n` +
+            `👤 *Nama:* ${who}\n` +
+            `🧾 *Invoice:* INV-${inv.id}\n` +
+            `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
+            `💰 *Nominal:* Rp ${Number(amountUnique).toLocaleString('id-ID')} (kode ${String(uniqueCode).padStart(3, '0')})\n` +
+            `📎 *Bukti:* ${proofUrl}\n`;
+          await sendWA(adminWaDigits, msg);
+        }
+      }
+    } catch (e) {
+      logger.error('[PaymentProof] WA error: ' + (e?.message || e));
+    }
+
+    const adminWaDigits = getFirstAdminWaDigits(settings);
+    const backUrl = payload
+      ? `/customer/check-billing?q=${encodeURIComponent(String(payload.lookup || ''))}`
+      : '/customer/dashboard#billing-section';
+
+    return res.render('qris_static', {
+      settings,
+      backUrl,
+      error: null,
+      info: 'Bukti transfer berhasil diupload. Silakan kirim konfirmasi ke admin.',
+      kind: 'invoice',
+      invoiceId: Number(inv.id),
+      periodText: `${inv.period_month}/${inv.period_year}`,
+      customerName: payload ? (inv.customer_name || '') : (profile?.name || inv.customer_name || ''),
+      amountUnique,
+      uniqueCode,
+      qrisQrUrl,
+      helpText: 'Pastikan nominal dibayar sama persis agar sistem dapat mendeteksi pembayaran.',
+      adminWaDigits,
+      publicToken: payload ? token : '',
+      proofUrl,
+      proofActionUrl: '/customer/payment/proof/' + encodeURIComponent(String(inv.id))
+    });
+  } catch (e) {
+    const backUrl = payload
+      ? `/customer/check-billing?q=${encodeURIComponent(String(payload.lookup || ''))}`
+      : '/customer/dashboard#billing-section';
+    return res.render('qris_static', {
+      settings,
+      backUrl,
+      error: String(e?.message || e || 'Gagal'),
+      info: null,
+      kind: 'invoice',
+      invoiceId,
+      periodText: '',
+      customerName: '',
+      amountUnique: 0,
+      uniqueCode: 0,
+      qrisQrUrl: getStaticQrisQrUrl(settings),
+      helpText: '',
+      adminWaDigits: getFirstAdminWaDigits(settings),
+      publicToken: payload ? token : '',
+      proofUrl: '',
+      proofActionUrl: '/customer/payment/proof/' + encodeURIComponent(String(invoiceId))
+    });
+  }
+});
+
+router.post('/voucher/proof/:orderId', uploadProof.single('proof'), async (req, res) => {
+  const settings = getSettingsWithCache();
+  const secret = settings.session_secret || 'rahasia-portal-pelanggan-default-ganti-ini';
+  const token = String(req.body && req.body.token ? req.body.token : '').trim();
+  const payload = verifyPublicToken(token, secret);
+  const orderId = Number(req.params.orderId);
+  if (!Number.isFinite(orderId) || orderId <= 0) return res.status(400).send('Order ID tidak valid');
+  if (!payload || Number(payload.voucherOrderId) !== orderId) return res.status(403).send('Forbidden');
+
+  try {
+    const order = db.prepare('SELECT * FROM public_voucher_orders WHERE id=?').get(orderId);
+    if (!order) throw new Error('Order tidak ditemukan');
+    if (String(order.status) !== 'pending') throw new Error('Order sudah tidak bisa dikonfirmasi (status bukan pending).');
+
+    const { uniqueCode, amountUnique } = ensureVoucherOrderQrisUnique(order, false);
+    const qrisQrUrl = await getStaticQrisQrUrlForAmount(settings, amountUnique);
+    if (!qrisQrUrl) throw new Error('QRIS statis belum diatur oleh admin');
+
+    if (!req.file) throw new Error('Bukti transfer belum dipilih');
+    const relPath = '/uploads/payment_proofs/' + String(req.file.filename || '');
+    if (!relPath || relPath.endsWith('/')) throw new Error('Gagal menyimpan bukti');
+    const baseUrl = getBaseUrl(req, settings);
+    const proofUrl = `${baseUrl}${relPath}`;
+
+    db.prepare(`
+      UPDATE public_voucher_orders
+      SET proof_url=?,
+          updated_at=CURRENT_TIMESTAMP
+      WHERE id=?
+    `).run(proofUrl, orderId);
+
+    try {
+      const adminWaDigits = getFirstAdminWaDigits(settings);
+      if (settings.whatsapp_enabled && adminWaDigits) {
+        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+        if (whatsappStatus.connection === 'open') {
+          const msg =
+            `🎫 *KONFIRMASI PEMBAYARAN VOUCHER (QRIS STATIS)*\n\n` +
+            `🧾 *Order:* VOUCHER-${orderId}\n` +
+            `📦 *Paket:* ${order.profile_name || '-'}${order.validity ? ' (' + order.validity + ')' : ''}\n` +
+            `💰 *Nominal:* Rp ${Number(amountUnique).toLocaleString('id-ID')} (kode ${String(uniqueCode).padStart(3, '0')})\n` +
+            `📞 *WA Pembeli:* ${order.buyer_phone || '-'}\n` +
+            `📎 *Bukti:* ${proofUrl}\n`;
+          await sendWA(adminWaDigits, msg);
+        }
+      }
+    } catch (e) {
+      logger.error('[VoucherProof] WA error: ' + (e?.message || e));
+    }
+
+    const adminWaDigits = getFirstAdminWaDigits(settings);
+    return res.render('qris_static', {
+      settings,
+      backUrl: '/customer/voucher?order=' + encodeURIComponent(String(orderId)) + '&t=' + encodeURIComponent(token),
+      error: null,
+      info: 'Bukti transfer berhasil diupload. Menunggu verifikasi/auto-detect notifikasi.',
+      kind: 'voucher',
+      invoiceId: Number(orderId),
+      periodText: `${order.profile_name || ''}${order.validity ? ' • ' + String(order.validity) : ''}`,
+      customerName: order.buyer_phone ? `WA: ${order.buyer_phone}` : 'Pembeli Voucher',
+      amountUnique,
+      uniqueCode,
+      qrisQrUrl,
+      helpText: 'Jika notifikasi e-wallet sudah masuk ke sistem, voucher akan otomatis diproses.',
+      adminWaDigits,
+      publicToken: token,
+      proofUrl,
+      proofActionUrl: '/customer/voucher/proof/' + encodeURIComponent(String(orderId))
+    });
+  } catch (e) {
+    return res.redirect('/customer/voucher?order=' + encodeURIComponent(String(orderId)) + '&t=' + encodeURIComponent(token) + '&err=' + encodeURIComponent(String(e?.message || e || 'Gagal')));
   }
 });
 

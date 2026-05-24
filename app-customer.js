@@ -1,11 +1,13 @@
 const express = require('express');
 const path = require('path');
 const dns = require('dns');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const crypto = require('crypto');
+const multer = require('multer');
 const { logger } = require('./config/logger');
 const db = require('./config/database');
 const customerSvc = require('./services/customerService');
+const mikrotikService = require('./services/mikrotikService');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { scheduleAutoBackup } = require('./services/backupService');
 
@@ -30,7 +32,7 @@ process.on('uncaughtException', (err) => {
 
 // Settings Management
 const session = require('express-session');
-const { getSetting } = require('./config/settingsManager');
+const { getSetting, getSettingsWithCache } = require('./config/settingsManager');
 const { SUPPORTED_LANGS, FALLBACK_LANG, normalizeLang, t } = require('./config/i18n');
 
 // Inisialisasi aplikasi Express
@@ -50,7 +52,26 @@ app.use(express.json({
     req.rawBody = buf?.toString('utf8') || '';
   }
 }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.urlencoded({
+  extended: true,
+  limit: '1mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf?.toString('utf8') || '';
+  }
+}));
+app.use(express.text({
+  type: (req) => {
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) return false;
+    if (contentType.includes('application/x-www-form-urlencoded')) return false;
+    if (contentType.includes('application/json')) return false;
+    return true;
+  },
+  limit: '1mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf?.toString('utf8') || '';
+  }
+}));
 app.use(session({
   secret: getSetting('session_secret', 'rahasia-portal-pelanggan-default-ganti-ini'),
   resave: false,
@@ -95,9 +116,15 @@ const insertWebhookPaymentNotif = db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?)
 `);
 
-const updateWebhookPaymentNotifMatch = db.prepare(`
+const updateWebhookPaymentNotifMatchInvoice = db.prepare(`
   UPDATE webhook_payment_notifs
   SET matched_invoice_id = ?
+  WHERE id = ?
+`);
+
+const updateWebhookPaymentNotifMatchVoucher = db.prepare(`
+  UPDATE webhook_payment_notifs
+  SET matched_voucher_order_id = ?
   WHERE id = ?
 `);
 
@@ -109,6 +136,45 @@ const selectInvoiceByUniqueAmount = db.prepare(`
   WHERE i.status = 'unpaid' AND i.qris_amount_unique = ?
   ORDER BY i.id DESC
   LIMIT 2
+`);
+
+const selectVoucherOrderByUniqueAmount = db.prepare(`
+  SELECT id, status, profile_name, validity, buyer_phone
+  FROM public_voucher_orders
+  WHERE status = 'pending' AND qris_amount_unique = ?
+  ORDER BY id DESC
+  LIMIT 2
+`);
+
+const markVoucherPaid = db.prepare(`
+  UPDATE public_voucher_orders
+  SET status='paid',
+      paid_at=NOW_LOCAL(),
+      qris_paid_notif_id=?,
+      updated_at=NOW_LOCAL()
+  WHERE id=?
+`);
+
+const selectVoucherOrderById = db.prepare(`SELECT * FROM public_voucher_orders WHERE id = ?`);
+const markVoucherFulfilled = db.prepare(`
+  UPDATE public_voucher_orders
+  SET status='fulfilled',
+      fulfilled_at=NOW_LOCAL(),
+      voucher_code=?,
+      voucher_password=?,
+      voucher_comment=?,
+      updated_at=NOW_LOCAL()
+  WHERE id=?
+`);
+const markVoucherWaSentOk = db.prepare(`
+  UPDATE public_voucher_orders
+  SET wa_sent=1, wa_sent_at=NOW_LOCAL(), wa_error='', updated_at=NOW_LOCAL()
+  WHERE id=?
+`);
+const markVoucherWaSentErr = db.prepare(`
+  UPDATE public_voucher_orders
+  SET wa_sent=0, wa_error=?, updated_at=NOW_LOCAL()
+  WHERE id=?
 `);
 
 const markInvoicePaidAppendNote = db.prepare(`
@@ -175,6 +241,20 @@ function parseRupiahAmountFromNotification(content) {
   const text = String(content || '').replace(/\u00A0/g, ' ').trim();
   if (!text) return null;
 
+  const lower = text.toLowerCase();
+  const incomingHints = [
+    'menerima', 'diterima', 'masuk', 'saldo masuk', 'saldo bertambah',
+    'pembayaran masuk', 'pembayaran diterima', 'received', 'incoming',
+    'qris berhasil', 'qris sukses', 'qr berhasil', 'qr sukses'
+  ];
+  const outgoingHints = [
+    'mengirim', 'terkirim', 'transfer ke', 'bayar ke', 'pembayaran berhasil',
+    'berhasil bayar', 'pembelian', 'belanja', 'purchase'
+  ];
+  const hasIncomingHint = incomingHints.some((hint) => lower.includes(hint));
+  const hasOutgoingHint = outgoingHints.some((hint) => lower.includes(hint));
+  if (hasOutgoingHint && !hasIncomingHint) return null;
+
   const candidates = [
     /(?:\bRp\.?\s*|IDR\s*)([0-9][0-9\.\,\s]*)/i,
     /(?:sebesar|senilai|nominal|masuk|transfer|top\s*up|topup|saldo\s+masuk)\s*(?:saldo\s*)?(?:\bRp\.?\s*)?([0-9][0-9\.\,\s]*)/i,
@@ -200,21 +280,181 @@ function parseRupiahAmountFromNotification(content) {
   return Number.isFinite(amount) ? amount : null;
 }
 
-app.post('/api/webhook/v1/payment-notif', async (req, res) => {
-  const { service, content, secret_key } = req.body || {};
+function genRandomCode(len = 6) {
+  const n = Math.max(1, Math.min(16, Number(len) || 6));
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    out += String(Math.floor(Math.random() * 10));
+  }
+  return out;
+}
+
+async function trySendWaToBuyer(settings, phone, message, orderId) {
+  if (!settings || !settings.whatsapp_enabled) return;
+  const p = String(phone || '').trim();
+  if (!p) return;
+  try {
+    const { sendWA, whatsappStatus } = await import('./services/whatsappBot.mjs');
+    if (whatsappStatus.connection !== 'open') throw new Error('Bot WhatsApp belum terhubung');
+    await sendWA(p, message);
+    markVoucherWaSentOk.run(orderId);
+  } catch (e) {
+    markVoucherWaSentErr.run(String(e?.message || e || ''), orderId);
+  }
+}
+
+async function fulfillVoucherOrder(settings, orderId) {
+  const ord = selectVoucherOrderById.get(orderId);
+  if (!ord) throw new Error('Order tidak ditemukan');
+  if (String(ord.status) === 'fulfilled' && ord.voucher_code) return { ok: true, already: true };
+  if (String(ord.status) !== 'paid') return { ok: false, reason: 'not_paid' };
+
+  let created = null;
+  let attempt = 0;
+  while (attempt < 10) {
+    attempt++;
+    const code = genRandomCode(6);
+    const pass = code;
+    const comment = `vc-online-${orderId}-${code}-${ord.profile_name}`;
+    const userData = {
+      server: 'all',
+      name: code,
+      password: pass,
+      profile: ord.profile_name,
+      comment
+    };
+    if (ord.validity) userData['limit-uptime'] = ord.validity;
+
+    try {
+      await mikrotikService.addHotspotUser(userData, ord.router_id ?? null);
+      created = { code, pass, comment };
+      break;
+    } catch (e) {
+      const msg = String(e?.message || e || '').toLowerCase();
+      const isDup = msg.includes('already') || msg.includes('exist') || msg.includes('duplicate');
+      if (isDup) continue;
+      throw e;
+    }
+  }
+  if (!created) throw new Error('Gagal membuat voucher (kode duplikat terlalu sering)');
+
+  markVoucherFulfilled.run(created.code, created.pass, created.comment, orderId);
+
+  const msg =
+    `🎫 *VOUCHER HOTSPOT*\n\n` +
+    `✅ Pembayaran diterima via *QRIS Statis*\n` +
+    `📦 Paket: *${ord.profile_name}* (${ord.validity || '-'})\n` +
+    `💰 Harga: Rp ${Number(ord.price || 0).toLocaleString('id-ID')}\n\n` +
+    `👤 User: *${created.code}*\n` +
+    `🔑 Pass: *${created.pass}*\n\n` +
+    `Terima kasih.`;
+
+  await trySendWaToBuyer(settings, ord.buyer_phone, msg, orderId);
+  return { ok: true, created };
+}
+
+app.post('/api/webhook/v1/payment-notif', multer().any(), async (req, res) => {
+  let body = req.body || {};
+  try {
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        body = { content: body };
+      }
+    } else if ((!body || (typeof body === 'object' && Object.keys(body).length === 0)) && req.rawBody) {
+      try {
+        body = JSON.parse(String(req.rawBody || ''));
+      } catch {
+        body = { content: String(req.rawBody || '') };
+      }
+    }
+  } catch {}
+
+  const service =
+    (typeof body === 'object' && body ? (body.service || body.app || body.packageName) : '') ||
+    req.query?.service ||
+    req.query?.app ||
+    req.query?.packageName ||
+    req.headers['x-webhook-service'] ||
+    '';
+
+  const secret_key =
+    (typeof body === 'object' && body ? (body.secret_key ?? body.secretKey ?? body.secret) : null) ??
+    req.query?.secret_key ??
+    req.query?.secretKey ??
+    req.query?.secret ??
+    req.get('x-webhook-token') ??
+    req.get('x-webhook-secret') ??
+    req.get('x-webhook-key');
   const expected = process.env.MY_WEBHOOK_SECRET;
+  const expectedTrim = typeof expected === 'string' ? expected.trim() : '';
+  const gotTrim = String(secret_key || '').trim();
 
-  if (!expected || typeof expected !== 'string' || expected.length < 8) {
+  if (!expectedTrim || expectedTrim.length < 8) {
     logger.error('[WEBHOOK][payment-notif] MY_WEBHOOK_SECRET belum diset (minimal 8 karakter). Request ditolak.');
-    return res.status(403).send('Forbidden');
+    return res.status(403).json({ ok: false, error: 'Forbidden', reason: 'server_secret_not_configured' });
   }
 
-  if (String(secret_key || '') !== expected) {
+  if (gotTrim !== expectedTrim) {
     logger.warn(`[WEBHOOK][payment-notif] Forbidden: secret_key mismatch. service=${String(service || '-')}`);
-    return res.status(403).send('Forbidden');
+    return res.status(403).json({ ok: false, error: 'Forbidden', reason: 'secret_key_mismatch' });
   }
 
-  const rawText = String(content || '');
+  // Safe debugging: log incoming request parameters (secrets masked)
+  const sanitizeForLog = (obj) => {
+    if (!obj || typeof obj !== 'object') return {};
+    const clean = {};
+    for (const key of Object.keys(obj)) {
+      const kLc = key.toLowerCase();
+      if (['secret', 'token', 'key', 'password', 'pass', 'authorization', 'cookie'].some(k => kLc.includes(k))) {
+        clean[key] = '***';
+      } else {
+        clean[key] = obj[key];
+      }
+    }
+    return clean;
+  };
+  logger.info(`[WEBHOOK][payment-notif] Debug params: query=${JSON.stringify(sanitizeForLog(req.query))} body=${JSON.stringify(sanitizeForLog(body))} headers=${JSON.stringify(sanitizeForLog(req.headers))}`);
+
+  // Collect all potential text from request
+  const extractedTexts = [];
+  if (typeof body === 'string') {
+    extractedTexts.push(body);
+  } else if (body && typeof body === 'object') {
+    for (const key of Object.keys(body)) {
+      const val = body[key];
+      if (typeof val === 'string' || typeof val === 'number') {
+        const kLc = key.toLowerCase();
+        if (['secret', 'token', 'key', 'password', 'pass'].some(k => kLc.includes(k))) continue;
+        if (['service', 'app', 'packagename'].includes(kLc)) continue;
+        extractedTexts.push(String(val));
+      }
+    }
+  }
+  if (req.query && typeof req.query === 'object') {
+    for (const key of Object.keys(req.query)) {
+      const val = req.query[key];
+      if (typeof val === 'string' || typeof val === 'number') {
+        const kLc = key.toLowerCase();
+        if (['secret', 'token', 'key', 'password', 'pass'].some(k => kLc.includes(k))) continue;
+        if (['service', 'app', 'packagename'].includes(kLc)) continue;
+        extractedTexts.push(String(val));
+      }
+    }
+  }
+  if (req.rawBody && typeof req.rawBody === 'string') {
+    const trimmedRaw = req.rawBody.trim();
+    if (!trimmedRaw.startsWith('{') && !trimmedRaw.startsWith('[')) {
+      extractedTexts.push(trimmedRaw);
+    }
+  }
+
+  const rawText = Array.from(new Set(extractedTexts))
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+    .join(' ');
+
   logger.info(`[WEBHOOK][payment-notif] IN service=${String(service || '-')} content="${rawText.replace(/\r?\n/g, ' ').slice(0, 500)}"`);
 
   try {
@@ -237,11 +477,16 @@ app.post('/api/webhook/v1/payment-notif', async (req, res) => {
     }
 
     let matchedInvoiceId = null;
+    let matchedVoucherOrderId = null;
     if (amount != null) {
       try {
-        const candidates = selectInvoiceByUniqueAmount.all(amount);
-        if (Array.isArray(candidates) && candidates.length === 1) {
-          const inv = candidates[0];
+        const invCandidates = selectInvoiceByUniqueAmount.all(amount);
+        const vCandidates = selectVoucherOrderByUniqueAmount.all(amount);
+        const totalCandidates = (Array.isArray(invCandidates) ? invCandidates.length : 0) + (Array.isArray(vCandidates) ? vCandidates.length : 0);
+
+        if (totalCandidates === 1) {
+          if (Array.isArray(invCandidates) && invCandidates.length === 1) {
+            const inv = invCandidates[0];
           const invId = Number(inv.id || 0);
           const custId = Number(inv.customer_id || 0);
           if (invId > 0) {
@@ -250,7 +495,7 @@ app.post('/api/webhook/v1/payment-notif', async (req, res) => {
             matchedInvoiceId = invId;
 
             if (notifId) {
-              try { updateWebhookPaymentNotifMatch.run(invId, notifId); } catch {}
+              try { updateWebhookPaymentNotifMatchInvoice.run(invId, notifId); } catch {}
             }
 
             if (custId > 0 && String(inv.customer_status || '') === 'suspended') {
@@ -265,8 +510,27 @@ app.post('/api/webhook/v1/payment-notif', async (req, res) => {
 
             logger.info(`[WEBHOOK][payment-notif] MATCH invoice=${invId} amount=${amount}`);
           }
-        } else if (Array.isArray(candidates) && candidates.length > 1) {
-          logger.error(`[WEBHOOK][payment-notif] MATCH ambiguous: amount=${amount} candidates=${candidates.map(x => x.id).join(',')}`);
+          } else if (Array.isArray(vCandidates) && vCandidates.length === 1) {
+            const ord = vCandidates[0];
+            const ordId = Number(ord.id || 0);
+            if (ordId > 0) {
+              markVoucherPaid.run(notifId || null, ordId);
+              matchedVoucherOrderId = ordId;
+              logger.info(`[WEBHOOK][payment-notif] MATCH voucher_order=${ordId} amount=${amount}`);
+              if (notifId) {
+                try { updateWebhookPaymentNotifMatchVoucher.run(ordId, notifId); } catch {}
+              }
+              try {
+                await fulfillVoucherOrder(getSettingsWithCache(), ordId);
+              } catch (e) {
+                logger.error(`[WEBHOOK][payment-notif] Voucher fulfill error: ${e?.message || e}`);
+              }
+            }
+          }
+        } else if (totalCandidates > 1) {
+          const invIds = Array.isArray(invCandidates) ? invCandidates.map(x => x.id).join(',') : '';
+          const vIds = Array.isArray(vCandidates) ? vCandidates.map(x => x.id).join(',') : '';
+          logger.error(`[WEBHOOK][payment-notif] MATCH ambiguous: amount=${amount} invoices=[${invIds}] vouchers=[${vIds}]`);
         }
       } catch (e) {
         logger.error(`[WEBHOOK][payment-notif] MATCH error: ${e && e.message ? e.message : String(e)}`);
@@ -275,7 +539,7 @@ app.post('/api/webhook/v1/payment-notif', async (req, res) => {
 
     if (amount != null) {
       logger.info(`[WEBHOOK][payment-notif] PARSED service=${String(service || '-')} amount=${amount}`);
-      return res.status(200).json({ status: 'processed', parsed: true, amount, matched_invoice_id: matchedInvoiceId });
+      return res.status(200).json({ status: 'processed', parsed: true, amount, matched_invoice_id: matchedInvoiceId, matched_voucher_order_id: matchedVoucherOrderId });
     }
 
     logger.error(`[WEBHOOK][payment-notif] FAILED parse: "${rawText.replace(/\r?\n/g, ' ').slice(0, 500)}"`);

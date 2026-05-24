@@ -56,6 +56,7 @@ const MENU_DEFINITIONS = [
 
   { key: 'update', section: 'system', href: '/admin/update', icon: 'bi bi-cloud-arrow-down', labelKey: 'admin.nav.update', labelDefault: 'Update GitHub', roles: ['admin'], activePages: ['update'] },
   { key: 'settings', section: 'system', href: '/admin/settings', icon: 'bi bi-gear', labelKey: 'admin.nav.settings', labelDefault: 'Pengaturan', roles: ['admin'], activePages: ['settings'] },
+  { key: 'ewallet_logs', section: 'system', href: '/admin/ewallet-logs', icon: 'bi bi-wallet2', labelKey: 'admin.settings.ewallet_logs.title', labelDefault: 'Log Notifikasi E-Wallet', roles: ['admin'], activePages: ['ewallet_logs'] },
   { key: 'backup', section: 'system', href: '/admin/backup', icon: 'bi bi-hdd-stack', labelKey: 'admin.nav.backup', labelDefault: 'Backup & Recovery', roles: ['admin'], activePages: ['backup'] },
   { key: 'monitoring', section: 'system', href: '/admin/monitoring', icon: 'bi bi-activity', labelKey: 'admin.nav.monitoring', labelDefault: 'Monitoring Sistem', roles: ['admin'], activePages: ['monitoring'] },
   { key: 'audit_logs', section: 'system', href: '/admin/audit-logs', icon: 'bi bi-shield-lock', labelKey: 'admin.nav.audit_logs', labelDefault: 'Log Aktivitas', roles: ['admin'], activePages: ['audit_logs'] }
@@ -91,6 +92,7 @@ const DEFAULT_MENU_STATES = {
   agents_reports: STATE_LOCKED,
   update: STATE_VISIBLE,
   settings: STATE_VISIBLE,
+  ewallet_logs: STATE_VISIBLE,
   backup: STATE_VISIBLE,
   monitoring: STATE_VISIBLE,
   audit_logs: STATE_VISIBLE
