@@ -623,19 +623,23 @@ function togglePPPoEFields() {
   const mikrotikCard = document.getElementById('mikrotikCard');
   
   if (lanMode === 'router') {
-    // Show PPPoE fields for ONU, hide MikroTik card
+    // Show PPPoE fields for ONU (ONU will dial)
     onuPppoeFields.style.display = 'block';
+    // Hide MikroTik card since ONU is dialing, not MikroTik
     mikrotikCard.style.display = 'none';
     // Uncheck and hide MikroTik fields
     document.getElementById('createMikrotikPPPoE').checked = false;
     document.getElementById('mikrotikPPPoEFields').style.display = 'none';
   } else {
-    // Hide ONU PPPoE fields, show MikroTik card
+    // Bridge mode: Hide ONU PPPoE fields, show MikroTik card
+    // In bridge mode, MikroTik will dial PPPoE
     onuPppoeFields.style.display = 'none';
     mikrotikCard.style.display = 'block';
     // Clear ONU PPPoE fields
-    document.querySelector('[name="pppoeUsername"]').value = '';
-    document.querySelector('[name="pppoePassword"]').value = '';
+    const pppoeUsernameField = document.querySelector('[name="pppoeUsername"]');
+    const pppoePasswordField = document.querySelector('[name="pppoePassword"]');
+    if (pppoeUsernameField) pppoeUsernameField.value = '';
+    if (pppoePasswordField) pppoePasswordField.value = '';
   }
 }
 

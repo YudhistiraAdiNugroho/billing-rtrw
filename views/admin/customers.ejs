@@ -212,9 +212,32 @@
         <div class="form-row">
           <div class="fg" id="add_pppoe_field">
             <label class="fl">PPPoE Username</label>
-            <input class="fc" name="pppoe_username" list="add_pppoe_list" placeholder="Pilih / cari dari MikroTik">
-            <datalist id="add_pppoe_list"></datalist>
-            <div class="hint" id="add_pppoe_hint"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="pppoe_input_mode" value="mikrotik" checked onchange="togglePppoeInputMode('add')">
+                <span>Pilih dari MikroTik</span>
+              </label>
+              <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="radio" name="pppoe_input_mode" value="manual" onchange="togglePppoeInputMode('add')">
+                <span>Input Manual</span>
+              </label>
+            </div>
+            <div id="add_pppoe_mikrotik_input">
+              <input class="fc" name="pppoe_username" list="add_pppoe_list" placeholder="Pilih / cari dari MikroTik">
+              <datalist id="add_pppoe_list"></datalist>
+              <div class="hint" id="add_pppoe_hint"></div>
+            </div>
+            <div id="add_pppoe_manual_input" style="display:none">
+              <input class="fc" id="add_pppoe_username_manual" placeholder="Masukkan username PPPoE">
+              <div style="margin-top:8px">
+                <label class="fl">PPPoE Password</label>
+                <input class="fc" name="pppoe_password" placeholder="Masukkan password PPPoE">
+              </div>
+              <div style="margin-top:8px">
+                <label class="fl">Remote Address (Optional)</label>
+                <input class="fc" name="pppoe_remote_address" placeholder="Contoh: 10.10.10.1">
+              </div>
+            </div>
           </div>
           <div class="fg" id="add_static_field" style="display:none">
             <label class="fl">IP Address Pelanggan</label>
@@ -705,6 +728,26 @@ function updateInputs(lat, lng) {
   const prefix = activePickerType === 'add' ? 'add_' : 'e_';
   document.getElementById(prefix + 'lat').value = lat.toFixed(8);
   document.getElementById(prefix + 'lng').value = lng.toFixed(8);
+}
+
+function togglePppoeInputMode(type) {
+  const mode = document.querySelector(`input[name="pppoe_input_mode"]:checked`)?.value || 'mikrotik';
+  const mikrotikInput = document.getElementById(type + '_pppoe_mikrotik_input');
+  const manualInput = document.getElementById(type + '_pppoe_manual_input');
+  const usernameField = document.querySelector(`input[name="pppoe_username"]`);
+  const manualUsernameField = document.getElementById(type + '_pppoe_username_manual');
+  
+  if (mode === 'manual') {
+    if (mikrotikInput) mikrotikInput.style.display = 'none';
+    if (manualInput) manualInput.style.display = 'block';
+    if (usernameField) usernameField.removeAttribute('name');
+    if (manualUsernameField) manualUsernameField.setAttribute('name', 'pppoe_username');
+  } else {
+    if (mikrotikInput) mikrotikInput.style.display = 'block';
+    if (manualInput) manualInput.style.display = 'none';
+    if (usernameField) usernameField.setAttribute('name', 'pppoe_username');
+    if (manualUsernameField) manualUsernameField.removeAttribute('name');
+  }
 }
 
 function toggleConnectionFields(type) {
