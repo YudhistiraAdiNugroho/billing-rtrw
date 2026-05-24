@@ -33,6 +33,10 @@
           <% }) %>
         </select>
       </div>
+      <button id="auto-refresh-toggle" onclick="toggleAutoRefresh()" class="btn btn-sm" style="background:rgba(34,197,94,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3)" title="Auto-refresh aktif (10 detik)">
+        <i class="bi bi-arrow-clockwise"></i>
+        <span id="refresh-status">Auto</span>
+      </button>
       <a href="#" onclick="downloadBackup(event)" class="btn btn-p btn-sm"><i class="bi bi-download"></i> <%= t('admin.mikrotik.backup_rsc', 'Backup RSC') %></a>
       <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
@@ -48,12 +52,48 @@
     </div>
 
     <!-- Summary Cards -->
-    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-      <div class="sc p"><i class="bi bi-ethernet sc-icon"></i><div class="sc-label"><%= t('admin.mikrotik.stats.pppoe_online', 'PPPoE Online') %></div><div class="sc-val" id="pppoe-online-count">0</div></div>
-      <div class="sc s"><i class="bi bi-wifi sc-icon"></i><div class="sc-label"><%= t('admin.mikrotik.stats.hotspot_online', 'Hotspot Online') %></div><div class="sc-val" id="hotspot-online-count">0</div></div>
-      <div class="sc w"><i class="bi bi-people sc-icon"></i><div class="sc-label"><%= t('admin.mikrotik.stats.total_secrets', 'Total Secrets') %></div><div class="sc-val" id="total-secrets-count">0</div></div>
-      <div class="sc d"><i class="bi bi-person-badge sc-icon"></i><div class="sc-label"><%= t('admin.mikrotik.stats.total_hotspot', 'Total Hotspot') %></div><div class="sc-val" id="total-hotspot-count">0</div></div>
+    <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px;position:relative">
+      <!-- 1. PPPoE Online -->
+      <div class="sc p" onclick="showOnlineUsersModal()" style="cursor:pointer" title="Klik untuk melihat detail user online">
+        <i class="bi bi-ethernet sc-icon"></i>
+        <div class="sc-label"><%= t('admin.mikrotik.stats.pppoe_online', 'PPPoE Online') %></div>
+        <div class="sc-val" id="pppoe-online-count">0</div>
+      </div>
+      <!-- 2. PPPoE Offline -->
+      <div class="sc w" onclick="showOfflineUsersModal()" style="cursor:pointer" title="Klik untuk melihat detail user offline">
+        <i class="bi bi-plug sc-icon"></i>
+        <div class="sc-label"><%= t('admin.mikrotik.stats.pppoe_offline', 'PPPoE Offline') %></div>
+        <div class="sc-val" id="pppoe-offline-count">0</div>
+      </div>
+      <!-- 3. Total Secrets -->
+      <div class="sc w" onclick="showAllSecretsModal()" style="cursor:pointer" title="Klik untuk melihat semua PPPoE secrets">
+        <i class="bi bi-people sc-icon"></i>
+        <div class="sc-label"><%= t('admin.mikrotik.stats.total_secrets', 'Total Secrets') %></div>
+        <div class="sc-val" id="total-secrets-count">0</div>
+      </div>
+      <!-- 4. Hotspot Online -->
+      <div class="sc s" onclick="showHotspotOnlineModal()" style="cursor:pointer" title="Klik untuk melihat detail hotspot online">
+        <i class="bi bi-wifi sc-icon"></i>
+        <div class="sc-label"><%= t('admin.mikrotik.stats.hotspot_online', 'Hotspot Online') %></div>
+        <div class="sc-val" id="hotspot-online-count">0</div>
+      </div>
+      <!-- 5. Total Hotspot -->
+      <div class="sc d" onclick="showAllHotspotModal()" style="cursor:pointer" title="Klik untuk melihat semua hotspot users">
+        <i class="bi bi-person-badge sc-icon"></i>
+        <div class="sc-label"><%= t('admin.mikrotik.stats.total_hotspot', 'Total Hotspot') %></div>
+        <div class="sc-val" id="total-hotspot-count">0</div>
+      </div>
+      <div id="refresh-indicator" style="position:absolute;top:-8px;right:0;font-size:11px;color:var(--muted);display:none;align-items:center;gap:4px">
+        <i class="bi bi-arrow-clockwise" style="animation:spin 1s linear infinite"></i>
+        <span>Memperbarui...</span>
+      </div>
     </div>
+    <style>
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
 
     <div class="tabs">
       <div class="tab active" onclick="showTab(event, 'pppoe')"><%= t('admin.mikrotik.tabs.pppoe_secrets', 'PPPoE Secrets') %></div>
@@ -223,6 +263,203 @@
   </div>
 </div>
 
+<!-- Modal Online Users -->
+<div class="mo" id="onlineUsersModal">
+  <div class="mb" style="max-width:900px">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-ethernet"></i> Daftar User PPPoE Online</span>
+      <button class="mc" onclick="closeModal('onlineUsersModal')">&times;</button>
+    </div>
+    <div class="mbody" style="max-height:500px;overflow-y:auto">
+      <div style="margin-bottom:15px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">
+          Total: <span id="online-users-total" style="font-weight:700;color:var(--text)">0</span> user online
+        </div>
+        <div class="sinput" style="max-width:250px">
+          <i class="bi bi-search"></i>
+          <input type="text" class="fc" id="online-search" placeholder="Cari username..." onkeyup="filterModalTable('online-users-list', this.value)">
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th style="width:50px">#</th>
+              <th>Username</th>
+              <th>Profile</th>
+              <th>IP Address</th>
+              <th>Uptime</th>
+            </tr>
+          </thead>
+          <tbody id="online-users-list">
+            <tr><td colspan="5" class="text-center text-muted">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-g" onclick="closeModal('onlineUsersModal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Offline Users -->
+<div class="mo" id="offlineUsersModal">
+  <div class="mb" style="max-width:800px">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-plug"></i> Daftar User PPPoE Offline</span>
+      <button class="mc" onclick="closeModal('offlineUsersModal')">&times;</button>
+    </div>
+    <div class="mbody" style="max-height:500px;overflow-y:auto">
+      <div style="margin-bottom:15px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">
+          Total: <span id="offline-users-total" style="font-weight:700;color:var(--text)">0</span> user offline
+        </div>
+        <div class="sinput" style="max-width:250px">
+          <i class="bi bi-search"></i>
+          <input type="text" class="fc" id="offline-search" placeholder="Cari username..." onkeyup="filterModalTable('offline-users-list', this.value)">
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th style="width:50px">#</th>
+              <th>Username</th>
+              <th>Profile</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="offline-users-list">
+            <tr><td colspan="4" class="text-center text-muted">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-g" onclick="closeModal('offlineUsersModal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Hotspot Online -->
+<div class="mo" id="hotspotOnlineModal">
+  <div class="mb" style="max-width:900px">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-wifi"></i> Daftar Hotspot User Online</span>
+      <button class="mc" onclick="closeModal('hotspotOnlineModal')">&times;</button>
+    </div>
+    <div class="mbody" style="max-height:500px;overflow-y:auto">
+      <div style="margin-bottom:15px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">
+          Total: <span id="hotspot-online-total" style="font-weight:700;color:var(--text)">0</span> user online
+        </div>
+        <div class="sinput" style="max-width:250px">
+          <i class="bi bi-search"></i>
+          <input type="text" class="fc" id="hotspot-online-search" placeholder="Cari username..." onkeyup="filterModalTable('hotspot-online-list', this.value)">
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th style="width:50px">#</th>
+              <th>Username</th>
+              <th>IP Address</th>
+              <th>MAC Address</th>
+              <th>Uptime</th>
+            </tr>
+          </thead>
+          <tbody id="hotspot-online-list">
+            <tr><td colspan="5" class="text-center text-muted">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-g" onclick="closeModal('hotspotOnlineModal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal All Secrets -->
+<div class="mo" id="allSecretsModal">
+  <div class="mb" style="max-width:900px">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-people"></i> Semua PPPoE Secrets</span>
+      <button class="mc" onclick="closeModal('allSecretsModal')">&times;</button>
+    </div>
+    <div class="mbody" style="max-height:500px;overflow-y:auto">
+      <div style="margin-bottom:15px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">
+          Total: <span id="all-secrets-total" style="font-weight:700;color:var(--text)">0</span> secrets
+        </div>
+        <div class="sinput" style="max-width:250px">
+          <i class="bi bi-search"></i>
+          <input type="text" class="fc" id="all-secrets-search" placeholder="Cari username..." onkeyup="filterModalTable('all-secrets-list', this.value)">
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th style="width:50px">#</th>
+              <th>Username</th>
+              <th>Profile</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="all-secrets-list">
+            <tr><td colspan="4" class="text-center text-muted">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-g" onclick="closeModal('allSecretsModal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal All Hotspot -->
+<div class="mo" id="allHotspotModal">
+  <div class="mb" style="max-width:900px">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-person-badge"></i> Semua Hotspot Users</span>
+      <button class="mc" onclick="closeModal('allHotspotModal')">&times;</button>
+    </div>
+    <div class="mbody" style="max-height:500px;overflow-y:auto">
+      <div style="margin-bottom:15px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">
+          Total: <span id="all-hotspot-total" style="font-weight:700;color:var(--text)">0</span> users
+        </div>
+        <div class="sinput" style="max-width:250px">
+          <i class="bi bi-search"></i>
+          <input type="text" class="fc" id="all-hotspot-search" placeholder="Cari username..." onkeyup="filterModalTable('all-hotspot-list', this.value)">
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead>
+            <tr>
+              <th style="width:50px">#</th>
+              <th>Username</th>
+              <th>Profile</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="all-hotspot-list">
+            <tr><td colspan="4" class="text-center text-muted">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-g" onclick="closeModal('allHotspotModal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal PPPoE Profile -->
 <div class="mo" id="pppoeProfileModal">
   <div class="mb">
@@ -335,6 +572,182 @@
         rows[i].style.display = text.includes(q) ? '' : 'none';
       }
     }, 200);
+  }
+
+  function filterModalTable(tbodyId, val) {
+    const q = val.toLowerCase();
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const rows = tbody.getElementsByTagName('tr');
+    for (let i = 0; i < rows.length; i++) {
+      const text = rows[i].textContent.toLowerCase();
+      rows[i].style.display = text.includes(q) ? '' : 'none';
+    }
+  }
+
+  // Store data globally
+  let onlineUsersData = [];
+  let hotspotOnlineData = [];
+  let allHotspotUsersData = [];
+
+  function showOnlineUsersModal() {
+    const tbody = document.getElementById('online-users-list');
+    const totalEl = document.getElementById('online-users-total');
+    
+    if (!onlineUsersData || onlineUsersData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Tidak ada user online</td></tr>';
+      if (totalEl) totalEl.textContent = '0';
+    } else {
+      if (totalEl) totalEl.textContent = onlineUsersData.length;
+      tbody.innerHTML = onlineUsersData.map((s, i) => {
+        return `
+          <tr>
+            <td class="text-center">${i + 1}</td>
+            <td class="fw6">${escapeHtmlAttr(s.name)}</td>
+            <td><span class="badge bp">${escapeHtmlAttr(s.profile || '-')}</span></td>
+            <td>${escapeHtmlAttr(s.address || '-')}</td>
+            <td>${escapeHtmlAttr(s.uptime || '-')}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    const searchInput = document.getElementById('online-search');
+    if (searchInput) searchInput.value = '';
+    
+    openModal('onlineUsersModal');
+  }
+
+  function showOfflineUsersModal() {
+    const tbody = document.getElementById('offline-users-list');
+    const totalEl = document.getElementById('offline-users-total');
+    
+    if (!offlineUsersData || offlineUsersData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Tidak ada user offline</td></tr>';
+      if (totalEl) totalEl.textContent = '0';
+    } else {
+      if (totalEl) totalEl.textContent = offlineUsersData.length;
+      tbody.innerHTML = offlineUsersData.map((s, i) => {
+        return `
+          <tr>
+            <td class="text-center">${i + 1}</td>
+            <td class="fw6">${escapeHtmlAttr(s.name)}</td>
+            <td><span class="badge bp">${escapeHtmlAttr(s.profile)}</span></td>
+            <td><span class="badge bw">Offline</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    // Clear search input
+    const searchInput = document.getElementById('offline-search');
+    if (searchInput) searchInput.value = '';
+    
+    openModal('offlineUsersModal');
+  }
+
+  function showHotspotOnlineModal() {
+    const tbody = document.getElementById('hotspot-online-list');
+    const totalEl = document.getElementById('hotspot-online-total');
+    
+    if (!hotspotOnlineData || hotspotOnlineData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Tidak ada hotspot user online</td></tr>';
+      if (totalEl) totalEl.textContent = '0';
+    } else {
+      if (totalEl) totalEl.textContent = hotspotOnlineData.length;
+      tbody.innerHTML = hotspotOnlineData.map((s, i) => {
+        return `
+          <tr>
+            <td class="text-center">${i + 1}</td>
+            <td class="fw6">${escapeHtmlAttr(s.user || s.name || '-')}</td>
+            <td>${escapeHtmlAttr(s.address || '-')}</td>
+            <td>${escapeHtmlAttr(s.macAddress || s['mac-address'] || '-')}</td>
+            <td>${escapeHtmlAttr(s.uptime || '-')}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    const searchInput = document.getElementById('hotspot-online-search');
+    if (searchInput) searchInput.value = '';
+    
+    openModal('hotspotOnlineModal');
+  }
+
+  function showAllSecretsModal() {
+    const tbody = document.getElementById('all-secrets-list');
+    const totalEl = document.getElementById('all-secrets-total');
+    
+    if (!pppoeData || pppoeData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Tidak ada PPPoE secrets</td></tr>';
+      if (totalEl) totalEl.textContent = '0';
+    } else {
+      if (totalEl) totalEl.textContent = pppoeData.length;
+      tbody.innerHTML = pppoeData.map((s, i) => {
+        const isOnline = onlineUsersData.some(a => a.name === s.name);
+        const isDisabled = s.disabled === true || s.disabled === 'true';
+        let statusBadge = '';
+        if (isOnline) {
+          statusBadge = '<span class="badge bs">Online</span>';
+        } else if (isDisabled) {
+          statusBadge = '<span class="badge bd">Disabled</span>';
+        } else {
+          statusBadge = '<span class="badge bw">Offline</span>';
+        }
+        
+        return `
+          <tr>
+            <td class="text-center">${i + 1}</td>
+            <td class="fw6">${escapeHtmlAttr(s.name)}</td>
+            <td><span class="badge bp">${escapeHtmlAttr(s.profile)}</span></td>
+            <td>${statusBadge}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    const searchInput = document.getElementById('all-secrets-search');
+    if (searchInput) searchInput.value = '';
+    
+    openModal('allSecretsModal');
+  }
+
+  function showAllHotspotModal() {
+    const tbody = document.getElementById('all-hotspot-list');
+    const totalEl = document.getElementById('all-hotspot-total');
+    
+    if (!allHotspotUsersData || allHotspotUsersData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Tidak ada hotspot users</td></tr>';
+      if (totalEl) totalEl.textContent = '0';
+    } else {
+      if (totalEl) totalEl.textContent = allHotspotUsersData.length;
+      tbody.innerHTML = allHotspotUsersData.map((s, i) => {
+        const isOnline = hotspotOnlineData.some(a => (a.user || a.name) === s.name);
+        const isDisabled = s.disabled === true || s.disabled === 'true';
+        let statusBadge = '';
+        if (isOnline) {
+          statusBadge = '<span class="badge bs">Online</span>';
+        } else if (isDisabled) {
+          statusBadge = '<span class="badge bd">Disabled</span>';
+        } else {
+          statusBadge = '<span class="badge bw">Offline</span>';
+        }
+        
+        return `
+          <tr>
+            <td class="text-center">${i + 1}</td>
+            <td class="fw6">${escapeHtmlAttr(s.name)}</td>
+            <td><span class="badge bp">${escapeHtmlAttr(s.profile || '-')}</span></td>
+            <td>${statusBadge}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    const searchInput = document.getElementById('all-hotspot-search');
+    if (searchInput) searchInput.value = '';
+    
+    openModal('allHotspotModal');
   }
 
   let pppoeData = [];
@@ -497,6 +910,9 @@
     } catch (e) { console.error(e); }
   }
 
+  // Store offline users data globally
+  let offlineUsersData = [];
+
   async function loadSecrets() {
     try {
       const routerId = getRouterId();
@@ -508,7 +924,9 @@
       if (!sRes.ok) {
         const msg = await readApiErrorMessage(sRes, I18N.loadFailed);
         pppoeData = [];
+        offlineUsersData = [];
         document.getElementById('pppoe-online-count').innerText = '0';
+        document.getElementById('pppoe-offline-count').innerText = '0';
         document.getElementById('total-secrets-count').innerText = '0';
         tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
         return;
@@ -516,7 +934,9 @@
       if (!aRes.ok) {
         const msg = await readApiErrorMessage(aRes, I18N.loadFailed);
         pppoeData = [];
+        offlineUsersData = [];
         document.getElementById('pppoe-online-count').innerText = '0';
+        document.getElementById('pppoe-offline-count').innerText = '0';
         document.getElementById('total-secrets-count').innerText = '0';
         tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${escapeHtmlAttr(msg)}</td></tr>`;
         return;
@@ -524,7 +944,24 @@
       pppoeData = await sRes.json();
       const activeSessions = await aRes.json();
       
+      // Store online users data with profile info
+      onlineUsersData = activeSessions.map(active => {
+        const secret = pppoeData.find(s => s.name === active.name);
+        return {
+          ...active,
+          profile: secret ? secret.profile : '-'
+        };
+      });
+      
+      // Calculate offline users
+      offlineUsersData = pppoeData.filter(s => {
+        const isOnline = activeSessions.some(a => a.name === s.name);
+        const isDisabled = s.disabled === true || s.disabled === 'true';
+        return !isOnline && !isDisabled;
+      });
+      
       document.getElementById('pppoe-online-count').innerText = activeSessions.length;
+      document.getElementById('pppoe-offline-count').innerText = offlineUsersData.length;
       document.getElementById('total-secrets-count').innerText = pppoeData.length;
 
       if (!pppoeData.length) {
@@ -595,6 +1032,10 @@
       
       hotspotData = await uRes.json();
       const activeSessions = await aRes.json();
+      
+      // Store data globally for modals
+      allHotspotUsersData = hotspotData;
+      hotspotOnlineData = activeSessions;
       
       const loadTime = Date.now() - startTime;
       console.log(`Hotspot users loaded in ${loadTime}ms`);
@@ -1083,11 +1524,13 @@
       
       if (hsUsersRes && hsUsersRes.ok) {
         const users = await hsUsersRes.json();
+        allHotspotUsersData = users; // Store for modal
         document.getElementById('total-hotspot-count').innerText = users.length;
       }
       
       if (hsActiveRes && hsActiveRes.ok) {
         const active = await hsActiveRes.json();
+        hotspotOnlineData = active; // Store for modal
         document.getElementById('hotspot-online-count').innerText = active.length;
       }
     } catch (err) {
@@ -1095,8 +1538,126 @@
     }
   }
 
+  // Auto-refresh functionality for real-time data updates
+  let autoRefreshInterval = null;
+  let isAutoRefreshEnabled = true;
+  let isRefreshing = false;
+  const REFRESH_INTERVAL = 10000; // 10 seconds
+
+  function showRefreshIndicator() {
+    const indicator = document.getElementById('refresh-indicator');
+    if (indicator) indicator.style.display = 'flex';
+  }
+
+  function hideRefreshIndicator() {
+    const indicator = document.getElementById('refresh-indicator');
+    if (indicator) indicator.style.display = 'none';
+  }
+
+  function toggleAutoRefresh() {
+    isAutoRefreshEnabled = !isAutoRefreshEnabled;
+    const btn = document.getElementById('auto-refresh-toggle');
+    const status = document.getElementById('refresh-status');
+    
+    if (isAutoRefreshEnabled) {
+      btn.style.background = 'rgba(34,197,94,0.2)';
+      btn.style.color = '#22c55e';
+      btn.style.borderColor = 'rgba(34,197,94,0.3)';
+      btn.title = 'Auto-refresh aktif (10 detik)';
+      if (status) status.textContent = 'Auto';
+      startAutoRefresh();
+    } else {
+      btn.style.background = 'rgba(239,68,68,0.2)';
+      btn.style.color = '#ef4444';
+      btn.style.borderColor = 'rgba(239,68,68,0.3)';
+      btn.title = 'Auto-refresh nonaktif (klik untuk aktifkan)';
+      if (status) status.textContent = 'Manual';
+      stopAutoRefresh();
+    }
+  }
+
+  function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    
+    autoRefreshInterval = setInterval(async () => {
+      if (!isAutoRefreshEnabled || isRefreshing) return;
+      
+      isRefreshing = true;
+      showRefreshIndicator();
+      
+      try {
+        // Get active tab and refresh its data
+        const activeTab = document.querySelector('.tab.active');
+        if (activeTab) {
+          const tabText = String(activeTab.textContent || '').toLowerCase();
+          
+          // Refresh data based on active tab
+          if (tabText.includes('pppoe secret')) {
+            await loadSecrets();
+          } else if (tabText.includes('hotspot user')) {
+            await loadHotspotUsers();
+          } else if (tabText.includes('pppoe profile')) {
+            await loadPppoeProfiles();
+          } else if (tabText.includes('hotspot profile')) {
+            await loadHotspotUserProfiles();
+          }
+        }
+        
+        // Always refresh card summary stats
+        await loadInitialStats();
+      } catch (err) {
+        console.error('Auto-refresh error:', err);
+      } finally {
+        isRefreshing = false;
+        hideRefreshIndicator();
+      }
+    }, REFRESH_INTERVAL);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+    }
+  }
+
+  // Pause auto-refresh when user is interacting with modals
+  function pauseAutoRefresh() {
+    isAutoRefreshEnabled = false;
+  }
+
+  function resumeAutoRefresh() {
+    isAutoRefreshEnabled = true;
+  }
+
+  // Pause refresh when modal is open
+  const originalOpenModal = window.openModal;
+  window.openModal = function(id) {
+    pauseAutoRefresh();
+    if (originalOpenModal) originalOpenModal(id);
+  };
+
+  const originalCloseModal = window.closeModal;
+  window.closeModal = function(id) {
+    resumeAutoRefresh();
+    if (originalCloseModal) originalCloseModal(id);
+  };
+
+  // Stop auto-refresh when page is hidden (user switched tabs)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      stopAutoRefresh();
+    } else {
+      startAutoRefresh();
+    }
+  });
+
+  // Initial load
   loadSecrets();
-  loadInitialStats(); // Load hotspot card summary on page load
+  loadInitialStats();
+  
+  // Start auto-refresh
+  startAutoRefresh();
 </script>
 </body>
 </html>

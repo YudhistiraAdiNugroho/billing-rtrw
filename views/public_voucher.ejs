@@ -285,12 +285,6 @@
         <% } %>
 
         <form method="POST" action="/customer/public/voucher/create-payment" class="d-grid gap-2">
-          <div>
-            <label class="muted small mb-1">Nomor WhatsApp Pembeli</label>
-            <input class="form-control" name="buyer_phone" placeholder="Contoh: 08xxxxxxxxxx" required>
-            <div class="muted small mt-1">Kode voucher akan dikirim ke nomor ini.</div>
-          </div>
-
           <div class="row g-2">
             <div class="col-12 col-lg-7">
               <label class="muted small mb-1">Paket Voucher</label>
@@ -428,6 +422,12 @@
                 </div>
               <% } %>
             </div>
+          </div>
+
+          <div>
+            <label class="muted small mb-1">Nomor WhatsApp Pembeli</label>
+            <input class="form-control" name="buyer_phone" placeholder="Contoh: 08xxxxxxxxxx" required>
+            <div class="muted small mt-1">Kode voucher akan dikirim ke nomor ini.</div>
           </div>
 
           <div class="form-check mt-1">
