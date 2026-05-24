@@ -3658,7 +3658,14 @@ router.get('/api/webhook/payment-notif/logs', requireAdminSession, (req, res) =>
       LIMIT ?
     `;
     const rows = db.prepare(sql).all(...params, limit);
-    res.json({ ok: true, rows });
+
+    // Convert created_at to local timezone
+    const rowsWithLocalTime = rows.map(row => ({
+      ...row,
+      created_at: row.created_at ? formatDateLocal(row.created_at, 'YYYY-MM-DD HH:mm:ss') : null
+    }));
+
+    res.json({ ok: true, rows: rowsWithLocalTime });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
