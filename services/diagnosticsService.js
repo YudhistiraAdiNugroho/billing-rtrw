@@ -51,28 +51,82 @@ async function checkDependencies() {
   try {
     const { getSetting } = require('../config/settingsManager');
     const acsUrl = getSetting('genieacs_url', 'http://localhost:7557');
-    const response = await axios.get(acsUrl, { timeout: 3000 });
-    results.genieacs = {
-      status: response.status === 200 ? 'online' : 'warning',
-      message: `GenieACS is responding (Status: ${response.status})`
+    const username = getSetting('genieacs_username', '');
+    const password = getSetting('genieacs_password', '');
+    
+    // Try to get devices list to verify GenieACS is working
+    const devicesUrl = `${acsUrl}/devices?limit=1`;
+    const config = {
+      timeout: 5000,
+      validateStatus: (status) => status < 500 // Accept any status < 500
     };
+    
+    if (username && password) {
+      config.auth = { username, password };
+    }
+    
+    const response = await axios.get(devicesUrl, config);
+    
+    // If we get a response (even 401), GenieACS is online
+    if (response.status === 200 || response.status === 401) {
+      results.genieacs = {
+        status: 'online',
+        message: response.status === 200 ? 'GenieACS is responding' : 'GenieACS online (auth required)'
+      };
+    } else {
+      results.genieacs = {
+        status: 'warning',
+        message: `GenieACS responding with status ${response.status}`
+      };
+    }
   } catch (err) {
-    results.genieacs = {
-      status: 'offline',
-      message: `GenieACS unreachable: ${err.message}`
-    };
+    // Check if it's a connection error or timeout
+    if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT') {
+      results.genieacs = {
+        status: 'offline',
+        message: 'GenieACS unreachable (connection refused)'
+      };
+    } else {
+      results.genieacs = {
+        status: 'offline',
+        message: `GenieACS error: ${err.message}`
+      };
+    }
   }
 
-  // 3. Check WhatsApp Gateway (Internal Check)
+  // 3. Check WhatsApp Gateway (using whatsappStatus from whatsappBot)
   try {
-    const whatsappSvc = require('./whatsapp'); // Assuming it exists
-    const isConnected = whatsappSvc.isConnected ? whatsappSvc.isConnected() : false;
+    // Import whatsappStatus dynamically to get real-time status
+    const whatsappBotModule = await import('./whatsappBot.mjs');
+    const waStatus = whatsappBotModule.whatsappStatus;
+    
+    // Check connection status
+    // Possible values: 'connecting', 'qr', 'open', 'loggedOut', 'close'
+    const isOnline = waStatus.connection === 'open';
+    const isQR = waStatus.connection === 'qr';
+    const isLoggedOut = waStatus.connection === 'loggedOut';
+    
+    let message = 'WhatsApp is disconnected';
+    if (isOnline) {
+      const phone = waStatus.user?.id ? String(waStatus.user.id).split(':')[0] : 'Unknown';
+      message = `WhatsApp connected (${phone})`;
+    } else if (isQR) {
+      message = 'WhatsApp waiting for QR scan';
+    } else if (isLoggedOut) {
+      message = 'WhatsApp logged out - scan QR again';
+    } else {
+      message = `WhatsApp ${waStatus.connection || 'disconnected'}`;
+    }
+    
     results.whatsapp = {
-      status: isConnected ? 'online' : 'offline',
-      message: isConnected ? 'WhatsApp is connected' : 'WhatsApp is disconnected'
+      status: isOnline ? 'online' : 'offline',
+      message: message
     };
   } catch (err) {
-    results.whatsapp = { status: 'offline', message: 'WhatsApp service error' };
+    results.whatsapp = {
+      status: 'offline',
+      message: `WhatsApp check error: ${err.message}`
+    };
   }
 
   return results;
