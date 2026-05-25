@@ -302,6 +302,21 @@
         </div>
         <div class="form-row">
           <div class="fg">
+            <label class="fl">
+              <i class="bi bi-person-badge"></i> Kolektor Penagihan
+            </label>
+            <select class="fs" name="collector_id">
+              <option value="">-- Tanpa Kolektor --</option>
+              <% if (typeof collectors !== 'undefined') { %>
+                <% collectors.forEach(col => { %>
+                  <option value="<%= col.id %>"><%= col.name %> (<%= col.username %>)</option>
+                <% }) %>
+              <% } %>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="fg">
             <label class="fl">Perangkat OLT</label>
             <select class="fs" name="olt_id">
               <option value="">-- Tanpa OLT --</option>
@@ -481,6 +496,21 @@
           <div class="fg">
             <label class="fl">Tanggal Isolir (1-31)</label>
             <input class="fc" type="number" name="isolate_day" id="e_isolate_day" min="1" max="31">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="fg">
+            <label class="fl">
+              <i class="bi bi-person-badge"></i> Kolektor Penagihan
+            </label>
+            <select class="fs" name="collector_id" id="e_collector_id">
+              <option value="">-- Tanpa Kolektor --</option>
+              <% if (typeof collectors !== 'undefined') { %>
+                <% collectors.forEach(col => { %>
+                  <option value="<%= col.id %>"><%= col.name %> (<%= col.username %>)</option>
+                <% }) %>
+              <% } %>
+            </select>
           </div>
         </div>
         <div class="form-row">
@@ -801,6 +831,7 @@ function editCust(idx) {
   document.getElementById('e_hotspot_password').value=c.hotspot_password||'';
   document.getElementById('e_hotspot_profile').value=c.hotspot_profile||'';
   document.getElementById('e_tag').value=c.genieacs_tag||'';
+  document.getElementById('e_collector_id').value=c.collector_id||'';
   document.getElementById('e_olt_id').value=c.olt_id||'';
   document.getElementById('e_odp_id').value=c.odp_id||'';
   document.getElementById('e_pon_port').value=c.pon_port||'';
