@@ -83,6 +83,18 @@
         <div class="fg"><label class="fl">Username Login</label><input type="text" name="username" class="fc" required></div>
         <div class="fg"><label class="fl">Password</label><input type="text" name="password" class="fc" required></div>
         <div class="fg"><label class="fl">No. HP</label><input type="text" name="phone" class="fc" placeholder="08123456789"></div>
+        <div class="fg">
+          <label class="fl">
+            <i class="bi bi-check-circle"></i> Auto-Approve Pembayaran
+          </label>
+          <select name="auto_approve" class="fs">
+            <option value="0">Nonaktif (Perlu Approval Admin)</option>
+            <option value="1">Aktif (Langsung Lunas)</option>
+          </select>
+          <div class="hint" style="margin-top:6px;font-size:11px;color:var(--muted)">
+            Jika aktif, pembayaran yang dilaporkan kolektor ini akan langsung diproses tanpa perlu approval admin/kasir.
+          </div>
+        </div>
       </div>
       <div class="mf">
         <button type="button" class="btn btn-g" onclick="closeModal('addCollectorModal')">Batal</button>
@@ -108,6 +120,18 @@
             <option value="0">Nonaktif</option>
           </select>
         </div>
+        <div class="fg">
+          <label class="fl">
+            <i class="bi bi-check-circle"></i> Auto-Approve Pembayaran
+          </label>
+          <select name="auto_approve" id="e-auto-approve" class="fs">
+            <option value="0">Nonaktif (Perlu Approval Admin)</option>
+            <option value="1">Aktif (Langsung Lunas)</option>
+          </select>
+          <div class="hint" style="margin-top:6px;font-size:11px;color:var(--muted)">
+            Jika aktif, pembayaran yang dilaporkan kolektor ini akan langsung diproses tanpa perlu approval admin/kasir.
+          </div>
+        </div>
       </div>
       <div class="mf">
         <button type="button" class="btn btn-g" onclick="closeModal('editCollectorModal')">Batal</button>
@@ -127,6 +151,7 @@ function editCollector(c){
   document.getElementById('e-password').value=c.password||'';
   document.getElementById('e-phone').value=c.phone||'';
   document.getElementById('e-status').value=String(c.is_active ? 1 : 0);
+  document.getElementById('e-auto-approve').value=String(c.auto_approve ? 1 : 0);
   openModal('editCollectorModal');
 }
 </script>
