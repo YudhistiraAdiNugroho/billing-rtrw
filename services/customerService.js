@@ -58,8 +58,8 @@ function getCustomerById(id) {
 
 function createCustomer(data) {
   return db.prepare(`
-    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
     data.package_id ? parseInt(data.package_id) : null,
@@ -82,7 +82,8 @@ function createCustomer(data) {
     data.mac_address || '',
     data.hotspot_username || '',
     data.hotspot_password || '',
-    data.hotspot_profile || ''
+    data.hotspot_profile || '',
+    data.collector_id ? parseInt(data.collector_id) : null
   );
 }
 
@@ -92,7 +93,7 @@ function updateCustomer(id, data) {
   const pkgChanged = prev && Number(prev.package_id || 0) !== Number(newPkgId || 0);
 
   const result = db.prepare(`
-    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?
+    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?
     WHERE id=?
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
@@ -118,6 +119,7 @@ function updateCustomer(id, data) {
     data.hotspot_username || '',
     data.hotspot_password || '',
     data.hotspot_profile || '',
+    data.collector_id ? parseInt(data.collector_id) : null,
     id
   );
 

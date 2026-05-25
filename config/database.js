@@ -621,6 +621,9 @@ try {
 try {
   db.exec("ALTER TABLE customers ADD COLUMN pppoe_remote_address TEXT DEFAULT ''");
 } catch (e) { /* ignore if already exists */ }
+try {
+  db.exec("ALTER TABLE customers ADD COLUMN collector_id INTEGER REFERENCES collectors(id) ON DELETE SET NULL");
+} catch (e) { /* ignore if already exists */ }
 try { db.exec("ALTER TABLE odps ADD COLUMN port_capacity INTEGER NOT NULL DEFAULT 16"); } catch (e) { /* ignore if already exists */ }
 
 // Kolom untuk Tiket Bantuan (Foto & Catatan Teknisi)

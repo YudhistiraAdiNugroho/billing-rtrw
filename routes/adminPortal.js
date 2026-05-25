@@ -1480,15 +1480,16 @@ router.get('/customers', requireAdminSession, requireSidebarMenuAccess('customer
   const routers = mikrotikService.getAllRouters();
   const olts = oltSvc.getAllOlts();
   const odps = odpSvc.getAllOdps();
+  const collectors = adminSvc.getAllCollectors();
 
   // Apply status filter in JS if provided
-  const filteredCustomers = filterStatus 
+  const filteredCustomers = filterStatus
     ? customers.filter(c => c.status === filterStatus)
     : customers;
 
   res.render('admin/customers', {
     title: 'Data Pelanggan', company: company(), activePage: 'customers',
-    customers: filteredCustomers, stats, packages, routers, olts, odps, search, filterStatus, msg: flashMsg(req),
+    customers: filteredCustomers, stats, packages, routers, olts, odps, collectors, search, filterStatus, msg: flashMsg(req),
     settings: getSettings()
   });
 });

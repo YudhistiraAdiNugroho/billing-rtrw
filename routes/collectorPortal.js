@@ -163,6 +163,8 @@ router.get('/', requireCollectorSession, (req, res) => {
   const scope = String(req.query.scope || '').trim(); // today, unpaid, isolir
   const todayDay = now.getDate();
 
+  const collectorId = Number(req.session.collectorId || 0);
+  
   let q = `
     SELECT i.*,
            c.name as customer_name,
@@ -182,9 +184,9 @@ router.get('/', requireCollectorSession, (req, res) => {
     JOIN customers c ON i.customer_id = c.id
     LEFT JOIN packages p ON c.package_id = p.id
     LEFT JOIN routers r ON c.router_id = r.id
-    WHERE 1=1
+    WHERE (c.collector_id = ? OR c.collector_id IS NULL)
   `;
-  const params = [];
+  const params = [collectorId];
   if (scope !== 'multi') {
     q += ' AND i.period_month=? AND i.period_year=?';
     params.push(month, year);
@@ -227,8 +229,9 @@ router.get('/', requireCollectorSession, (req, res) => {
       SUM(CASE WHEN i.status='unpaid' AND c.status='suspended' THEN i.amount ELSE 0 END) as isolir_total
     FROM invoices i
     JOIN customers c ON i.customer_id = c.id
-    WHERE i.period_month=? AND i.period_year=?
-  `).get(todayDay, todayDay, month, year) || {};
+    WHERE (c.collector_id = ? OR c.collector_id IS NULL)
+      AND i.period_month=? AND i.period_year=?
+  `).get(todayDay, todayDay, collectorId, month, year) || {};
 
   const summaryMulti = db.prepare(`
     SELECT
@@ -236,13 +239,15 @@ router.get('/', requireCollectorSession, (req, res) => {
       SUM(x.cnt) as multi_invoice_count,
       SUM(x.total_amount) as multi_total
     FROM (
-      SELECT customer_id, COUNT(1) as cnt, SUM(amount) as total_amount
-      FROM invoices
-      WHERE status='unpaid'
-      GROUP BY customer_id
+      SELECT i.customer_id, COUNT(1) as cnt, SUM(i.amount) as total_amount
+      FROM invoices i
+      JOIN customers c ON i.customer_id = c.id
+      WHERE i.status='unpaid'
+        AND (c.collector_id = ? OR c.collector_id IS NULL)
+      GROUP BY i.customer_id
       HAVING COUNT(1) > 1
     ) x
-  `).get() || {};
+  `).get(collectorId) || {};
 
   const summary = { ...summaryPeriod, ...summaryMulti };
 
@@ -262,7 +267,6 @@ router.get('/', requireCollectorSession, (req, res) => {
     }
   }
 
-  const collectorId = Number(req.session.collectorId || 0);
   const myReqs = db.prepare(`
     SELECT r.*, i.period_month, i.period_year, i.amount as invoice_amount, c.name as customer_name, c.phone as customer_phone
     FROM collector_payment_requests r
@@ -290,7 +294,7 @@ router.get('/', requireCollectorSession, (req, res) => {
   });
 });
 
-router.post('/payment-request', requireCollectorSession, express.urlencoded({ extended: true }), (req, res) => {
+router.post('/payment-request', requireCollectorSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const invoiceId = Number(req.body.invoice_id || 0);
     if (!Number.isFinite(invoiceId) || invoiceId <= 0) throw new Error('Invoice ID tidak valid');
@@ -311,12 +315,62 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
     const amount = Math.max(0, Number(inv.amount || 0) || 0);
     if (amount <= 0) throw new Error('Nominal tagihan tidak valid');
 
-    db.prepare(`
-      INSERT INTO collector_payment_requests (collector_id, invoice_id, customer_id, amount, note, status)
-      VALUES (?, ?, ?, ?, ?, 'pending')
-    `).run(collectorId, invoiceId, Number(inv.customer_id || 0), amount, note);
+    // Check if auto-approve is enabled
+    const autoApprove = getSetting('collector_auto_approve', false);
+    const autoApproveEnabled = autoApprove === true || autoApprove === 'true';
 
-    req.session._msg = { type: 'success', text: 'Berhasil. Status pembayaran menunggu approval Admin/Kasir.' };
+    if (autoApproveEnabled) {
+      // Auto-approve: directly mark invoice as paid
+      const collectorName = String(req.session.collectorName || '').trim();
+      const collectorUsername = String(req.session.collectorUsername || '').trim();
+      const collectorLabel = `Kolektor ${collectorName}${collectorUsername ? ` (@${collectorUsername})` : ''}`;
+      
+      const notesParts = [
+        'Via Kolektor',
+        collectorLabel,
+        'Auto-Approved (Setting Aktif)'
+      ];
+      if (note) notesParts.push(note);
+      const notes = notesParts.join(' | ');
+
+      // Mark invoice as paid
+      billingSvc.markAsPaid(invoiceId, collectorLabel, notes);
+
+      // Insert request with approved status
+      db.prepare(`
+        INSERT INTO collector_payment_requests (collector_id, invoice_id, customer_id, amount, note, status, decided_by_role, decided_by_name, decided_note, decided_at)
+        VALUES (?, ?, ?, ?, ?, 'approved', 'system', 'Auto-Approve', 'Otomatis disetujui (setting aktif)', CURRENT_TIMESTAMP)
+      `).run(collectorId, invoiceId, Number(inv.customer_id || 0), amount, note);
+
+      // Send WhatsApp notification to customer
+      const customer = customerSvc.getCustomerById(inv.customer_id);
+      if (customer && customer.phone) {
+        const msg =
+          `✅ *PEMBAYARAN BERHASIL*\n\n` +
+          `👤 *Pelanggan:* ${customer.name}\n` +
+          `🧾 *Invoice:* #${inv.id}\n` +
+          `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
+          `💰 *Nominal Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n` +
+          `🏷️ *Dibayar Via:* ${collectorLabel}\n\n` +
+          `Terima kasih.`;
+        try {
+          const waBot = require('../services/whatsappBot.mjs');
+          await waBot.sendMessage(customer.phone, msg);
+        } catch (e) {
+          logger.error('Failed to send WA notification for auto-approved collector payment:', e);
+        }
+      }
+
+      req.session._msg = { type: 'success', text: 'Pembayaran berhasil diproses dan tagihan sudah lunas (Auto-Approve aktif).' };
+    } else {
+      // Manual approval: insert as pending
+      db.prepare(`
+        INSERT INTO collector_payment_requests (collector_id, invoice_id, customer_id, amount, note, status)
+        VALUES (?, ?, ?, ?, ?, 'pending')
+      `).run(collectorId, invoiceId, Number(inv.customer_id || 0), amount, note);
+
+      req.session._msg = { type: 'success', text: 'Berhasil. Status pembayaran menunggu approval Admin/Kasir.' };
+    }
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal: ' + (e.message || String(e)) };
   }
