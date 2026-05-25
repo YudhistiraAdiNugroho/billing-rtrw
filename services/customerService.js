@@ -165,6 +165,23 @@ async function deleteCustomer(id) {
     }
   }
   
+  // Remove Hotspot user if connection type is hotspot and username exists
+  if (customer && customer.connection_type === 'hotspot' && customer.hotspot_username) {
+    try {
+      // Get hotspot user to find the ID
+      const hotspotUser = await mikrotikSvc.getHotspotUserByName(customer.hotspot_username, customer.router_id);
+      
+      if (hotspotUser && hotspotUser.id) {
+        await mikrotikSvc.deleteHotspotUser(hotspotUser.id, customer.router_id);
+        console.log(`Successfully removed Hotspot user ${customer.hotspot_username} from MikroTik`);
+      } else {
+        console.warn(`Hotspot user ${customer.hotspot_username} not found in MikroTik`);
+      }
+    } catch (e) {
+      console.error('Failed to remove Hotspot user from MikroTik during customer deletion:', e);
+    }
+  }
+  
   return db.prepare('DELETE FROM customers WHERE id=?').run(id);
 }
 
