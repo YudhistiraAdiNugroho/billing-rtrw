@@ -134,14 +134,35 @@ function updateCustomerCablePath(id, path) {
 
 async function deleteCustomer(id) {
   const customer = getCustomerById(id);
+  const mikrotikSvc = require('./mikrotikService');
+  
+  // Remove static IP if connection type is static
   if (customer && customer.connection_type === 'static' && customer.static_ip) {
-    const mikrotikSvc = require('./mikrotikService');
     try {
       await mikrotikSvc.removeStaticIp(customer.static_ip, customer.router_id);
     } catch (e) {
       console.error('Failed to remove static IP from MikroTik during customer deletion:', e);
     }
   }
+  
+  // Remove PPPoE secret if connection type is pppoe and username exists
+  if (customer && customer.connection_type === 'pppoe' && customer.pppoe_username) {
+    try {
+      // Get PPPoE secrets to find the ID
+      const secrets = await mikrotikSvc.getPppoeSecrets(customer.router_id);
+      const secret = secrets.find(s => s.name === customer.pppoe_username);
+      
+      if (secret && secret.id) {
+        await mikrotikSvc.deletePppoeSecret(secret.id, customer.router_id);
+        console.log(`Successfully removed PPPoE secret for ${customer.pppoe_username} from MikroTik`);
+      } else {
+        console.warn(`PPPoE secret for ${customer.pppoe_username} not found in MikroTik`);
+      }
+    } catch (e) {
+      console.error('Failed to remove PPPoE secret from MikroTik during customer deletion:', e);
+    }
+  }
+  
   return db.prepare('DELETE FROM customers WHERE id=?').run(id);
 }
 
