@@ -315,9 +315,9 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
     const amount = Math.max(0, Number(inv.amount || 0) || 0);
     if (amount <= 0) throw new Error('Nominal tagihan tidak valid');
 
-    // Check if auto-approve is enabled
-    const autoApprove = getSetting('collector_auto_approve', false);
-    const autoApproveEnabled = autoApprove === true || autoApprove === 'true';
+    // Check if auto-approve is enabled for this collector
+    const collector = db.prepare('SELECT auto_approve FROM collectors WHERE id = ?').get(collectorId);
+    const autoApproveEnabled = collector && collector.auto_approve === 1;
 
     if (autoApproveEnabled) {
       // Auto-approve: directly mark invoice as paid
@@ -328,7 +328,7 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
       const notesParts = [
         'Via Kolektor',
         collectorLabel,
-        'Auto-Approved (Setting Aktif)'
+        'Auto-Approved (Kolektor Setting Aktif)'
       ];
       if (note) notesParts.push(note);
       const notes = notesParts.join(' | ');
@@ -339,7 +339,7 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
       // Insert request with approved status
       db.prepare(`
         INSERT INTO collector_payment_requests (collector_id, invoice_id, customer_id, amount, note, status, decided_by_role, decided_by_name, decided_note, decided_at)
-        VALUES (?, ?, ?, ?, ?, 'approved', 'system', 'Auto-Approve', 'Otomatis disetujui (setting aktif)', CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, 'approved', 'system', 'Auto-Approve', 'Otomatis disetujui (kolektor setting aktif)', CURRENT_TIMESTAMP)
       `).run(collectorId, invoiceId, Number(inv.customer_id || 0), amount, note);
 
       // Send WhatsApp notification to customer
@@ -361,7 +361,7 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
         }
       }
 
-      req.session._msg = { type: 'success', text: 'Pembayaran berhasil diproses dan tagihan sudah lunas (Auto-Approve aktif).' };
+      req.session._msg = { type: 'success', text: 'Pembayaran berhasil diproses dan tagihan sudah lunas (Auto-Approve kolektor aktif).' };
     } else {
       // Manual approval: insert as pending
       db.prepare(`

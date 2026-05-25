@@ -142,6 +142,7 @@ db.exec(`
     name TEXT NOT NULL,
     phone TEXT DEFAULT '',
     is_active INTEGER DEFAULT 1,
+    auto_approve INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
@@ -623,6 +624,9 @@ try {
 } catch (e) { /* ignore if already exists */ }
 try {
   db.exec("ALTER TABLE customers ADD COLUMN collector_id INTEGER REFERENCES collectors(id) ON DELETE SET NULL");
+} catch (e) { /* ignore if already exists */ }
+try {
+  db.exec("ALTER TABLE collectors ADD COLUMN auto_approve INTEGER DEFAULT 0");
 } catch (e) { /* ignore if already exists */ }
 try { db.exec("ALTER TABLE odps ADD COLUMN port_capacity INTEGER NOT NULL DEFAULT 16"); } catch (e) { /* ignore if already exists */ }
 

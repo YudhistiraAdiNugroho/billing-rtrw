@@ -53,19 +53,20 @@ function getAllCollectors() {
 function createCollector(data) {
   return db
     .prepare(
-      'INSERT INTO collectors (username, password, name, phone, is_active) VALUES (?, ?, ?, ?, 1)'
+      'INSERT INTO collectors (username, password, name, phone, is_active, auto_approve) VALUES (?, ?, ?, ?, 1, ?)'
     )
     .run(
       String(data.username || '').trim(),
       String(data.password || ''),
       String(data.name || '').trim(),
-      String(data.phone || '').trim()
+      String(data.phone || '').trim(),
+      data.auto_approve ? 1 : 0
     );
 }
 
 function updateCollector(id, data) {
-  const stmt = db.prepare('UPDATE collectors SET username = ?, password = ?, name = ?, phone = ?, is_active = ? WHERE id = ?');
-  return stmt.run(data.username, data.password, data.name, data.phone || '', data.is_active ? 1 : 0, id);
+  const stmt = db.prepare('UPDATE collectors SET username = ?, password = ?, name = ?, phone = ?, is_active = ?, auto_approve = ? WHERE id = ?');
+  return stmt.run(data.username, data.password, data.name, data.phone || '', data.is_active ? 1 : 0, data.auto_approve ? 1 : 0, id);
 }
 
 function deleteCollector(id) {

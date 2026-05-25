@@ -150,18 +150,38 @@ async function deleteCustomer(id) {
   // Remove PPPoE secret if connection type is pppoe and username exists
   if (customer && customer.connection_type === 'pppoe' && customer.pppoe_username) {
     try {
+      console.log(`[DELETE] Attempting to remove PPPoE secret: ${customer.pppoe_username} from router ${customer.router_id}`);
+      
       // Get PPPoE secrets to find the ID
       const secrets = await mikrotikSvc.getPppoeSecrets(customer.router_id);
-      const secret = secrets.find(s => s.name === customer.pppoe_username);
+      console.log(`[DELETE] Found ${secrets.length} PPPoE secrets in MikroTik`);
       
-      if (secret && secret.id) {
-        await mikrotikSvc.deletePppoeSecret(secret.id, customer.router_id);
-        console.log(`Successfully removed PPPoE secret for ${customer.pppoe_username} from MikroTik`);
+      // Try to find by exact name match
+      let secret = secrets.find(s => s.name === customer.pppoe_username);
+      
+      // If not found, try case-insensitive match
+      if (!secret) {
+        const username = String(customer.pppoe_username || '').toLowerCase();
+        secret = secrets.find(s => String(s.name || '').toLowerCase() === username);
+      }
+      
+      if (secret) {
+        // Check both .id and id fields
+        const secretId = secret['.id'] || secret.id;
+        console.log(`[DELETE] Found secret with ID: ${secretId}, name: ${secret.name}`);
+        
+        if (secretId) {
+          await mikrotikSvc.deletePppoeSecret(secretId, customer.router_id);
+          console.log(`[DELETE] Successfully removed PPPoE secret for ${customer.pppoe_username} from MikroTik`);
+        } else {
+          console.warn(`[DELETE] Secret found but no ID available for ${customer.pppoe_username}`);
+        }
       } else {
-        console.warn(`PPPoE secret for ${customer.pppoe_username} not found in MikroTik`);
+        console.warn(`[DELETE] PPPoE secret for ${customer.pppoe_username} not found in MikroTik`);
+        console.log(`[DELETE] Available usernames: ${secrets.map(s => s.name).join(', ')}`);
       }
     } catch (e) {
-      console.error('Failed to remove PPPoE secret from MikroTik during customer deletion:', e);
+      console.error('[DELETE] Failed to remove PPPoE secret from MikroTik during customer deletion:', e);
     }
   }
   
