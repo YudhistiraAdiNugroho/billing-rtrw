@@ -414,7 +414,8 @@ async function getTripayChannels() {
 
   try {
     const res = await axios.get(baseUrl, {
-      headers: { Authorization: `Bearer ${apiKey}` }
+      headers: { Authorization: `Bearer ${apiKey}` },
+      timeout: 3000 // Timeout 3 detik untuk menghindari loading lama
     });
     
     if (!res.data.success) {

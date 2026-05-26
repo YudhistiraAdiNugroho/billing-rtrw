@@ -856,9 +856,40 @@ router.get('/voucher', async (req, res) => {
     }
   };
 
+  // Cache untuk voucher profiles (5 menit)
+  const CACHE_KEY = 'voucher_profiles_cache';
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 menit
+  
   const getVoucherProfiles = async () => {
+    // Cek cache terlebih dahulu
+    const cached = global[CACHE_KEY];
+    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+      return cached.data;
+    }
+
+    // OPTIMASI: Hanya query router pertama yang aktif (default router)
+    // Tidak perlu query semua router untuk voucher public
     const routers = mikrotikService.getAllRouters().filter(r => r.is_active);
-    const routerList = routers.length > 0 ? routers : [{ id: null, name: '' }];
+    const defaultRouter = routers.length > 0 ? routers[0] : { id: null, name: '' };
+    const routerList = [defaultRouter]; // Hanya 1 router
+
+    // Optimasi: Ambil semua configured prices sekaligus
+    const configuredPrices = new Map();
+    try {
+      const rows = db.prepare(`
+        SELECT router_id, profile_name, price, validity
+        FROM voucher_batches
+        WHERE price > 0
+        GROUP BY router_id, profile_name
+        HAVING id = MAX(id)
+      `).all();
+      for (const row of rows) {
+        const key = `${row.router_id}_${row.profile_name}`;
+        configuredPrices.set(key, { price: row.price, validity: row.validity });
+      }
+    } catch (e) {
+      logger.error('[Voucher] Error loading configured prices: ' + e.message);
+    }
 
     const allRows = [];
     const results = await Promise.allSettled(routerList.map(r => mikrotikService.getHotspotUserProfiles(r.id)));
@@ -879,8 +910,10 @@ router.get('/voucher', async (req, res) => {
       const meta = parseMikhmonOnLogin(row.onLogin || '');
       let price = Number(meta?.price || 0) || 0;
       let validity = String(meta?.validity || '').trim();
+      
       if (price <= 0 || !validity) {
-        const configured = getConfiguredVoucherPrice(row.routerId, name);
+        const key = `${row.routerId}_${name}`;
+        const configured = configuredPrices.get(key);
         if (configured) {
           price = Number(configured.price || 0) || 0;
           validity = String(configured.validity || '').trim();
@@ -895,35 +928,76 @@ router.get('/voucher', async (req, res) => {
       }
     }
 
-    return Array.from(bestByName.values()).sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+    const profiles = Array.from(bestByName.values()).sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+    
+    // Simpan ke cache
+    global[CACHE_KEY] = {
+      data: profiles,
+      timestamp: Date.now()
+    };
+    
+    return profiles;
   };
 
   const resolveVoucherGateway = () => {
     return resolveConfiguredGateway(settings);
   };
 
+  // Cache untuk payment channels (5 menit)
+  const PAYMENT_CACHE_KEY = 'voucher_payment_channels_cache';
+  const PAYMENT_CACHE_DURATION = 5 * 60 * 1000; // 5 menit
+  
   const getVoucherPaymentChannels = async () => {
+    // Cek apakah ada gateway yang aktif
     const gateway = resolveVoucherGateway();
-    if (!gateway) return [];
+    if (!gateway) {
+      logger.info('[Voucher] No active payment gateway configured');
+      return [];
+    }
+    
+    // Cek cache terlebih dahulu
+    const cacheKey = `${PAYMENT_CACHE_KEY}_${gateway}`;
+    const cached = global[cacheKey];
+    if (cached && (Date.now() - cached.timestamp) < PAYMENT_CACHE_DURATION) {
+      return cached.data;
+    }
+    
+    let channels = [];
+    
     if (gateway === 'tripay') {
       try {
-        return await paymentSvc.getTripayChannels();
-      } catch {
-        return [];
+        // Reduce timeout untuk Tripay dari 5s ke 2s
+        channels = await Promise.race([
+          paymentSvc.getTripayChannels(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+        ]);
+      } catch (e) {
+        logger.warn('[Voucher] Tripay channels fetch failed or timeout: ' + e.message);
+        channels = [];
       }
+    } else {
+      // Gateway lain tidak perlu query API, langsung return hardcoded
+      const base = [
+        { code: 'QRIS', name: 'QRIS', group: 'QRIS', active: true },
+        { code: 'BCAVA', name: 'BCA Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'BNIVA', name: 'BNI Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'BRIVA', name: 'BRI Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'PERMATAVA', name: 'Permata Virtual Account', group: 'Virtual Account', active: true },
+        { code: 'MANDIRIVA', name: 'Mandiri Virtual Account', group: 'Virtual Account', active: true }
+      ];
+      if (gateway === 'midtrans') channels = [{ code: 'SNAP', name: 'Semua Metode (Snap)', group: 'E-Wallet', active: true }, ...base];
+      else if (gateway === 'xendit') channels = [{ code: 'XENDIT', name: 'Semua Metode', group: 'E-Wallet', active: true }, ...base];
+      else if (gateway === 'duitku') channels = [{ code: 'DUITKU', name: 'Semua Metode', group: 'E-Wallet', active: true }, ...base];
+      else channels = base;
     }
-    const base = [
-      { code: 'QRIS', name: 'QRIS', group: 'QRIS', active: true },
-      { code: 'BCAVA', name: 'BCA Virtual Account', group: 'Virtual Account', active: true },
-      { code: 'BNIVA', name: 'BNI Virtual Account', group: 'Virtual Account', active: true },
-      { code: 'BRIVA', name: 'BRI Virtual Account', group: 'Virtual Account', active: true },
-      { code: 'PERMATAVA', name: 'Permata Virtual Account', group: 'Virtual Account', active: true },
-      { code: 'MANDIRIVA', name: 'Mandiri Virtual Account', group: 'Virtual Account', active: true }
-    ];
-    if (gateway === 'midtrans') return [{ code: 'SNAP', name: 'Semua Metode (Snap)', group: 'E-Wallet', active: true }, ...base];
-    if (gateway === 'xendit') return [{ code: 'XENDIT', name: 'Semua Metode', group: 'E-Wallet', active: true }, ...base];
-    if (gateway === 'duitku') return [{ code: 'DUITKU', name: 'Semua Metode', group: 'E-Wallet', active: true }, ...base];
-    return base;
+    
+    // Simpan ke cache
+    global[cacheKey] = {
+      data: channels,
+      timestamp: Date.now()
+    };
+    
+    return channels;
   };
 
   let profiles = [];
