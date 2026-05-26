@@ -6,6 +6,7 @@ const billingSvc = require('../services/billingService');
 const paymentSvc = require('../services/paymentService');
 const customerSvc = require('../services/customerService');
 const mikrotikService = require('../services/mikrotikService');
+const { parseMikhmonOnLogin } = require('../utils/mikhmonParser');
 const { logger } = require('../config/logger');
 const ticketSvc = require('../services/ticketService');
 const crypto = require('crypto');
@@ -168,52 +169,8 @@ function verifyPublicToken(token, secret) {
   }
 }
 
-function parseMikhmonOnLogin(script) {
-  if (!script) return null;
-  const s = String(script).trim();
-  
-  // Format: :put (",rem,COST,VALIDITY,PRICE,...)
-  // Support ROS6 dan ROS7 (script bisa berbeda struktur)
-  
-  // Cari pattern :put (",rem, ... , ... , ...
-  // Bisa ada di mana saja dalam script
-  // Updated regex untuk support format: :put (",rem,4000,2d,5000,,Disable,");
-  const putMatch = s.match(/:\s*put\s*\(\s*[",]rem[",]?\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/i);
-  if (putMatch) {
-    const cost = String(putMatch[1] || '').trim();
-    const validity = String(putMatch[2] || '').trim();
-    const priceStr = String(putMatch[3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-    }
-  }
-  
-  // Fallback: split by comma (untuk format lama)
-  const parts = s.split(',').map(p => String(p).trim());
-  let remIdx = -1;
-  for (let i = 0; i < parts.length; i++) {
-    const norm = String(parts[i] || '').toLowerCase().replace(/[^a-z]/g, '');
-    if (norm === 'rem') {
-      remIdx = i;
-      break;
-    }
-  }
-  
-  if (remIdx >= 0 && remIdx + 3 < parts.length) {
-    const cost = String(parts[remIdx + 1] || '').trim();
-    const validity = String(parts[remIdx + 2] || '').trim();
-    const priceStr = String(parts[remIdx + 3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-    }
-  }
-  
-  return null;
-}
+// parseMikhmonOnLogin dipindahkan ke utils/mikhmonParser.js (shared utility)
+// Dipakai oleh route handler dan voucherCacheWarmer agar konsisten
 
 function normalizeBuyerPhone(input) {
   const digits = String(input || '').replace(/\D/g, '');
@@ -857,36 +814,79 @@ router.get('/voucher', async (req, res) => {
   };
 
   /**
-   * Ambil voucher profiles dari MikroTik (hanya router di settings.json)
-   * Filter hanya yang punya metadata Mikhmon dengan harga
+   * Ambil voucher profiles — OPTIMASI: cek cache dulu, fallback live query
+   * Cache di-isi oleh voucherCacheWarmer.js setiap 3 menit
    */
+  const VOUCHER_PROFILES_CACHE_KEY = 'voucher_profiles_cache';
+  const VOUCHER_PROFILES_CACHE_TTL = 5 * 60 * 1000; // 5 menit
+
   const getVoucherProfiles = async () => {
     try {
-      // Ambil router dari settings.json
+      // 1. Cek global cache dari VoucherCacheWarmer
+      const cached = global[VOUCHER_PROFILES_CACHE_KEY];
+      if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
+        const age = Date.now() - Number(cached.timestamp || 0);
+        if (age < VOUCHER_PROFILES_CACHE_TTL) {
+          logger.debug(`[Voucher] Using cached profiles (${cached.data.length} profiles, age ${Math.round(age/1000)}s)`);
+          return cached.data;
+        }
+        logger.info('[Voucher] Cache expired, falling back to live query');
+      }
+
+      // 2. Cache miss/expired — query MikroTik live (dengan timeout 4 detik)
       const mikrotikHost = settings.mikrotik_host;
       const mikrotikUser = settings.mikrotik_user;
       const mikrotikPassword = settings.mikrotik_password;
-      const mikrotikPort = settings.mikrotik_port || 8728;
 
       if (!mikrotikHost || !mikrotikUser || !mikrotikPassword) {
         logger.error('[Voucher] MikroTik settings not configured in settings.json');
         return [];
       }
 
-      logger.info(`[Voucher] Querying MikroTik at ${mikrotikHost}:${mikrotikPort}`);
+      logger.info(`[Voucher] Live querying MikroTik (cache miss)...`);
 
-      // Query hotspot user profiles dari MikroTik
-      // Gunakan router_id = null untuk router dari settings.json
-      const profiles = await mikrotikService.getHotspotUserProfiles(null);
+      let profiles;
+      try {
+        profiles = await Promise.race([
+          mikrotikService.getHotspotUserProfiles(null),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout 4s')), 4000))
+        ]);
+      } catch (e) {
+        logger.warn('[Voucher] MikroTik live query timeout/error: ' + e.message);
+        // Jika timeout, coba return cache lama (stale) daripada kosong
+        if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
+          logger.info(`[Voucher] Returning stale cache (${cached.data.length} profiles) due to MikroTik error`);
+          return cached.data;
+        }
+        return [];
+      }
 
       if (!Array.isArray(profiles) || profiles.length === 0) {
         logger.warn('[Voucher] No profiles found from MikroTik');
         return [];
       }
 
-      logger.info(`[Voucher] Found ${profiles.length} profiles from MikroTik`);
+      logger.info(`[Voucher] Found ${profiles.length} raw profiles from MikroTik`);
 
-      // Filter dan parse profiles yang punya metadata Mikhmon dengan harga
+      // 3. Load configured prices dari voucher_batches (DB fallback)
+      let configuredPrices = new Map();
+      try {
+        const rows = db.prepare(`
+          SELECT router_id, profile_name, price, validity
+          FROM voucher_batches
+          WHERE price > 0
+          GROUP BY router_id, profile_name
+          HAVING id = MAX(id)
+        `).all();
+        for (const row of rows) {
+          const key = `${row.router_id}_${row.profile_name}`;
+          configuredPrices.set(key, { price: row.price, validity: row.validity });
+        }
+      } catch (e) {
+        logger.warn('[Voucher] Error loading configured prices: ' + e.message);
+      }
+
+      // 4. Parse dan filter profiles
       const validProfiles = [];
       for (const p of profiles) {
         const name = String(p?.name || '').trim();
@@ -894,33 +894,50 @@ router.get('/voucher', async (req, res) => {
 
         const onLogin = String(p?.onLogin || p?.['on-login'] || '').trim();
         const meta = parseMikhmonOnLogin(onLogin);
-        
-        const price = Number(meta?.price || 0) || 0;
-        const validity = String(meta?.validity || '').trim();
 
-        if (price > 0 && validity) {
+        let price = Number(meta?.price || 0) || 0;
+        let validity = String(meta?.validity || '').trim();
+
+        // Fallback ke voucher_batches jika tidak ada metadata Mikhmon
+        if (price <= 0 || !validity) {
+          const key = `null_${name}`;
+          const configured = configuredPrices.get(key);
+          if (configured) {
+            price = Number(configured.price || 0) || 0;
+            validity = String(configured.validity || '').trim();
+          }
+        }
+
+        if (price > 0) {
           validProfiles.push({
             name: name,
             price: price,
-            validity: validity,
-            router_id: null // null = router dari settings.json
+            validity: validity || '-',
+            router_id: null
           });
         } else {
-          logger.debug(`[Voucher] Skipped profile "${name}" - no Mikhmon metadata (onLogin: ${onLogin || 'empty'})`);
+          logger.debug(`[Voucher] Skipped profile "${name}" - no price (onLogin: ${onLogin || 'empty'})`);
         }
       }
 
-      logger.info(`[Voucher] ${validProfiles.length} profiles with valid Mikhmon metadata (price & validity)`);
+      logger.info(`[Voucher] ${validProfiles.length} profiles with valid price data`);
 
-      if (validProfiles.length === 0) {
-        logger.warn('[Voucher] No profiles with Mikhmon metadata found. Add metadata like $10000^1d to profile on-login script in MikroTik.');
-      }
+      // Sort by price dan simpan ke cache (agar request berikutnya cepat)
+      const sorted = validProfiles.sort((a, b) => a.price - b.price);
+      global[VOUCHER_PROFILES_CACHE_KEY] = {
+        data: sorted,
+        timestamp: Date.now()
+      };
 
-      // Sort by price
-      return validProfiles.sort((a, b) => a.price - b.price);
+      return sorted;
 
     } catch (e) {
-      logger.error('[Voucher] Error loading profiles from MikroTik: ' + e.message);
+      logger.error('[Voucher] Error loading profiles: ' + e.message);
+      // Last resort: return stale cache
+      const stale = global[VOUCHER_PROFILES_CACHE_KEY];
+      if (stale && stale.data && Array.isArray(stale.data) && stale.data.length > 0) {
+        return stale.data;
+      }
       return [];
     }
   };

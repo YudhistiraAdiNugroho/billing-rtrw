@@ -5,6 +5,7 @@
  */
 
 const { logger } = require('../config/logger');
+const { parseMikhmonOnLogin } = require('../utils/mikhmonParser');
 
 // Flag untuk mencegah multiple warming berjalan bersamaan
 let isWarming = false;
@@ -110,17 +111,11 @@ async function warmVoucherCache() {
       const name = String(row.name || '').trim();
       if (!name) continue;
 
-      // Parse Mikhmon metadata
+      // Parse Mikhmon metadata (gunakan shared parser agar konsisten dengan route handler)
       const onLogin = String(row.onLogin || '').trim();
-      let price = 0;
-      let validity = '';
-      
-      if (onLogin) {
-        const priceMatch = onLogin.match(/\$([0-9]+)/);
-        const validityMatch = onLogin.match(/\^([0-9]+[hdwm])/i);
-        if (priceMatch) price = Number(priceMatch[1]) || 0;
-        if (validityMatch) validity = validityMatch[1];
-      }
+      const meta = parseMikhmonOnLogin(onLogin);
+      let price = Number(meta?.price || 0) || 0;
+      let validity = String(meta?.validity || '').trim();
       
       if (price <= 0 || !validity) {
         const key = `${row.routerId}_${name}`;
@@ -229,16 +224,16 @@ function startCacheWarming() {
     warmVoucherCache().catch(err => {
       logger.error('[VoucherCacheWarmer] Initial warming failed:', err.message);
     });
-  }, 5000); // 5 detik setelah aplikasi start
+  }, 2000); // 2 detik setelah aplikasi start (lebih cepat siap)
 
   // Then warm every 8 minutes
   warmingInterval = setInterval(() => {
     warmVoucherCache().catch(err => {
       logger.error('[VoucherCacheWarmer] Periodic warming failed:', err.message);
     });
-  }, 8 * 60 * 1000); // 8 menit
+  }, 3 * 60 * 1000); // 3 menit (agar profile selalu up-to-date)
 
-  logger.info('[VoucherCacheWarmer] Background cache warming started (every 8 minutes)');
+  logger.info('[VoucherCacheWarmer] Background cache warming started (every 3 minutes)');
 }
 
 /**
