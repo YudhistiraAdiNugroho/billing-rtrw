@@ -9,12 +9,16 @@ const db = require('../config/database');
 const connectionProbeCache = new Map();
 const listCache = new Map();
 
+// CACHE DISABLED untuk data yang selalu akurat
+const CACHE_ENABLED = false; // Set false untuk disable cache
+
 function cacheKey(routerId, name) {
   const rid = routerId == null || String(routerId).trim() === '' ? 'default' : String(routerId).trim();
   return `${name}:${rid}`;
 }
 
 function getCachedList(key, ttlMs) {
+  if (!CACHE_ENABLED) return null; // Skip cache jika disabled
   const hit = listCache.get(key);
   if (!hit) return null;
   const age = Date.now() - Number(hit.ts || 0);
@@ -23,6 +27,7 @@ function getCachedList(key, ttlMs) {
 }
 
 function setCachedList(key, data) {
+  if (!CACHE_ENABLED) return; // Skip cache jika disabled
   listCache.set(key, { ts: Date.now(), data });
 }
 
@@ -489,7 +494,7 @@ async function getPppoeSecrets(routerId = null) {
           '?service=pppoe', // Only get PPPoE service
           '=.proplist=.id,name,profile,local-address,remote-address,disabled,service'
         ]),
-        15000, // Increased timeout to 15s for slow routers
+        25000, // Increased timeout to 25s for very slow routers
         'getPppoeSecrets'
       );
     } catch (timeoutErr) {
@@ -497,7 +502,7 @@ async function getPppoeSecrets(routerId = null) {
       logger.warn(`[MikroTik] Timeout with proplist, trying full query: ${timeoutErr.message}`);
       const allRows = await withTimeout(
         conn.client.menu('/ppp/secret').get(),
-        20000, // 20 second timeout for fallback
+        30000, // 30 second timeout for fallback
         'getPppoeSecrets-fallback'
       );
       // Filter only pppoe service
@@ -612,7 +617,7 @@ async function getPppoeActive(routerId = null) {
           '/ppp/active/print',
           '=.proplist=.id,name,address,uptime,caller-id,service'
         ]),
-        10000, // Increased timeout to 10s
+        15000, // Increased timeout to 15s
         'getPppoeActive'
       );
     } catch (timeoutErr) {
@@ -620,7 +625,7 @@ async function getPppoeActive(routerId = null) {
       logger.warn(`[MikroTik] Timeout with proplist for active PPPoE, trying full query: ${timeoutErr.message}`);
       rows = await withTimeout(
         conn.client.menu('/ppp/active').get(),
-        15000, // 15 second timeout for fallback
+        20000, // 20 second timeout for fallback
         'getPppoeActive-fallback'
       );
     }
@@ -931,7 +936,7 @@ async function getHotspotUsers(routerId = null) {
           '/ip/hotspot/user/print',
           '=.proplist=.id,name,profile,mac-address,disabled,comment'
         ]),
-        10000, // Increased timeout from 8s to 10s
+        20000, // Increased timeout to 20s for very slow routers
         'getHotspotUsers'
       );
     } catch (timeoutErr) {
@@ -939,7 +944,7 @@ async function getHotspotUsers(routerId = null) {
       logger.warn(`[MikroTik] Timeout with proplist for hotspot users, trying full query: ${timeoutErr.message}`);
       rows = await withTimeout(
         conn.client.menu('/ip/hotspot/user').get(),
-        12000, // 12 second timeout for fallback
+        25000, // 25 second timeout for fallback
         'getHotspotUsers-fallback'
       );
     }

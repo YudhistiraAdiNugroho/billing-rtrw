@@ -856,120 +856,109 @@ router.get('/voucher', async (req, res) => {
     }
   };
 
-  // Cache untuk voucher profiles (5 menit)
-  const CACHE_KEY = 'voucher_profiles_cache';
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 menit
-  
+  /**
+   * Ambil voucher profiles dari MikroTik (hanya router di settings.json)
+   * Filter hanya yang punya metadata Mikhmon dengan harga
+   */
   const getVoucherProfiles = async () => {
-    // Cek cache terlebih dahulu
-    const cached = global[CACHE_KEY];
-    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
-      return cached.data;
-    }
-
-    // OPTIMASI: Hanya query router pertama yang aktif (default router)
-    // Tidak perlu query semua router untuk voucher public
-    const routers = mikrotikService.getAllRouters().filter(r => r.is_active);
-    const defaultRouter = routers.length > 0 ? routers[0] : { id: null, name: '' };
-    const routerList = [defaultRouter]; // Hanya 1 router
-
-    // Optimasi: Ambil semua configured prices sekaligus
-    const configuredPrices = new Map();
     try {
-      const rows = db.prepare(`
-        SELECT router_id, profile_name, price, validity
-        FROM voucher_batches
-        WHERE price > 0
-        GROUP BY router_id, profile_name
-        HAVING id = MAX(id)
-      `).all();
-      for (const row of rows) {
-        const key = `${row.router_id}_${row.profile_name}`;
-        configuredPrices.set(key, { price: row.price, validity: row.validity });
+      // Ambil router dari settings.json
+      const mikrotikHost = settings.mikrotik_host;
+      const mikrotikUser = settings.mikrotik_user;
+      const mikrotikPassword = settings.mikrotik_password;
+      const mikrotikPort = settings.mikrotik_port || 8728;
+
+      if (!mikrotikHost || !mikrotikUser || !mikrotikPassword) {
+        logger.error('[Voucher] MikroTik settings not configured in settings.json');
+        return [];
       }
-    } catch (e) {
-      logger.error('[Voucher] Error loading configured prices: ' + e.message);
-    }
 
-    const allRows = [];
-    const results = await Promise.allSettled(routerList.map(r => mikrotikService.getHotspotUserProfiles(r.id)));
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i];
-      const router = routerList[i];
-      if (result.status !== 'fulfilled' || !Array.isArray(result.value)) continue;
-      for (const p of result.value) {
-        allRows.push({ routerId: router.id ?? null, name: p?.name, onLogin: p?.onLogin ?? p?.['on-login'] });
+      logger.info(`[Voucher] Querying MikroTik at ${mikrotikHost}:${mikrotikPort}`);
+
+      // Query hotspot user profiles dari MikroTik
+      // Gunakan router_id = null untuk router dari settings.json
+      const profiles = await mikrotikService.getHotspotUserProfiles(null);
+
+      if (!Array.isArray(profiles) || profiles.length === 0) {
+        logger.warn('[Voucher] No profiles found from MikroTik');
+        return [];
       }
-    }
 
-    const bestByName = new Map();
-    for (const row of allRows) {
-      const name = String(row.name || '').trim();
-      if (!name) continue;
+      logger.info(`[Voucher] Found ${profiles.length} profiles from MikroTik`);
 
-      const meta = parseMikhmonOnLogin(row.onLogin || '');
-      let price = Number(meta?.price || 0) || 0;
-      let validity = String(meta?.validity || '').trim();
-      
-      if (price <= 0 || !validity) {
-        const key = `${row.routerId}_${name}`;
-        const configured = configuredPrices.get(key);
-        if (configured) {
-          price = Number(configured.price || 0) || 0;
-          validity = String(configured.validity || '').trim();
+      // Filter dan parse profiles yang punya metadata Mikhmon dengan harga
+      const validProfiles = [];
+      for (const p of profiles) {
+        const name = String(p?.name || '').trim();
+        if (!name) continue;
+
+        const onLogin = String(p?.onLogin || p?.['on-login'] || '').trim();
+        const meta = parseMikhmonOnLogin(onLogin);
+        
+        const price = Number(meta?.price || 0) || 0;
+        const validity = String(meta?.validity || '').trim();
+
+        if (price > 0 && validity) {
+          validProfiles.push({
+            name: name,
+            price: price,
+            validity: validity,
+            router_id: null // null = router dari settings.json
+          });
+        } else {
+          logger.debug(`[Voucher] Skipped profile "${name}" - no Mikhmon metadata (onLogin: ${onLogin || 'empty'})`);
         }
       }
-      if (price <= 0) continue;
-      if (!validity) validity = '-';
 
-      const existing = bestByName.get(name);
-      if (!existing || Number(price) < Number(existing.price || 0)) {
-        bestByName.set(name, { name, validity, price, router_id: row.routerId });
+      logger.info(`[Voucher] ${validProfiles.length} profiles with valid Mikhmon metadata (price & validity)`);
+
+      if (validProfiles.length === 0) {
+        logger.warn('[Voucher] No profiles with Mikhmon metadata found. Add metadata like $10000^1d to profile on-login script in MikroTik.');
       }
-    }
 
-    const profiles = Array.from(bestByName.values()).sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
-    
-    // Simpan ke cache
-    global[CACHE_KEY] = {
-      data: profiles,
-      timestamp: Date.now()
-    };
-    
-    return profiles;
+      // Sort by price
+      return validProfiles.sort((a, b) => a.price - b.price);
+
+    } catch (e) {
+      logger.error('[Voucher] Error loading profiles from MikroTik: ' + e.message);
+      return [];
+    }
   };
 
   const resolveVoucherGateway = () => {
     return resolveConfiguredGateway(settings);
   };
 
-  // Cache untuk payment channels (5 menit)
+  // Cache untuk payment channels
+  // Set PAYMENT_CACHE_DURATION = 0 untuk disable cache
   const PAYMENT_CACHE_KEY = 'voucher_payment_channels_cache';
-  const PAYMENT_CACHE_DURATION = 5 * 60 * 1000; // 5 menit
+  const PAYMENT_CACHE_DURATION = 60 * 1000; // 1 menit (payment channels jarang berubah)
   
   const getVoucherPaymentChannels = async () => {
     // Cek apakah ada gateway yang aktif
     const gateway = resolveVoucherGateway();
     if (!gateway) {
-      logger.info('[Voucher] No active payment gateway configured');
       return [];
     }
     
-    // Cek cache terlebih dahulu
+    // Cek cache terlebih dahulu (skip jika PAYMENT_CACHE_DURATION = 0)
     const cacheKey = `${PAYMENT_CACHE_KEY}_${gateway}`;
-    const cached = global[cacheKey];
-    if (cached && (Date.now() - cached.timestamp) < PAYMENT_CACHE_DURATION) {
-      return cached.data;
+    if (PAYMENT_CACHE_DURATION > 0) {
+      const cached = global[cacheKey];
+      if (cached && (Date.now() - cached.timestamp) < PAYMENT_CACHE_DURATION) {
+        logger.debug('[Voucher] Using cached payment channels');
+        return cached.data;
+      }
     }
     
     let channels = [];
     
     if (gateway === 'tripay') {
       try {
-        // Reduce timeout untuk Tripay dari 5s ke 2s
+        // Timeout 1.5 detik untuk Tripay (lebih agresif)
         channels = await Promise.race([
           paymentSvc.getTripayChannels(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1500))
         ]);
       } catch (e) {
         logger.warn('[Voucher] Tripay channels fetch failed or timeout: ' + e.message);
@@ -991,25 +980,30 @@ router.get('/voucher', async (req, res) => {
       else channels = base;
     }
     
-    // Simpan ke cache
-    global[cacheKey] = {
-      data: channels,
-      timestamp: Date.now()
-    };
+    // Simpan ke cache (jika enabled)
+    if (PAYMENT_CACHE_DURATION > 0) {
+      global[cacheKey] = {
+        data: channels,
+        timestamp: Date.now()
+      };
+      logger.debug(`[Voucher] Cached ${channels.length} payment channels for ${PAYMENT_CACHE_DURATION/1000}s`);
+    }
     
     return channels;
   };
 
-  let profiles = [];
-  try {
-    profiles = await getVoucherProfiles();
-  } catch (e) {
-    logger.error('[Voucher] Error getting profiles: ' + e.message);
-    profiles = [];
-  }
-
-  let paymentChannels = [];
-  paymentChannels = await getVoucherPaymentChannels();
+  // OPTIMASI UTAMA: Parallel execution untuk profiles dan payment channels
+  // Tidak perlu menunggu satu selesai baru eksekusi yang lain
+  const [profiles, paymentChannels] = await Promise.all([
+    getVoucherProfiles().catch(e => {
+      logger.error('[Voucher] Error getting profiles: ' + e.message);
+      return [];
+    }),
+    getVoucherPaymentChannels().catch(e => {
+      logger.error('[Voucher] Error getting payment channels: ' + e.message);
+      return [];
+    })
+  ]);
 
   let order = null;
   let orderToken = null;
@@ -1426,25 +1420,30 @@ router.post('/login', async (req, res) => {
   const startTime = Date.now();
 
   let device = null;
-  let effectiveTag = phone;
+  let pppoeUsername = null;
+  let customerPhone = phone;
 
   // 1. Tahap 1: Cari Data di Billing DB
   const customer = customerSvc.findCustomerByAny(phone);
   
   if (customer) {
-    logger.info(`[Login] Pelanggan ditemukan di DB (customerId=${customer.id || '-'}).`);
+    logger.info(`[Login] Pelanggan ditemukan di DB (customerId=${customer.id || '-'}, pppoe=${customer.pppoe_username || '-'}).`);
     
-    // Kumpulkan semua token yang mungkin untuk mencari perangkat
+    // Use customer's actual phone number and PPPoE username
+    customerPhone = customer.phone || phone;
+    pppoeUsername = customer.pppoe_username || null;
+    
+    // Prioritas: PPPoE username > genieacs_tag > phone
     const searchTokens = [
-      customer.genieacs_tag, 
-      customer.pppoe_username, 
+      customer.pppoe_username,
+      customer.genieacs_tag,
       customer.phone
     ].filter(Boolean);
 
     // Cari secara paralel dengan allSettled untuk tidak blocking jika ada error
     const results = await Promise.allSettled(searchTokens.map(async (token) => {
-      let d = await customerDevice.findDeviceByTag(token);
-      if (!d) d = await customerDevice.findDeviceByPppoe(token);
+      let d = await customerDevice.findDeviceByPppoe(token); // Prioritas PPPoE
+      if (!d) d = await customerDevice.findDeviceByTag(token);
       if (!d) {
         const variants = await customerDevice.findDeviceWithTagVariants(token);
         if (variants) d = variants.device;
@@ -1455,7 +1454,11 @@ router.post('/login', async (req, res) => {
     device = results.find(r => r.status === 'fulfilled' && r.value !== null)?.value;
     if (device) {
       logger.info('[Login] Perangkat terdeteksi di GenieACS (matched).');
-      effectiveTag = device._id;
+      // Extract PPPoE username from device if not in customer data
+      if (!pppoeUsername && device.pppoeUsername) {
+        pppoeUsername = device.pppoeUsername;
+        logger.info(`[Login] PPPoE username dari device: ${pppoeUsername}`);
+      }
     }
   }
 
@@ -1464,7 +1467,9 @@ router.post('/login', async (req, res) => {
     const directResult = await customerDevice.findDeviceWithTagVariants(phone);
     if (directResult) {
       device = directResult.device;
-      effectiveTag = directResult.canonicalTag;
+      if (device.pppoeUsername) {
+        pppoeUsername = device.pppoeUsername;
+      }
       logger.info('[Login] Perangkat ditemukan secara langsung di GenieACS (fallback).');
     }
   }
@@ -1473,8 +1478,8 @@ router.post('/login', async (req, res) => {
   if (!device && !customer) {
     logger.warn('[Login] Gagal: pelanggan tidak ditemukan.');
     const packages = customerSvc.getAllPackages().filter(p => p.is_active !== 0);
-    return res.render('login', { 
-      error: 'Data pelanggan tidak ditemukan. Pastikan nomor WhatsApp sudah benar.', 
+    return res.render('login', {
+      error: 'Data pelanggan tidak ditemukan. Pastikan nomor WhatsApp sudah benar.',
       settings,
       packages
     });
@@ -1487,15 +1492,15 @@ router.post('/login', async (req, res) => {
   const loginTime = Date.now() - startTime;
   logger.info(`[Login] Proses login selesai dalam ${loginTime}ms`);
 
-  // --- OTP LOGIC --- (Hanya jika perangkat ditemukan)
+  // --- OTP LOGIC ---
   if (settings.login_otp_enabled) {
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const expiry = Date.now() + 5 * 60 * 1000; // 5 menit
     
     // Simpan ke session sementara
     req.session.pending_login = {
-      phone: phone,
-      effectiveTag: effectiveTag,
+      phone: customerPhone,
+      pppoeUsername: pppoeUsername,
       otp: otp,
       expiry: expiry
     };
@@ -1512,7 +1517,7 @@ router.post('/login', async (req, res) => {
         }
 
         const msg = `🛡️ *KODE VERIFIKASI (OTP)*\n\nKode Anda adalah: *${otp}*\n\nJangan berikan kode ini kepada siapapun. Kode berlaku selama 5 menit.`;
-        const sent = await sendWA(phone, msg);
+        const sent = await sendWA(customerPhone, msg);
         
         if (!sent) {
           throw new Error('Gagal mengirim kode OTP melalui WhatsApp. Pastikan nomor Anda terdaftar di WhatsApp.');
@@ -1531,7 +1536,8 @@ router.post('/login', async (req, res) => {
 
   // --- DIRECT LOGIN ---
   logger.info('[Login] Login direct berhasil.');
-  req.session.phone = effectiveTag;
+  req.session.phone = customerPhone; // Nomor telepon untuk findCustomerByAny()
+  req.session.pppoe_username = pppoeUsername; // PPPoE username untuk GenieACS & MikroTik
   if (customer && customer.status === 'suspended') {
     return res.redirect('/isolated');
   }
@@ -1559,7 +1565,8 @@ router.post('/login-otp', (req, res) => {
 
   if (otp === pending.otp) {
     logger.info('[Login] OTP berhasil diverifikasi.');
-    req.session.phone = pending.effectiveTag;
+    req.session.phone = pending.phone; // Nomor telepon customer
+    req.session.pppoe_username = pending.pppoeUsername; // PPPoE username untuk GenieACS & MikroTik
     delete req.session.pending_login;
     const custAfterOtp = customerSvc.findCustomerByAny(pending.phone);
     if (custAfterOtp && custAfterOtp.status === 'suspended') {
@@ -1590,7 +1597,7 @@ router.use((req, res, next) => {
 
 router.get('/dashboard', async (req, res) => {
   // Debug logging
-  logger.info(`[Dashboard] Session ID: ${req.sessionID}, Phone: ${req.session?.phone || 'TIDAK ADA'}`);
+  logger.info(`[Dashboard] Session ID: ${req.sessionID}, Phone: ${req.session?.phone || 'TIDAK ADA'}, PPPoE: ${req.session?.pppoe_username || 'TIDAK ADA'}`);
   
   const loginId = req.session && req.session.phone;
   if (!loginId) return res.redirect('/customer/login');
@@ -1602,8 +1609,9 @@ router.get('/dashboard', async (req, res) => {
     delete req.session._msg;
   }
   
-  // Data dari GenieACS
-  const deviceData = await getCustomerDeviceData(loginId);
+  // Data dari GenieACS - use PPPoE username if available, fallback to phone
+  const pppoeUsername = req.session.pppoe_username || loginId;
+  const deviceData = await getCustomerDeviceData(pppoeUsername);
   
   // Data dari Billing DB (Coba cari pakai loginId atau pppoeUsername)
   let searchToken = loginId;

@@ -308,11 +308,29 @@ function findCustomerByAny(val) {
     if (p1) return getCustomerById(p1.id);
   }
 
-  // 2. Try GenieACS Tag, PPPoE Username, atau MAC Address (Exact Match)
-  const t = db.prepare('SELECT id FROM customers WHERE genieacs_tag = ? OR pppoe_username = ? OR mac_address = ?').get(cleanVal, cleanVal, cleanVal);
-  if (t) return getCustomerById(t.id);
+  // 2. Try GenieACS Tag (Exact Match)
+  const byTag = db.prepare('SELECT id FROM customers WHERE genieacs_tag = ?').get(cleanVal);
+  if (byTag) return getCustomerById(byTag.id);
 
-  // 3. Try ID if numeric
+  // 3. Try PPPoE Username (Exact Match)
+  const byPppoe = db.prepare('SELECT id FROM customers WHERE pppoe_username = ?').get(cleanVal);
+  if (byPppoe) return getCustomerById(byPppoe.id);
+
+  // 4. Try MAC Address (Exact Match or Partial Match for ONU MAC format)
+  // Handle ONU MAC format like: F4B5AA-ZXHN%20F477-01FFFFFFFF011FFF23F4B5AA7D806FBA
+  const byMac = db.prepare('SELECT id FROM customers WHERE mac_address = ?').get(cleanVal);
+  if (byMac) return getCustomerById(byMac.id);
+  
+  // Try partial MAC match (first part before dash for ONU format)
+  if (cleanVal.includes('-')) {
+    const macPrefix = cleanVal.split('-')[0];
+    if (macPrefix.length >= 6) {
+      const byMacPrefix = db.prepare('SELECT id FROM customers WHERE mac_address LIKE ?').get(`${macPrefix}%`);
+      if (byMacPrefix) return getCustomerById(byMacPrefix.id);
+    }
+  }
+
+  // 5. Try ID if numeric
   if (/^\d+$/.test(cleanVal) && cleanVal.length < 8) {
     const c = getCustomerById(parseInt(cleanVal));
     if (c) return c;

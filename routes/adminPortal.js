@@ -3626,9 +3626,21 @@ router.get('/api/mikrotik/users', requireAdmin, async (req, res) => {
 
 // ─── MIKROTIK MONITORING ───────────────────────────────────────────────────
 router.get('/mikrotik', requireAdminSession, requireSidebarMenuAccess('mikrotik'), (req, res) => {
-  const routers = mikrotikService.getAllRouters();
+  // Hanya gunakan router dari settings.json (tidak dari database)
+  const settings = getSettings();
+  const router = {
+    id: null, // null = router dari settings.json
+    name: 'MikroTik (settings.json)',
+    host: settings.mikrotik_host || '',
+    user: settings.mikrotik_user || '',
+    port: settings.mikrotik_port || 8728,
+    is_active: true
+  };
+  
+  const routers = [router]; // Hanya 1 router
+  
   res.render('admin/mikrotik', {
-    title: 'Monitoring MikroTik', company: company(), activePage: 'mikrotik', 
+    title: 'Monitoring MikroTik', company: company(), activePage: 'mikrotik',
     routers, msg: flashMsg(req)
   });
 });
