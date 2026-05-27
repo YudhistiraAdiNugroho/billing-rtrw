@@ -12,7 +12,7 @@ const dbPath = path.join(dbDir, 'billing.db');
 
 let db;
 try {
-  db = new Database(dbPath);
+  db = new Database(dbPath, { timeout: 5000 });
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
