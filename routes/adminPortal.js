@@ -3,6 +3,11 @@
  */
 const express = require('express');
 const router = express.Router();
+
+const oltRoutes = require('./admin/olts');
+const mapRoutes = require('./admin/maps');
+const authRoutes = require('./admin/auth');
+
 const { getSetting, getSettings, saveSettings, getNowLocal, getCurrentDateInTimezone, getCurrentTimeInfo, getNowLocalISO, formatDateLocal } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
@@ -212,18 +217,7 @@ async function invokeRouterOsMenuCommand(menu, command, args) {
 }
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────
-function requireAdmin(req, res, next) {
-  if (req.session?.isAdmin || req.session?.isCashier) return next();
-  const adminKey = getSetting('admin_api_key', '');
-  const providedKey = req.headers['x-admin-key'] || req.query.key;
-  if (adminKey && providedKey === adminKey) return next();
-  return res.status(401).json({ error: 'Unauthorized - Admin/Staff access required' });
-}
-
-function requireAdminSession(req, res, next) {
-  if (req.session?.isAdmin || req.session?.isCashier) return next();
-  return res.redirect('/admin/login');
-}
+const { requireAdmin, requireAdminSession, restrictToAdmin } = require('./admin/auth');
 
 function resolvePaidByName(req, fallback) {
   const fb = String(fallback || '').trim();
@@ -252,12 +246,6 @@ async function trySendWhatsappPayment(customerPhone, message) {
   }
 }
 
-// Middleware strictly for Admin
-function restrictToAdmin(req, res, next) {
-  if (req.session?.isAdmin) return next();
-  req.session._msg = { type: 'error', text: 'Hanya Admin yang dapat mengakses halaman ini.' };
-  return res.redirect('/admin');
-}
 
 function company() { return getSetting('company_header', 'ISP Admin'); }
 
@@ -531,298 +519,13 @@ router.use((req, res, next) => {
   next();
 });
 
-// ─── AUTH ROUTES ───────────────────────────────────────────────────────────
-router.get('/login', (req, res) => {
-  if (req.session?.isAdmin || req.session?.isCashier) return res.redirect('/admin');
-  res.render('admin/login', { title: 'Admin Login', company: company(), error: null });
-});
+// Mount modular sub-routers after global locals middleware so that res.locals variables are populated
+router.use('/olts', oltRoutes);
+router.use('/map', mapRoutes);
+router.use('/api', mapRoutes);
+router.use('/', authRoutes.router);
 
-router.post('/login', express.urlencoded({ extended: true }), (req, res) => {
-  const { username, password } = req.body;
-  if (username === getSetting('admin_username', 'admin') && password === getSetting('admin_password', 'admin123')) {
-    req.session.isAdmin = true;
-    req.session.adminUser = username;
-    return res.redirect('/admin');
-  }
-  
-  // Check Cashier
-  const cashier = adminSvc.authenticateCashier(username, password);
-  if (cashier) {
-    req.session.isCashier = true;
-    req.session.cashierId = cashier.id;
-    req.session.cashierName = cashier.name;
-    req.session.cashierUsername = cashier.username;
-    return res.redirect('/admin');
-  }
 
-  res.render('admin/login', { title: 'Admin Login', company: company(), error: 'Username atau password salah' });
-});
-
-router.get('/logout', (req, res) => { req.session.destroy(); res.redirect('/admin/login'); });
-
-// ─── OLT MANAGEMENT ────────────────────────────────────────────────────────
-router.get('/olts', requireAdminSession, async (req, res) => {
-  const olts = oltSvc.getAllOlts();
-  
-  res.render('admin/olts', { 
-    title: 'Manajemen OLT', 
-    company: company(), 
-    activePage: 'olts', 
-    olts, 
-    msg: flashMsg(req) 
-  });
-});
-
-router.get('/olts/:id/stats', requireAdminSession, async (req, res) => {
-  try {
-    const stats = await oltSvc.getOltStats(req.params.id, req.query.full === 'true');
-    res.json(stats);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.post('/olts/:id/onu/:index/reboot', requireAdminSession, restrictToAdmin, async (req, res) => {
-  try {
-    await oltSvc.rebootOnu(req.params.id, req.params.index);
-    res.json({ success: true, message: 'Perintah reboot berhasil dikirim.' });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.post('/olts/:id/onu/:index/rename', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), async (req, res) => {
-  try {
-    const { name } = req.body;
-    if (!name) throw new Error('Nama tidak boleh kosong');
-    await oltSvc.renameOnu(req.params.id, req.params.index, name);
-    res.json({ success: true, message: 'Nama ONU berhasil diubah.' });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.post('/olts/:id/onu/authorize', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), async (req, res) => {
-  try {
-    const output = await oltSvc.authorizeOnu(req.params.id, req.body);
-    res.json({ success: true, message: 'Otorisasi berhasil.', output });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.post('/olts/:id/onu/configure-wan', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), async (req, res) => {
-  try {
-    const { method, sn } = req.body;
-    let output;
-    if (method === 'tr069') {
-      output = await oltSvc.configureWanViaAcs(sn, req.body);
-    } else {
-      output = await oltSvc.configureOnuWan(req.params.id, req.body);
-    }
-    res.json({ success: true, message: 'Konfigurasi WAN berhasil.', output });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.post('/olts', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
-  try {
-    oltSvc.createOlt(req.body);
-    req.session._msg = { type: 'success', text: 'OLT berhasil ditambahkan.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
-  }
-  res.redirect('/admin/olts');
-});
-
-router.post('/olts/:id/update', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
-  try {
-    oltSvc.updateOlt(req.params.id, req.body);
-    req.session._msg = { type: 'success', text: 'OLT berhasil diperbarui.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
-  }
-  res.redirect('/admin/olts');
-});
-
-router.post('/olts/:id/delete', requireAdminSession, restrictToAdmin, (req, res) => {
-  try {
-    oltSvc.deleteOlt(req.params.id);
-    req.session._msg = { type: 'success', text: 'OLT berhasil dihapus.' };
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
-  }
-  res.redirect('/admin/olts');
-});
-
-// ─── ODP & MAP MANAGEMENT ───────────────────────────────────────────────────
-router.get('/map', requireAdminSession, requireSidebarMenuAccess('map'), (req, res) => {
-  const customers = customerSvc.getAllCustomers();
-  const odps = odpSvc.getAllOdps();
-  
-  res.render('admin/map', { 
-    title: 'Peta Jaringan', 
-    company: company(), 
-    activePage: 'map', 
-    customers, 
-    odps,
-    msg: flashMsg(req),
-    settings: getSettings()
-  });
-});
-
-router.get('/api/customers/:id/pppoe-traffic', requireAdminSession, async (req, res) => {
-  const customerId = Number(req.params.id);
-  if (!customerId) return res.status(400).json({ ok: false, error: 'invalid_customer' });
-
-  const customer = customerSvc.getCustomerById(customerId);
-  if (!customer) return res.status(404).json({ ok: false, error: 'not_found' });
-
-  const routerId = customer.router_id ? Number(customer.router_id) : null;
-  const username = String(customer.pppoe_username || '').trim();
-
-  if (!routerId || !username) {
-    return res.json({ ok: true, available: false, online: false, username: username || null, rxMbps: 0, txMbps: 0 });
-  }
-
-  const now = Date.now();
-  prunePppoeTrafficSamples(now);
-
-  let conn = null;
-  try {
-    conn = await mikrotikService.getConnection(routerId);
-    const sessions = await conn.client.menu('/ppp/active').where('name', username).get();
-    if (!sessions || sessions.length === 0) {
-      return res.json({ ok: true, available: true, online: false, username, rxMbps: 0, txMbps: 0 });
-    }
-
-    const s = sessions[0];
-    let iface = strField(s, ['interface', 'interface-name', 'interfaceName', 'ifname', 'if-name', 'pppInterface']) || null;
-    const baseSessionId = strField(s, ['.id', 'id', 'sessionId', 'session-id']) || `${username}`;
-    const bytesIn = numField(s, ['bytesIn', 'bytes-in', 'bytes_in']);
-    const bytesOut = numField(s, ['bytesOut', 'bytes-out', 'bytes_out']);
-    const uptime = strField(s, ['uptime']) || null;
-
-    if (!iface) {
-      try {
-        const pppoeSrvMenu = conn.client.menu('/interface/pppoe-server');
-        let pppoeRows = [];
-        try {
-          pppoeRows = await pppoeSrvMenu.where('user', username).get();
-        } catch {
-          pppoeRows = await pppoeSrvMenu.get();
-        }
-        const hit = (Array.isArray(pppoeRows) ? pppoeRows : []).find(r => String(r.user || r['user'] || '').trim() === username);
-        const ifaceName = strField(hit, ['name']);
-        if (ifaceName) iface = ifaceName;
-      } catch {}
-    }
-
-    const sessionId = `${baseSessionId}${iface ? `|${iface}` : ''}`;
-
-    const key = `${routerId || 'default'}:${username}`;
-    const prev = pppoeTrafficSamples.get(key);
-    let rxBytes = bytesIn;
-    let txBytes = bytesOut;
-    let source = 'ppp-active';
-
-    if (iface) {
-      const ifMenu = conn.client.menu('/interface');
-      if (ifMenu) {
-        try {
-          const mtRaw = await invokeRouterOsMenuCommand(ifMenu, 'monitor-traffic', { interface: iface, once: '' });
-          const mt = Array.isArray(mtRaw) ? mtRaw[0] : mtRaw;
-          const rxBps = numField(mt, ['rxBitsPerSecond', 'rx-bits-per-second', 'rx-bits-per-second']);
-          const txBps = numField(mt, ['txBitsPerSecond', 'tx-bits-per-second', 'tx-bits-per-second']);
-          if (rxBps || txBps) {
-            return res.json({
-              ok: true,
-              available: true,
-              online: true,
-              username,
-              iface,
-              source: 'monitor-traffic',
-              uptime,
-              rxMbps: (Number(rxBps) || 0) / 1e6,
-              txMbps: (Number(txBps) || 0) / 1e6
-            });
-          }
-        } catch {}
-      }
-    }
-
-    if (iface) {
-      try {
-        const ifRows = await conn.client.menu('/interface').where('name', iface).get();
-        if (ifRows && ifRows.length > 0) {
-          const row = ifRows[0];
-          const ifRx = numField(row, ['rxByte', 'rx-byte', 'rx-bytes', 'rxBytes']);
-          const ifTx = numField(row, ['txByte', 'tx-byte', 'tx-bytes', 'txBytes']);
-          if (ifRx || ifTx) {
-            rxBytes = ifRx;
-            txBytes = ifTx;
-            source = 'interface';
-          }
-        }
-      } catch {}
-    }
-
-    pppoeTrafficSamples.set(key, { t: now, sessionId, rxBytes, txBytes, source });
-
-    if (!prev || prev.sessionId !== sessionId || !prev.t) {
-      return res.json({
-        ok: true,
-        available: true,
-        online: true,
-        warmup: true,
-        username,
-        iface,
-        source,
-        uptime,
-        rxMbps: 0,
-        txMbps: 0
-      });
-    }
-
-    const dtMs = Math.max(1, now - prev.t);
-    const dIn = rxBytes - numField(prev, ['rxBytes']);
-    const dOut = txBytes - numField(prev, ['txBytes']);
-    if (dIn < 0 || dOut < 0) {
-      return res.json({
-        ok: true,
-        available: true,
-        online: true,
-        warmup: true,
-        username,
-        iface,
-        source,
-        uptime,
-        rxMbps: 0,
-        txMbps: 0
-      });
-    }
-
-    const rxMbps = (dIn * 8) / (dtMs / 1000) / 1e6;
-    const txMbps = (dOut * 8) / (dtMs / 1000) / 1e6;
-
-    return res.json({
-      ok: true,
-      available: true,
-      online: true,
-      username,
-      iface,
-      source,
-      uptime,
-      rxMbps: Number.isFinite(rxMbps) ? rxMbps : 0,
-      txMbps: Number.isFinite(txMbps) ? txMbps : 0
-    });
-  } catch (e) {
-    return res.json({ ok: false, error: e.message || 'failed' });
-  } finally {
-    if (conn && conn.api) conn.api.close();
-  }
-});
 
 router.post('/api/customers/:id/cable-path', requireAdminSession, (req, res) => {
   try {

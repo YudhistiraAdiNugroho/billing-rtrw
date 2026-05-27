@@ -488,15 +488,19 @@ async function getPppoeSecrets(routerId = null) {
     // Use proplist to only fetch needed fields for better performance
     let rows;
     try {
-      rows = await withTimeout(
+      const allRows = await withTimeout(
         conn.api.send([
           '/ppp/secret/print',
-          '?service=pppoe', // Only get PPPoE service
           '=.proplist=.id,name,profile,local-address,remote-address,disabled,service'
         ]),
         25000, // Increased timeout to 25s for very slow routers
         'getPppoeSecrets'
       );
+      // Filter only pppoe service, 'any', or empty service
+      rows = Array.isArray(allRows) ? allRows.filter(r => {
+        const svc = String(r?.service || '').toLowerCase();
+        return svc === 'pppoe' || svc === 'any' || !svc || svc === 'unknown';
+      }) : [];
     } catch (timeoutErr) {
       // Fallback: try without proplist if timeout occurs
       logger.warn(`[MikroTik] Timeout with proplist, trying full query: ${timeoutErr.message}`);
@@ -508,7 +512,7 @@ async function getPppoeSecrets(routerId = null) {
       // Filter only pppoe service
       rows = Array.isArray(allRows) ? allRows.filter(r => {
         const svc = String(r?.service || '').toLowerCase();
-        return svc === 'pppoe' || svc === 'any' || !svc;
+        return svc === 'pppoe' || svc === 'any' || !svc || svc === 'unknown';
       }) : [];
     }
     const mapped = Array.isArray(rows) ? rows.map(augmentRow) : [];
@@ -610,11 +614,11 @@ async function getPppoeActive(routerId = null) {
   try {
     conn = await getConnection(routerId);
     // Use proplist to only fetch needed fields for better performance
-    let rows;
     try {
       rows = await withTimeout(
         conn.api.send([
           '/ppp/active/print',
+          '?service=pppoe',
           '=.proplist=.id,name,address,uptime,caller-id,service'
         ]),
         15000, // Increased timeout to 15s
@@ -624,14 +628,18 @@ async function getPppoeActive(routerId = null) {
       // Fallback: try without proplist if timeout occurs
       logger.warn(`[MikroTik] Timeout with proplist for active PPPoE, trying full query: ${timeoutErr.message}`);
       rows = await withTimeout(
-        conn.client.menu('/ppp/active').get(),
+        conn.client.menu('/ppp/active').where('service', 'pppoe').get(),
         20000, // 20 second timeout for fallback
         'getPppoeActive-fallback'
       );
     }
     const mapped = Array.isArray(rows) ? rows.map(augmentRow) : [];
-    setCachedList(ck, mapped);
-    return mapped;
+    const filtered = mapped.filter(r => {
+      const svc = String(r?.service || '').toLowerCase();
+      return svc === 'pppoe';
+    });
+    setCachedList(ck, filtered);
+    return filtered;
   } catch (e) {
     logger.error('Error getting active PPPoE sessions:', e);
     // Return cached data if available, even if expired
