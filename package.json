@@ -5,7 +5,9 @@
   "main": "app-customer.js",
   "scripts": {
     "start": "node app-customer.js",
-    "dev": "nodemon app-customer.js"
+    "dev": "nodemon app-customer.js",
+    "postinstall": "echo 'Install complete. If you used sudo, run: sudo chown -R $USER:$USER .'",
+    "fix-permissions": "sudo chown -R $USER:$USER ."
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.21",
@@ -25,7 +27,6 @@
     "pino": "^9.6.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "ros-client": "^1.1.2",
     "routeros-client": "^1.1.1",
     "ssh2": "^1.15.0",
     "winston": "^3.8.2",

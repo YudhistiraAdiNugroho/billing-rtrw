@@ -767,9 +767,9 @@ function startServer(portToUse) {
             // Update global.appSettings.port dengan port yang berhasil digunakan
             global.appSettings.port = portToUse.toString();
             
-            // Start voucher cache warmer untuk pre-load profiles dari MikroTik
-            const voucherCacheWarmer = require('./services/voucherCacheWarmer');
-            voucherCacheWarmer.startCacheWarming();
+            // Voucher cache warmer dinonaktifkan — halaman voucher sekarang direct query ke MikroTik
+            // const voucherCacheWarmer = require('./services/voucherCacheWarmer');
+            // voucherCacheWarmer.startCacheWarming();
         }).on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
                 logger.warn(`PERINGATAN: Port ${portToUse} sudah digunakan, mencoba port alternatif...`);
@@ -784,9 +784,9 @@ function startServer(portToUse) {
                     // Update global.appSettings.port dengan port yang berhasil digunakan
                     global.appSettings.port = alternativePort.toString();
                     
-                    // Start voucher cache warmer untuk pre-load profiles dari MikroTik
-                    const voucherCacheWarmer = require('./services/voucherCacheWarmer');
-                    voucherCacheWarmer.startCacheWarming();
+                    // Voucher cache warmer dinonaktifkan — halaman voucher sekarang direct query ke MikroTik
+                    // const voucherCacheWarmer = require('./services/voucherCacheWarmer');
+                    // voucherCacheWarmer.startCacheWarming();
                 }).on('error', (altErr) => {
                     logger.error(`ERROR: Gagal memulai server pada port alternatif ${alternativePort}:`, altErr.message);
                     process.exit(1);

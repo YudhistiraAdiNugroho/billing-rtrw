@@ -21,11 +21,9 @@ function parseMikhmonOnLogin(script) {
   if (!script) return null;
   const s = String(script).trim();
 
-  // Format: :put (",rem,COST,VALIDITY,PRICE,...)
+  // Format 1: :put (",rem,COST,VALIDITY,PRICE,...)
   // Support ROS6 dan ROS7 (script bisa berbeda struktur)
-
   // Cari pattern :put (",rem, ... , ... , ...
-  // Bisa ada di mana saja dalam script
   // Updated regex untuk support format: :put (",rem,4000,2d,5000,,Disable,");
   const putMatch = s.match(/:\s*put\s*\(\s*[",]rem[",]?\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/i);
   if (putMatch) {
@@ -39,7 +37,29 @@ function parseMikhmonOnLogin(script) {
     }
   }
 
-  // Fallback: split by comma (untuk format lama)
+  // Format 2: $HARGA^VALIDITAS (shorthand Mikhmon v2 / custom)
+  // Contoh: $5000^1d atau $10000^7d
+  const shortMatch = s.match(/\$(\d+)\^([\w]+)/i);
+  if (shortMatch) {
+    const price = Number(shortMatch[1]) || 0;
+    const validity = String(shortMatch[2] || '').trim();
+    if (price > 0 && validity) {
+      return { price, validity, cost: 0 };
+    }
+  }
+
+  // Format 3: HARGA^VALIDITAS (tanpa dollar, untuk script custom)
+  // Contoh: 5000^1d atau 10000^7d dalam on-login
+  const bareMatch = s.match(/(?:^|[\s,;])(\d{3,})\^([\d]+[dhwm])/i);
+  if (bareMatch) {
+    const price = Number(bareMatch[1]) || 0;
+    const validity = String(bareMatch[2] || '').trim();
+    if (price > 0 && validity) {
+      return { price, validity, cost: 0 };
+    }
+  }
+
+  // Format 4: Fallback split by comma (untuk format lama)
   const parts = s.split(',').map(p => String(p).trim());
   let remIdx = -1;
   for (let i = 0; i < parts.length; i++) {

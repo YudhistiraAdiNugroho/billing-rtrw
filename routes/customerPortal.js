@@ -187,6 +187,20 @@ function genRandomCode(length = 6) {
   return out;
 }
 
+function genCustomCode(len, charset) {
+  const n = Math.max(4, Math.min(16, Number(len) || 6));
+  let chars = '0123456789';
+  if (charset === 'letters') chars = 'abcdefghjkmnpqrstuvwxyz';
+  else if (charset === 'mixed') chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    out += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  if (charset === 'numbers' && out[0] === '0') out = '1' + out.slice(1);
+  return out;
+}
+
+
 function isEnabledFlag(v) {
   return v === true || v === 'true' || v === 1 || v === '1';
 }
@@ -786,6 +800,11 @@ router.get('/check-billing', async (req, res) => {
   });
 });
 
+// Simpan hasil query profile terakhir yang berhasil (last-known-good)
+// Dipakai sebagai fallback jika MikroTik timeout/gagal sesaat
+// Bukan cache permanen — hilang saat server restart
+let _voucherLastGoodProfiles = null;
+
 router.get('/voucher', async (req, res) => {
   const settings = getSettingsWithCache();
   const error = String(req.query.err || '').trim() || null;
@@ -796,6 +815,20 @@ router.get('/voucher', async (req, res) => {
     const name = String(profileName || '').trim();
     if (!name) return null;
     try {
+      // ── Cek voucher_packages ──────────────────
+      const pkgRow = db.prepare(`
+        SELECT price, validity
+        FROM voucher_packages
+        WHERE router_id IS ? AND profile_name = ? AND is_active = 1
+        LIMIT 1
+      `).get(rid, name);
+      if (pkgRow) {
+        const price = Number(pkgRow.price || 0) || 0;
+        const validity = String(pkgRow.validity || '').trim();
+        if (price > 0) return { price, validity };
+      }
+
+      // ── Fallback: voucher_batches ──────────────────
       const row = db.prepare(`
         SELECT price, validity
         FROM voucher_batches
@@ -814,133 +847,119 @@ router.get('/voucher', async (req, res) => {
   };
 
   /**
-   * Ambil voucher profiles — OPTIMASI: cek cache dulu, fallback live query
-   * Cache di-isi oleh voucherCacheWarmer.js setiap 3 menit
+   * Ambil voucher profiles — LANGSUNG dari database lokal (voucher_batches).
+   * Tidak perlu koneksi ke MikroTik. Instan < 1ms karena SQLite lokal.
+   * Profile dengan nama 'default' difilter otomatis.
    */
-  const VOUCHER_PROFILES_CACHE_KEY = 'voucher_profiles_cache';
-  const VOUCHER_PROFILES_CACHE_TTL = 5 * 60 * 1000; // 5 menit
-
   const getVoucherProfiles = async () => {
     try {
-      // 1. Cek global cache dari VoucherCacheWarmer
-      const cached = global[VOUCHER_PROFILES_CACHE_KEY];
-      if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
-        const age = Date.now() - Number(cached.timestamp || 0);
-        if (age < VOUCHER_PROFILES_CACHE_TTL) {
-          logger.debug(`[Voucher] Using cached profiles (${cached.data.length} profiles, age ${Math.round(age/1000)}s)`);
-          return cached.data;
+      // ── SUMBER UTAMA: voucher_packages di SQLite lokal ──────────────────
+      const activePackages = db.prepare(`
+        SELECT router_id, profile_name, price, validity
+        FROM voucher_packages
+        WHERE is_active = 1
+          AND LOWER(TRIM(profile_name)) != 'default'
+        ORDER BY price ASC
+      `).all();
+
+      if (activePackages.length > 0) {
+        const profiles = activePackages.map(row => ({
+          name: String(row.profile_name || '').trim(),
+          price: Number(row.price || 0),
+          validity: String(row.validity || '-').trim() || '-',
+          router_id: row.router_id ?? null
+        })).filter(p => p.name && p.price > 0);
+
+        logger.info(`[Voucher] DB-first: ${profiles.length} profile dari voucher_packages`);
+        if (profiles.length > 0) {
+          _voucherLastGoodProfiles = profiles;
+          return profiles;
         }
-        logger.info('[Voucher] Cache expired, falling back to live query');
       }
 
-      // 2. Cache miss/expired — query MikroTik live (dengan timeout 4 detik)
+      // ── FALLBACK 1: voucher_batches di SQLite lokal ──────────────────
+      // Ambil profile unik dengan harga terbaru (id MAX per profile_name)
+      // Filter: price > 0 dan bukan nama 'default'
+      const dbRows = db.prepare(`
+        SELECT router_id, profile_name, price, validity
+        FROM voucher_batches
+        WHERE price > 0
+          AND LOWER(TRIM(profile_name)) != 'default'
+        GROUP BY profile_name
+        HAVING id = MAX(id)
+        ORDER BY price ASC
+      `).all();
+
+      if (dbRows.length > 0) {
+        const profiles = dbRows.map(row => ({
+          name: String(row.profile_name || '').trim(),
+          price: Number(row.price || 0),
+          validity: String(row.validity || '-').trim() || '-',
+          router_id: row.router_id ?? null
+        })).filter(p => p.name && p.price > 0);
+
+        logger.info(`[Voucher] Fallback: ${profiles.length} profile dari voucher_batches`);
+
+        if (profiles.length > 0) {
+          _voucherLastGoodProfiles = profiles;
+          return profiles;
+        }
+      }
+
+      logger.warn('[Voucher] voucher_batches kosong atau tidak ada harga — coba last-known-good');
+
+      // ── FALLBACK: last-known-good dari query sebelumnya ────────────────
+      if (_voucherLastGoodProfiles && _voucherLastGoodProfiles.length > 0) {
+        return _voucherLastGoodProfiles;
+      }
+
+      // ── LAST RESORT: coba MikroTik dengan timeout singkat 3 detik ──────
+      logger.warn('[Voucher] Fallback ke MikroTik (last resort)...');
       const mikrotikHost = settings.mikrotik_host;
       const mikrotikUser = settings.mikrotik_user;
       const mikrotikPassword = settings.mikrotik_password;
+      if (!mikrotikHost || !mikrotikUser || !mikrotikPassword) return [];
 
-      if (!mikrotikHost || !mikrotikUser || !mikrotikPassword) {
-        logger.error('[Voucher] MikroTik settings not configured in settings.json');
-        return [];
-      }
+      const routers = mikrotikService.getAllRouters().filter(r => r.is_active);
+      const routerList = routers.length > 0 ? routers : [{ id: null, name: 'default' }];
 
-      logger.info(`[Voucher] Live querying MikroTik (cache miss)...`);
+      const mikrotikResults = await Promise.allSettled(
+        routerList.map(r =>
+          Promise.race([
+            mikrotikService.getHotspotUserProfiles(r.id),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+          ])
+        )
+      );
 
-      let profiles;
-      try {
-        profiles = await Promise.race([
-          mikrotikService.getHotspotUserProfiles(null),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout 4s')), 4000))
-        ]);
-      } catch (e) {
-        logger.warn('[Voucher] MikroTik live query timeout/error: ' + e.message);
-        // Jika timeout, coba return cache lama (stale) daripada kosong
-        if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
-          logger.info(`[Voucher] Returning stale cache (${cached.data.length} profiles) due to MikroTik error`);
-          return cached.data;
-        }
-        return [];
-      }
-
-      if (!Array.isArray(profiles) || profiles.length === 0) {
-        logger.warn('[Voucher] No profiles found from MikroTik');
-        return [];
-      }
-
-      logger.info(`[Voucher] Found ${profiles.length} raw profiles from MikroTik`);
-
-      // 3. Load configured prices dari voucher_batches (DB fallback)
-      let configuredPrices = new Map();
-      try {
-        const rows = db.prepare(`
-          SELECT router_id, profile_name, price, validity
-          FROM voucher_batches
-          WHERE price > 0
-          GROUP BY router_id, profile_name
-          HAVING id = MAX(id)
-        `).all();
-        for (const row of rows) {
-          const key = `${row.router_id}_${row.profile_name}`;
-          configuredPrices.set(key, { price: row.price, validity: row.validity });
-        }
-      } catch (e) {
-        logger.warn('[Voucher] Error loading configured prices: ' + e.message);
-      }
-
-      // 4. Parse dan filter profiles
-      const validProfiles = [];
-      for (const p of profiles) {
-        const name = String(p?.name || '').trim();
-        if (!name) continue;
-
-        const onLogin = String(p?.onLogin || p?.['on-login'] || '').trim();
-        const meta = parseMikhmonOnLogin(onLogin);
-
-        let price = Number(meta?.price || 0) || 0;
-        let validity = String(meta?.validity || '').trim();
-
-        // Fallback ke voucher_batches jika tidak ada metadata Mikhmon
-        if (price <= 0 || !validity) {
-          const key = `null_${name}`;
-          const configured = configuredPrices.get(key);
-          if (configured) {
-            price = Number(configured.price || 0) || 0;
-            validity = String(configured.validity || '').trim();
+      const bestByName = new Map();
+      for (let i = 0; i < mikrotikResults.length; i++) {
+        const result = mikrotikResults[i];
+        if (result.status !== 'fulfilled' || !Array.isArray(result.value)) continue;
+        for (const p of result.value) {
+          const name = String(p?.name || '').trim();
+          if (!name || name.toLowerCase() === 'default') continue;
+          const meta = parseMikhmonOnLogin(String(p?.onLogin || p?.['on-login'] || ''));
+          const price = Number(meta?.price || 0) || 0;
+          const validity = String(meta?.validity || '').trim();
+          if (price <= 0) continue;
+          if (!bestByName.has(name) || price < Number(bestByName.get(name).price || 0)) {
+            bestByName.set(name, { name, price, validity: validity || '-', router_id: routerList[i].id ?? null });
           }
         }
-
-        if (price > 0) {
-          validProfiles.push({
-            name: name,
-            price: price,
-            validity: validity || '-',
-            router_id: null
-          });
-        } else {
-          logger.debug(`[Voucher] Skipped profile "${name}" - no price (onLogin: ${onLogin || 'empty'})`);
-        }
       }
 
-      logger.info(`[Voucher] ${validProfiles.length} profiles with valid price data`);
-
-      // Sort by price dan simpan ke cache (agar request berikutnya cepat)
-      const sorted = validProfiles.sort((a, b) => a.price - b.price);
-      global[VOUCHER_PROFILES_CACHE_KEY] = {
-        data: sorted,
-        timestamp: Date.now()
-      };
-
-      return sorted;
+      const fallback = Array.from(bestByName.values()).sort((a, b) => a.price - b.price);
+      if (fallback.length > 0) _voucherLastGoodProfiles = fallback;
+      logger.info(`[Voucher] MikroTik fallback: ${fallback.length} profile`);
+      return fallback;
 
     } catch (e) {
-      logger.error('[Voucher] Error loading profiles: ' + e.message);
-      // Last resort: return stale cache
-      const stale = global[VOUCHER_PROFILES_CACHE_KEY];
-      if (stale && stale.data && Array.isArray(stale.data) && stale.data.length > 0) {
-        return stale.data;
-      }
-      return [];
+      logger.error('[Voucher] Error getVoucherProfiles: ' + e.message);
+      return _voucherLastGoodProfiles || [];
     }
   };
+
 
   const resolveVoucherGateway = () => {
     return resolveConfiguredGateway(settings);
@@ -1136,6 +1155,20 @@ router.post('/public/voucher/create-payment', async (req, res) => {
     const name = String(profileName || '').trim();
     if (!name) return null;
     try {
+      // ── Cek voucher_packages ──────────────────
+      const pkgRow = db.prepare(`
+        SELECT price, validity
+        FROM voucher_packages
+        WHERE router_id IS ? AND profile_name = ? AND is_active = 1
+        LIMIT 1
+      `).get(rid, name);
+      if (pkgRow) {
+        const price = Number(pkgRow.price || 0) || 0;
+        const validity = String(pkgRow.validity || '').trim();
+        if (price > 0) return { price, validity };
+      }
+
+      // ── Fallback: voucher_batches ──────────────────
       const row = db.prepare(`
         SELECT price, validity
         FROM voucher_batches
@@ -1186,6 +1219,55 @@ router.post('/public/voucher/create-payment', async (req, res) => {
     }
   } catch {
     selected = null;
+  }
+
+  // ── Robust DB Fallback ──────────────────
+  if (!selected) {
+    logger.warn(`[Voucher] Resolving profile '${profileName}' from MikroTik failed or timed out. Falling back to local DB...`);
+    const configured = getConfiguredVoucherPrice(null, profileName);
+    if (configured) {
+      selected = {
+        name: profileName,
+        validity: configured.validity || '-',
+        price: configured.price
+      };
+      selectedRouterId = null;
+    } else {
+      try {
+        const anyPkg = db.prepare(`
+          SELECT price, validity, router_id
+          FROM voucher_packages
+          WHERE profile_name = ? AND is_active = 1
+          LIMIT 1
+        `).get(profileName);
+        if (anyPkg && Number(anyPkg.price) > 0) {
+          selected = {
+            name: profileName,
+            validity: anyPkg.validity || '-',
+            price: Number(anyPkg.price)
+          };
+          selectedRouterId = anyPkg.router_id ?? null;
+        } else {
+          const anyBatch = db.prepare(`
+            SELECT price, validity, router_id
+            FROM voucher_batches
+            WHERE profile_name = ? AND price > 0
+            ORDER BY id DESC
+            LIMIT 1
+          `).get(profileName);
+          if (anyBatch) {
+            selected = {
+              name: profileName,
+              validity: anyBatch.validity || '-',
+              price: Number(anyBatch.price)
+            };
+            selectedRouterId = anyBatch.router_id ?? null;
+          }
+        }
+      } catch (err) {
+        logger.error(`[Voucher] Fallback DB resolution error: ${err.message}`);
+      }
+    }
   }
 
   if (!selected) return res.redirect('/customer/voucher?err=' + encodeURIComponent('Profile voucher tidak ditemukan'));
@@ -2859,11 +2941,28 @@ router.post('/payment/callback', express.json({
       try {
         let created = null;
         let attempt = 0;
+        
+        // ── Load Paket Voucher Config ──────────────────
+        let prefix = '';
+        let codeLength = 6;
+        let charset = 'mixed';
+        try {
+          const pkg = db.prepare('SELECT * FROM voucher_packages WHERE router_id IS ? AND profile_name = ?').get(fresh.router_id ?? null, fresh.profile_name);
+          if (pkg) {
+            prefix = String(pkg.prefix || '').trim();
+            codeLength = Math.max(4, Math.min(16, Number(pkg.code_length) || 6));
+            charset = String(pkg.charset || 'mixed');
+          }
+        } catch (pkgErr) {
+          logger.error('[Fulfillment] Gagal query voucher_packages: ' + pkgErr.message);
+        }
+
         while (attempt < 10) {
           attempt++;
-          const code = genRandomCode(6);
+          const coreLen = Math.max(4, codeLength - prefix.length);
+          const code = prefix + genCustomCode(coreLen, charset);
           const pass = code;
-          const comment = `pub-${orderId}-${code}-${fresh.profile_name}`;
+          const comment = `vc-${code}-${fresh.profile_name}`;
           const userData = {
             server: 'all',
             name: code,

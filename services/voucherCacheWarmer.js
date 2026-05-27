@@ -219,12 +219,12 @@ function startCacheWarming() {
     return;
   }
 
-  // Warm immediately on start
+  // Warm immediately on start (500ms delay agar app sudah siap)
   setTimeout(() => {
     warmVoucherCache().catch(err => {
       logger.error('[VoucherCacheWarmer] Initial warming failed:', err.message);
     });
-  }, 2000); // 2 detik setelah aplikasi start (lebih cepat siap)
+  }, 500); // 500ms setelah aplikasi start (lebih cepat siap)
 
   // Then warm every 8 minutes
   warmingInterval = setInterval(() => {

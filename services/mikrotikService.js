@@ -1,7 +1,7 @@
 const dns = require('dns');
 const net = require('net');
 const { URL } = require('url');
-const RosClient = require('ros-client');
+const { RouterOSClient } = require('routeros-client');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
@@ -263,11 +263,11 @@ async function getConnection(routerId = null) {
 
   try {
     const useTls = selectedPort === 8729 || tlsSetting === true;
-    const api = new RosClient({
+    const api = new RouterOSClient({
       host,
-      username: user,
-      password,
       port: selectedPort,
+      user,
+      password,
       tls: Boolean(useTls),
       timeout: 5000
     });
@@ -282,16 +282,24 @@ async function getConnection(routerId = null) {
 
     await api.connect();
     connectionProbeCache.set(cacheKey, { port: selectedPort, okUntil: Date.now() + 30000, failUntil: 0, failMessage: '' });
+    
+    // Adapt api so that it exposes the expected .send method and correct close logic
+    api.send = async (words) => {
+      if (!api.rosApi || typeof api.rosApi.write !== 'function') {
+        throw new Error('MikroTik API connection is not established');
+      }
+      return await api.rosApi.write(words);
+    };
+
     const originalClose = typeof api.close === 'function' ? api.close.bind(api) : null;
-    const originalDisconnect = typeof api.disconnect === 'function' ? api.disconnect.bind(api) : null;
     api.close = async () => {
       try {
         if (originalClose) return await originalClose();
-        if (originalDisconnect) return await originalDisconnect();
       } catch {}
       return undefined;
     };
     if (typeof api.disconnect !== 'function') api.disconnect = api.close;
+    
     const client = new ClientAdapter(api);
     return { client, api };
   } catch (err) {
@@ -488,19 +496,15 @@ async function getPppoeSecrets(routerId = null) {
     // Use proplist to only fetch needed fields for better performance
     let rows;
     try {
-      const allRows = await withTimeout(
+      rows = await withTimeout(
         conn.api.send([
           '/ppp/secret/print',
+          '?service=pppoe', // Only get PPPoE service
           '=.proplist=.id,name,profile,local-address,remote-address,disabled,service'
         ]),
         25000, // Increased timeout to 25s for very slow routers
         'getPppoeSecrets'
       );
-      // Filter only pppoe service, 'any', or empty service
-      rows = Array.isArray(allRows) ? allRows.filter(r => {
-        const svc = String(r?.service || '').toLowerCase();
-        return svc === 'pppoe' || svc === 'any' || !svc || svc === 'unknown';
-      }) : [];
     } catch (timeoutErr) {
       // Fallback: try without proplist if timeout occurs
       logger.warn(`[MikroTik] Timeout with proplist, trying full query: ${timeoutErr.message}`);
@@ -512,7 +516,7 @@ async function getPppoeSecrets(routerId = null) {
       // Filter only pppoe service
       rows = Array.isArray(allRows) ? allRows.filter(r => {
         const svc = String(r?.service || '').toLowerCase();
-        return svc === 'pppoe' || svc === 'any' || !svc || svc === 'unknown';
+        return svc === 'pppoe' || svc === 'any' || !svc;
       }) : [];
     }
     const mapped = Array.isArray(rows) ? rows.map(augmentRow) : [];
@@ -614,11 +618,11 @@ async function getPppoeActive(routerId = null) {
   try {
     conn = await getConnection(routerId);
     // Use proplist to only fetch needed fields for better performance
+    let rows;
     try {
       rows = await withTimeout(
         conn.api.send([
           '/ppp/active/print',
-          '?service=pppoe',
           '=.proplist=.id,name,address,uptime,caller-id,service'
         ]),
         15000, // Increased timeout to 15s
@@ -628,18 +632,14 @@ async function getPppoeActive(routerId = null) {
       // Fallback: try without proplist if timeout occurs
       logger.warn(`[MikroTik] Timeout with proplist for active PPPoE, trying full query: ${timeoutErr.message}`);
       rows = await withTimeout(
-        conn.client.menu('/ppp/active').where('service', 'pppoe').get(),
+        conn.client.menu('/ppp/active').get(),
         20000, // 20 second timeout for fallback
         'getPppoeActive-fallback'
       );
     }
     const mapped = Array.isArray(rows) ? rows.map(augmentRow) : [];
-    const filtered = mapped.filter(r => {
-      const svc = String(r?.service || '').toLowerCase();
-      return svc === 'pppoe';
-    });
-    setCachedList(ck, filtered);
-    return filtered;
+    setCachedList(ck, mapped);
+    return mapped;
   } catch (e) {
     logger.error('Error getting active PPPoE sessions:', e);
     // Return cached data if available, even if expired
@@ -763,20 +763,10 @@ async function getHotspotUserProfiles(routerId = null) {
   try {
     conn = await getConnection(routerId);
     const start = Date.now();
-    // Gunakan client.menu().get() agar semua field termasuk on-login ikut terambil
-    let rows = [];
-    try {
-      rows = await conn.client.menu('/ip/hotspot/user/profile').get();
-    } catch {
-      // Fallback ke conn.api.send jika client.menu tidak tersedia
-      const raw = await conn.api.send([
-        '/ip/hotspot/user/profile/print',
-        '=.proplist=.id,name,rate-limit,shared-users,session-timeout,on-login'
-      ]);
-      rows = Array.isArray(raw) ? raw.map(augmentRow) : [];
-    }
+    // Gunakan client.menu().get() karena dengan routeros-client sudah stabil dan tidak hang
+    const rows = await conn.client.menu('/ip/hotspot/user/profile').get();
     const ms = Date.now() - start;
-    if (ms > 1200) logger.warn(`[MikroTik] Slow /ip/hotspot/user/profile/print (${ms}ms)`);
+    if (ms > 1200) logger.warn(`[MikroTik] Slow /ip/hotspot/user/profile.get (${ms}ms)`);
     setCachedList(ck, rows);
     return rows;
   } catch (e) {

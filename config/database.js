@@ -12,7 +12,7 @@ const dbPath = path.join(dbDir, 'billing.db');
 
 let db;
 try {
-  db = new Database(dbPath, { timeout: 5000 });
+  db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -513,6 +513,25 @@ db.exec(`
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 `);
+
+// Inisialisasi tabel voucher_packages (Paket Voucher Hotspot Real-time)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS voucher_packages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    router_id INTEGER REFERENCES routers(id) ON DELETE SET NULL,
+    profile_name TEXT NOT NULL,
+    price INTEGER NOT NULL DEFAULT 0,
+    validity TEXT DEFAULT '',
+    prefix TEXT DEFAULT '',
+    code_length INTEGER NOT NULL DEFAULT 6,
+    charset TEXT DEFAULT 'mixed',
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL()),
+    UNIQUE(router_id, profile_name)
+  );
+`);
+
 
 /**
  * Memastikan menu-menu utama (WA, Settings, dll) selalu terbuka (Visible)
