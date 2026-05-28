@@ -1481,6 +1481,7 @@ router.get('/customers', requireAdminSession, requireSidebarMenuAccess('customer
   const olts = oltSvc.getAllOlts();
   const odps = odpSvc.getAllOdps();
   const collectors = adminSvc.getAllCollectors();
+  const technicians = require('../services/techService').getAllTechnicians().filter(t => t.is_active !== 0);
 
   // Apply status filter in JS if provided
   const filteredCustomers = filterStatus
@@ -1489,7 +1490,7 @@ router.get('/customers', requireAdminSession, requireSidebarMenuAccess('customer
 
   res.render('admin/customers', {
     title: 'Data Pelanggan', company: company(), activePage: 'customers',
-    customers: filteredCustomers, stats, packages, routers, olts, odps, collectors, search, filterStatus, msg: flashMsg(req),
+    customers: filteredCustomers, stats, packages, routers, olts, odps, collectors, technicians, search, filterStatus, msg: flashMsg(req),
     settings: getSettings()
   });
 });
@@ -1562,6 +1563,59 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
     }
 
     customerSvc.createCustomer(req.body);
+
+    // Send WhatsApp/Telegram notification to technician if assigned
+    const technicianId = req.body.technician_id ? Number(req.body.technician_id) : null;
+    if (technicianId) {
+      try {
+        const techSvc = require('../services/techService');
+        const tech = techSvc.getTechById(technicianId);
+        if (tech) {
+          const odpSvc = require('../services/odpService');
+          const odp = req.body.odp_id ? odpSvc.getAllOdps().find(o => Number(o.id) === Number(req.body.odp_id)) : null;
+          const pkg = req.body.package_id ? customerSvc.getPackageById(req.body.package_id) : null;
+          
+          const notifMsg = `🛠️ *PENUGASAN PELANGGAN BARU*\n\n` +
+                           `👤 *Pelanggan:* ${req.body.name}\n` +
+                           `📞 *HP/WA:* ${req.body.phone || '-'}\n` +
+                           `📍 *Alamat:* ${req.body.address || '-'}\n` +
+                           `📦 *Paket:* ${pkg ? pkg.name : '-'}\n` +
+                           `🔌 *Koneksi:* ${req.body.connection_type || '-'}\n` +
+                           (req.body.connection_type === 'pppoe' ? `👤 *PPPoE User:* ${req.body.pppoe_username || '-'}\n` : '') +
+                           (req.body.connection_type === 'static' ? `🌐 *IP Statis:* ${req.body.static_ip || '-'}\n` : '') +
+                           (req.body.connection_type === 'hotspot' ? `👤 *Hotspot User:* ${req.body.hotspot_username || '-'}\n` : '') +
+                           `📌 *ODP:* ${odp ? odp.name : '-'}\n` +
+                           `🔌 *PON Port:* ${req.body.pon_port || '-'}\n` +
+                           `📝 *Catatan:* ${req.body.notes || '-'}`;
+
+          // Send Telegram if chat ID exists
+          if (tech.telegram_chat_id) {
+            try {
+              const { sendTelegramNotification } = require('../services/telegramBot');
+              sendTelegramNotification(notifMsg, tech.telegram_chat_id);
+            } catch (tgErr) {
+              console.error('Failed to send Telegram notification to technician:', tgErr);
+            }
+          }
+          
+          // Send WhatsApp if phone exists
+          if (tech.phone) {
+            try {
+              const { sendWA } = await import('../services/whatsappBot.mjs');
+              let phone = tech.phone.trim().replace(/\D/g, '');
+              if (phone.startsWith('0')) {
+                phone = '62' + phone.slice(1);
+              }
+              await sendWA(phone, notifMsg);
+            } catch (waErr) {
+              console.error('Failed to send WhatsApp notification to technician:', waErr);
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.error('Error sending technician notification:', notifErr);
+      }
+    }
     
     // Sync to MikroTik if username provided
     if (connectionType === 'pppoe' && req.body.pppoe_username) {
@@ -2477,21 +2531,145 @@ router.get('/tickets', requireAdminSession, requireSidebarMenuAccess('tickets'),
   const { status = 'all' } = req.query;
   const tickets = ticketSvc.getAllTickets(status);
   const stats = ticketSvc.getTicketStats();
+  const technicians = require('../services/techService').getAllTechnicians().filter(t => t.is_active !== 0);
+  const customers = customerSvc.getAllCustomers();
   res.render('admin/tickets', {
     title: 'Keluhan Pelanggan', company: company(), activePage: 'tickets',
-    tickets, stats, filterStatus: status, msg: flashMsg(req)
+    tickets, stats, filterStatus: status, technicians, customers, msg: flashMsg(req)
   });
+});
+
+router.post('/tickets/create', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const { customerId, subject, message, technicianId } = req.body;
+    
+    if (!customerId || !subject || !message) {
+      throw new Error('Pelanggan, Subjek, dan Detail Gangguan harus diisi.');
+    }
+
+    const custId = parseInt(customerId, 10);
+    const parsedTechId = technicianId ? parseInt(technicianId, 10) : null;
+    
+    // Insert ticket into DB
+    const stmt = db.prepare(`
+      INSERT INTO tickets (customer_id, subject, message, technician_id, status)
+      VALUES (?, ?, ?, ?, 'open')
+    `);
+    const result = stmt.run(custId, subject, message, Number.isFinite(parsedTechId) ? parsedTechId : null);
+    const ticketId = result.lastInsertRowid;
+
+    req.session._msg = { type: 'success', text: 'Tiket penugasan manual berhasil dibuat.' };
+
+    // --- TELEGRAM & WHATSAPP NOTIFICATION ON TICKET CREATION & ASSIGNMENT ---
+    if (ticketId && parsedTechId) {
+      const ticket = ticketSvc.getTicketById(ticketId);
+      if (ticket) {
+        try {
+          const techSvc = require('../services/techService');
+          const tech = techSvc.getTechById(parsedTechId);
+          if (tech) {
+            const msg = `🛠️ *PENUGASAN TIKET GANGGUAN BARU* 🛠️\n\n` +
+                         `🎫 *ID Tiket:* #${ticket.id}\n` +
+                         `👤 *Teknisi:* ${tech.name || '-'}\n` +
+                         `👤 *Pelanggan:* ${ticket.customer_name}\n` +
+                         `📞 *HP/WA Pelanggan:* ${ticket.customer_phone || '-'}\n` +
+                         `📍 *Alamat:* ${ticket.customer_address || '-'}\n` +
+                         `📝 *Subjek:* ${ticket.subject}\n` +
+                         `💬 *Keterangan:* ${ticket.message}`;
+
+            // Send Telegram if chat ID exists
+            if (tech.telegram_chat_id) {
+              try {
+                const { sendTelegramNotification } = require('../services/telegramBot');
+                sendTelegramNotification(msg, tech.telegram_chat_id);
+              } catch (tgErr) {
+                console.error(`[AdminPortal] TG Notification Error: ${tgErr.message}`);
+              }
+            }
+
+            // Send WhatsApp if phone exists
+            if (tech.phone) {
+              try {
+                const { sendWA } = await import('../services/whatsappBot.mjs');
+                let phone = tech.phone.trim().replace(/\D/g, '');
+                if (phone.startsWith('0')) {
+                  phone = '62' + phone.slice(1);
+                }
+                await sendWA(phone, msg);
+              } catch (waErr) {
+                console.error(`[AdminPortal] WA Notification Error: ${waErr.message}`);
+              }
+            }
+          }
+        } catch (notifErr) {
+          console.error(`[AdminPortal] Ticket Notification Error: ${notifErr.message}`);
+        }
+      }
+    }
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal membuat tiket: ' + e.message };
+  }
+  res.redirect('/admin/tickets');
 });
 
 router.post('/tickets/:id/update', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, technicianId } = req.body;
     const ticketId = req.params.id;
     
-    ticketSvc.updateTicketStatus(ticketId, status);
+    // Dapatkan info tiket sebelum update untuk mengecek perubahan teknisi
+    const oldTicket = ticketSvc.getTicketById(ticketId);
+    
+    const parsedTechId = technicianId ? parseInt(technicianId, 10) : null;
+    ticketSvc.updateTicketStatus(ticketId, status, Number.isFinite(parsedTechId) ? parsedTechId : null);
     req.session._msg = { type: 'success', text: 'Status keluhan berhasil diperbarui.' };
 
-    // --- WHATSAPP NOTIFICATION FOR RESOLVED TICKET (BY ADMIN) ---
+    const ticket = ticketSvc.getTicketById(ticketId);
+
+    // --- TELEGRAM & WHATSAPP NOTIFICATION ON TICKET ASSIGNMENT ---
+    if (ticket && parsedTechId && (!oldTicket || oldTicket.technician_id !== parsedTechId)) {
+      try {
+        const techSvc = require('../services/techService');
+        const tech = techSvc.getTechById(parsedTechId);
+        if (tech) {
+          const msg = `🛠️ *TIKET DITUGASKAN KEPADA TEKNISI*\n\n` +
+                       `🎫 *ID Tiket:* #${ticket.id}\n` +
+                       `👤 *Teknisi:* ${tech.name || '-'}\n` +
+                       `👤 *Pelanggan:* ${ticket.customer_name}\n` +
+                       `📞 *HP/WA Pelanggan:* ${ticket.customer_phone || '-'}\n` +
+                       `📍 *Alamat:* ${ticket.customer_address || '-'}\n` +
+                       `📝 *Subjek:* ${ticket.subject}\n` +
+                       `💬 *Keluhan:* ${ticket.message}`;
+
+          // Send Telegram if chat ID exists
+          if (tech.telegram_chat_id) {
+            try {
+              const { sendTelegramNotification } = require('../services/telegramBot');
+              sendTelegramNotification(msg, tech.telegram_chat_id);
+            } catch (tgErr) {
+              console.error(`[AdminPortal] TG Notification Error: ${tgErr.message}`);
+            }
+          }
+
+          // Send WhatsApp if phone exists
+          if (tech.phone) {
+            try {
+              const { sendWA } = await import('../services/whatsappBot.mjs');
+              let phone = tech.phone.trim().replace(/\D/g, '');
+              if (phone.startsWith('0')) {
+                phone = '62' + phone.slice(1);
+              }
+              await sendWA(phone, msg);
+            } catch (waErr) {
+              console.error(`[AdminPortal] WA Notification Error: ${waErr.message}`);
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.error(`[AdminPortal] Ticket Notification Error: ${notifErr.message}`);
+      }
+    }
+
     if (status === 'resolved') {
       try {
         const settings = getSettings();

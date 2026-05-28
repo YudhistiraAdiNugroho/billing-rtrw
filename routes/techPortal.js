@@ -172,8 +172,29 @@ router.get('/map', requireTechSession, (req, res) => {
 // --- ACTIONS ---
 router.post('/tickets/:id/take', requireTechSession, (req, res) => {
   try {
-    techSvc.takeTicket(req.params.id, req.session.techId);
+    const ticketId = req.params.id;
+    const techId = req.session.techId;
+    
+    techSvc.takeTicket(ticketId, techId);
     req.session._msg = { type: 'success', text: 'Tiket berhasil diambil. Silakan mulai kerjakan.' };
+    
+    // --- TELEGRAM NOTIFICATION ON TICKET TAKEN ---
+    try {
+      const ticketSvc = require('../services/ticketService');
+      const ticket = ticketSvc.getTicketById(ticketId);
+      if (ticket) {
+        const { sendTelegramNotification } = require('../services/telegramBot');
+        const msg = `🛠️ *TIKET DIAMBIL OLEH TEKNISI*\n\n` +
+                     `🎫 *ID Tiket:* #${ticket.id}\n` +
+                     `👤 *Teknisi:* ${req.session.techName || '-'}\n` +
+                     `👤 *Pelanggan:* ${ticket.customer_name}\n` +
+                     `📝 *Subjek:* ${ticket.subject}\n` +
+                     `💬 *Keluhan:* ${ticket.message}`;
+        sendTelegramNotification(msg, ticket.technician_telegram_chat_id || null);
+      }
+    } catch (tgErr) {
+      console.error(`[TechPortal] TG Notification Error: ${tgErr.message}`);
+    }
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal mengambil tiket: ' + e.message };
   }

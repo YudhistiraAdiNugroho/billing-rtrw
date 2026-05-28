@@ -19,6 +19,8 @@ function getAllCustomers(search = '') {
            r.name as router_name,
            o.name as olt_name,
            odp.name as odp_name,
+           tech.name as technician_name,
+           tech.telegram_chat_id as technician_telegram_chat_id,
            (SELECT COUNT(*) FROM invoices WHERE customer_id=c.id AND status='unpaid') as unpaid_count,
            u.bytes_in, u.bytes_out
     FROM customers c
@@ -26,6 +28,7 @@ function getAllCustomers(search = '') {
     LEFT JOIN routers r ON c.router_id = r.id
     LEFT JOIN olts o ON c.olt_id = o.id
     LEFT JOIN odps odp ON c.odp_id = odp.id
+    LEFT JOIN technicians tech ON c.technician_id = tech.id
     LEFT JOIN customer_usage u ON u.customer_id = c.id AND u.period_month = ${month} AND u.period_year = ${year}
   `;
   if (search) {
@@ -46,20 +49,22 @@ function getCustomerById(id) {
     SELECT c.*, p.name as package_name, p.price as package_price,
            p.promo_cycles as package_promo_cycles,
            p.prorate_first_invoice as package_prorate_first_invoice,
-           r.name as router_name, o.name as olt_name, odp.name as odp_name
+           r.name as router_name, o.name as olt_name, odp.name as odp_name,
+           tech.name as technician_name, tech.telegram_chat_id as technician_telegram_chat_id
     FROM customers c 
     LEFT JOIN packages p ON c.package_id = p.id 
     LEFT JOIN routers r ON c.router_id = r.id
     LEFT JOIN olts o ON c.olt_id = o.id
     LEFT JOIN odps odp ON c.odp_id = odp.id
+    LEFT JOIN technicians tech ON c.technician_id = tech.id
     WHERE c.id = ?
   `).get(id);
 }
 
 function createCustomer(data) {
   return db.prepare(`
-    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id, technician_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
     data.package_id ? parseInt(data.package_id) : null,
@@ -83,7 +88,8 @@ function createCustomer(data) {
     data.hotspot_username || '',
     data.hotspot_password || '',
     data.hotspot_profile || '',
-    data.collector_id ? parseInt(data.collector_id) : null
+    data.collector_id ? parseInt(data.collector_id) : null,
+    data.technician_id ? parseInt(data.technician_id) : null
   );
 }
 
@@ -93,7 +99,7 @@ function updateCustomer(id, data) {
   const pkgChanged = prev && Number(prev.package_id || 0) !== Number(newPkgId || 0);
 
   const result = db.prepare(`
-    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?
+    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?, technician_id=?
     WHERE id=?
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
@@ -120,6 +126,7 @@ function updateCustomer(id, data) {
     data.hotspot_password || '',
     data.hotspot_profile || '',
     data.collector_id ? parseInt(data.collector_id) : null,
+    data.technician_id ? parseInt(data.technician_id) : null,
     id
   );
 
