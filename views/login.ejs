@@ -30,10 +30,11 @@
       max-width: 420px;
       width: 100%;
       overflow: hidden;
+      border-radius: 24px !important;
     }
 
     .login-header {
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%);
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
       color: #f8fafc;
       padding: 35px 25px 25px;
       text-align: center;
@@ -41,21 +42,40 @@
     }
 
     .logo-container {
-      width: 84px;
-      height: 84px;
-      background: rgba(15, 23, 42, 0.45);
-      border: 1px solid var(--border-glass);
+      width: 80px;
+      height: 80px;
+      background: rgba(15, 23, 42, 0.55);
+      border: 2px solid rgba(99, 102, 241, 0.35);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       margin: 0 auto 18px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 
+                  0 0 15px rgba(99, 102, 241, 0.15);
+      transition: var(--transition-smooth);
     }
 
-    .logo-container img {
-      width: 54px;
-      height: 54px;
+    .logo-container:hover {
+      transform: scale(1.05) rotate(4deg);
+      border-color: rgba(99, 102, 241, 0.6);
+      box-shadow: 0 12px 32px rgba(99, 102, 241, 0.4), 
+                  0 0 20px rgba(99, 102, 241, 0.3);
+    }
+
+    .logo-img {
+      width: 50px;
+      height: 50px;
       object-fit: contain;
+      border-radius: 50%;
+      background: transparent !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+
+    .logo-img:hover {
+      transform: none !important;
+      box-shadow: none !important;
     }
 
     .form-container {
@@ -67,37 +87,58 @@
     }
 
     .form-control {
-      background: rgba(15, 23, 42, 0.55);
-      border: 1px solid var(--border-glass);
-      color: #e2e8f0;
-      border-radius: 12px;
-      padding: 15px 20px;
-      font-size: 16px;
-      transition: var(--transition-smooth);
+      background: rgba(15, 23, 42, 0.55) !important;
+      border: 1px solid var(--border-glass) !important;
+      color: #e2e8f0 !important;
+      border-radius: 12px !important;
+      padding: 15px 20px !important;
+      font-size: 16px !important;
+      transition: var(--transition-smooth) !important;
     }
 
     .form-control:focus {
-      background: rgba(15, 23, 42, 0.75);
-      border-color: rgba(99, 102, 241, 0.85);
-      box-shadow: 0 0 0 0.25rem rgba(99, 102, 241, 0.2);
-      color: #f1f5f9;
+      background: rgba(15, 23, 42, 0.75) !important;
+      border-color: rgba(99, 102, 241, 0.8) !important;
+      box-shadow: 0 0 0 0.25rem rgba(99, 102, 241, 0.2) !important;
+      color: #f1f5f9 !important;
+    }
+
+    /* Autofill overrides for premium look */
+    .form-control:-webkit-autofill,
+    .form-control:-webkit-autofill:hover,
+    .form-control:-webkit-autofill:focus {
+      -webkit-text-fill-color: #f1f5f9 !important;
+      -webkit-box-shadow: 0 0 0px 1000px rgba(15, 23, 42, 0.75) inset !important;
+      transition: background-color 5000s ease-in-out 0s;
     }
 
     .form-floating>label {
-      color: var(--text-mute);
+      color: var(--text-mute) !important;
+      padding-left: 20px !important;
     }
 
-    .form-floating>.form-control:focus~label,
+    .form-floating>.form-control:focus~label {
+      color: #a5b4fc !important;
+      opacity: 1 !important;
+    }
+
     .form-floating>.form-control:not(:placeholder-shown)~label {
-      color: var(--text-mute);
-      opacity: 0.8;
+      color: var(--text-mute) !important;
+      opacity: 0.8 !important;
+    }
+
+    /* Prevent white background flash behind floating label */
+    .form-floating>.form-control:focus~label::after,
+    .form-floating>.form-control:not(:placeholder-shown)~label::after {
+      background-color: transparent !important;
     }
 
     .alert {
-      border: 1px solid var(--border-glass);
-      background: rgba(239, 68, 68, 0.1);
-      color: #fee2e2;
+      border: 1px solid rgba(239, 68, 68, 0.25) !important;
+      background: rgba(239, 68, 68, 0.08) !important;
+      color: #fee2e2 !important;
       border-radius: 12px;
+      backdrop-filter: blur(4px);
     }
 
     .quick-actions {
@@ -116,7 +157,7 @@
 
     .info-box {
       border: 1px solid var(--border-glass);
-      background: rgba(15, 23, 42, 0.2);
+      background: rgba(15, 23, 42, 0.25);
       border-radius: 14px;
       padding: 14px 16px;
       transition: var(--transition-smooth);
@@ -124,8 +165,9 @@
 
     .info-box:hover {
       border-color: var(--border-glass-hover);
-      background: rgba(15, 23, 42, 0.35);
+      background: rgba(15, 23, 42, 0.4);
       transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     }
 
     .info-title {
@@ -145,13 +187,44 @@
       margin: 0;
     }
 
+    /* Premium custom scrollbar for package list */
+    .info-box div::-webkit-scrollbar {
+      width: 4px;
+    }
+    .info-box div::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .info-box div::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.2);
+      border-radius: 2px;
+    }
+    .info-box div::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.5);
+    }
+
+    .footer-link {
+      color: var(--text-mute) !important;
+      transition: var(--transition-smooth);
+      font-size: 13px;
+      text-decoration: none;
+    }
+
+    .footer-link:hover {
+      color: #a5b4fc !important;
+      text-shadow: 0 0 8px rgba(165, 180, 252, 0.4);
+    }
+
+    body {
+      background-attachment: fixed !important;
+    }
+
     @media (max-width: 576px) {
       .login-container {
         padding: 10px;
       }
 
       .login-card {
-        border-radius: 16px;
+        border-radius: 20px !important;
       }
 
       .form-container {
@@ -170,7 +243,7 @@
     <div class="login-card card-glass glow-border">
       <div class="login-header">
         <div class="logo-container">
-          <img src="/img/logo.png" alt="Logo">
+          <img src="/img/logo.png" class="logo-img" alt="Logo">
         </div>
         <h4 class="mb-1 fw-bold"><%= t('customer.portal_title', 'Portal Pelanggan') %></h4>
         <p class="mb-0 opacity-75">
@@ -265,12 +338,12 @@
           <p class="mb-3"><%= t('customer.not_subscribed', 'Belum berlangganan?') %> <a href="/customer/register"
               style="color: #6366f1; text-decoration: none; font-weight: 700;"><%= t('customer.register_new', 'Daftar Pemasangan Baru') %></a></p>
           
-          <div class="d-flex flex-wrap justify-content-center gap-3 mb-3" style="font-size: 13px;">
-            <a href="/customer/about" class="text-decoration-none text-secondary"><%= t('customer.footer.about', 'Tentang Kami') %></a>
-            <a href="/customer/contact" class="text-decoration-none text-secondary"><%= t('customer.footer.contact', 'Kontak') %></a>
-            <a href="/customer/tos" class="text-decoration-none text-secondary"><%= t('customer.footer.tos', 'Syarat & Ketentuan') %></a>
-            <a href="/customer/privacy" class="text-decoration-none text-secondary"><%= t('customer.footer.privacy', 'Kebijakan Privasi') %></a>
-            <a href="/customer/tos#refund" class="text-decoration-none text-secondary"><%= t('customer.footer.refund', 'Kebijakan Refund') %></a>
+          <div class="d-flex flex-wrap justify-content-center gap-3 mb-3">
+            <a href="/customer/about" class="footer-link"><%= t('customer.footer.about', 'Tentang Kami') %></a>
+            <a href="/customer/contact" class="footer-link"><%= t('customer.footer.contact', 'Kontak') %></a>
+            <a href="/customer/tos" class="footer-link"><%= t('customer.footer.tos', 'Syarat & Ketentuan') %></a>
+            <a href="/customer/privacy" class="footer-link"><%= t('customer.footer.privacy', 'Kebijakan Privasi') %></a>
+            <a href="/customer/tos#refund" class="footer-link"><%= t('customer.footer.refund', 'Kebijakan Refund') %></a>
           </div>
 
           &copy; <%= new Date().getFullYear() %> <%= settings.company_header %>
