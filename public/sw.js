@@ -1,4 +1,4 @@
-const CACHE_NAME = 'customer-pwa-v1';
+const CACHE_NAME = 'customer-pwa-v2';
 const PRECACHE_URLS = [
   '/css/style.css',
   '/img/logo.png',
