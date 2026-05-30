@@ -649,6 +649,12 @@ try {
 } catch (e) { /* ignore if already exists */ }
 try { db.exec("ALTER TABLE odps ADD COLUMN port_capacity INTEGER NOT NULL DEFAULT 16"); } catch (e) { /* ignore if already exists */ }
 
+// Kolom untuk PPN & ULO/USO pada tabel packages
+try { db.exec("ALTER TABLE packages ADD COLUMN use_ppn INTEGER DEFAULT 0"); } catch (e) {}
+try { db.exec("ALTER TABLE packages ADD COLUMN ppn_percentage REAL DEFAULT 11.0"); } catch (e) {}
+try { db.exec("ALTER TABLE packages ADD COLUMN use_uso INTEGER DEFAULT 0"); } catch (e) {}
+try { db.exec("ALTER TABLE packages ADD COLUMN uso_percentage REAL DEFAULT 1.75"); } catch (e) {}
+
 // Kolom untuk Tiket Bantuan (Foto & Catatan Teknisi)
 try { db.exec("ALTER TABLE tickets ADD COLUMN technician_notes TEXT DEFAULT ''"); } catch (e) {}
 try { db.exec("ALTER TABLE tickets ADD COLUMN photos TEXT DEFAULT ''"); } catch (e) {}

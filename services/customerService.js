@@ -238,6 +238,10 @@ function createPackage(data) {
   const promoPrice = parsePromoPrice(data.promo_price);
   const promoCycles = Math.max(0, parseInt(data.promo_cycles, 10) || 0);
   const prorateFirst = data.prorate_first_invoice ? 1 : 0;
+  const usePpn = data.use_ppn ? 1 : 0;
+  const ppnPercentage = parseFloat(data.ppn_percentage || 11.0);
+  const useUso = data.use_uso ? 1 : 0;
+  const usoPercentage = parseFloat(data.uso_percentage || 1.75);
 
   return db.prepare(`
     INSERT INTO packages (
@@ -245,15 +249,17 @@ function createPackage(data) {
       speed_down, speed_up, 
       use_night_speed, night_profile_name, night_speed_down, night_speed_up, 
       use_fup, fup_profile_name, fup_limit_gb, fup_speed_down, 
-      description
+      description,
+      use_ppn, ppn_percentage, use_uso, uso_percentage
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
     down, up,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
-    data.description || ''
+    data.description || '',
+    usePpn, ppnPercentage, useUso, usoPercentage
   );
 }
 
@@ -273,6 +279,10 @@ function updatePackage(id, data) {
   const promoPrice = parsePromoPrice(data.promo_price);
   const promoCycles = Math.max(0, parseInt(data.promo_cycles, 10) || 0);
   const prorateFirst = data.prorate_first_invoice ? 1 : 0;
+  const usePpn = data.use_ppn ? 1 : 0;
+  const ppnPercentage = parseFloat(data.ppn_percentage || 11.0);
+  const useUso = data.use_uso ? 1 : 0;
+  const usoPercentage = parseFloat(data.uso_percentage || 1.75);
 
   return db.prepare(`
     UPDATE packages 
@@ -280,14 +290,17 @@ function updatePackage(id, data) {
         speed_down=?, speed_up=?, 
         use_night_speed=?, night_profile_name=?, night_speed_down=?, night_speed_up=?, 
         use_fup=?, fup_profile_name=?, fup_limit_gb=?, fup_speed_down=?, 
-        description=?, is_active=? 
+        description=?, is_active=?,
+        use_ppn=?, ppn_percentage=?, use_uso=?, uso_percentage=?
     WHERE id=?
   `).run(
     data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
     down, up,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
-    data.description || '', data.is_active == '1' ? 1 : 0, id
+    data.description || '', data.is_active == '1' ? 1 : 0,
+    usePpn, ppnPercentage, useUso, usoPercentage,
+    id
   );
 }
 

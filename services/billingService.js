@@ -58,17 +58,38 @@ function computeInvoiceAmountAndMeta(customer, pkg, periodMonth, periodYear) {
     }
   }
 
+  const baseAmount = amount;
+  let taxAmount = 0;
   const metaParts = [];
+  
   if (usePromo) {
     metaParts.push(`Promo siklus ${promoUsed + 1}/${promoCycles} @ Rp ${Number(promoPrice).toLocaleString('id-ID')}`);
   }
   if (prorated && billableDays != null && dim != null) {
     metaParts.push(`Prorata ${billableDays}/${dim} hari`);
   }
+
+  // PPN Calculation
+  if (pkg.use_ppn === 1) {
+    const ppnPct = Number(pkg.ppn_percentage) || 11.0;
+    const ppnVal = Math.round(baseAmount * (ppnPct / 100));
+    taxAmount += ppnVal;
+    metaParts.push(`PPN ${ppnPct}% (Rp ${ppnVal.toLocaleString('id-ID')})`);
+  }
+
+  // USO Calculation
+  if (pkg.use_uso === 1) {
+    const usoPct = Number(pkg.uso_percentage) || 1.75;
+    const usoVal = Math.round(baseAmount * (usoPct / 100));
+    taxAmount += usoVal;
+    metaParts.push(`USO ${usoPct}% (Rp ${usoVal.toLocaleString('id-ID')})`);
+  }
+
+  const finalAmount = baseAmount + taxAmount;
   const notesAuto = metaParts.length ? `AUTO: ${metaParts.join(' | ')}` : '';
 
   return {
-    amount: Math.max(0, Math.round(amount)),
+    amount: Math.max(0, Math.round(finalAmount)),
     bumpPromo: usePromo,
     notesAuto
   };
@@ -514,11 +535,32 @@ function createInstallProrataCatchUpInvoice(customerId) {
   const dim = daysInMonth(periodYear, periodMonth);
   const billableDays = Math.min(dim, Math.max(1, dim - inst.d + 1));
   const basePrice = Number(pkg.price) || 0;
-  const amount = Math.max(0, Math.round(basePrice * (billableDays / dim)));
-  const notesAuto = `AUTO: Susulan prorata bulan pasang (${billableDays}/${dim} hari, dasar harga reguler Rp ${basePrice.toLocaleString('id-ID')})`;
+  const baseAmount = Math.max(0, Math.round(basePrice * (billableDays / dim)));
+  
+  let taxAmount = 0;
+  const metaParts = [`Susulan prorata bulan pasang (${billableDays}/${dim} hari, dasar harga reguler Rp ${basePrice.toLocaleString('id-ID')})`];
+
+  // PPN
+  if (pkg.use_ppn === 1) {
+    const ppnPct = Number(pkg.ppn_percentage) || 11.0;
+    const ppnVal = Math.round(baseAmount * (ppnPct / 100));
+    taxAmount += ppnVal;
+    metaParts.push(`PPN ${ppnPct}% (Rp ${ppnVal.toLocaleString('id-ID')})`);
+  }
+
+  // USO
+  if (pkg.use_uso === 1) {
+    const usoPct = Number(pkg.uso_percentage) || 1.75;
+    const usoVal = Math.round(baseAmount * (usoPct / 100));
+    taxAmount += usoVal;
+    metaParts.push(`USO ${usoPct}% (Rp ${usoVal.toLocaleString('id-ID')})`);
+  }
+
+  const finalAmount = baseAmount + taxAmount;
+  const notesAuto = `AUTO: ${metaParts.join(' | ')}`;
 
   const r = db.prepare('INSERT INTO invoices (customer_id, period_month, period_year, amount, notes) VALUES (?, ?, ?, ?, ?)').run(
-    cid, periodMonth, periodYear, amount, notesAuto
+    cid, periodMonth, periodYear, finalAmount, notesAuto
   );
 
   return {

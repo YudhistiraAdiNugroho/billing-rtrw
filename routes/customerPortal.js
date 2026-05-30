@@ -11,6 +11,7 @@ const { logger } = require('../config/logger');
 const ticketSvc = require('../services/ticketService');
 const crypto = require('crypto');
 const db = require('../config/database');
+const sidebarMenuSvc = require('../services/sidebarMenuService');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -1775,6 +1776,9 @@ router.get('/dashboard', async (req, res) => {
     if (Number.isFinite(upKbps) && upKbps > 0) trafficMaxUpMbps = Math.max(1, Math.round(upKbps / 1000));
   }
 
+  const states = sidebarMenuSvc.getStoredMenuStates();
+  const showPPOB = states['digiflazz'] === 'visible';
+
   res.render('dashboard', {
     customer: deviceData || fallbackCustomer(loginId),
     profile: profile || null,
@@ -1787,6 +1791,7 @@ router.get('/dashboard', async (req, res) => {
     connectedUsers: deviceData ? deviceData.connectedUsers : [],
     customerBalance,
     isLoggedIn: true,
+    showPPOB,
     notif: msgNotif || (deviceData ? null : dashboardNotif('Data perangkat tidak ditemukan di sistem ONU.', 'warning'))
   });
 });
@@ -2051,6 +2056,8 @@ router.post('/change-tag', async (req, res) => {
   if (!newTag || newTag === oldTag) {
     const data = await getCustomerDeviceData(oldTag);
     const invoices = billingSvc.getInvoicesByAny(oldTag);
+    const states = sidebarMenuSvc.getStoredMenuStates();
+    const showPPOB = states['digiflazz'] === 'visible';
     return res.render('dashboard', {
       customer: data || fallbackCustomer(oldTag),
       profile: null,
@@ -2060,6 +2067,7 @@ router.post('/change-tag', async (req, res) => {
       paymentChannels: [],
       connectedUsers: data ? data.connectedUsers : [],
       customerBalance: 0,
+      showPPOB,
       notif: dashboardNotif('ID/Tag baru tidak boleh kosong atau sama dengan yang lama.', 'warning')
     });
   }
@@ -2107,6 +2115,8 @@ router.post('/change-tag', async (req, res) => {
   const tickets = profile ? ticketSvc.getTicketsByCustomerId(profile.id) : [];
   const customerBalance = profile ? getCustomerBalance(profile.id) : 0;
 
+  const states = sidebarMenuSvc.getStoredMenuStates();
+  const showPPOB = states['digiflazz'] === 'visible';
   res.render('dashboard', {
     customer: deviceData || fallbackCustomer(resolvedPhone),
     profile: profile || null,
@@ -2116,6 +2126,7 @@ router.post('/change-tag', async (req, res) => {
     paymentChannels: [],
     connectedUsers: deviceData ? deviceData.connectedUsers : [],
     customerBalance,
+    showPPOB,
     notif
   });
 });
@@ -3099,6 +3110,10 @@ function adjustCustomerBalance(customerId, delta, note = '') {
 
 // Halaman PPOB & saldo untuk pelanggan (wajib login)
 router.get('/ppob', (req, res) => {
+  const states = sidebarMenuSvc.getStoredMenuStates();
+  if (states['digiflazz'] !== 'visible') {
+    return res.redirect('/customer');
+  }
   const settings = getSettingsWithCache();
   
   // Debug logging
@@ -3157,6 +3172,10 @@ router.get('/ppob', (req, res) => {
 
 // Beli PPOB pakai saldo (wajib login)
 router.post('/ppob/buy', express.urlencoded({ extended: true }), async (req, res) => {
+  const states = sidebarMenuSvc.getStoredMenuStates();
+  if (states['digiflazz'] !== 'visible') {
+    return res.redirect('/customer');
+  }
   const redirectErr = (msg) => res.redirect('/customer/ppob?err=' + encodeURIComponent(msg));
   if (!req.session.phone) return res.redirect('/customer/login');
 
@@ -3221,6 +3240,10 @@ router.post('/ppob/buy', express.urlencoded({ extended: true }), async (req, res
 
 // Halaman request top-up saldo pelanggan
 router.get('/topup', async (req, res) => {
+  const states = sidebarMenuSvc.getStoredMenuStates();
+  if (states['digiflazz'] !== 'visible') {
+    return res.redirect('/customer');
+  }
   const settings = getSettingsWithCache();
   if (!req.session.phone) return res.redirect('/customer/login?next=/customer/topup');
   const customer = customerSvc.findCustomerByAny(req.session.phone);
@@ -3283,6 +3306,10 @@ router.get('/topup', async (req, res) => {
 
 // Proses request top-up → redirect ke Payment Gateway
 router.post('/topup/create', express.urlencoded({ extended: true }), async (req, res) => {
+  const states = sidebarMenuSvc.getStoredMenuStates();
+  if (states['digiflazz'] !== 'visible') {
+    return res.redirect('/customer');
+  }
   const settings = getSettingsWithCache();
   const redirectErr = (msg) => res.redirect('/customer/topup?err=' + encodeURIComponent(msg));
   if (!req.session.phone) return res.redirect('/customer/login');
