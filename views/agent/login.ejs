@@ -8,56 +8,39 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
   <style>
     body {
-      background: radial-gradient(circle at 50% -20%, #1e1b4b 0%, #0f172a 100%) !important;
+      background-color: #0f172a;
       color: #f8fafc;
       height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       padding: 16px;
     }
 
     .login-card {
-      background: rgba(30, 41, 59, 0.6) !important;
+      background: #1e293b;
       border-radius: 20px;
-      padding: 32px 28px;
+      padding: 28px;
       width: 100%;
       max-width: 420px;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(99, 102, 241, 0.2) !important;
-      box-shadow: 0 0 25px rgba(99, 102, 241, 0.15) !important;
-      position: relative;
-    }
-
-    .login-card::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 20px;
-      padding: 1px;
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(59, 130, 246, 0.1));
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      pointer-events: none;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(148, 163, 184, 0.14);
     }
 
     .form-control {
-      background: rgba(15, 23, 42, 0.6) !important;
-      border: 1px solid rgba(99, 102, 241, 0.2) !important;
-      color: white !important;
-      padding: 12px 14px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: white;
+      padding: 12px;
       border-radius: 12px;
-      transition: all 0.3s ease;
     }
 
     .form-control:focus {
-      background: rgba(15, 23, 42, 0.8) !important;
-      color: white !important;
-      border-color: #6366f1 !important;
-      box-shadow: 0 0 12px rgba(99, 102, 241, 0.45) !important;
+      background: #0f172a;
+      color: white;
+      border-color: #6366f1;
+      box-shadow: none;
     }
 
     .btn-login {
@@ -68,22 +51,14 @@
       border-radius: 12px;
       width: 100%;
       font-weight: 700;
-      margin-top: 15px;
-      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
-      transition: all 0.3s ease;
-    }
-
-    .btn-login:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 28px rgba(99, 102, 241, 0.5);
-      opacity: 0.95;
+      margin-top: 10px;
+      box-shadow: 0 14px 28px rgba(99, 102, 241, 0.22);
     }
 
     .brand-icon {
       font-size: 42px;
-      color: #818cf8;
-      margin-bottom: 12px;
-      text-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+      color: #6366f1;
+      margin-bottom: 10px;
     }
   </style>
 </head>

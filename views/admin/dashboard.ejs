@@ -524,7 +524,7 @@ async function loadDevices() {
   try {
     const search = document.getElementById('search-device')?.value || '';
     const status = document.getElementById('filter-status')?.value || 'all';
-    let url = '/admin/api/devices?limit=200';
+    let url = '/admin/api/devices';
     if (search) url += '&search=' + encodeURIComponent(search);
     if (status && status !== 'all') url += '&status=' + status;
 

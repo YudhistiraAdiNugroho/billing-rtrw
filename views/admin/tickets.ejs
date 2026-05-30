@@ -5,78 +5,6 @@
   <title><%= t('admin.nav.customer_tickets', 'Keluhan Pelanggan') %> | <%= company %></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="/css/admin.css">
-  <style>
-    /* Theme overrides using premium glassmorphism & dark aura */
-    :root {
-      --bg: #0b0f19;
-      --bg2: rgba(17, 24, 39, 0.7);
-      --bg3: rgba(31, 41, 55, 0.6);
-      --border: rgba(99, 102, 241, 0.15);
-      --text: #f3f4f6;
-      --muted: #9ca3af;
-      --primary: #6366f1;
-    }
-    body {
-      background: radial-gradient(circle at 50% -20%, #1e1b4b 0%, #09090b 100%) !important;
-    }
-    .card {
-      background: var(--bg2) !important;
-      border: 1px solid var(--border) !important;
-      backdrop-filter: blur(12px) !important;
-      -webkit-backdrop-filter: blur(12px) !important;
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    }
-    .topbar {
-      background: rgba(17, 24, 39, 0.8) !important;
-      border-bottom: 1px solid var(--border) !important;
-      backdrop-filter: blur(8px) !important;
-      -webkit-backdrop-filter: blur(8px) !important;
-    }
-    .sidebar {
-      background: rgba(17, 24, 39, 0.95) !important;
-      border-right: 1px solid var(--border) !important;
-    }
-    .dtbl th {
-      background: rgba(31, 41, 55, 0.8) !important;
-      border-bottom: 1px solid var(--border) !important;
-    }
-    .dtbl td {
-      border-bottom: 1px solid rgba(240, 246, 252, 0.05) !important;
-    }
-    .dtbl tr:hover td {
-      background: rgba(255, 255, 255, 0.03) !important;
-    }
-    .sc {
-      background: var(--bg2) !important;
-      border: 1px solid var(--border) !important;
-      backdrop-filter: blur(12px) !important;
-      -webkit-backdrop-filter: blur(12px) !important;
-      box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.2);
-    }
-    /* Modal premium glow & glass */
-    .mb {
-      background: rgba(17, 24, 39, 0.9) !important;
-      border: 1px solid rgba(99, 102, 241, 0.3) !important;
-      backdrop-filter: blur(20px) !important;
-      -webkit-backdrop-filter: blur(20px) !important;
-      box-shadow: 0 0 25px rgba(99, 102, 241, 0.25) !important;
-    }
-    .mh {
-      border-bottom: 1px solid var(--border) !important;
-    }
-    .mf {
-      border-top: 1px solid var(--border) !important;
-    }
-    .fc, .fs {
-      background: rgba(17, 24, 39, 0.5) !important;
-      border: 1px solid var(--border) !important;
-      color: #f3f4f6 !important;
-    }
-    .fc:focus, .fs:focus {
-      border-color: #6366f1 !important;
-      box-shadow: 0 0 10px rgba(99, 102, 241, 0.4) !important;
-    }
-  </style>
 </head>
 <body>
 <%- include('partials/sidebar', { activePage: 'tickets', company }) %>
@@ -106,9 +34,8 @@
 
     <!-- Filter -->
     <div class="card">
-      <div class="card-hd" style="display:flex; justify-content:space-between; align-items:center">
+      <div class="card-hd">
         <h6><i class="bi bi-list-ul"></i> <%= t('admin.tickets.list_title', 'Daftar Keluhan') %> (<%= tickets.length %>)</h6>
-        <button class="btn btn-p btn-sm" onclick="openModal('addTicketModal')"><i class="bi bi-plus-lg"></i> Tambah Penugasan / Tiket</button>
       </div>
       <div class="card-bd" style="padding-bottom:0">
         <form method="GET" action="/admin/tickets" style="display:flex;gap:10px;margin-bottom:18px">
@@ -170,7 +97,7 @@
                   data-notes="<%= ticket.technician_notes || '' %>"
                   data-photos="<%= ticket.photos || '' %>"
                   data-customer-photos="<%= ticket.customer_photos || '' %>"
-                  data-tech-id="<%= ticket.technician_id || '' %>">
+                  data-tech="<%= ticket.technician_name || t('admin.tickets.no_technician', 'Belum ada') %>">
                   <i class="bi bi-pencil"></i>
                 </button>
                 <% if ((ticket.photos && ticket.photos !== '' && ticket.photos !== '[]') || (ticket.customer_photos && ticket.customer_photos !== '' && ticket.customer_photos !== '[]')) { %>
@@ -196,54 +123,6 @@
   </div>
 </div>
 
-<!-- Modal Tambah Tiket Manual -->
-<div class="mo" id="addTicketModal">
-  <div class="mb" style="max-width:540px">
-    <div class="mh">
-      <span class="mt"><i class="bi bi-ticket-detailed"></i> Tambah Penugasan / Tiket Baru</span>
-      <button class="mc" onclick="closeModal('addTicketModal')">&times;</button>
-    </div>
-    <form method="POST" action="/admin/tickets/create">
-      <div class="mbody">
-        <div class="fg">
-          <label class="fl">Pilih Pelanggan *</label>
-          <select class="fs" name="customerId" required style="width: 100%">
-            <option value="">-- Pilih Pelanggan --</option>
-            <% if (typeof customers !== 'undefined') { %>
-              <% customers.forEach(c => { %>
-                <option value="<%= c.id %>"><%= c.name %> (<%= c.phone || '-' %>) — <%= c.address || '-' %></option>
-              <% }) %>
-            <% } %>
-          </select>
-        </div>
-        <div class="fg">
-          <label class="fl">Subjek / Masalah *</label>
-          <input class="fc" name="subject" required placeholder="Contoh: Perbaikan Router, Gangguan ODP, Kabel Putus">
-        </div>
-        <div class="fg">
-          <label class="fl">Detail Keluhan / Penugasan *</label>
-          <textarea class="fc" name="message" required style="height:100px" placeholder="Masukkan rincian keluhan atau instruksi kerja untuk teknisi..."></textarea>
-        </div>
-        <div class="fg">
-          <label class="fl">Teknisi Ditugaskan</label>
-          <select class="fs" name="technicianId" style="width: 100%">
-            <option value="">-- Tanpa Teknisi (Pool Keluhan) --</option>
-            <% if (typeof technicians !== 'undefined') { %>
-              <% technicians.forEach(tech => { %>
-                <option value="<%= tech.id %>"><%= tech.name %> (<%= tech.area || '-' %>)</option>
-              <% }) %>
-            <% } %>
-          </select>
-        </div>
-      </div>
-      <div class="mf">
-        <button type="button" class="btn btn-g" onclick="closeModal('addTicketModal')">Batal</button>
-        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Simpan Penugasan</button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <!-- Modal Update -->
 <div class="mo" id="updateModal">
   <div class="mb">
@@ -252,15 +131,7 @@
       <div class="mbody">
         <div class="fg"><label class="fl"><%= t('admin.tickets.table.customer', 'Pelanggan') %></label><input class="fc" id="upCustomer" readonly></div>
         <div class="fg"><label class="fl"><%= t('admin.tickets.table.issue', 'Kendala') %></label><input class="fc" id="upSubject" readonly></div>
-        <div class="fg">
-          <label class="fl"><%= t('admin.tickets.table.technician', 'Teknisi') %></label>
-          <select class="fs" name="technicianId" id="upTechnician">
-            <option value=""><%= t('admin.tickets.no_technician', 'Belum ditugaskan') %></option>
-            <% technicians.forEach(tech => { %>
-              <option value="<%= tech.id %>"><%= tech.name %></option>
-            <% }) %>
-          </select>
-        </div>
+        <div class="fg"><label class="fl"><%= t('admin.tickets.table.technician', 'Teknisi') %></label><input class="fc" id="upTechnician" readonly></div>
         <div class="fg"><label class="fl"><%= t('admin.tickets.modal.message', 'Detail Pesan') %></label><textarea class="fc" id="upMessage" rows="3" readonly></textarea></div>
         <div class="fg" id="techNotesContainer" style="display:none;">
           <label class="fl"><i class="bi bi-pencil-square me-1"></i>Catatan Teknisi</label>
@@ -317,7 +188,7 @@ document.addEventListener('click', function(e) {
   document.getElementById('upMessage').value = btn.dataset.message;
   document.getElementById('upSubject').value = btn.dataset.subject;
   document.getElementById('upCustomer').value = btn.dataset.customer;
-  document.getElementById('upTechnician').value = btn.dataset.techId || '';
+  document.getElementById('upTechnician').value = btn.dataset.tech;
   
   // Show technician notes if available
   const notes = btn.dataset.notes || '';

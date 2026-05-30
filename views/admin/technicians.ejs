@@ -91,7 +91,6 @@
         <div class="fg"><label class="fl"><%= t('admin.technicians.form.login_username', 'Username Login') %></label><input type="text" name="username" class="fc" required></div>
         <div class="fg"><label class="fl"><%= t('admin.technicians.form.password', 'Password') %></label><input type="text" name="password" class="fc" required></div>
         <div class="fg"><label class="fl"><%= t('admin.technicians.form.whatsapp', 'No. WhatsApp') %></label><input type="text" name="phone" class="fc" placeholder="<%= t('admin.technicians.form.whatsapp_placeholder', 'Contoh: 08123456789') %>"></div>
-        <div class="fg"><label class="fl">Telegram Chat ID</label><input type="text" name="telegram_chat_id" class="fc" placeholder="Contoh: 12345678"></div>
         <div class="fg"><label class="fl"><%= t('admin.technicians.form.area', 'Area Tugas') %></label><input type="text" name="area" class="fc" placeholder="<%= t('admin.technicians.form.area_placeholder', 'Contoh: Kelurahan A, Blok B') %>"></div>
       </div>
       <div class="mf">
@@ -112,7 +111,6 @@
         <div class="fg"><label class="fl"><%= t('admin.technicians.form.login_username', 'Username Login') %></label><input type="text" name="username" id="e-username" class="fc" required></div>
         <div class="fg"><label class="fl"><%= t('admin.technicians.form.password', 'Password') %></label><input type="text" name="password" id="e-password" class="fc" required></div>
         <div class="fg"><label class="fl"><%= t('admin.technicians.form.whatsapp', 'No. WhatsApp') %></label><input type="text" name="phone" id="e-phone" class="fc"></div>
-        <div class="fg"><label class="fl">Telegram Chat ID</label><input type="text" name="telegram_chat_id" id="e-telegram-chat-id" class="fc" placeholder="Contoh: 12345678"></div>
         <div class="fg"><label class="fl"><%= t('admin.technicians.form.area', 'Area Tugas') %></label><input type="text" name="area" id="e-area" class="fc"></div>
         <div class="fg">
           <label class="fl"><%= t('admin.technicians.form.account_status', 'Status Akun') %></label>
@@ -143,7 +141,6 @@ function editTech(t) {
   document.getElementById('e-username').value = t.username;
   document.getElementById('e-password').value = t.password;
   document.getElementById('e-phone').value = t.phone || '';
-  document.getElementById('e-telegram-chat-id').value = t.telegram_chat_id || '';
   document.getElementById('e-area').value = t.area || '';
   document.getElementById('e-status').value = t.is_active;
   openModal('editTechModal');

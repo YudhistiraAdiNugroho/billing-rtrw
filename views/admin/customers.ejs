@@ -314,19 +314,6 @@
               <% } %>
             </select>
           </div>
-          <div class="fg">
-            <label class="fl">
-              <i class="bi bi-tools"></i> Teknisi Ditugaskan
-            </label>
-            <select class="fs" name="technician_id">
-              <option value="">-- Tanpa Teknisi --</option>
-              <% if (typeof technicians !== 'undefined') { %>
-                <% technicians.forEach(tech => { %>
-                  <option value="<%= tech.id %>"><%= tech.name %> (<%= tech.area || '-' %>)</option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
         </div>
         <div class="form-row">
           <div class="fg">
@@ -521,19 +508,6 @@
               <% if (typeof collectors !== 'undefined') { %>
                 <% collectors.forEach(col => { %>
                   <option value="<%= col.id %>"><%= col.name %> (<%= col.username %>)</option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-          <div class="fg">
-            <label class="fl">
-              <i class="bi bi-tools"></i> Teknisi Ditugaskan
-            </label>
-            <select class="fs" name="technician_id" id="e_technician_id">
-              <option value="">-- Tanpa Teknisi --</option>
-              <% if (typeof technicians !== 'undefined') { %>
-                <% technicians.forEach(tech => { %>
-                  <option value="<%= tech.id %>"><%= tech.name %> (<%= tech.area || '-' %>)</option>
                 <% }) %>
               <% } %>
             </select>
@@ -858,7 +832,6 @@ function editCust(idx) {
   document.getElementById('e_hotspot_profile').value=c.hotspot_profile||'';
   document.getElementById('e_tag').value=c.genieacs_tag||'';
   document.getElementById('e_collector_id').value=c.collector_id||'';
-  document.getElementById('e_technician_id').value=c.technician_id||'';
   document.getElementById('e_olt_id').value=c.olt_id||'';
   document.getElementById('e_odp_id').value=c.odp_id||'';
   document.getElementById('e_pon_port').value=c.pon_port||'';

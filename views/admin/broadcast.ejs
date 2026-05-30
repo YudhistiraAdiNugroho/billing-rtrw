@@ -34,6 +34,7 @@
     <div class="wa-tabs">
       <a href="/admin/whatsapp" class="wa-tab <%= waTab==='status' ? 'active' : '' %>"><i class="bi bi-phone"></i> Status</a>
       <a href="/admin/whatsapp/broadcast" class="wa-tab <%= waTab==='broadcast' ? 'active' : '' %>"><i class="bi bi-megaphone"></i> Broadcast & Pengingat</a>
+      <a href="/admin/whatsapp/templates" class="wa-tab <%= waTab==='templates' ? 'active' : '' %>"><i class="bi bi-chat-left-quote"></i> Template Pesan</a>
     </div>
 
     <div class="card">
@@ -98,16 +99,7 @@
       <form method="POST" action="/admin/whatsapp/auto-billing" onsubmit="return confirm('Simpan pengaturan pengingat tagihan otomatis?');">
         <div class="card-bd">
           <%
-            const defaultAutoBillingMsg =
-              `Yth. Pelanggan {{nama}},\n\n` +
-              `Ini adalah pengingat sebelum tanggal jatuh tempo/isolir.\n\n` +
-              `📦 *Paket:* {{paket}}\n` +
-              `💰 *Total Tagihan:* Rp {{tagihan}}\n` +
-              `📅 *Periode:* {{rincian}}\n\n` +
-              `Mohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\n` +
-              `Terima kasih atas kerja samanya.\n` +
-              `Salam,\nAdmin ${company}`;
-            const autoBillingMsg = getSetting('whatsapp_auto_billing_message', defaultAutoBillingMsg);
+            // autoBillingMsg is loaded dynamically from the SQLite database
           %>
           <div class="form-row" style="margin-bottom: 12px;">
             <div class="fg" style="width: 100%;">
