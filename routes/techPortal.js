@@ -172,29 +172,8 @@ router.get('/map', requireTechSession, (req, res) => {
 // --- ACTIONS ---
 router.post('/tickets/:id/take', requireTechSession, (req, res) => {
   try {
-    const ticketId = req.params.id;
-    const techId = req.session.techId;
-    
-    techSvc.takeTicket(ticketId, techId);
+    techSvc.takeTicket(req.params.id, req.session.techId);
     req.session._msg = { type: 'success', text: 'Tiket berhasil diambil. Silakan mulai kerjakan.' };
-    
-    // --- TELEGRAM NOTIFICATION ON TICKET TAKEN ---
-    try {
-      const ticketSvc = require('../services/ticketService');
-      const ticket = ticketSvc.getTicketById(ticketId);
-      if (ticket) {
-        const { sendTelegramNotification } = require('../services/telegramBot');
-        const msg = `🛠️ *TIKET DIAMBIL OLEH TEKNISI*\n\n` +
-                     `🎫 *ID Tiket:* #${ticket.id}\n` +
-                     `👤 *Teknisi:* ${req.session.techName || '-'}\n` +
-                     `👤 *Pelanggan:* ${ticket.customer_name}\n` +
-                     `📝 *Subjek:* ${ticket.subject}\n` +
-                     `💬 *Keluhan:* ${ticket.message}`;
-        sendTelegramNotification(msg, ticket.technician_telegram_chat_id || null);
-      }
-    } catch (tgErr) {
-      console.error(`[TechPortal] TG Notification Error: ${tgErr.message}`);
-    }
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal mengambil tiket: ' + e.message };
   }
@@ -458,7 +437,7 @@ router.get('/api/odps/:id/ports', requireTechSession, (req, res) => {
 
 router.get('/api/devices', requireTechSession, async (req, res) => {
   try {
-    const { search, status, acs, limit = 100, offset = 0 } = req.query;
+    const { search, status, acs, limit = 999999, offset = 0 } = req.query;
     const customers = db.prepare('SELECT id, name, phone, pppoe_username, genieacs_tag FROM customers').all();
     const byPppoe = new Map();
     const byTag = new Map();
@@ -469,7 +448,7 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
       if (tg) byTag.set(tg, c);
     }
 
-    const result = await customerDevice.listAllDevices(1000);
+    const result = await customerDevice.listAllDevices(999999);
     if (!result.ok) return res.json({ error: result.message });
     
     let devices = result.devices.map(d => {
@@ -523,7 +502,7 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
 
     if (status && status !== 'all') devices = devices.filter(d => d.status === status);
     
-    res.json({ devices: devices.slice(0, 100), total: devices.length });
+    res.json({ devices: devices, total: devices.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -252,6 +252,23 @@ async function trySendWhatsappPayment(customerPhone, message) {
   }
 }
 
+async function sendPaymentSuccessWA(customerPhone, customerName, periodText, amountText, paidBy) {
+  try {
+    const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
+    const template = db.getAppSetting('whatsapp_payment_success_message', defaultSuccess);
+
+    const formattedMsg = template
+      .replace(/{{nama}}/gi, customerName || 'Pelanggan')
+      .replace(/{{periode}}/gi, periodText || '-')
+      .replace(/{{total}}/gi, amountText || '-')
+      .replace(/{{metode}}/gi, paidBy || '-');
+
+    return await trySendWhatsappPayment(customerPhone, formattedMsg);
+  } catch (e) {
+    return false;
+  }
+}
+
 // Middleware strictly for Admin
 function restrictToAdmin(req, res, next) {
   if (req.session?.isAdmin) return next();
@@ -1040,15 +1057,13 @@ router.post('/collector-payments/:id/approve', requireAdminSession, express.urle
 
     const customer = customerSvc.getCustomerById(inv.customer_id);
     if (customer && customer.phone) {
-      const msg =
-        `✅ *PEMBAYARAN BERHASIL*\n\n` +
-        `👤 *Pelanggan:* ${customer.name}\n` +
-        `🧾 *Invoice:* #${inv.id}\n` +
-        `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
-        `💰 *Nominal Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n` +
-        `🏷️ *Dibayar Via:* ${collectorLabel}\n\n` +
-        `Terima kasih.`;
-      await trySendWhatsappPayment(customer.phone, msg);
+      await sendPaymentSuccessWA(
+        customer.phone,
+        customer.name,
+        `${inv.period_month}/${inv.period_year}`,
+        Number(inv.amount || 0).toLocaleString('id-ID'),
+        collectorLabel
+      );
     }
 
     const freshCustomer = customerSvc.getAllCustomers().find(c => Number(c.id) === Number(inv.customer_id));
@@ -1481,7 +1496,6 @@ router.get('/customers', requireAdminSession, requireSidebarMenuAccess('customer
   const olts = oltSvc.getAllOlts();
   const odps = odpSvc.getAllOdps();
   const collectors = adminSvc.getAllCollectors();
-  const technicians = require('../services/techService').getAllTechnicians().filter(t => t.is_active !== 0);
 
   // Apply status filter in JS if provided
   const filteredCustomers = filterStatus
@@ -1490,7 +1504,7 @@ router.get('/customers', requireAdminSession, requireSidebarMenuAccess('customer
 
   res.render('admin/customers', {
     title: 'Data Pelanggan', company: company(), activePage: 'customers',
-    customers: filteredCustomers, stats, packages, routers, olts, odps, collectors, technicians, search, filterStatus, msg: flashMsg(req),
+    customers: filteredCustomers, stats, packages, routers, olts, odps, collectors, search, filterStatus, msg: flashMsg(req),
     settings: getSettings()
   });
 });
@@ -1563,59 +1577,6 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
     }
 
     customerSvc.createCustomer(req.body);
-
-    // Send WhatsApp/Telegram notification to technician if assigned
-    const technicianId = req.body.technician_id ? Number(req.body.technician_id) : null;
-    if (technicianId) {
-      try {
-        const techSvc = require('../services/techService');
-        const tech = techSvc.getTechById(technicianId);
-        if (tech) {
-          const odpSvc = require('../services/odpService');
-          const odp = req.body.odp_id ? odpSvc.getAllOdps().find(o => Number(o.id) === Number(req.body.odp_id)) : null;
-          const pkg = req.body.package_id ? customerSvc.getPackageById(req.body.package_id) : null;
-          
-          const notifMsg = `🛠️ *PENUGASAN PELANGGAN BARU*\n\n` +
-                           `👤 *Pelanggan:* ${req.body.name}\n` +
-                           `📞 *HP/WA:* ${req.body.phone || '-'}\n` +
-                           `📍 *Alamat:* ${req.body.address || '-'}\n` +
-                           `📦 *Paket:* ${pkg ? pkg.name : '-'}\n` +
-                           `🔌 *Koneksi:* ${req.body.connection_type || '-'}\n` +
-                           (req.body.connection_type === 'pppoe' ? `👤 *PPPoE User:* ${req.body.pppoe_username || '-'}\n` : '') +
-                           (req.body.connection_type === 'static' ? `🌐 *IP Statis:* ${req.body.static_ip || '-'}\n` : '') +
-                           (req.body.connection_type === 'hotspot' ? `👤 *Hotspot User:* ${req.body.hotspot_username || '-'}\n` : '') +
-                           `📌 *ODP:* ${odp ? odp.name : '-'}\n` +
-                           `🔌 *PON Port:* ${req.body.pon_port || '-'}\n` +
-                           `📝 *Catatan:* ${req.body.notes || '-'}`;
-
-          // Send Telegram if chat ID exists
-          if (tech.telegram_chat_id) {
-            try {
-              const { sendTelegramNotification } = require('../services/telegramBot');
-              sendTelegramNotification(notifMsg, tech.telegram_chat_id);
-            } catch (tgErr) {
-              console.error('Failed to send Telegram notification to technician:', tgErr);
-            }
-          }
-          
-          // Send WhatsApp if phone exists
-          if (tech.phone) {
-            try {
-              const { sendWA } = await import('../services/whatsappBot.mjs');
-              let phone = tech.phone.trim().replace(/\D/g, '');
-              if (phone.startsWith('0')) {
-                phone = '62' + phone.slice(1);
-              }
-              await sendWA(phone, notifMsg);
-            } catch (waErr) {
-              console.error('Failed to send WhatsApp notification to technician:', waErr);
-            }
-          }
-        }
-      } catch (notifErr) {
-        console.error('Error sending technician notification:', notifErr);
-      }
-    }
     
     // Sync to MikroTik if username provided
     if (connectionType === 'pppoe' && req.body.pppoe_username) {
@@ -1985,15 +1946,13 @@ router.post('/customers/:id/billing/pay', requireAdminSession, express.urlencode
 
       if (customer && customer.phone && done > 0) {
         const monthsText = (sum.paidMonths || []).join(', ');
-        const msg =
-          `✅ *PEMBAYARAN BERHASIL*\n\n` +
-          `👤 *Pelanggan:* ${customer.name}\n` +
-          `📅 *Tahun:* ${sum.year}\n` +
-          `🧾 *Bulan Dibayar:* ${monthsText || '-'}\n` +
-          `💰 *Total:* Rp ${Number(total || 0).toLocaleString('id-ID')}\n` +
-          `🏷️ *Dibayar Via:* ${paidBy}\n\n` +
-          `Terima kasih.`;
-        await trySendWhatsappPayment(customer.phone, msg);
+        await sendPaymentSuccessWA(
+          customer.phone,
+          customer.name,
+          `${monthsText} / ${sum.year}`,
+          Number(total || 0).toLocaleString('id-ID'),
+          paidBy
+        );
       }
     } else {
       const m = parseInt(month);
@@ -2008,15 +1967,13 @@ router.post('/customers/:id/billing/pay', requireAdminSession, express.urlencode
           const invs = billingSvc.getInvoicesByAny(String(req.params.id)) || [];
           const inv = (Array.isArray(invs) ? invs : []).find(i => Number(i?.period_month) === Number(m) && Number(i?.period_year) === Number(y)) || null;
           const amount = inv ? Number(inv.amount || 0) : 0;
-          const msg =
-            `✅ *PEMBAYARAN BERHASIL*\n\n` +
-            `👤 *Pelanggan:* ${customer.name}\n` +
-            `📅 *Periode:* ${m}/${y}\n` +
-            `${inv ? `🧾 *Invoice:* #${inv.id}\n` : ''}` +
-            `💰 *Nominal Tagihan:* Rp ${amount.toLocaleString('id-ID')}\n` +
-            `🏷️ *Dibayar Via:* ${paidBy}\n\n` +
-            `Terima kasih.`;
-          await trySendWhatsappPayment(customer.phone, msg);
+          await sendPaymentSuccessWA(
+            customer.phone,
+            customer.name,
+            `${m}/${y}`,
+            amount.toLocaleString('id-ID'),
+            paidBy
+          );
         }
       }
     }
@@ -2250,15 +2207,13 @@ router.post('/billing/pay-bulk', requireAdminSession, express.urlencoded({ exten
           .map(x => `${x.period_month}/${x.period_year}`)
           .slice(0, 10)
           .join(', ') + (paidInvoices.length > 10 ? `, +${paidInvoices.length - 10} lainnya` : '');
-        const msg =
-          `✅ *PEMBAYARAN BERHASIL*\n\n` +
-          `👤 *Pelanggan:* ${customer.name}\n` +
-          `🧾 *Tagihan Dibayar:* ${paidInvoices.length} invoice\n` +
-          `📅 *Periode:* ${periods}\n` +
-          `💰 *Total:* Rp ${Number(total || 0).toLocaleString('id-ID')}\n` +
-          `🏷️ *Dibayar Via:* ${paidBy}\n\n` +
-          `Terima kasih.`;
-        await trySendWhatsappPayment(customer.phone, msg);
+        await sendPaymentSuccessWA(
+          customer.phone,
+          customer.name,
+          periods,
+          Number(total || 0).toLocaleString('id-ID'),
+          paidBy
+        );
       }
     }
 
@@ -2305,15 +2260,13 @@ router.post('/billing/:id/pay', requireAdminSession, express.urlencoded({ extend
     // Check if customer is currently suspended and has no more unpaid invoices
     const customer = customerSvc.getCustomerById(inv.customer_id);
     if (!wasPaid && customer && customer.phone) {
-      const msg =
-        `✅ *PEMBAYARAN BERHASIL*\n\n` +
-        `👤 *Pelanggan:* ${customer.name}\n` +
-        `🧾 *Invoice:* #${inv.id}\n` +
-        `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
-        `💰 *Nominal Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n` +
-        `🏷️ *Dibayar Via:* ${paidBy}\n\n` +
-        `Terima kasih.`;
-      await trySendWhatsappPayment(customer.phone, msg);
+      await sendPaymentSuccessWA(
+        customer.phone,
+        customer.name,
+        `${inv.period_month}/${inv.period_year}`,
+        Number(inv.amount || 0).toLocaleString('id-ID'),
+        paidBy
+      );
     }
     if (customer && customer.status === 'suspended') {
       const freshCustomer = customerSvc.getAllCustomers().find(c => c.id === inv.customer_id);
@@ -2484,10 +2437,13 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
     const host = req.get('host');
     const loginLink = `${protocol}://${host}/customer/login`;
 
-    const templateQris = `Yth. *{{nama}}*,\n\nTagihan internet Anda untuk periode *{{periode}}*.\n\n📦 *Paket:* {{paket}}\n💳 *Pembayaran QRIS (Semua E-Wallet)*\n💰 *Nominal (WAJIB tepat):* Rp {{qris_nominal}}\n🏷️ *Kode:* {{qris_kode}}\n{{qris_qr}}\n\nCatatan: nominal harus sama persis agar sistem dapat mendeteksi pembayaran.\n\nTerima kasih.\nSalam,\nAdmin ${getSetting('company_header', 'ISP')}`;
+    const comp = company();
+    const defaultAutoBilling = `Yth. Pelanggan {{nama}},\n\nIni adalah pengingat sebelum tanggal jatuh tempo/isolir.\n\n📦 *Paket:* {{paket}}\n💰 *Total Tagihan:* Rp {{tagihan}}\n📅 *Periode:* {{rincian}}\n\nMohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\nTerima kasih atas kerja samanya.\nSalam,\nAdmin ${comp}`;
+    
+    const defaultQris = `Yth. Pelanggan {{nama}},\n\nBerikut rincian tagihan manual + Kode Bayar QRIS Anda:\n\n📦 *Paket:* {{paket}}\n📅 *Periode:* {{periode}}\n💰 *Nominal:* Rp {{qris_nominal}}\n\nSilakan scan QRIS berikut untuk melakukan pembayaran otomatis:\n{{qris_qr}}\n\nTerima kasih.`;
 
-    // Pesan Template (Sama dengan Broadcast Unpaid)
-    const template = `Yth. *{{nama}}*,\n\nBerdasarkan data sistem kami, Anda memiliki tagihan internet yang *BELUM LUNAS*.\n\n📦 *Paket:* {{paket}}\n💰 *Total Tagihan:* Rp {{tagihan}}\n📅 *Periode:* {{rincian}}\n\nMohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\nTerima kasih atas kerja samanya.\nSalam,\nAdmin ${getSetting('company_header', 'ISP')}`;
+    const templateQris = db.getAppSetting('whatsapp_billing_qris_message', defaultQris);
+    const template = db.getAppSetting('whatsapp_auto_billing_message', defaultAutoBilling);
 
     const formattedMsg = (qrisAmountUnique > 0 && qrisCode > 0)
       ? templateQris
@@ -2531,145 +2487,21 @@ router.get('/tickets', requireAdminSession, requireSidebarMenuAccess('tickets'),
   const { status = 'all' } = req.query;
   const tickets = ticketSvc.getAllTickets(status);
   const stats = ticketSvc.getTicketStats();
-  const technicians = require('../services/techService').getAllTechnicians().filter(t => t.is_active !== 0);
-  const customers = customerSvc.getAllCustomers();
   res.render('admin/tickets', {
     title: 'Keluhan Pelanggan', company: company(), activePage: 'tickets',
-    tickets, stats, filterStatus: status, technicians, customers, msg: flashMsg(req)
+    tickets, stats, filterStatus: status, msg: flashMsg(req)
   });
-});
-
-router.post('/tickets/create', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
-  try {
-    const { customerId, subject, message, technicianId } = req.body;
-    
-    if (!customerId || !subject || !message) {
-      throw new Error('Pelanggan, Subjek, dan Detail Gangguan harus diisi.');
-    }
-
-    const custId = parseInt(customerId, 10);
-    const parsedTechId = technicianId ? parseInt(technicianId, 10) : null;
-    
-    // Insert ticket into DB
-    const stmt = db.prepare(`
-      INSERT INTO tickets (customer_id, subject, message, technician_id, status)
-      VALUES (?, ?, ?, ?, 'open')
-    `);
-    const result = stmt.run(custId, subject, message, Number.isFinite(parsedTechId) ? parsedTechId : null);
-    const ticketId = result.lastInsertRowid;
-
-    req.session._msg = { type: 'success', text: 'Tiket penugasan manual berhasil dibuat.' };
-
-    // --- TELEGRAM & WHATSAPP NOTIFICATION ON TICKET CREATION & ASSIGNMENT ---
-    if (ticketId && parsedTechId) {
-      const ticket = ticketSvc.getTicketById(ticketId);
-      if (ticket) {
-        try {
-          const techSvc = require('../services/techService');
-          const tech = techSvc.getTechById(parsedTechId);
-          if (tech) {
-            const msg = `🛠️ *PENUGASAN TIKET GANGGUAN BARU* 🛠️\n\n` +
-                         `🎫 *ID Tiket:* #${ticket.id}\n` +
-                         `👤 *Teknisi:* ${tech.name || '-'}\n` +
-                         `👤 *Pelanggan:* ${ticket.customer_name}\n` +
-                         `📞 *HP/WA Pelanggan:* ${ticket.customer_phone || '-'}\n` +
-                         `📍 *Alamat:* ${ticket.customer_address || '-'}\n` +
-                         `📝 *Subjek:* ${ticket.subject}\n` +
-                         `💬 *Keterangan:* ${ticket.message}`;
-
-            // Send Telegram if chat ID exists
-            if (tech.telegram_chat_id) {
-              try {
-                const { sendTelegramNotification } = require('../services/telegramBot');
-                sendTelegramNotification(msg, tech.telegram_chat_id);
-              } catch (tgErr) {
-                console.error(`[AdminPortal] TG Notification Error: ${tgErr.message}`);
-              }
-            }
-
-            // Send WhatsApp if phone exists
-            if (tech.phone) {
-              try {
-                const { sendWA } = await import('../services/whatsappBot.mjs');
-                let phone = tech.phone.trim().replace(/\D/g, '');
-                if (phone.startsWith('0')) {
-                  phone = '62' + phone.slice(1);
-                }
-                await sendWA(phone, msg);
-              } catch (waErr) {
-                console.error(`[AdminPortal] WA Notification Error: ${waErr.message}`);
-              }
-            }
-          }
-        } catch (notifErr) {
-          console.error(`[AdminPortal] Ticket Notification Error: ${notifErr.message}`);
-        }
-      }
-    }
-  } catch (e) {
-    req.session._msg = { type: 'error', text: 'Gagal membuat tiket: ' + e.message };
-  }
-  res.redirect('/admin/tickets');
 });
 
 router.post('/tickets/:id/update', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
-    const { status, technicianId } = req.body;
+    const { status } = req.body;
     const ticketId = req.params.id;
     
-    // Dapatkan info tiket sebelum update untuk mengecek perubahan teknisi
-    const oldTicket = ticketSvc.getTicketById(ticketId);
-    
-    const parsedTechId = technicianId ? parseInt(technicianId, 10) : null;
-    ticketSvc.updateTicketStatus(ticketId, status, Number.isFinite(parsedTechId) ? parsedTechId : null);
+    ticketSvc.updateTicketStatus(ticketId, status);
     req.session._msg = { type: 'success', text: 'Status keluhan berhasil diperbarui.' };
 
-    const ticket = ticketSvc.getTicketById(ticketId);
-
-    // --- TELEGRAM & WHATSAPP NOTIFICATION ON TICKET ASSIGNMENT ---
-    if (ticket && parsedTechId && (!oldTicket || oldTicket.technician_id !== parsedTechId)) {
-      try {
-        const techSvc = require('../services/techService');
-        const tech = techSvc.getTechById(parsedTechId);
-        if (tech) {
-          const msg = `🛠️ *TIKET DITUGASKAN KEPADA TEKNISI*\n\n` +
-                       `🎫 *ID Tiket:* #${ticket.id}\n` +
-                       `👤 *Teknisi:* ${tech.name || '-'}\n` +
-                       `👤 *Pelanggan:* ${ticket.customer_name}\n` +
-                       `📞 *HP/WA Pelanggan:* ${ticket.customer_phone || '-'}\n` +
-                       `📍 *Alamat:* ${ticket.customer_address || '-'}\n` +
-                       `📝 *Subjek:* ${ticket.subject}\n` +
-                       `💬 *Keluhan:* ${ticket.message}`;
-
-          // Send Telegram if chat ID exists
-          if (tech.telegram_chat_id) {
-            try {
-              const { sendTelegramNotification } = require('../services/telegramBot');
-              sendTelegramNotification(msg, tech.telegram_chat_id);
-            } catch (tgErr) {
-              console.error(`[AdminPortal] TG Notification Error: ${tgErr.message}`);
-            }
-          }
-
-          // Send WhatsApp if phone exists
-          if (tech.phone) {
-            try {
-              const { sendWA } = await import('../services/whatsappBot.mjs');
-              let phone = tech.phone.trim().replace(/\D/g, '');
-              if (phone.startsWith('0')) {
-                phone = '62' + phone.slice(1);
-              }
-              await sendWA(phone, msg);
-            } catch (waErr) {
-              console.error(`[AdminPortal] WA Notification Error: ${waErr.message}`);
-            }
-          }
-        }
-      } catch (notifErr) {
-        console.error(`[AdminPortal] Ticket Notification Error: ${notifErr.message}`);
-      }
-    }
-
+    // --- WHATSAPP NOTIFICATION FOR RESOLVED TICKET (BY ADMIN) ---
     if (status === 'resolved') {
       try {
         const settings = getSettings();
@@ -3681,7 +3513,7 @@ router.get('/api/genieacs/test', requireAdmin, async (req, res) => {
 // ─── API ROUTES (existing) ──────────────────────────────────────────────────
 router.get('/api/stats', requireAdmin, async (req, res) => {
   try {
-    const result = await customerDevice.listAllDevices(1000);
+    const result = await customerDevice.listAllDevices(999999);
     if (!result.ok) return res.json({ error: result.message });
     const devices = result.devices;
     const total = devices.length;
@@ -3699,8 +3531,8 @@ router.get('/api/stats', requireAdmin, async (req, res) => {
 
 router.get('/api/devices', requireAdmin, async (req, res) => {
   try {
-    const { search, status, limit = 100, offset = 0 } = req.query;
-    const result = await customerDevice.listAllDevices(1000);
+    const { search, status, limit = 999999, offset = 0 } = req.query;
+    const result = await customerDevice.listAllDevices(999999);
     if (!result.ok) return res.json({ error: result.message });
     let devices = result.devices.map(d => {
       const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id);
@@ -4683,10 +4515,69 @@ router.get('/whatsapp', requireAdminSession, requireSidebarMenuAccess('whatsapp'
   });
 });
 
+router.get('/whatsapp/templates', requireAdminSession, requireSidebarMenuAccess('whatsapp'), async (req, res) => {
+  const comp = company();
+  const defaultAutoBilling = `Yth. Pelanggan {{nama}},\n\nIni adalah pengingat sebelum tanggal jatuh tempo/isolir.\n\n📦 *Paket:* {{paket}}\n💰 *Total Tagihan:* Rp {{tagihan}}\n📅 *Periode:* {{rincian}}\n\nMohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\nTerima kasih atas kerja samanya.\nSalam,\nAdmin ${comp}`;
+  
+  const defaultQris = `Yth. Pelanggan {{nama}},\n\nBerikut rincian tagihan manual + Kode Bayar QRIS Anda:\n\n📦 *Paket:* {{paket}}\n📅 *Periode:* {{periode}}\n💰 *Nominal:* Rp {{qris_nominal}}\n\nSilakan scan QRIS berikut untuk melakukan pembayaran otomatis:\n{{qris_qr}}\n\nTerima kasih.`;
+
+  const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
+
+  const defaultIsolir = `Yth. Pelanggan {{nama}},\n\nLayanan internet Anda (Paket {{paket}}) saat ini ditangguhkan (Terisolir) karena belum melunasi tagihan sebesar *Rp {{tagihan}}*.\n\nSilakan lakukan pembayaran segera melalui portal pelanggan: {{link}}\n\nTerima kasih.`;
+
+  const templates = {
+    whatsapp_auto_billing_message: db.getAppSetting('whatsapp_auto_billing_message', defaultAutoBilling),
+    whatsapp_billing_qris_message: db.getAppSetting('whatsapp_billing_qris_message', defaultQris),
+    whatsapp_payment_success_message: db.getAppSetting('whatsapp_payment_success_message', defaultSuccess),
+    whatsapp_isolir_message: db.getAppSetting('whatsapp_isolir_message', defaultIsolir)
+  };
+
+  res.render('admin/whatsapp_templates', {
+    title: 'Template Pesan WhatsApp',
+    company: comp,
+    activePage: 'whatsapp',
+    msg: flashMsg(req),
+    templates
+  });
+});
+
+router.post('/whatsapp/templates', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const {
+      whatsapp_auto_billing_message,
+      whatsapp_billing_qris_message,
+      whatsapp_payment_success_message,
+      whatsapp_isolir_message
+    } = req.body;
+
+    db.saveAppSetting('whatsapp_auto_billing_message', whatsapp_auto_billing_message || '');
+    db.saveAppSetting('whatsapp_billing_qris_message', whatsapp_billing_qris_message || '');
+    db.saveAppSetting('whatsapp_payment_success_message', whatsapp_payment_success_message || '');
+    db.saveAppSetting('whatsapp_isolir_message', whatsapp_isolir_message || '');
+
+    req.session._msg = { type: 'success', text: 'Template WhatsApp berhasil disimpan ke database.' };
+  } catch (e) {
+    req.session._msg = { type: 'danger', text: 'Gagal menyimpan template: ' + e.message };
+  }
+  res.redirect('/admin/whatsapp/templates');
+});
+
 router.get('/whatsapp/broadcast', requireAdminSession, requireSidebarMenuAccess('broadcast'), (req, res) => {
+  const comp = company();
+  const defaultAutoBillingMsg =
+    `Yth. Pelanggan {{nama}},\n\n` +
+    `Ini adalah pengingat sebelum tanggal jatuh tempo/isolir.\n\n` +
+    `📦 *Paket:* {{paket}}\n` +
+    `💰 *Total Tagihan:* Rp {{tagihan}}\n` +
+    `📅 *Periode:* {{rincian}}\n\n` +
+    `Mohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\n` +
+    `Terima kasih atas kerja samanya.\n` +
+    `Salam,\nAdmin ${comp}`;
+  const autoBillingMsg = db.getAppSetting('whatsapp_auto_billing_message', defaultAutoBillingMsg);
+
   res.render('admin/broadcast', {
-    title: 'Broadcast WhatsApp', company: company(), activePage: 'broadcast', msg: flashMsg(req),
-    broadcastStatus: global.broadcastStatus, getSetting
+    title: 'Broadcast WhatsApp', company: comp, activePage: 'broadcast', msg: flashMsg(req),
+    broadcastStatus: global.broadcastStatus, getSetting, autoBillingMsg
   });
 });
 
@@ -4921,7 +4812,7 @@ router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ 
     }
     const msg = req.body && typeof req.body.message === 'string' ? req.body.message.trim() : '';
     if (msg) {
-      next.whatsapp_auto_billing_message = msg;
+      db.saveAppSetting('whatsapp_auto_billing_message', msg);
     }
     saveSettings(next);
     req.session._msg = { type: 'success', text: `Pengingat tagihan otomatis ${enabled ? 'diaktifkan' : 'dimatikan'}.` };

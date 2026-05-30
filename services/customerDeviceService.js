@@ -623,7 +623,7 @@ async function listDevicesWithTags(limit = 250) {
 }
 
 /** Mengambil semua perangkat tanpa melihat tag. */
-async function listAllDevices(limit = 500) {
+async function listAllDevices(limit = 999999) {
   const servers = genieacsApi.getAllACSServers();
   let allDevices = [];
   let lastError = null;

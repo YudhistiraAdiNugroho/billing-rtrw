@@ -9,6 +9,7 @@ const customerSvc = require('./customerService');
 const mikrotikService = require('./mikrotikService');
 const usageSvc = require('./usageService');
 const { getSetting } = require('../config/settingsManager');
+const db = require('../config/database');
 
 // Helper: Random delay generator untuk smart rate limiting
 function getRandomDelay(baseDelayMs, varianceMs = 3000) {
@@ -158,7 +159,7 @@ function startCronJobs() {
       `Mohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\n` +
       `Terima kasih atas kerja samanya.\n` +
       `Salam,\nAdmin ${getSetting('company_header', 'ISP')}`;
-    const template = String(getSetting('whatsapp_auto_billing_message', defaultTemplate) || defaultTemplate);
+    const template = String(db.getAppSetting('whatsapp_auto_billing_message', defaultTemplate) || defaultTemplate);
 
     // Filter pelanggan yang perlu diingatkan
     const targetCustomers = [];

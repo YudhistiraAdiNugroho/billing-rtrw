@@ -8,13 +8,13 @@ function getAllTechnicians() {
 }
 
 function createTechnician(data) {
-  const stmt = db.prepare('INSERT INTO technicians (username, password, name, phone, area, telegram_chat_id) VALUES (?, ?, ?, ?, ?, ?)');
-  return stmt.run(data.username, data.password, data.name, data.phone || '', data.area || '', data.telegram_chat_id || '');
+  const stmt = db.prepare('INSERT INTO technicians (username, password, name, phone, area) VALUES (?, ?, ?, ?, ?)');
+  return stmt.run(data.username, data.password, data.name, data.phone || '', data.area || '');
 }
 
 function updateTechnician(id, data) {
-  const stmt = db.prepare('UPDATE technicians SET username = ?, password = ?, name = ?, phone = ?, area = ?, telegram_chat_id = ?, is_active = ? WHERE id = ?');
-  return stmt.run(data.username, data.password, data.name, data.phone || '', data.area || '', data.telegram_chat_id || '', data.is_active ? 1 : 0, id);
+  const stmt = db.prepare('UPDATE technicians SET username = ?, password = ?, name = ?, phone = ?, area = ?, is_active = ? WHERE id = ?');
+  return stmt.run(data.username, data.password, data.name, data.phone || '', data.area || '', data.is_active ? 1 : 0, id);
 }
 
 function deleteTechnician(id) {

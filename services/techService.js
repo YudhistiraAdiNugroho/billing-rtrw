@@ -6,7 +6,7 @@ function authenticate(username, password) {
 }
 
 function getTechById(id) {
-  return db.prepare('SELECT id, username, name, phone, area, telegram_chat_id FROM technicians WHERE id = ?').get(id);
+  return db.prepare('SELECT id, username, name, phone, area FROM technicians WHERE id = ?').get(id);
 }
 
 function getTechStats(techId) {

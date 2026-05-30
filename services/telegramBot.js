@@ -630,25 +630,5 @@ function initTelegram() {
   });
 }
 
-function sendTelegramNotification(text, targetChatId = null) {
-  const enabled = getSetting('telegram_enabled', false);
-  const token = getSetting('telegram_bot_token', '');
-  const adminId = getSetting('telegram_admin_id', '');
-
-  if (enabled && token) {
-    if (!bot) initTelegram();
-    if (bot) {
-      if (adminId) {
-        bot.sendMessage(adminId, text, { parse_mode: 'Markdown' })
-          .catch(e => logger.error('[Telegram] Gagal mengirim notifikasi admin:', e.message));
-      }
-      if (targetChatId && String(targetChatId) !== String(adminId)) {
-        bot.sendMessage(targetChatId, text, { parse_mode: 'Markdown' })
-          .catch(e => logger.error('[Telegram] Gagal mengirim notifikasi ke Chat ID:', e.message));
-      }
-    }
-  }
-}
-
 // Export for manual re-init from settings
-module.exports = { initTelegram, sendTelegramNotification };
+module.exports = { initTelegram };

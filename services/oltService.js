@@ -287,16 +287,9 @@ const CARD_OIDS = {
     cpu:    '1.3.6.1.4.1.3320.101.11.1.13',
     ram:    '1.3.6.1.4.1.3320.101.11.1.14',
     serial: '1.3.6.1.4.1.3320.101.11.1.8',
-  },
-  cdata: {
-    type:   '1.3.6.1.4.1.34592.1.3.100.1.2.1.1.2',
-    status: '1.3.6.1.4.1.34592.1.3.100.1.2.1.1.3',
-    ports:  '1.3.6.1.4.1.34592.1.3.100.1.2.1.1.4',
-    cpu:    '1.3.6.1.4.1.34592.1.3.100.1.2.1.1.6',
-    ram:    '1.3.6.1.4.1.34592.1.3.100.1.2.1.1.7',
-    serial: '1.3.6.1.4.1.34592.1.3.100.1.2.1.1.8',
   }
 };
+
 const CARD_STATUS_MAP = {
   1: 'INSERVICE',
   2: 'STANDBY',
@@ -657,26 +650,15 @@ const slowWalk = async (session, baseOid, maxEntries = 5000) => {
   let currentOid = baseOid;
   let walkCount  = 0;
   const results  = {};
-  const startTime = Date.now();
-  const stepTimeoutMs = 1500;
-  const totalTimeoutMs = 10000; // Maksimal 10 detik untuk slowWalk
 
   while (true) {
-    if (Date.now() - startTime > totalTimeoutMs) {
-      logger.warn(`[OLT-SNMP] slowWalk total timeout reached for OID ${baseOid}. Entries found: ${walkCount}`);
-      break;
-    }
-
     try {
-      const vb = await Promise.race([
-        new Promise((rv, rj) => {
-          session.getNext([currentOid], (err, vbs) => {
-            if (err) rj(err);
-            else rv(vbs ? vbs[0] : null);
-          });
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('SNMP Step Timeout')), stepTimeoutMs))
-      ]);
+      const vb = await new Promise((rv, rj) => {
+        session.getNext([currentOid], (err, vbs) => {
+          if (err) rj(err);
+          else rv(vbs[0]);
+        });
+      });
 
       // Berhenti jika tidak ada data, error, atau OID sudah keluar dari subtree
       if (!vb || vb.oid == null) break;
@@ -690,7 +672,6 @@ const slowWalk = async (session, baseOid, maxEntries = 5000) => {
 
       if (walkCount >= maxEntries) break;
     } catch (e) {
-      logger.warn(`[OLT-SNMP] slowWalk step broken: ${e.message || String(e)}`);
       break;
     }
   }
@@ -702,26 +683,15 @@ const walkSample = async (session, baseOid, maxItems = 3) => {
   let currentOid = baseOid;
   let count = 0;
   const values = [];
-  const startTime = Date.now();
-  const stepTimeoutMs = 1500;
-  const totalTimeoutMs = 4000; // Maksimal 4 detik untuk walkSample
 
   while (count < maxItems) {
-    if (Date.now() - startTime > totalTimeoutMs) {
-      logger.warn(`[OLT-SNMP] walkSample total timeout reached for OID ${baseOid}`);
-      break;
-    }
-
     try {
-      const vb = await Promise.race([
-        new Promise((rv, rj) => {
-          session.getNext([currentOid], (err, vbs) => {
-            if (err) rj(err);
-            else rv(vbs ? vbs[0] : null);
-          });
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('SNMP Step Timeout')), stepTimeoutMs))
-      ]);
+      const vb = await new Promise((rv, rj) => {
+        session.getNext([currentOid], (err, vbs) => {
+          if (err) rj(err);
+          else rv(vbs[0]);
+        });
+      });
 
       if (!vb || vb.oid == null) break;
       if (vb.type === snmp.ObjectType.EndOfMibView || vb.type === snmp.ObjectType.NoSuchObject || vb.type === snmp.ObjectType.NoSuchInstance) break;
@@ -731,7 +701,6 @@ const walkSample = async (session, baseOid, maxItems = 3) => {
       currentOid = normalizeOid(vb.oid);
       count++;
     } catch (e) {
-      logger.warn(`[OLT-SNMP] walkSample step broken: ${e.message || String(e)}`);
       break;
     }
   }

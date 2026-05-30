@@ -288,21 +288,26 @@ async function getLANHosts(deviceId, serverConfig) {
 // ============================================
 
 async function fetchDevicesFromACS(server, vParams = [], paths = {}, options = {}) {
-    const { page = 1, limit = 300 } = options;
+    const { page = 1, limit = null } = options;
     try {
         const baseUrl = normalizeUrl(server.url);
         // Gabungkan proyeksi dasar dengan path pencarian
         let projection = '_id,_lastInform,_ip,_deviceId._Manufacturer,_deviceId._ProductClass,_deviceId._SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1';
         
-        const skip = (page - 1) * limit;
+        const params = { projection };
+        if (limit !== null) {
+            params.limit = limit + 1;
+            params.skip = (page - 1) * limit;
+        }
+
         const response = await axios.get(`${baseUrl}/devices`, {
             ...getAxiosConfig(server),
-            params: { projection, limit: limit + 1, skip }
+            params
         });
 
         if (!Array.isArray(response.data)) return { server, devices: [], hasMore: false };
 
-        const hasMore = response.data.length > limit;
+        const hasMore = limit !== null && response.data.length > limit;
         const devicesData = hasMore ? response.data.slice(0, limit) : response.data;
 
         const devices = devicesData.map(d => {
@@ -399,7 +404,7 @@ router.get('/', async (req, res) => {
                         const baseUrl = normalizeUrl(server.url);
                         const response = await axios.get(`${baseUrl}/devices`, {
                             ...getAxiosConfig(server),
-                            params: { query, limit: 100 }
+                            params: { query }
                         });
                         
                         if (Array.isArray(response.data)) {

@@ -3051,8 +3051,16 @@ router.post('/payment/callback', express.json({
         if (!customer.phone) {
           throw new Error('Nomor WhatsApp pelanggan kosong');
         }
-        const msg = `✅ *PEMBAYARAN BERHASIL*\n\nTerima kasih Kak *${customer.name}*,\n\nPembayaran tagihan internet periode *${checkInv.period_month}/${checkInv.period_year}* telah kami terima via *${gateway}*.\n\n💰 *Total:* Rp ${checkInv.amount.toLocaleString('id-ID')}\n📅 *Waktu:* ${getNowLocal()}\n\nStatus layanan Anda kini telah aktif. Selamat berinternet kembali! 🚀`;
-        await sendWA(customer.phone, msg);
+        const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
+        const template = db.getAppSetting('whatsapp_payment_success_message', defaultSuccess);
+
+        const formattedMsg = template
+          .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
+          .replace(/{{periode}}/gi, `${checkInv.period_month}/${checkInv.period_year}`)
+          .replace(/{{total}}/gi, checkInv.amount.toLocaleString('id-ID'))
+          .replace(/{{metode}}/gi, gateway || '-');
+
+        await sendWA(customer.phone, formattedMsg);
       } catch (waErr) {
         logger.error(`[Webhook] Gagal kirim notif WA: ${waErr.message}`);
       }

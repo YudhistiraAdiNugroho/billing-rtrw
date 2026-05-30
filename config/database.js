@@ -943,45 +943,6 @@ try {
   console.error('Failed to migrate customers balance:', e);
 }
 
-// Safe migration: tambah kolom telegram_chat_id ke tabel technicians
-try {
-  const techCols = db.prepare("PRAGMA table_info(technicians)").all();
-  if (!techCols.find(c => c.name === 'telegram_chat_id')) {
-    db.exec("ALTER TABLE technicians ADD COLUMN telegram_chat_id TEXT DEFAULT ''");
-    console.log('[DB] Migration: Added telegram_chat_id column to technicians table successfully.');
-  }
-} catch(e) {
-  console.error('Failed to migrate technicians telegram_chat_id:', e);
-}
-
-// Safe migration: tambah kolom technician_id ke tabel customers
-try {
-  const custCols = db.prepare("PRAGMA table_info(customers)").all();
-  if (!custCols.find(c => c.name === 'technician_id')) {
-    db.exec("ALTER TABLE customers ADD COLUMN technician_id INTEGER REFERENCES technicians(id) ON DELETE SET NULL");
-    console.log('[DB] Migration: Added technician_id column to customers table successfully.');
-  }
-} catch(e) {
-  console.error('Failed to migrate customers technician_id:', e);
-}
-
-// ─── INDEX OPTIMIZATIONS ─────────────────────────────────────────────────────
-try {
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
-    CREATE INDEX IF NOT EXISTS idx_customers_pppoe ON customers(pppoe_username);
-    CREATE INDEX IF NOT EXISTS idx_customers_tag ON customers(genieacs_tag);
-    CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices(customer_id);
-    CREATE INDEX IF NOT EXISTS idx_invoices_status_qris ON invoices(status, qris_amount_unique);
-    CREATE INDEX IF NOT EXISTS idx_tickets_customer ON tickets(customer_id);
-    CREATE INDEX IF NOT EXISTS idx_attendance_employee ON attendance(employee_id, employee_type);
-  `);
-  console.log('[DB] Index optimizations applied successfully.');
-} catch (e) {
-  console.error('[DB] Failed to apply index optimizations:', e.message);
-}
-
 module.exports = db;
 module.exports.getAppSetting = getAppSetting;
 module.exports.saveAppSetting = saveAppSetting;
-
