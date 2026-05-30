@@ -52,7 +52,11 @@
             <tr>
               <td class="text-muted"><%= i+1 %></td>
               <td class="fw6"><%= p.name %></td>
-              <td class="fw6" style="color:var(--success)">Rp <%= p.price.toLocaleString('id-ID') %></td>
+              <td class="fw6" style="color:var(--success)">
+                Rp <%= p.price.toLocaleString('id-ID') %>
+                <% if (p.use_ppn) { %><br><span class="badge bp" style="font-size:9px;padding:2px 4px;margin-top:2px;display:inline-block">+ PPN <%= p.ppn_percentage %>%</span><% } %>
+                <% if (p.use_uso) { %><br><span class="badge bm" style="font-size:9px;padding:2px 4px;margin-top:2px;display:inline-block">+ USO <%= p.uso_percentage %>%</span><% } %>
+              </td>
               <td style="font-size:11px;max-width:160px">
                 <% if (p.promo_cycles > 0 && p.promo_price != null && p.promo_price !== '') { %>
                   <span class="badge bp">Promo</span> Rp <%= Number(p.promo_price).toLocaleString('id-ID') %> × <%= p.promo_cycles %> bln
@@ -113,6 +117,35 @@
             <label for="add_prorate" style="margin:0;font-size:12px">Prorata tagihan <strong>pertama</strong> jika pasang di tengah bulan (proporsi sisa hari, perlu tanggal pasang di data pelanggan)</label>
           </div>
         </div>
+        
+        <div style="background: rgba(99,102,241,0.06); padding: 12px 14px; border-radius: 10px; margin-top: 10px;">
+          <div class="fw6" style="font-size:12px;margin-bottom:8px;color:var(--primary)"><i class="bi bi-calculator"></i> Pengaturan Pajak & Regulasi (PPN & USO)</div>
+          <div class="form-row" style="margin-bottom: 8px;">
+            <div class="fg">
+              <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; margin-top: 26px;">
+                <input type="checkbox" name="use_ppn" id="add_use_ppn" value="1">
+                Aktifkan PPN
+              </label>
+            </div>
+            <div class="fg">
+              <label class="fl">Persentase PPN (%)</label>
+              <input class="fc" name="ppn_percentage" type="number" step="any" min="0" value="11.0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; margin-top: 26px;">
+                <input type="checkbox" name="use_uso" id="add_use_uso" value="1">
+                Aktifkan ULO/USO
+              </label>
+            </div>
+            <div class="fg">
+              <label class="fl">Persentase ULO/USO (%)</label>
+              <input class="fc" name="uso_percentage" type="number" step="any" min="0" value="1.75">
+            </div>
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_up', 'Kecepatan Upload (Mbps)') %></label><input class="fc" name="speed_up" type="number" step="any" min="0" placeholder="5"></div>
           <div class="fg"><label class="fl"><%= t('admin.packages.form.status', 'Status') %></label>
@@ -205,6 +238,35 @@
             <label for="e_prorate" style="margin:0;font-size:12px">Prorata tagihan pertama (tanggal pasang = bulan tagihan)</label>
           </div>
         </div>
+        
+        <div style="background: rgba(99,102,241,0.06); padding: 12px 14px; border-radius: 10px; margin-top: 10px;">
+          <div class="fw6" style="font-size:12px;margin-bottom:8px;color:var(--primary)"><i class="bi bi-calculator"></i> Pengaturan Pajak & Regulasi (PPN & USO)</div>
+          <div class="form-row" style="margin-bottom: 8px;">
+            <div class="fg">
+              <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; margin-top: 26px;">
+                <input type="checkbox" name="use_ppn" id="e_use_ppn" value="1">
+                Aktifkan PPN
+              </label>
+            </div>
+            <div class="fg">
+              <label class="fl">Persentase PPN (%)</label>
+              <input class="fc" name="ppn_percentage" id="e_ppn_percentage" type="number" step="any" min="0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; margin-top: 26px;">
+                <input type="checkbox" name="use_uso" id="e_use_uso" value="1">
+                Aktifkan ULO/USO
+              </label>
+            </div>
+            <div class="fg">
+              <label class="fl">Persentase ULO/USO (%)</label>
+              <input class="fc" name="uso_percentage" id="e_uso_percentage" type="number" step="any" min="0">
+            </div>
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="fg"><label class="fl"><%= t('admin.packages.form.speed_up', 'Kecepatan Upload (Mbps)') %></label><input class="fc" name="speed_up" id="e_up" type="number" step="any" min="0"></div>
           <div class="fg"><label class="fl"><%= t('admin.packages.form.status', 'Status') %></label>
@@ -281,6 +343,10 @@ function editPkg(idx) {
   document.getElementById('e_promo_price').value = (p.promo_price != null && p.promo_price !== '') ? p.promo_price : '';
   document.getElementById('e_promo_cycles').value = p.promo_cycles != null ? p.promo_cycles : 0;
   document.getElementById('e_prorate').checked = !!p.prorate_first_invoice;
+  document.getElementById('e_use_ppn').checked = !!p.use_ppn;
+  document.getElementById('e_ppn_percentage').value = p.ppn_percentage != null ? p.ppn_percentage : 11.0;
+  document.getElementById('e_use_uso').checked = !!p.use_uso;
+  document.getElementById('e_uso_percentage').value = p.uso_percentage != null ? p.uso_percentage : 1.75;
   document.getElementById('e_down').value=p.speed_down ? (p.speed_down/1000) : 0;
   document.getElementById('e_up').value=p.speed_up ? (p.speed_up/1000) : 0;
   document.getElementById('e_night_down').value=p.night_speed_down ? (p.night_speed_down/1000) : 0;
