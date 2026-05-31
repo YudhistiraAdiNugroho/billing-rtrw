@@ -5415,6 +5415,31 @@ router.post('/onu-provision/scan-unconfigured', requireAdminSession, restrictToA
   }
 });
 
+router.post('/onu-provision/scan-configured', requireAdminSession, restrictToAdmin, express.json(), async (req, res) => {
+  try {
+    const host = getSetting('olt_host', '');
+    if (!host) {
+      return res.json({ success: false, error: 'OLT belum dikonfigurasi di pengaturan global' });
+    }
+    
+    const olt = db.prepare('SELECT * FROM olts WHERE host = ? LIMIT 1').get(host);
+    if (!olt) {
+      return res.json({ 
+        success: false, 
+        error: 'OLT dengan IP ' + host + ' belum didaftarkan di halaman "Manajemen OLT". Silakan daftarkan OLT Anda di sana terlebih dahulu agar sistem dapat membaca data monitoring SNMP.' 
+      });
+    }
+    
+    const oltSvc = require('../services/oltService');
+    const stats = await oltSvc.getOltStats(olt.id, true);
+    
+    res.json({ success: true, onus: stats.onus || [], oltId: olt.id });
+  } catch (error) {
+    logger.error('Scan configured ONUs error:', error);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 router.post('/onu-provision/provision', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const oltConfig = {

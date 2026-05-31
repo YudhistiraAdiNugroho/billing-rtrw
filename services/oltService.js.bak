@@ -1495,60 +1495,9 @@ async function getOltStats(id, full = false) {
 
 // ─── ONU ACTIONS ─────────────────────────────────────────────────────────────
 
-function decodeOltSnmpIndex(brand, index) {
-  const idxNum = parseInt(index, 10);
-  if (!Number.isFinite(idxNum)) {
-    const s = String(index || '');
-    let frame = '0', board = '1', port = '1', onuId = '1';
-    const parts = s.split(/[/: ]+/).filter(Boolean);
-    if (parts.length >= 3) {
-      board = parts[parts.length - 3];
-      port = parts[parts.length - 2];
-      onuId = parts[parts.length - 1];
-    }
-    return { frame, board, port, onuId };
-  }
-
-  const bKey = String(brand || '').toLowerCase();
-  if (bKey === 'zte') {
-    const board = (idxNum >> 16) & 0xFF;
-    const port = (idxNum >> 8) & 0xFF;
-    const onuId = idxNum & 0xFF;
-    return { frame: '0', board: String(board), port: String(port), onuId: String(onuId) };
-  } else if (bKey === 'huawei') {
-    const frame = (idxNum >> 21) & 0x1F;
-    const slot = (idxNum >> 16) & 0x1F;
-    const port = (idxNum >> 8) & 0xFF;
-    const onuId = idxNum & 0xFF;
-    return { frame: String(frame), board: String(slot), port: String(port), onuId: String(onuId) };
-  } else {
-    let port = (idxNum >> 16) & 0xFF;
-    if (port === 0 || port > 16) port = (idxNum >> 8) & 0xFF;
-    const onuId = idxNum & 0xFF;
-    return { frame: '0', board: '0', port: String(port), onuId: String(onuId) };
-  }
-}
-
 async function rebootOnu(oltId, index) {
   const olt = getOltById(oltId);
   if (!olt) throw new Error('OLT tidak ditemukan');
-
-  const brand = (olt.brand || 'hioso').toLowerCase();
-  if (brand === 'zte' || brand === 'huawei') {
-    const onuProvisionSvc = require('./onuProvisionService');
-    const oltConfig = {
-      vendor: olt.brand,
-      host: olt.host,
-      username: olt.web_user,
-      password: olt.web_password
-    };
-    const portVal = parseInt(olt.telnet_port, 10);
-    oltConfig.port = (Number.isFinite(portVal) && portVal > 0) ? portVal : 22;
-    
-    const parsed = decodeOltSnmpIndex(olt.brand, index);
-    return await onuProvisionSvc.rebootONU(oltConfig, olt.brand, parsed);
-  }
-
   const community = olt.snmp_community || 'public';
   const session = snmp.createSession(olt.host, community, { port: olt.snmp_port || 161, version: snmp.Version2c });
   const oid = `1.3.6.1.4.1.25355.3.2.6.3.2.1.40.${index}`;
@@ -1564,24 +1513,6 @@ async function rebootOnu(oltId, index) {
 async function renameOnu(oltId, index, newName) {
   const olt = getOltById(oltId);
   if (!olt) throw new Error('OLT tidak ditemukan');
-
-  const brand = (olt.brand || 'hioso').toLowerCase();
-  if (brand === 'zte' || brand === 'huawei') {
-    const onuProvisionSvc = require('./onuProvisionService');
-    const oltConfig = {
-      vendor: olt.brand,
-      host: olt.host,
-      username: olt.web_user,
-      password: olt.web_password
-    };
-    const portVal = parseInt(olt.telnet_port, 10);
-    oltConfig.port = (Number.isFinite(portVal) && portVal > 0) ? portVal : 22;
-    
-    const parsed = decodeOltSnmpIndex(olt.brand, index);
-    parsed.newName = newName;
-    return await onuProvisionSvc.renameONU(oltConfig, olt.brand, parsed);
-  }
-
   const community = olt.snmp_community || 'public';
   const session = snmp.createSession(olt.host, community, { port: olt.snmp_port || 161, version: snmp.Version2c });
   const oid = `1.3.6.1.4.1.25355.3.2.6.3.2.1.37.${index}`;

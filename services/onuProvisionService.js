@@ -928,6 +928,78 @@ class ONUProvisionService {
       throw error;
     }
   }
+
+  /**
+   * Reboot ONU via SSH CLI (for ZTE and Huawei)
+   */
+  async rebootONU(oltConfig, vendor, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      const { frame, board, port, onuId } = params;
+      const cmds = [];
+      
+      if (vendor === 'ZTE') {
+        cmds.push('enable');
+        cmds.push('configure terminal');
+        cmds.push(`pon-onu-mng gpon-onu_1/${board}/${port}:${onuId}`);
+        cmds.push('reboot');
+      } else if (vendor === 'Huawei') {
+        cmds.push('enable');
+        cmds.push('config');
+        cmds.push(`interface gpon ${frame}/${board}`);
+        cmds.push(`ont reset ${port} ${onuId}`);
+        cmds.push('quit');
+        cmds.push('save');
+      } else {
+        throw new Error('Unsupported vendor for SSH reboot');
+      }
+      
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      return { success: true, message: 'ONU rebooted successfully' };
+    } catch (error) {
+      if (conn) conn.end();
+      throw error;
+    }
+  }
+
+  /**
+   * Rename ONU via SSH CLI (for ZTE and Huawei)
+   */
+  async renameONU(oltConfig, vendor, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      const { frame, board, port, onuId, newName } = params;
+      const cmds = [];
+      
+      if (vendor === 'ZTE') {
+        cmds.push('enable');
+        cmds.push('configure terminal');
+        cmds.push(`interface gpon-onu_1/${board}/${port}:${onuId}`);
+        cmds.push(`name ${newName}`);
+        cmds.push('exit');
+        cmds.push('write');
+      } else if (vendor === 'Huawei') {
+        cmds.push('enable');
+        cmds.push('config');
+        cmds.push(`interface gpon ${frame}/${board}`);
+        cmds.push(`ont name ${port} ${onuId} "${newName}"`);
+        cmds.push('quit');
+        cmds.push('save');
+      } else {
+        throw new Error('Unsupported vendor for SSH rename');
+      }
+      
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      return { success: true, message: 'ONU renamed successfully' };
+    } catch (error) {
+      if (conn) conn.end();
+      throw error;
+    }
+  }
 }
 
 module.exports = new ONUProvisionService();
