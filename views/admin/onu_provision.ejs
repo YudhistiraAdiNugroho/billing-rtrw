@@ -220,13 +220,18 @@
     <!-- Tab: Configured ONUs -->
     <div id="tab-configured" class="tab-content">
       <div class="card">
-        <div class="card-hd">
+        <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
           <h6 style="margin:0"><i class="bi bi-list-check"></i> Daftar ONU Terkonfigurasi</h6>
+          <button onclick="scanConfiguredONUs()" class="btn btn-p btn-sm">
+            <i class="bi bi-arrow-clockwise"></i> Muat Ulang / Scan
+          </button>
         </div>
         <div class="card-bd">
-          <div class="hint" style="text-align:center;padding:40px">
-            <i class="bi bi-info-circle" style="font-size:32px;opacity:0.5"></i>
-            <p>Fitur ini akan menampilkan daftar ONU yang sudah terkonfigurasi</p>
+          <div id="configuredList">
+            <div class="hint" style="text-align:center;padding:40px">
+              <i class="bi bi-info-circle" style="font-size:32px;opacity:0.5"></i>
+              <p>Klik "Muat Ulang / Scan" untuk memantau status ONU terkonfigurasi via SNMP</p>
+            </div>
           </div>
         </div>
       </div>
@@ -691,6 +696,152 @@ function resetForm() {
     
     document.getElementById('enableTR069').checked = false;
     document.getElementById('tr069Fields').style.display = 'none';
+  }
+}
+
+// Scan and render configured ONUs
+async function scanConfiguredONUs() {
+  const listDiv = document.getElementById('configuredList');
+  listDiv.innerHTML = '<div class="hint" style="text-align:center;padding:40px"><i class="bi bi-hourglass-split" style="font-size:32px"></i><p>Scanning OLT SNMP...</p></div>';
+  
+  try {
+    const response = await fetch('/admin/onu-provision/scan-configured', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success && data.onus && data.onus.length > 0) {
+      let html = '';
+      data.onus.forEach(onu => {
+        const vendorClass = (onu.vendor || 'ZTE').toLowerCase();
+        html += `
+          <div class="onu-card">
+            <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px">
+              <div>
+                <span class="vendor-badge vendor-${vendorClass}">${onu.vendor || 'ZTE'}</span>
+                <span class="onu-status ${onu.status.toLowerCase() === 'online' ? 'online' : 'offline'}">${onu.status}</span>
+                <span style="margin-left: 8px; font-weight: 700; color: #e2e8f0;">${onu.name}</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button onclick="renameConfiguredOnu('${data.oltId}', '${onu.index}', '${onu.name}')" class="btn btn-g btn-sm" title="Rename ONU">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button onclick="rebootConfiguredOnu('${data.oltId}', '${onu.index}')" class="btn btn-g btn-sm" style="color:#f59e0b" title="Reboot ONU">
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
+                <button onclick="deleteConfiguredOnu('${onu.index}', '${onu.sn}')" class="btn btn-g btn-sm" style="color:#ef4444" title="Hapus/Delete ONU">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+              <div>
+                <div class="hint" style="font-size:11px">Serial Number</div>
+                <div style="font-weight:700;font-family:monospace">${onu.sn}</div>
+              </div>
+              <div>
+                <div class="hint" style="font-size:11px">Interface / Index</div>
+                <div style="font-weight:600">${onu.id || onu.index}</div>
+              </div>
+              <div>
+                <div class="hint" style="font-size:11px">Sinyal RX / TX</div>
+                <div style="font-weight:600; color:${parseFloat(onu.rx) < -27 ? '#fca5a5' : '#e2e8f0'}">${onu.rx} / ${onu.tx}</div>
+              </div>
+              <div>
+                <div class="hint" style="font-size:11px">Uptime / Jarak</div>
+                <div style="font-weight:600">${onu.uptime || '-'} / ${onu.distance || '-'}</div>
+              </div>
+              \${onu.wifi_ssid && onu.wifi_ssid !== '-' ? `
+              <div>
+                <div class="hint" style="font-size:11px">WiFi SSID (ACS)</div>
+                <div style="font-weight:600; color:#3b82f6"><i class="bi bi-wifi"></i> \${onu.wifi_ssid}</div>
+              </div>
+              ` : ''}
+              \${onu.client_count !== undefined && onu.client_count > 0 ? `
+              <div>
+                <div class="hint" style="font-size:11px">Klien Connected (ACS)</div>
+                <div style="font-weight:600; color:#10b981"><i class="bi bi-people"></i> \${onu.client_count} device</div>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      });
+      listDiv.innerHTML = html;
+    } else {
+      const errorMsg = data.error || 'Tidak ada ONU terkonfigurasi yang ditemukan';
+      listDiv.innerHTML = `<div class="hint" style="text-align:center;padding:40px"><i class="bi bi-info-circle" style="font-size:32px;color:#f59e0b"></i><p>\${errorMsg}</p></div>`;
+    }
+  } catch (error) {
+    listDiv.innerHTML = '<div class="alert alert-d"><i class="bi bi-exclamation-circle"></i> Error: ' + error.message + '</div>';
+  }
+}
+
+// Reboot Configured ONU
+async function rebootConfiguredOnu(oltId, index) {
+  if (!confirm('Apakah Anda yakin ingin me-reboot ONU dengan index ' + index + '?')) return;
+  
+  try {
+    const res = await fetch(`/admin/olts/\${oltId}/onu/\${index}/reboot`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      alert('Perintah reboot berhasil dikirim!');
+      scanConfiguredONUs();
+    } else {
+      alert('Gagal: ' + data.error);
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+}
+
+// Rename Configured ONU
+async function renameConfiguredOnu(oltId, index, oldName) {
+  const newName = prompt('Masukkan nama baru untuk ONU:', oldName);
+  if (!newName || newName.trim() === '') return;
+  
+  try {
+    const res = await fetch(`/admin/olts/\${oltId}/onu/\${index}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ name: newName })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('Nama ONU berhasil diubah!');
+      scanConfiguredONUs();
+    } else {
+      alert('Gagal: ' + data.error);
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+}
+
+// Delete Configured ONU
+async function deleteConfiguredOnu(index, sn) {
+  if (!confirm('Apakah Anda yakin ingin menghapus/menghilangkan otorisasi ONU dengan Serial Number ' + sn + '?')) return;
+  
+  try {
+    const res = await fetch('/admin/onu-provision/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vendor: '<%= oltConfig.vendor %>',
+        params: { index, sn }
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('ONU berhasil dihapus!');
+      scanConfiguredONUs();
+    } else {
+      alert('Gagal: ' + data.error);
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
   }
 }
 </script>
