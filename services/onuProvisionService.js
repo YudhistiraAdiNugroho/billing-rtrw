@@ -50,24 +50,46 @@ class ONUProvisionService {
   }
 
   /**
-   * Execute command via SSH
+   * Execute multiple commands sequentially on a single SSH interactive shell stream
    */
-  async executeCommand(conn, command, waitFor = '#') {
+  async executeCommands(conn, commands, promptPattern = /#|>/) {
     return new Promise((resolve, reject) => {
       conn.shell((err, stream) => {
         if (err) return reject(err);
 
         let output = '';
+        let cmdIndex = 0;
+        const cmdList = Array.isArray(commands) ? [...commands] : [commands];
+
         const timeout = setTimeout(() => {
           stream.end();
-          reject(new Error('Command timeout'));
-        }, 30000);
+          reject(new Error('SSH command sequence timeout'));
+        }, 60000);
 
-        stream.on('data', (data) => {
-          output += data.toString();
-          if (output.includes(waitFor)) {
+        const writeNext = () => {
+          if (cmdIndex < cmdList.length) {
+            const cmd = cmdList[cmdIndex++];
+            logger.info(`SSH command sent: ${cmd}`);
+            stream.write(cmd + '\n');
+          } else {
             clearTimeout(timeout);
             stream.end();
+          }
+        };
+
+        let buffer = '';
+        stream.on('data', (data) => {
+          const chunk = data.toString();
+          output += chunk;
+          buffer += chunk;
+
+          const lines = buffer.split('\n');
+          const lastLine = lines[lines.length - 1].trim();
+
+          // If the last line matches the OLT prompt pattern, send the next command
+          if (promptPattern.test(lastLine)) {
+            buffer = '';
+            setTimeout(writeNext, 50);
           }
         });
 
@@ -79,9 +101,6 @@ class ONUProvisionService {
         stream.stderr.on('data', (data) => {
           logger.error('SSH stderr:', data.toString());
         });
-
-        // Send command
-        stream.write(command + '\n');
       });
     });
   }
@@ -94,13 +113,12 @@ class ONUProvisionService {
     try {
       conn = await this.connectSSH(oltConfig);
       
-      // Enable mode
-      await this.executeCommand(conn, 'enable', '#');
+      const commands = [
+        'enable',
+        `show gpon onu uncfg gpon-olt_${pon}`
+      ];
       
-      // Show unconfigured ONUs
-      const command = `show gpon onu uncfg gpon-olt_${pon}`;
-      const output = await this.executeCommand(conn, command, '#');
-      
+      const output = await this.executeCommands(conn, commands);
       const onus = this.parseZTEUnconfiguredONUs(output);
       conn.end();
       
@@ -113,23 +131,48 @@ class ONUProvisionService {
   }
 
   /**
-   * Parse ZTE unconfigured ONUs output
+   * Parse ZTE unconfigured ONUs output robustly
    */
   parseZTEUnconfiguredONUs(output) {
     const onus = [];
     const lines = output.split('\n');
     
     for (const line of lines) {
-      // Format: gpon-onu_1/1/1:1  ZTEG-F660  ZTEGC8343210  
-      const match = line.match(/gpon-onu_(\d+\/\d+\/\d+):(\d+)\s+(\S+)\s+(\S+)/);
+      const match = line.match(/gpon-onu_(\d+\/\d+\/\d+):(\d+)\s+(.+)/);
       if (match) {
-        onus.push({
-          pon: match[1],
-          onuId: match[2],
-          model: match[3],
-          sn: match[4],
-          vendor: 'ZTE'
-        });
+        const pon = match[1];
+        const onuId = match[2];
+        const rest = match[3].trim().split(/\s+/);
+        
+        let sn = '';
+        let model = 'Unknown';
+        
+        if (rest.length >= 2) {
+          const isSn = (str) => /^[A-Z]{4}[0-9A-F]{8}$/i.test(str) || /^[0-9A-F]{12}$/i.test(str);
+          
+          if (isSn(rest[0])) {
+            sn = rest[0];
+            model = rest[1] || 'Unknown';
+          } else if (isSn(rest[1])) {
+            sn = rest[1];
+            model = rest[0];
+          } else {
+            sn = rest[1] || rest[0];
+            model = rest[0];
+          }
+        } else if (rest.length === 1) {
+          sn = rest[0];
+        }
+        
+        if (sn && sn.toLowerCase() !== 'sn-auth') {
+          onus.push({
+            pon,
+            onuId,
+            model,
+            sn,
+            vendor: 'ZTE'
+          });
+        }
       }
     }
     
@@ -144,68 +187,55 @@ class ONUProvisionService {
     try {
       conn = await this.connectSSH(oltConfig);
       
-      // Enable and config mode
-      await this.executeCommand(conn, 'enable', '#');
-      await this.executeCommand(conn, 'configure terminal', '#');
-      
       const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
-      // Add ONU
-      let cmd = `interface gpon-olt_${pon}\n`;
-      cmd += `onu ${onuId} type ${params.onuType || 'F660'} sn ${sn}\n`;
-      cmd += `exit\n`;
+      const cmds = [
+        'enable',
+        'configure terminal',
+        `interface gpon-olt_${pon}`,
+        `onu ${onuId} type ${params.onuType || 'F660'} sn ${sn}`,
+        'exit',
+        `interface gpon-onu_${pon}:${onuId}`,
+        `name ${name}`,
+        `tcont 1 profile ${bandwidth || 'default'}`,
+        'gemport 1 tcont 1'
+      ];
       
-      // Configure ONU
-      cmd += `interface gpon-onu_${pon}:${onuId}\n`;
-      cmd += `name ${name}\n`;
-      cmd += `tcont 1 profile ${bandwidth || 'default'}\n`;
-      cmd += `gemport 1 tcont 1\n`;
-      
-      // WiFi Configuration
       if (wifiSsid && wifiPassword) {
-        cmd += `ssid 1 ${wifiSsid}\n`;
-        cmd += `security 1 wpa2-psk AES ${wifiPassword}\n`;
-        cmd += `wifi enable 1\n`;
+        cmds.push(`ssid 1 ${wifiSsid}`);
+        cmds.push(`security 1 wpa2-psk AES ${wifiPassword}`);
+        cmds.push('wifi enable 1');
       }
       
-      // LAN Mode Configuration
       if (lanMode) {
-        cmd += `lan-mode ${lanMode}\n`; // bridge or router
+        cmds.push(`lan-mode ${lanMode}`);
       }
       
-      // PPPoE Configuration (if router mode)
       if (lanMode === 'router' && pppoeUsername && pppoePassword) {
-        cmd += `wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
+        cmds.push(`wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}`);
       }
       
-      // TR069/CWMP Configuration
       if (tr069AcsUrl) {
-        cmd += `tr069 enable\n`;
-        cmd += `tr069 acs url ${tr069AcsUrl}\n`;
-        
+        cmds.push('tr069 enable');
+        cmds.push(`tr069 acs url ${tr069AcsUrl}`);
         if (tr069AcsUsername && tr069AcsPassword) {
-          cmd += `tr069 acs username ${tr069AcsUsername}\n`;
-          cmd += `tr069 acs password ${tr069AcsPassword}\n`;
+          cmds.push(`tr069 acs username ${tr069AcsUsername}`);
+          cmds.push(`tr069 acs password ${tr069AcsPassword}`);
         }
-        
         if (tr069PeriodicInform) {
-          cmd += `tr069 periodic-inform interval ${tr069PeriodicInform}\n`;
-          cmd += `tr069 periodic-inform enable\n`;
+          cmds.push(`tr069 periodic-inform interval ${tr069PeriodicInform}`);
+          cmds.push('tr069 periodic-inform enable');
         }
-        
-        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
       }
       
-      cmd += `exit\n`;
+      cmds.push('exit');
+      cmds.push(`pon-onu-mng gpon-onu_${pon}:${onuId}`);
+      cmds.push(`service 1 gemport 1 vlan ${vlan}`);
+      cmds.push(`vlan port eth_0/1 mode tag vlan ${vlan}`);
+      cmds.push('exit');
+      cmds.push('write');
       
-      // Service port
-      cmd += `pon-onu-mng gpon-onu_${pon}:${onuId}\n`;
-      cmd += `service 1 gemport 1 vlan ${vlan}\n`;
-      cmd += `vlan port eth_0/1 mode tag vlan ${vlan}\n`;
-      cmd += `exit\n`;
-      
-      await this.executeCommand(conn, cmd, '#');
-      
+      await this.executeCommands(conn, cmds);
       conn.end();
       
       const features = [];
@@ -232,13 +262,12 @@ class ONUProvisionService {
     try {
       conn = await this.connectSSH(oltConfig);
       
-      // Enable mode
-      await this.executeCommand(conn, 'enable', '#');
+      const commands = [
+        'enable',
+        `display ont autofind ${frame}/${slot}/${pon}`
+      ];
       
-      // Show autofind ONUs
-      const command = `display ont autofind ${frame}/${slot}/${pon}`;
-      const output = await this.executeCommand(conn, command, '#');
-      
+      const output = await this.executeCommands(conn, commands);
       const onus = this.parseHuaweiUnconfiguredONUs(output, frame, slot, pon);
       conn.end();
       
@@ -251,25 +280,81 @@ class ONUProvisionService {
   }
 
   /**
-   * Parse Huawei unconfigured ONUs output
+   * Parse Huawei unconfigured ONUs output robustly (handles both block and table formats)
    */
   parseHuaweiUnconfiguredONUs(output, frame, slot, pon) {
     const onus = [];
-    const lines = output.split('\n');
     
-    for (const line of lines) {
-      // Format varies, look for SN pattern
-      const match = line.match(/(\d+)\s+(\S+)\s+(\S+)/);
-      if (match && match[2].length >= 12) {
-        onus.push({
-          frame,
-          slot,
-          pon,
-          onuId: match[1],
-          sn: match[2],
-          model: match[3] || 'Unknown',
-          vendor: 'Huawei'
-        });
+    if (output.includes('Ont SN') || output.includes('Slot/Port')) {
+      const blocks = output.split(/----------------------------------------------------------------------/);
+      for (const block of blocks) {
+        const snMatch = block.match(/Ont\s+SN\s*:\s*(\S+)/i);
+        if (snMatch) {
+          let sn = snMatch[1];
+          sn = sn.split('(')[0].trim();
+          
+          const portMatch = block.match(/Slot\/Port\s*:\s*(\d+\/\d+\/\d+)/i) || block.match(/Slot\/Port\s*:\s*(\d+\/\d+)/i);
+          let blockPon = pon;
+          let blockSlot = slot;
+          let blockFrame = frame;
+          
+          if (portMatch) {
+            const parts = portMatch[1].split('/');
+            if (parts.length === 3) {
+              blockFrame = parts[0];
+              blockSlot = parts[1];
+              blockPon = parts[2];
+            } else if (parts.length === 2) {
+              blockSlot = parts[0];
+              blockPon = parts[1];
+            }
+          }
+          
+          const modelMatch = block.match(/Ont\s+EquipmentID\s*:\s*(\S+)/i) || block.match(/Ont\s+Type\s*:\s*(\S+)/i);
+          const model = modelMatch ? modelMatch[1] : 'Unknown';
+          
+          onus.push({
+            frame: blockFrame,
+            slot: blockSlot,
+            pon: blockPon,
+            onuId: onus.length.toString(),
+            sn,
+            model,
+            vendor: 'Huawei'
+          });
+        }
+      }
+    } else {
+      const lines = output.split('\n');
+      for (const line of lines) {
+        const match = line.match(/(?:^|\s)([0-9A-F]{16}|[A-Z]{4}[0-9A-F]{8}|HWTC[0-9A-F]{8})(?:\s|$)/i);
+        if (match) {
+          const sn = match[1];
+          const parts = line.trim().split(/\s+/);
+          let blockFrame = frame, blockSlot = slot, blockPon = pon;
+          const portPart = parts.find(p => /^\d+\/\d+\/\d+$/.test(p) || /^\d+\/\d+$/.test(p));
+          if (portPart) {
+            const p = portPart.split('/');
+            if (p.length === 3) {
+              blockFrame = p[0];
+              blockSlot = p[1];
+              blockPon = p[2];
+            } else if (p.length === 2) {
+              blockSlot = p[0];
+              blockPon = p[1];
+            }
+          }
+          
+          onus.push({
+            frame: blockFrame,
+            slot: blockSlot,
+            pon: blockPon,
+            onuId: parts[0] || onus.length.toString(),
+            sn,
+            model: 'Unknown',
+            vendor: 'Huawei'
+          });
+        }
       }
     }
     
@@ -284,56 +369,44 @@ class ONUProvisionService {
     try {
       conn = await this.connectSSH(oltConfig);
       
-      // Enable and config mode
-      await this.executeCommand(conn, 'enable', '#');
-      await this.executeCommand(conn, 'config', '#');
-      
       const { frame, slot, pon, onuId, sn, name, vlan, bandwidth, lineProfile, srvProfile, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
-      // Add ONU
-      let cmd = `interface gpon ${frame}/${slot}\n`;
-      cmd += `ont add ${pon} ${onuId} sn-auth ${sn} omci ont-lineprofile-id ${lineProfile || 1} ont-srvprofile-id ${srvProfile || 1} desc ${name}\n`;
+      const cmds = [
+        'enable',
+        'config',
+        `interface gpon ${frame}/${slot}`,
+        `ont add ${pon} ${onuId} sn-auth ${sn} omci ont-lineprofile-id ${lineProfile || 1} ont-srvprofile-id ${srvProfile || 1} desc ${name}`
+      ];
       
-      // WiFi Configuration
       if (wifiSsid && wifiPassword) {
-        cmd += `ont wifi-config ${pon} ${onuId} ssid ${wifiSsid} wpa-psk ${wifiPassword}\n`;
+        cmds.push(`ont wifi-config ${pon} ${onuId} ssid ${wifiSsid} wpa-psk ${wifiPassword}`);
       }
       
-      // LAN Mode Configuration
       if (lanMode) {
-        cmd += `ont port native-vlan ${pon} ${onuId} eth 1 vlan ${vlan} priority 0\n`;
+        cmds.push(`ont port native-vlan ${pon} ${onuId} eth 1 vlan ${vlan} priority 0`);
       }
       
-      // PPPoE Configuration (if router mode)
       if (lanMode === 'router' && pppoeUsername && pppoePassword) {
-        cmd += `ont wan-config ${pon} ${onuId} pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
+        cmds.push(`ont wan-config ${pon} ${onuId} pppoe username ${pppoeUsername} password ${pppoePassword}`);
       }
       
-      // TR069/CWMP Configuration
       if (tr069AcsUrl) {
-        cmd += `ont tr069-server ${pon} ${onuId} url ${tr069AcsUrl}\n`;
-        
+        cmds.push(`ont tr069-server ${pon} ${onuId} url ${tr069AcsUrl}`);
         if (tr069AcsUsername && tr069AcsPassword) {
-          cmd += `ont tr069-server ${pon} ${onuId} username ${tr069AcsUsername} password ${tr069AcsPassword}\n`;
+          cmds.push(`ont tr069-server ${pon} ${onuId} username ${tr069AcsUsername} password ${tr069AcsPassword}`);
         }
-        
         if (tr069PeriodicInform) {
-          cmd += `ont tr069-server ${pon} ${onuId} periodic-inform interval ${tr069PeriodicInform}\n`;
-          cmd += `ont tr069-server ${pon} ${onuId} periodic-inform enable\n`;
+          cmds.push(`ont tr069-server ${pon} ${onuId} periodic-inform interval ${tr069PeriodicInform}`);
+          cmds.push(`ont tr069-server ${pon} ${onuId} periodic-inform enable`);
         }
-        
-        cmd += `ont tr069-server ${pon} ${onuId} enable\n`;
-        
-        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
+        cmds.push(`ont tr069-server ${pon} ${onuId} enable`);
       }
       
-      cmd += `quit\n`;
+      cmds.push('quit');
+      cmds.push(`service-port vlan ${vlan} gpon ${frame}/${slot}/${pon} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}`);
+      cmds.push('save');
       
-      // Service port
-      cmd += `service-port vlan ${vlan} gpon ${frame}/${slot}/${pon} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}\n`;
-      
-      await this.executeCommand(conn, cmd, '#');
-      
+      await this.executeCommands(conn, cmds);
       conn.end();
       
       const features = [];
@@ -360,59 +433,46 @@ class ONUProvisionService {
     try {
       conn = await this.connectSSH(oltConfig);
       
-      // Enable and config mode
-      await this.executeCommand(conn, 'enable', '#');
-      await this.executeCommand(conn, 'config', '#');
-      
       const { frame, slot, pon, onuId, sn, name, vlan, lineProfile, srvProfile, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
-      // Add ONU
-      let cmd = `interface gpon ${frame}/${slot}\n`;
-      cmd += `ont add ${pon} ${onuId} sn-auth ${sn} ont-lineprofile-id ${lineProfile || 1} ont-srvprofile-id ${srvProfile || 1} desc ${name}\n`;
+      const cmds = [
+        'enable',
+        'config',
+        `interface gpon ${frame}/${slot}`,
+        `ont add ${pon} ${onuId} sn-auth ${sn} ont-lineprofile-id ${lineProfile || 1} ont-srvprofile-id ${srvProfile || 1} desc ${name}`
+      ];
       
-      // WiFi Configuration
       if (wifiSsid && wifiPassword) {
-        cmd += `ont wlan ssid ${pon} ${onuId} 1 ${wifiSsid}\n`;
-        cmd += `ont wlan security ${pon} ${onuId} 1 wpa2-psk aes ${wifiPassword}\n`;
-        cmd += `ont wlan enable ${pon} ${onuId} 1\n`;
+        cmds.push(`ont wlan ssid ${pon} ${onuId} 1 ${wifiSsid}`);
+        cmds.push(`ont wlan security ${pon} ${onuId} 1 wpa2-psk aes ${wifiPassword}`);
+        cmds.push(`ont wlan enable ${pon} ${onuId} 1`);
       }
       
-      // LAN Mode Configuration
       if (lanMode) {
-        cmd += `ont port vlan ${pon} ${onuId} eth 1 mode tag vlan ${vlan}\n`;
+        cmds.push(`ont port vlan ${pon} ${onuId} eth 1 mode tag vlan ${vlan}`);
       }
       
-      // PPPoE Configuration (if router mode)
       if (lanMode === 'router' && pppoeUsername && pppoePassword) {
-        cmd += `ont wan ${pon} ${onuId} pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
+        cmds.push(`ont wan ${pon} ${onuId} pppoe username ${pppoeUsername} password ${pppoePassword}`);
       }
       
-      // TR069/CWMP Configuration
       if (tr069AcsUrl) {
-        cmd += `ont cwmp ${pon} ${onuId} acs-url ${tr069AcsUrl}\n`;
-        
+        cmds.push(`ont cwmp ${pon} ${onuId} acs-url ${tr069AcsUrl}`);
         if (tr069AcsUsername && tr069AcsPassword) {
-          cmd += `ont cwmp ${pon} ${onuId} acs-username ${tr069AcsUsername}\n`;
-          cmd += `ont cwmp ${pon} ${onuId} acs-password ${tr069AcsPassword}\n`;
+          cmds.push(`ont cwmp ${pon} ${onuId} acs-username ${tr069AcsUsername}`);
+          cmds.push(`ont cwmp ${pon} ${onuId} acs-password ${tr069AcsPassword}`);
         }
-        
         if (tr069PeriodicInform) {
-          cmd += `ont cwmp ${pon} ${onuId} periodic-inform-interval ${tr069PeriodicInform}\n`;
-          cmd += `ont cwmp ${pon} ${onuId} periodic-inform enable\n`;
+          cmds.push(`ont cwmp ${pon} ${onuId} periodic-inform-interval ${tr069PeriodicInform}`);
+          cmds.push(`ont cwmp ${pon} ${onuId} periodic-inform enable`);
         }
-        
-        cmd += `ont cwmp ${pon} ${onuId} enable\n`;
-        
-        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
+        cmds.push(`ont cwmp ${pon} ${onuId} enable`);
       }
       
-      cmd += `quit\n`;
+      cmds.push('quit');
+      cmds.push(`service-port ${vlan} vlan ${vlan} gpon ${frame}/${slot}/${pon} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}`);
       
-      // Service port
-      cmd += `service-port ${vlan} vlan ${vlan} gpon ${frame}/${slot}/${pon} ont ${onuId} gemport 1 multi-service user-vlan ${vlan}\n`;
-      
-      await this.executeCommand(conn, cmd, '#');
-      
+      await this.executeCommands(conn, cmds);
       conn.end();
       
       const features = [];
@@ -430,76 +490,63 @@ class ONUProvisionService {
       throw error;
     }
   }
+
   /**
-   * VSOL V1600/V2400 - Provision ONU (Similar to ZTE)
+   * VSOL V1600/V2400 - Provision ONU
    */
   async vsolProvisionONU(oltConfig, params) {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
       
-      // Enable and config mode
-      await this.executeCommand(conn, 'enable', '#');
-      await this.executeCommand(conn, 'configure terminal', '#');
-      
       const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
-      // Add ONU
-      let cmd = `interface gpon-olt_${pon}\n`;
-      cmd += `onu ${onuId} type ${params.onuType || 'V2802RGW'} sn ${sn}\n`;
-      cmd += `exit\n`;
+      const cmds = [
+        'enable',
+        'configure terminal',
+        `interface gpon-olt_${pon}`,
+        `onu ${onuId} type ${params.onuType || 'V2802RGW'} sn ${sn}`,
+        'exit',
+        `interface gpon-onu_${pon}:${onuId}`,
+        `name ${name}`,
+        `tcont 1 profile ${bandwidth || 'default'}`,
+        'gemport 1 tcont 1'
+      ];
       
-      // Configure ONU
-      cmd += `interface gpon-onu_${pon}:${onuId}\n`;
-      cmd += `name ${name}\n`;
-      cmd += `tcont 1 profile ${bandwidth || 'default'}\n`;
-      cmd += `gemport 1 tcont 1\n`;
-      
-      // WiFi Configuration
       if (wifiSsid && wifiPassword) {
-        cmd += `ssid 1 ${wifiSsid}\n`;
-        cmd += `security 1 wpa2-psk AES ${wifiPassword}\n`;
-        cmd += `wifi enable 1\n`;
+        cmds.push(`ssid 1 ${wifiSsid}`);
+        cmds.push(`security 1 wpa2-psk AES ${wifiPassword}`);
+        cmds.push('wifi enable 1');
       }
       
-      // LAN Mode Configuration
       if (lanMode) {
-        cmd += `lan-mode ${lanMode}\n`;
+        cmds.push(`lan-mode ${lanMode}`);
       }
       
-      // PPPoE Configuration (if router mode)
       if (lanMode === 'router' && pppoeUsername && pppoePassword) {
-        cmd += `wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
+        cmds.push(`wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}`);
       }
       
-      // TR069/CWMP Configuration
       if (tr069AcsUrl) {
-        cmd += `tr069 enable\n`;
-        cmd += `tr069 acs url ${tr069AcsUrl}\n`;
-        
+        cmds.push('tr069 enable');
+        cmds.push(`tr069 acs url ${tr069AcsUrl}`);
         if (tr069AcsUsername && tr069AcsPassword) {
-          cmd += `tr069 acs username ${tr069AcsUsername}\n`;
-          cmd += `tr069 acs password ${tr069AcsPassword}\n`;
+          cmds.push(`tr069 acs username ${tr069AcsUsername}`);
+          cmds.push(`tr069 acs password ${tr069AcsPassword}`);
         }
-        
         if (tr069PeriodicInform) {
-          cmd += `tr069 periodic-inform interval ${tr069PeriodicInform}\n`;
-          cmd += `tr069 periodic-inform enable\n`;
+          cmds.push(`tr069 periodic-inform interval ${tr069PeriodicInform}`);
+          cmds.push('tr069 periodic-inform enable');
         }
-        
-        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
       }
       
-      cmd += `exit\n`;
+      cmds.push('exit');
+      cmds.push(`pon-onu-mng gpon-onu_${pon}:${onuId}`);
+      cmds.push(`service 1 gemport 1 vlan ${vlan}`);
+      cmds.push(`vlan port eth_0/1 mode tag vlan ${vlan}`);
+      cmds.push('exit');
       
-      // Service port
-      cmd += `pon-onu-mng gpon-onu_${pon}:${onuId}\n`;
-      cmd += `service 1 gemport 1 vlan ${vlan}\n`;
-      cmd += `vlan port eth_0/1 mode tag vlan ${vlan}\n`;
-      cmd += `exit\n`;
-      
-      await this.executeCommand(conn, cmd, '#');
-      
+      await this.executeCommands(conn, cmds);
       conn.end();
       
       const features = [];
@@ -519,75 +566,61 @@ class ONUProvisionService {
   }
 
   /**
-   * C-Data FD1600/FD1800 - Provision ONU (Similar to ZTE)
+   * C-Data FD1600/FD1800 - Provision ONU
    */
   async cdataProvisionONU(oltConfig, params) {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
       
-      // Enable and config mode
-      await this.executeCommand(conn, 'enable', '#');
-      await this.executeCommand(conn, 'configure terminal', '#');
-      
       const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
-      // Add ONU
-      let cmd = `interface gpon-olt_${pon}\n`;
-      cmd += `onu ${onuId} type ${params.onuType || 'FD1104S'} sn ${sn}\n`;
-      cmd += `exit\n`;
+      const cmds = [
+        'enable',
+        'configure terminal',
+        `interface gpon-olt_${pon}`,
+        `onu ${onuId} type ${params.onuType || 'FD1104S'} sn ${sn}`,
+        'exit',
+        `interface gpon-onu_${pon}:${onuId}`,
+        `name ${name}`,
+        `tcont 1 profile ${bandwidth || 'default'}`,
+        'gemport 1 tcont 1'
+      ];
       
-      // Configure ONU
-      cmd += `interface gpon-onu_${pon}:${onuId}\n`;
-      cmd += `name ${name}\n`;
-      cmd += `tcont 1 profile ${bandwidth || 'default'}\n`;
-      cmd += `gemport 1 tcont 1\n`;
-      
-      // WiFi Configuration
       if (wifiSsid && wifiPassword) {
-        cmd += `ssid 1 ${wifiSsid}\n`;
-        cmd += `security 1 wpa2-psk AES ${wifiPassword}\n`;
-        cmd += `wifi enable 1\n`;
+        cmds.push(`ssid 1 ${wifiSsid}`);
+        cmds.push(`security 1 wpa2-psk AES ${wifiPassword}`);
+        cmds.push('wifi enable 1');
       }
       
-      // LAN Mode Configuration
       if (lanMode) {
-        cmd += `lan-mode ${lanMode}\n`;
+        cmds.push(`lan-mode ${lanMode}`);
       }
       
-      // PPPoE Configuration (if router mode)
       if (lanMode === 'router' && pppoeUsername && pppoePassword) {
-        cmd += `wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}\n`;
+        cmds.push(`wan-ip pppoe username ${pppoeUsername} password ${pppoePassword}`);
       }
       
-      // TR069/CWMP Configuration
       if (tr069AcsUrl) {
-        cmd += `cwmp enable\n`;
-        cmd += `cwmp acs url ${tr069AcsUrl}\n`;
-        
+        cmds.push('cwmp enable');
+        cmds.push(`cwmp acs url ${tr069AcsUrl}`);
         if (tr069AcsUsername && tr069AcsPassword) {
-          cmd += `cwmp acs username ${tr069AcsUsername}\n`;
-          cmd += `cwmp acs password ${tr069AcsPassword}\n`;
+          cmds.push(`cwmp acs username ${tr069AcsUsername}`);
+          cmds.push(`cwmp acs password ${tr069AcsPassword}`);
         }
-        
         if (tr069PeriodicInform) {
-          cmd += `cwmp periodic-inform interval ${tr069PeriodicInform}\n`;
-          cmd += `cwmp periodic-inform enable\n`;
+          cmds.push(`cwmp periodic-inform interval ${tr069PeriodicInform}`);
+          cmds.push('cwmp periodic-inform enable');
         }
-        
-        logger.info(`TR069 configured for ONU ${name}: ACS URL=${tr069AcsUrl}, Interval=${tr069PeriodicInform || 300}s`);
       }
       
-      cmd += `exit\n`;
+      cmds.push('exit');
+      cmds.push(`pon-onu-mng gpon-onu_${pon}:${onuId}`);
+      cmds.push(`service 1 gemport 1 vlan ${vlan}`);
+      cmds.push(`vlan port eth_0/1 mode tag vlan ${vlan}`);
+      cmds.push('exit');
       
-      // Service port
-      cmd += `pon-onu-mng gpon-onu_${pon}:${onuId}\n`;
-      cmd += `service 1 gemport 1 vlan ${vlan}\n`;
-      cmd += `vlan port eth_0/1 mode tag vlan ${vlan}\n`;
-      cmd += `exit\n`;
-      
-      await this.executeCommand(conn, cmd, '#');
-      
+      await this.executeCommands(conn, cmds);
       conn.end();
       
       const features = [];
@@ -605,7 +638,6 @@ class ONUProvisionService {
       throw error;
     }
   }
-
 
   /**
    * Get ONU details (works for both ZTE and Huawei)
@@ -626,12 +658,12 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
-      await this.executeCommand(conn, 'enable', '#');
-      
       const { pon, onuId } = params;
-      const command = `show gpon onu detail-info gpon-onu_${pon}:${onuId}`;
-      const output = await this.executeCommand(conn, command, '#');
-      
+      const cmds = [
+        'enable',
+        `show gpon onu detail-info gpon-onu_${pon}:${onuId}`
+      ];
+      const output = await this.executeCommands(conn, cmds);
       conn.end();
       
       return this.parseZTEONUDetails(output);
@@ -673,12 +705,12 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
-      await this.executeCommand(conn, 'enable', '#');
-      
       const { frame, slot, pon, onuId } = params;
-      const command = `display ont info ${frame} ${slot} ${pon} ${onuId}`;
-      const output = await this.executeCommand(conn, command, '#');
-      
+      const cmds = [
+        'enable',
+        `display ont info ${frame} ${slot} ${pon} ${onuId}`
+      ];
+      const output = await this.executeCommands(conn, cmds);
       conn.end();
       
       return this.parseHuaweiONUDetails(output);
@@ -732,13 +764,16 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
-      await this.executeCommand(conn, 'enable', '#');
-      await this.executeCommand(conn, 'configure terminal', '#');
-      
       const { pon, onuId } = params;
-      const cmd = `interface gpon-olt_${pon}\nno onu ${onuId}\nexit\n`;
-      await this.executeCommand(conn, cmd, '#');
-      
+      const cmds = [
+        'enable',
+        'configure terminal',
+        `interface gpon-olt_${pon}`,
+        `no onu ${onuId}`,
+        'exit',
+        'write'
+      ];
+      await this.executeCommands(conn, cmds);
       conn.end();
       return { success: true, message: 'ONU deleted successfully' };
     } catch (error) {
@@ -754,13 +789,16 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
-      await this.executeCommand(conn, 'enable', '#');
-      await this.executeCommand(conn, 'config', '#');
-      
       const { frame, slot, pon, onuId } = params;
-      const cmd = `interface gpon ${frame}/${slot}\nont delete ${pon} ${onuId}\nquit\n`;
-      await this.executeCommand(conn, cmd, '#');
-      
+      const cmds = [
+        'enable',
+        'config',
+        `interface gpon ${frame}/${slot}`,
+        `ont delete ${pon} ${onuId}`,
+        'quit',
+        'save'
+      ];
+      await this.executeCommands(conn, cmds);
       conn.end();
       return { success: true, message: 'ONU deleted successfully' };
     } catch (error) {
@@ -778,7 +816,6 @@ class ONUProvisionService {
     try {
       const { username, password, profile, comment, localAddress, remoteAddress } = params;
       
-      // Use the existing createPppoeSecret function
       const secretData = {
         name: username,
         password: password,
@@ -798,7 +835,6 @@ class ONUProvisionService {
         secretData['remote-address'] = remoteAddress;
       }
       
-      // Use addPppoeSecret which already exists in mikrotikService
       await mikrotikService.addPppoeSecret(secretData, null);
       
       logger.info(`PPPoE secret created in MikroTik: ${username}`);
@@ -818,7 +854,6 @@ class ONUProvisionService {
     try {
       const conn = await mikrotikService.connect(mikrotikConfig);
       
-      // Find secret by name
       const secrets = await conn.write('/ppp/secret/print', [`?name=${username}`]);
       
       if (secrets && secrets.length > 0) {
@@ -847,7 +882,6 @@ class ONUProvisionService {
     };
     
     try {
-      // 1. Provision ONU
       const { vendor } = params;
       
       if (vendor === 'ZTE') {
@@ -866,7 +900,6 @@ class ONUProvisionService {
       
       logger.info(`ONU provisioned: ${params.name} (${vendor})`);
       
-      // 2. Create PPPoE in MikroTik (if credentials provided)
       if (params.pppoeUsername && params.pppoePassword && mikrotikConfig) {
         try {
           results.pppoe = await this.createMikrotikPPPoE(mikrotikConfig, {
