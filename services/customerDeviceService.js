@@ -623,12 +623,17 @@ async function listDevicesWithTags(limit = 250) {
 }
 
 /** Mengambil semua perangkat tanpa melihat tag. */
-async function listAllDevices(limit = 999999) {
-  const servers = genieacsApi.getAllACSServers();
+async function listAllDevices(limit = 999999, acsId = null) {
+  let servers = genieacsApi.getAllACSServers();
+  if (acsId && acsId !== 'all') {
+    servers = servers.filter(s => String(s.id) === String(acsId));
+  }
+  
   let allDevices = [];
   let lastError = null;
 
-  for (const server of servers) {
+  // Query servers in parallel using Promise.allSettled
+  const promises = servers.map(async (server) => {
     try {
       const instance = genieacsApi.createAxiosInstance(server);
       const response = await instance.get(`/devices`, {
@@ -636,19 +641,28 @@ async function listAllDevices(limit = 999999) {
           limit,
           projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
         },
-        timeout: 45000
+        timeout: 8000 // Reduce timeout to 8 seconds so a slow server doesn't block forever
       });
       const rows = Array.isArray(response.data) ? response.data : [];
       rows.forEach(d => {
         d._acs_server_id = server.id;
         d._acs_server_name = server.name;
       });
-      allDevices.push(...rows);
+      return rows;
     } catch (e) {
-      lastError = e;
       logger.error(`[CustomerDevice] Error listing devices on ${server.name}: ${e.message}`);
+      throw e;
     }
-  }
+  });
+
+  const results = await Promise.allSettled(promises);
+  results.forEach((r) => {
+    if (r.status === 'fulfilled') {
+      allDevices.push(...r.value);
+    } else {
+      lastError = r.reason;
+    }
+  });
   
   if (allDevices.length > 0 || !lastError) {
     return { ok: true, devices: allDevices.slice(0, limit) };
