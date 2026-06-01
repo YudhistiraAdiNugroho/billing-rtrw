@@ -49,6 +49,10 @@
         .device-link { text-decoration: none; display: block; transition: all 0.2s; }
         .device-link:hover { opacity: 0.8; }
         .device-link:hover div:first-child { text-decoration: underline; }
+
+        .bind-tag { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg); font-size: 12px; font-weight: 700; cursor: pointer; text-align: center; transition: all 0.2s; color: var(--text); }
+        .bind-tag:hover { border-color: var(--primary); background: var(--hover-bg); }
+        .bind-tag.active { background: var(--primary) !important; color: white !important; border-color: var(--primary) !important; box-shadow: 0 4px 12px rgba(59,130,246,0.2); }
     </style>
 </head>
 <body>
@@ -143,7 +147,10 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <button class="btn-action" onclick="refreshDevice('<%= d.id %>')"><i class="fas fa-sync"></i></button>
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <button class="btn-action" onclick="refreshDevice('<%= d.id %>')" title="Refresh Device"><i class="fas fa-sync"></i></button>
+                                        <button class="btn-action" onclick="openAddWanModal('<%= d.id %>', '<%= d.acs_server_id || selectedAcsId %>', '<%= d.sn %>', '<%= d.manufacturer || "" %>', '<%= d.model || "" %>')" title="Add WAN All-in-One"><i class="fas fa-network-wired"></i></button>
+                                    </div>
                                 </td>
                             </tr>
                             <% }); %>
@@ -222,6 +229,165 @@
             &copy; <%= new Date().getFullYear() %> <%= (typeof settings !== 'undefined' ? settings.company_header : 'ALIJAYA NET') %> - GenieACS Pro
         </footer>
     </div>
+</div>
+
+<!-- Unified Add WAN All-in-One Modal -->
+<div class="mo" id="addWanModal">
+  <div class="mb" style="max-width:650px">
+    <div class="mh">
+      <span class="mt"><i class="fas fa-network-wired"></i> Provisioning All-in-One WAN</span>
+      <button class="mc" onclick="closeModal('addWanModal')">&times;</button>
+    </div>
+    <div class="mbody" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+      <form id="addWanForm" onsubmit="submitAddWanForm(event)">
+        <input type="hidden" id="wanDeviceId" value="">
+        <input type="hidden" id="wanAcsId" value="">
+        
+        <div style="background: var(--sub-bg); padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px dashed var(--border);">
+            <div style="display: flex; gap: 15px; font-size: 13px;">
+                <div><strong>SN Perangkat:</strong> <span id="lblWanSn" class="text-primary" style="font-weight: 700;">-</span></div>
+                <div><strong>Vendor:</strong> <span id="lblWanVendor" style="text-transform: capitalize; font-weight: 700;">-</span></div>
+                <div><strong>Tipe:</strong> <span id="lblWanModel" style="font-weight: 700;">-</span></div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+            <div class="fg" style="margin: 0;">
+              <label class="fl">WAN Connection Mode</label>
+              <select id="wanMode" class="fc" onchange="toggleWanModeFields()" style="height: 42px;">
+                <option value="pppoe">PPPoE (Router Mode)</option>
+                <option value="bridge">Bridge Mode</option>
+              </select>
+            </div>
+            <div class="fg" style="margin: 0;">
+              <label class="fl">VLAN ID</label>
+              <input type="number" id="wanVlanId" class="fc" required min="1" max="4094" placeholder="e.g. 100" style="height: 42px;">
+            </div>
+        </div>
+
+        <!-- PPPoE Credentials Block -->
+        <div id="pppoeFields" style="background: rgba(59,130,246,0.03); border: 1px solid rgba(59,130,246,0.1); padding: 18px; border-radius: 16px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--primary);"><i class="fas fa-key"></i> Kredensial PPPoE</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 12px;">
+                <div class="fg" style="margin: 0;">
+                  <label class="fl">Username PPPoE</label>
+                  <input type="text" id="wanPppoeUser" class="fc" placeholder="e.g. customer123">
+                </div>
+                <div class="fg" style="margin: 0;">
+                  <label class="fl">Password PPPoE</label>
+                  <input type="text" id="wanPppoePass" class="fc" placeholder="e.g. secretpass">
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 15px; align-items: center; margin-top: 15px; padding-top: 12px; border-top: 1px dashed var(--border);">
+                <div>
+                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text); font-weight:600; cursor:pointer;">
+                      <input type="checkbox" id="wanAutoMikrotik" checked style="width:18px; height:18px;" onchange="toggleMikrotikProfileField()">
+                      Auto-create PPPoE Secret di MikroTik
+                    </label>
+                </div>
+                <div class="fg" style="margin: 0;" id="pppoeProfileContainer">
+                  <label class="fl">Profile MikroTik</label>
+                  <select id="wanPppoeProfile" class="fc" style="height: 38px;">
+                    <% pppoeProfiles.forEach(p => { %>
+                        <option value="<%= p.name %>" <%= p.name === 'default' ? 'selected' : '' %>><%= p.name %></option>
+                    <% }); %>
+                  </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Unified Wi-Fi Block -->
+        <div style="border: 1px solid var(--border); border-radius: 16px; margin-bottom: 20px; overflow: hidden;">
+            <div style="background: var(--sub-bg); padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 13px; cursor: pointer; margin: 0; width: 100%;">
+                    <input type="checkbox" id="wanConfigureWifi" onchange="toggleWifiFields()" style="width: 18px; height: 18px;">
+                    <i class="fas fa-wifi text-primary"></i> Konfigurasikan Wi-Fi Sekaligus
+                </label>
+            </div>
+            <div id="wifiFields" style="display: none; padding: 20px; background: rgba(16,185,129,0.01);">
+                <div id="wifiLoading" style="text-align: center; padding: 15px; color: var(--muted);">
+                    <i class="bi bi-arrow-clockwise spin" style="font-size: 20px;"></i> Mengunduh SSID lama...
+                </div>
+                <div id="wifiBandsContainer" style="display: grid; gap: 15px;">
+                    <!-- 2.4GHz Band -->
+                    <div id="band24Fields" style="display: block;">
+                        <h5 style="margin: 0 0 10px 0; font-size: 13px; color: var(--text); font-weight: 700;"><i class="fas fa-broadcast-tower"></i> Wi-Fi 2.4GHz</h5>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="fg" style="margin: 0;">
+                              <label class="fl">SSID (Nama Wi-Fi)</label>
+                              <input type="text" id="wifiSsid24" class="fc" placeholder="Mengunduh...">
+                            </div>
+                            <div class="fg" style="margin: 0;">
+                              <label class="fl">Sandi Wi-Fi (WPA2)</label>
+                              <input type="password" id="wifiPass24" class="fc" placeholder="Biarkan kosong jika tidak diganti">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 5GHz Band -->
+                    <div id="band5Fields" style="display: none; border-top: 1px dashed var(--border); padding-top: 15px; margin-top: 10px;">
+                        <h5 style="margin: 0 0 10px 0; font-size: 13px; color: var(--text); font-weight: 700;"><i class="fas fa-bolt"></i> Wi-Fi 5GHz</h5>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="fg" style="margin: 0;">
+                              <label class="fl">SSID (Nama Wi-Fi)</label>
+                              <input type="text" id="wifiSsid5" class="fc" placeholder="Mengunduh...">
+                            </div>
+                            <div class="fg" style="margin: 0;">
+                              <label class="fl">Sandi Wi-Fi (WPA2)</label>
+                              <input type="password" id="wifiPass5" class="fc" placeholder="Biarkan kosong jika tidak diganti">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LAN / WLAN Port Binding -->
+        <div style="background: var(--sub-bg); border: 1px solid var(--border); padding: 18px; border-radius: 16px; margin-bottom: 5px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 13px; color: var(--text); font-weight: 700;"><i class="fas fa-bezier-curve text-primary"></i> LAN / WLAN Port Binding</h4>
+            
+            <label class="fl" style="margin-bottom: 8px;">Pilih LAN Port yang akan di-bind:</label>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px;">
+                <label class="bind-tag active" id="lblLan1">
+                    <input type="checkbox" name="lanPorts" value="LAN1" checked style="display: none;" onchange="syncTagClass(this, 'lblLan1')"> LAN 1
+                </label>
+                <label class="bind-tag active" id="lblLan2">
+                    <input type="checkbox" name="lanPorts" value="LAN2" checked style="display: none;" onchange="syncTagClass(this, 'lblLan2')"> LAN 2
+                </label>
+                <label class="bind-tag active" id="lblLan3">
+                    <input type="checkbox" name="lanPorts" value="LAN3" checked style="display: none;" onchange="syncTagClass(this, 'lblLan3')"> LAN 3
+                </label>
+                <label class="bind-tag active" id="lblLan4">
+                    <input type="checkbox" name="lanPorts" value="LAN4" checked style="display: none;" onchange="syncTagClass(this, 'lblLan4')"> LAN 4
+                </label>
+            </div>
+
+            <label class="fl" style="margin-bottom: 8px;">Pilih WLAN (SSID) yang akan di-bind:</label>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                <label class="bind-tag active" id="lblWlan1">
+                    <input type="checkbox" name="wlanSsids" value="SSID1" checked style="display: none;" onchange="syncTagClass(this, 'lblWlan1')"> SSID 1
+                </label>
+                <label class="bind-tag" id="lblWlan2">
+                    <input type="checkbox" name="wlanSsids" value="SSID2" style="display: none;" onchange="syncTagClass(this, 'lblWlan2')"> SSID 2
+                </label>
+                <label class="bind-tag" id="lblWlan3">
+                    <input type="checkbox" name="wlanSsids" value="SSID3" style="display: none;" onchange="syncTagClass(this, 'lblWlan3')"> SSID 3
+                </label>
+                <label class="bind-tag" id="lblWlan4">
+                    <input type="checkbox" name="wlanSsids" value="SSID4" style="display: none;" onchange="syncTagClass(this, 'lblWlan4')"> SSID 4
+                </label>
+            </div>
+        </div>
+
+      </form>
+    </div>
+    <div class="mf">
+      <button type="button" class="btn btn-g" onclick="closeModal('addWanModal')">Batal</button>
+      <button type="submit" form="addWanForm" class="btn btn-p" id="btn-save-add-wan">
+        <span class="btn-text"><i class="bi bi-save"></i> Jalankan Provisioning</span>
+        <span class="btn-loader" style="display:none"><i class="bi bi-arrow-clockwise spin"></i> Memproses...</span>
+      </button>
+    </div>
+  </div>
 </div>
 
 <div class="mo" id="serverModal">
@@ -383,6 +549,185 @@ async function refreshDevice(deviceId) {
     const d = await res.json();
     alert(d.message);
 }
+// Sync class active on binding tag label based on checkbox state
+function syncTagClass(checkbox, labelId) {
+    const lbl = document.getElementById(labelId);
+    if (checkbox.checked) {
+        lbl.classList.add('active');
+    } else {
+        lbl.classList.remove('active');
+    }
+}
+
+// Toggle visibility of PPPoE-specific fields
+function toggleWanModeFields() {
+    const mode = document.getElementById('wanMode').value;
+    const pppoeFields = document.getElementById('pppoeFields');
+    if (mode === 'pppoe') {
+        pppoeFields.style.display = 'block';
+    } else {
+        pppoeFields.style.display = 'none';
+    }
+}
+
+// Toggle visibility of Profile MikroTik field based on auto-create check
+function toggleMikrotikProfileField() {
+    const autoChk = document.getElementById('wanAutoMikrotik');
+    const container = document.getElementById('pppoeProfileContainer');
+    if (autoChk.checked) {
+        container.style.visibility = 'visible';
+    } else {
+        container.style.visibility = 'hidden';
+    }
+}
+
+// Toggle Wi-Fi configuration slide-down and AJAX fetch
+async function toggleWifiFields() {
+    const configureWifi = document.getElementById('wanConfigureWifi').checked;
+    const wifiFields = document.getElementById('wifiFields');
+    
+    if (configureWifi) {
+        wifiFields.style.display = 'block';
+        
+        const deviceId = document.getElementById('wanDeviceId').value;
+        const acsId = document.getElementById('wanAcsId').value;
+        const wifiLoading = document.getElementById('wifiLoading');
+        const band24Fields = document.getElementById('band24Fields');
+        const band5Fields = document.getElementById('band5Fields');
+        
+        wifiLoading.style.display = 'block';
+        band24Fields.style.opacity = '0.5';
+        band5Fields.style.opacity = '0.5';
+        
+        try {
+            const res = await fetch(`/admin/acs/api/wifi-settings/${encodeURIComponent(deviceId)}?acsId=${encodeURIComponent(acsId)}`);
+            const d = await res.json();
+            
+            if (d && d.success && Array.isArray(d.bands)) {
+                // Reset fields
+                document.getElementById('wifiSsid24').value = '';
+                document.getElementById('wifiSsid5').value = '';
+                band5Fields.style.display = 'none';
+                
+                d.bands.forEach(b => {
+                    if (b.index === '1') {
+                        document.getElementById('wifiSsid24').value = b.ssid;
+                        document.getElementById('wifiSsid24').placeholder = 'Nama Wi-Fi 2.4G';
+                    } else if (b.index === '5' || b.index === '2') {
+                        band5Fields.style.display = 'block';
+                        document.getElementById('wifiSsid5').value = b.ssid;
+                        document.getElementById('wifiSsid5').placeholder = 'Nama Wi-Fi 5G';
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Gagal mengambil SSID perangkat:', e);
+        } finally {
+            wifiLoading.style.display = 'none';
+            band24Fields.style.opacity = '1';
+            band5Fields.style.opacity = '1';
+        }
+    } else {
+        wifiFields.style.display = 'none';
+    }
+}
+
+// Open modal Add WAN All-in-One and populate basic details
+function openAddWanModal(deviceId, acsId, sn, manufacturer, model) {
+    document.getElementById('wanDeviceId').value = deviceId;
+    document.getElementById('wanAcsId').value = acsId;
+    document.getElementById('lblWanSn').innerText = sn || deviceId;
+    document.getElementById('lblWanVendor').innerText = manufacturer || '-';
+    document.getElementById('lblWanModel').innerText = model || '-';
+    
+    // Reset form fields
+    document.getElementById('wanVlanId').value = '';
+    document.getElementById('wanPppoeUser').value = '';
+    document.getElementById('wanPppoePass').value = '';
+    document.getElementById('wanConfigureWifi').checked = false;
+    document.getElementById('wifiFields').style.display = 'none';
+    
+    // Default active bindings
+    document.querySelectorAll('input[name="lanPorts"]').forEach(c => {
+        c.checked = true;
+        syncTagClass(c, 'lbl' + c.value.charAt(0) + c.value.slice(1).toLowerCase());
+    });
+    
+    document.querySelectorAll('input[name="wlanSsids"]').forEach(c => {
+        if (c.value === 'SSID1') {
+            c.checked = true;
+        } else {
+            c.checked = false;
+        }
+        syncTagClass(c, 'lblWlan' + c.value.replace('SSID', ''));
+    });
+    
+    toggleWanModeFields();
+    toggleMikrotikProfileField();
+    openModal('addWanModal');
+}
+
+// AJAX submission of the Provisioning form
+async function submitAddWanForm(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-save-add-wan');
+    const txt = btn.querySelector('.btn-text');
+    const ldr = btn.querySelector('.btn-loader');
+    
+    btn.disabled = true;
+    txt.style.display = 'none';
+    ldr.style.display = 'inline-block';
+    
+    const deviceId = document.getElementById('wanDeviceId').value;
+    const acsId = document.getElementById('wanAcsId').value;
+    
+    const lanPorts = [];
+    document.querySelectorAll('input[name="lanPorts"]:checked').forEach(c => lanPorts.push(c.value));
+    
+    const wlanSsids = [];
+    document.querySelectorAll('input[name="wlanSsids"]:checked').forEach(c => wlanSsids.push(c.value));
+    
+    const body = {
+        acsId,
+        mode: document.getElementById('wanMode').value,
+        vlanId: document.getElementById('wanVlanId').value,
+        pppoeUser: document.getElementById('wanPppoeUser').value,
+        pppoePass: document.getElementById('wanPppoePass').value,
+        pppoeProfile: document.getElementById('wanPppoeProfile').value,
+        autoCreateMikrotik: document.getElementById('wanAutoMikrotik').checked,
+        lanPorts,
+        wlanSsids,
+        configureWifi: document.getElementById('wanConfigureWifi').checked,
+        wifiSsid24: document.getElementById('wifiSsid24').value,
+        wifiPass24: document.getElementById('wifiPass24').value,
+        wifiSsid5: document.getElementById('wifiSsid5').value,
+        wifiPass5: document.getElementById('wifiPass5').value
+    };
+    
+    try {
+        const res = await fetch(`/admin/acs/api/add-wan/${encodeURIComponent(deviceId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        
+        if (data && data.success) {
+            alert(data.message);
+            closeModal('addWanModal');
+            location.reload();
+        } else {
+            alert(data.message || 'Gagal menjalankan provisioning');
+        }
+    } catch (err) {
+        alert('Terjadi kesalahan: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        txt.style.display = 'inline-block';
+        ldr.style.display = 'none';
+    }
+}
+
 async function syncAllACS() {
     const res = await fetch('/admin/acs/api/sync/all', { method: 'POST' });
     const d = await res.json();
