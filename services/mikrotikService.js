@@ -6,6 +6,50 @@ const { getSettingsWithCache } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 
+// Runtime patches for node-routeros to prevent uncaught exceptions under RouterOS v7
+try {
+  const { Channel } = require('node-routeros/dist/Channel');
+  const { Receiver } = require('node-routeros/dist/connector/Receiver');
+  const { RosException } = require('node-routeros/dist/RosException');
+
+  // 1. Prevent onUnknown from throwing a synchronous exception which crashes the process.
+  Channel.prototype.onUnknown = function(reply) {
+    logger.warn(`[MikroTik Channel] Received unknown reply: ${reply}`);
+  };
+
+  // 2. Reject the write promise when receiving an unknown reply, so it can be handled by try-catch.
+  const originalWrite = Channel.prototype.write;
+  Channel.prototype.write = function(params, isStream = false, returnPromise = true) {
+    if (returnPromise) {
+      this.streaming = isStream;
+      params.push('.tag=' + this.id);
+      this.on('data', (packet) => this.data.push(packet));
+      return new Promise((resolve, reject) => {
+        this.once('done', (data) => resolve(data));
+        this.once('trap', (data) => reject(new Error(data.message)));
+        this.once('unknown', (reply) => {
+          reject(new RosException('UNKNOWNREPLY', { reply: reply }));
+        });
+        this.readAndWrite(params);
+      });
+    }
+    return originalWrite.call(this, params, isStream, returnPromise);
+  };
+
+  // 3. Prevent sendTagData from throwing a synchronous exception when tag is unregistered.
+  Receiver.prototype.sendTagData = function(currentTag) {
+    const tag = this.tags.get(currentTag);
+    if (tag) {
+      tag.callback(this.currentPacket);
+    } else {
+      logger.warn(`[MikroTik Receiver] Received data for unregistered tag: ${currentTag}`);
+    }
+    this.cleanUp();
+  };
+} catch (e) {
+  logger.error(`[MikroTik Patch] Failed to apply runtime patches: ${e.message}`);
+}
+
 const connectionProbeCache = new Map();
 const listCache = new Map();
 
@@ -277,6 +321,12 @@ async function getConnection(routerId = null) {
     if (typeof api.on === 'function') {
       api.on('error', (err) => {
         logger.error(`[MikroTik] Connection error event (${host}): ${err?.message || err}`);
+      });
+    }
+
+    if (api.rosApi && typeof api.rosApi.on === 'function') {
+      api.rosApi.on('error', (err) => {
+        logger.error(`[MikroTik Raw API] Connection or parser error (${host}): ${err?.message || err}`);
       });
     }
 
