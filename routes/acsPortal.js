@@ -833,23 +833,15 @@ router.get('/api/wifi-settings/:deviceId', requireAdmin, async (req, res) => {
         const wlanConfig = deviceData.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration || {};
         const bands = [];
         
-        // Check for 2.4GHz (WLANConfiguration.1)
-        if (wlanConfig['1']) {
-            bands.push({
-                index: '1',
-                ssid: getNestedValue(wlanConfig['1'], 'SSID') || 'WiFi 2.4GHz',
-                name: 'Wi-Fi 2.4GHz'
-            });
-        }
-        
-        // Check for 5GHz (WLANConfiguration.5 or WLANConfiguration.2)
-        const fiveGIndex = wlanConfig['5'] ? '5' : (wlanConfig['2'] ? '2' : null);
-        if (fiveGIndex) {
-            bands.push({
-                index: fiveGIndex,
-                ssid: getNestedValue(wlanConfig[fiveGIndex], 'SSID') || 'WiFi 5GHz',
-                name: 'Wi-Fi 5GHz'
-            });
+        // Return all SSID indices (1 to 8) that exist on the ONU
+        for (let i = 1; i <= 8; i++) {
+            if (wlanConfig[String(i)]) {
+                bands.push({
+                    index: String(i),
+                    ssid: getNestedValue(wlanConfig[String(i)], 'SSID') || `SSID ${i}`,
+                    name: i <= 4 ? `Wi-Fi 2.4GHz (SSID ${i})` : `Wi-Fi 5GHz (SSID ${i})`
+                });
+            }
         }
         
         res.json({ success: true, bands });
@@ -876,7 +868,8 @@ router.post('/api/add-wan/:deviceId', requireAdmin, async (req, res) => {
             wifiSsid24,
             wifiPass24,
             wifiSsid5,
-            wifiPass5
+            wifiPass5,
+            dhcp
         } = req.body;
         
         // 1. Validasi awal
@@ -951,13 +944,21 @@ router.post('/api/add-wan/:deviceId', requireAdmin, async (req, res) => {
         const isPppoe = mode === 'pppoe';
         if (isPppoe) {
             paramValues.push([`${baseConnPath}.ConnectionType`, 'IP_Routed', 'xsd:string']);
-            paramValues.push([`${baseConnPath}.AddressingType`, 'DHCP', 'xsd:string']);
             paramValues.push([`${baseConnPath}.NATEnabled`, true, 'xsd:boolean']);
             paramValues.push([`${baseConnPath}.Username`, pppoeUser, 'xsd:string']);
             paramValues.push([`${baseConnPath}.Password`, pppoePass, 'xsd:string']);
         } else {
             paramValues.push([`${baseConnPath}.ConnectionType`, 'Bridged', 'xsd:string']);
         }
+        
+        // Queue LAN DHCP Server toggle as a separate task using standard TR-098 path so that if the ONU doesn't support it, WAN provisioning doesn't fail
+        const dhcpParamValues = [];
+        const isDhcpEnabled = dhcp === true || dhcp === 'true' || dhcp === 'on';
+        dhcpParamValues.push([`InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.DHCPServerEnable`, isDhcpEnabled, 'xsd:boolean']);
+        axios.post(`${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`, {
+            name: 'setParameterValues',
+            parameterValues: dhcpParamValues
+        }, config).catch(() => {});
         
         // VLAN & Port Binding Parameter Mapping berdasarkan vendor
         const lanPortsArray = Array.isArray(lanPorts) ? lanPorts : (lanPorts ? [lanPorts] : []);
@@ -976,6 +977,7 @@ router.post('/api/add-wan/:deviceId', requireAdmin, async (req, res) => {
             }
         } else if (manufacturer.includes('zte')) {
             paramValues.push([`${baseConnPath}.VLANIDMark`, parsedVlan, 'xsd:unsignedInt']);
+            paramValues.push([`${baseConnPath}.VLANID`, parsedVlan, 'xsd:unsignedInt']); // Standard VLAN ID path
             paramValues.push([`${baseConnPath}.X_ZTE_VLAN`, parsedVlan, 'xsd:unsignedInt']);
             paramValues.push([`${baseConnPath}.VLANMode`, 1, 'xsd:unsignedInt']); // 1 = Tag
             if (lanPortsArray.length > 0) {
@@ -987,6 +989,7 @@ router.post('/api/add-wan/:deviceId', requireAdmin, async (req, res) => {
         } else {
             // Fallback default
             paramValues.push([`${baseConnPath}.VLANIDMark`, parsedVlan, 'xsd:unsignedInt']);
+            paramValues.push([`${baseConnPath}.VLANID`, parsedVlan, 'xsd:unsignedInt']); // Standard VLAN ID path
             paramValues.push([`${baseConnPath}.VLANMode`, 1, 'xsd:unsignedInt']);
         }
         

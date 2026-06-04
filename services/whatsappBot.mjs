@@ -597,8 +597,8 @@ function loadWhatsappAdminSendList() {
  * @param {string} priority - Priority level: 'high', 'medium', 'low'
  */
 export async function sendMonitoringAlert(message, priority = 'medium') {
-  if (!currentSock) {
-    logger.warn('[WhatsApp] Bot belum siap, tidak dapat mengirim alert monitoring');
+  if (!currentSock || whatsappStatus.connection !== 'open') {
+    logger.warn('[WhatsApp] Bot belum siap (koneksi belum terbuka), tidak dapat mengirim alert monitoring');
     return { success: false, message: 'Bot belum siap' };
   }
 
@@ -671,7 +671,7 @@ export async function sendMonitoringAlert(message, priority = 'medium') {
 }
 
 export async function sendWA(to, text) {
-  if (!currentSock) {
+  if (!currentSock || whatsappStatus.connection !== 'open') {
     logger.warn('WhatsApp: Gagal kirim pesan, bot belum terhubung.');
     return false;
   }
