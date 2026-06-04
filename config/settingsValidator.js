@@ -33,6 +33,11 @@ const VALIDATION_RULES = {
     required: true,
     description: 'Nama perusahaan'
   },
+  public_base_url: {
+    type: 'string',
+    pattern: /^https?:\/\/.+/,
+    description: 'URL publik aplikasi (http://... atau https://...)'
+  },
   company_manager: {
     type: 'string',
     maxLength: 100,

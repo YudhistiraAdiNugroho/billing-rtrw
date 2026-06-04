@@ -265,6 +265,13 @@
             </div>
         </div>
 
+        <div style="margin-bottom: 20px;">
+            <label style="display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); font-weight:700; cursor:pointer;">
+              <input type="checkbox" id="wanDhcp" checked style="width:18px; height:18px;">
+              <i class="fas fa-server text-primary"></i> Aktifkan DHCP Server LAN (Rekomendasi: Nonaktifkan jika Bridge)
+            </label>
+        </div>
+
         <!-- PPPoE Credentials Block -->
         <div id="pppoeFields" style="background: rgba(59,130,246,0.03); border: 1px solid rgba(59,130,246,0.1); padding: 18px; border-radius: 16px; margin-bottom: 15px;">
             <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--primary);"><i class="fas fa-key"></i> Kredensial PPPoE</h4>
@@ -563,10 +570,13 @@ function syncTagClass(checkbox, labelId) {
 function toggleWanModeFields() {
     const mode = document.getElementById('wanMode').value;
     const pppoeFields = document.getElementById('pppoeFields');
+    const wanDhcp = document.getElementById('wanDhcp');
     if (mode === 'pppoe') {
         pppoeFields.style.display = 'block';
+        if (wanDhcp) wanDhcp.checked = true;
     } else {
         pppoeFields.style.display = 'none';
+        if (wanDhcp) wanDhcp.checked = false;
     }
 }
 
@@ -633,7 +643,7 @@ async function toggleWifiFields() {
 }
 
 // Open modal Add WAN All-in-One and populate basic details
-function openAddWanModal(deviceId, acsId, sn, manufacturer, model) {
+async function openAddWanModal(deviceId, acsId, sn, manufacturer, model) {
     document.getElementById('wanDeviceId').value = deviceId;
     document.getElementById('wanAcsId').value = acsId;
     document.getElementById('lblWanSn').innerText = sn || deviceId;
@@ -653,18 +663,36 @@ function openAddWanModal(deviceId, acsId, sn, manufacturer, model) {
         syncTagClass(c, 'lbl' + c.value.charAt(0) + c.value.slice(1).toLowerCase());
     });
     
-    document.querySelectorAll('input[name="wlanSsids"]').forEach(c => {
-        if (c.value === 'SSID1') {
-            c.checked = true;
-        } else {
-            c.checked = false;
+    // Reset SSID labels to original text first
+    for (let i = 1; i <= 4; i++) {
+        const lbl = document.getElementById(`lblWlan${i}`);
+        if (lbl) {
+            lbl.innerHTML = `<input type="checkbox" name="wlanSsids" value="SSID${i}" ${i === 1 ? 'checked' : ''} style="display: none;" onchange="syncTagClass(this, 'lblWlan${i}')"> SSID ${i}`;
+            if (i === 1) lbl.classList.add('active');
+            else lbl.classList.remove('active');
         }
-        syncTagClass(c, 'lblWlan' + c.value.replace('SSID', ''));
-    });
+    }
     
     toggleWanModeFields();
     toggleMikrotikProfileField();
     openModal('addWanModal');
+    
+    // Async fetch WLAN actual SSID names
+    try {
+        const res = await fetch(`/admin/acs/api/wifi-settings/${encodeURIComponent(deviceId)}?acsId=${encodeURIComponent(acsId)}`);
+        const d = await res.json();
+        if (d && d.success && Array.isArray(d.bands)) {
+            d.bands.forEach(b => {
+                const lbl = document.getElementById(`lblWlan${b.index}`);
+                if (lbl) {
+                    const isChecked = b.index === '1'; // Default SSID 1 is checked
+                    lbl.innerHTML = `<input type="checkbox" name="wlanSsids" value="SSID${b.index}" ${isChecked ? 'checked' : ''} style="display: none;" onchange="syncTagClass(this, 'lblWlan${b.index}')"> SSID ${b.index}: ${b.ssid}`;
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Gagal mengambil nama SSID:', e);
+    }
 }
 
 // AJAX submission of the Provisioning form
@@ -701,7 +729,8 @@ async function submitAddWanForm(e) {
         wifiSsid24: document.getElementById('wifiSsid24').value,
         wifiPass24: document.getElementById('wifiPass24').value,
         wifiSsid5: document.getElementById('wifiSsid5').value,
-        wifiPass5: document.getElementById('wifiPass5').value
+        wifiPass5: document.getElementById('wifiPass5').value,
+        dhcp: document.getElementById('wanDhcp').checked
     };
     
     try {

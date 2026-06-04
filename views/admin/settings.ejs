@@ -137,6 +137,11 @@
             <input class="fc" name="company_header" value="<%= settings.company_header || '' %>">
           </div>
           <div class="fg">
+            <label class="fl">URL Publik Aplikasi (Public Base URL)</label>
+            <input class="fc" name="public_base_url" value="<%= settings.public_base_url || '' %>" placeholder="https://billing.alijayanet.net">
+            <div style="font-size:10px; color:var(--muted); margin-top:4px">Digunakan untuk menyusun tautan login pelanggan yang dikirim via WhatsApp. Contoh: <span class="mono">https://billing.alijayanet.net</span></div>
+          </div>
+          <div class="fg">
             <label class="fl"><%= t('admin.settings.footer_info', 'Info Footer') %></label>
             <input class="fc" name="footer_info" value="<%= settings.footer_info || '' %>">
           </div>
