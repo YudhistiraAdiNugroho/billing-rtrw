@@ -103,10 +103,23 @@
           %>
           <div class="form-row" style="margin-bottom: 12px;">
             <div class="fg" style="width: 100%;">
-              <label class="fl">Status</label>
+              <label class="fl">Kirim Tagihan via WhatsApp (Global)</label>
+              <label style="display:flex; align-items:center; gap:10px; font-weight:800; color: var(--text);">
+                <input type="checkbox" name="billing_enabled" value="1" <%= getSetting('whatsapp_billing_to_customer_enabled', true) ? 'checked' : '' %>>
+                Izinkan kirim tagihan ke pelanggan
+              </label>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
+                Mengatur izin pengiriman tagihan WhatsApp untuk semua fitur (manual & otomatis).
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom: 12px;">
+            <div class="fg" style="width: 100%;">
+              <label class="fl">Pengingat Otomatis (Jadwal)</label>
               <label style="display:flex; align-items:center; gap:10px; font-weight:800; color: var(--text);">
                 <input type="checkbox" name="enabled" value="1" <%= getSetting('whatsapp_auto_billing_enabled', false) ? 'checked' : '' %>>
-                Aktifkan pengingat tagihan otomatis
+                Jalankan pengingat tagihan otomatis (CRON)
               </label>
               <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
                 Sistem akan mengirim pengingat ke pelanggan yang punya tunggakan pada H-1 sebelum tanggal isolir (isolate_day).
