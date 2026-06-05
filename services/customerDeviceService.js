@@ -92,7 +92,7 @@ async function fetchFullDevice(tag) {
 }
 
 async function resolveDeviceToken(input) {
-  const token = String(input || '').trim();
+  const token = String(input ?? '').replace(/[\r\n\t]+/g, '').trim();
   if (!token) return null;
 
   const direct = await findDeviceByTag(token);
@@ -437,7 +437,9 @@ async function updateSSID(tag, newSSID, actor = null) {
 
 async function updatePassword(tag, newPassword, actor = null) {
   try {
-    if (newPassword.length < 8) {
+    const pwRaw = String(newPassword ?? '');
+    const pw = pwRaw.replace(/[\r\n\t]+/g, '').trim();
+    if (pw.length < 8) {
       logger.warn(`[updatePassword] Password too short for tag ${tag}`);
       return false;
     }
@@ -461,7 +463,7 @@ async function updatePassword(tag, newPassword, actor = null) {
       try {
         await instance.post(tasksUrl, {
           name: 'setParameterValues',
-          parameterValues: [[path, newPassword, 'xsd:string']]
+          parameterValues: [[path, pw, 'xsd:string']]
         }, { timeout: 15000 });
         return true;
       } catch (e) {

@@ -1962,10 +1962,20 @@ router.get('/api/pppoe-traffic', async (req, res) => {
 });
 
 router.post('/change-ssid', async (req, res) => {
-  const phone = req.session && req.session.phone;
-  if (!phone) return res.redirect('/customer/login');
+  const loginId = String(req.session?.phone ?? '').replace(/[\r\n\t]+/g, '').trim();
+  if (!loginId) return res.redirect('/customer/login');
   const { ssid } = req.body;
-  const ok = await updateSSID(phone, ssid);
+  const profile = findCustomerProfileByLoginId(loginId);
+  const tokenCandidates = [];
+  for (const v of [loginId, profile?.phone, profile?.pppoe_username, profile?.genieacs_tag]) {
+    const s = String(v ?? '').replace(/[\r\n\t]+/g, '').trim();
+    if (s && !tokenCandidates.includes(s)) tokenCandidates.push(s);
+  }
+  let ok = false;
+  for (const token of tokenCandidates) {
+    ok = await updateSSID(token, ssid);
+    if (ok) break;
+  }
   
   req.session._msg = ok 
     ? { type: 'success', text: 'Nama WiFi (SSID) berhasil diubah.' }
@@ -1999,14 +2009,30 @@ router.post('/change-ssid', async (req, res) => {
 });
 
 router.post('/change-password', async (req, res) => {
-  const phone = req.session && req.session.phone;
-  if (!phone) return res.redirect('/customer/login');
-  const { password } = req.body;
-  const ok = await updatePassword(phone, password);
+  const loginId = String(req.session?.phone ?? '').replace(/[\r\n\t]+/g, '').trim();
+  if (!loginId) return res.redirect('/customer/login');
+  const passwordRaw = req.body ? req.body.password : '';
+  const password = String(passwordRaw ?? '').replace(/[\r\n\t]+/g, '').trim();
+  if (password.length < 8) {
+    req.session._msg = { type: 'danger', text: 'Gagal mengubah password. Pastikan minimal 8 karakter.' };
+    return res.redirect('/customer/dashboard');
+  }
+
+  const profile = findCustomerProfileByLoginId(loginId);
+  const tokenCandidates = [];
+  for (const v of [loginId, profile?.phone, profile?.pppoe_username, profile?.genieacs_tag]) {
+    const s = String(v ?? '').replace(/[\r\n\t]+/g, '').trim();
+    if (s && !tokenCandidates.includes(s)) tokenCandidates.push(s);
+  }
+  let ok = false;
+  for (const token of tokenCandidates) {
+    ok = await updatePassword(token, password);
+    if (ok) break;
+  }
   
   req.session._msg = ok
     ? { type: 'success', text: 'Password WiFi berhasil diubah.' }
-    : { type: 'danger', text: 'Gagal mengubah password. Pastikan minimal 8 karakter.' };
+    : { type: 'danger', text: 'Gagal mengubah password. Perangkat mungkin offline atau sedang sibuk, silakan coba lagi.' };
 
   // Kirim notifikasi WhatsApp ke pelanggan
   if (ok) {
