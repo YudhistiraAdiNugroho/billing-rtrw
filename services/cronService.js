@@ -106,7 +106,8 @@ function startCronJobs() {
   cron.schedule('0 9 * * *', async () => {
     const enabled = getSetting('whatsapp_auto_billing_enabled', false);
     const waEnabled = getSetting('whatsapp_enabled', false);
-    if (!enabled || !waEnabled) return;
+    const billingEnabled = getSetting('whatsapp_billing_to_customer_enabled', true);
+    if (!enabled || !waEnabled || !billingEnabled) return;
 
     let sendWA, whatsappStatus;
     try {

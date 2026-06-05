@@ -2369,6 +2369,11 @@ router.post('/billing/:id/qris-clear', requireAdminSession, (req, res) => {
 
 router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
   try {
+    const waEnabled = getSetting('whatsapp_enabled', false);
+    const billingEnabled = getSetting('whatsapp_billing_to_customer_enabled', true);
+    if (!waEnabled) throw new Error('Notifikasi WhatsApp sedang dinonaktifkan di Pengaturan.');
+    if (!billingEnabled) throw new Error('Notifikasi tagihan WhatsApp ke pelanggan sedang dinonaktifkan.');
+
     const inv = billingSvc.getInvoiceById(req.params.id);
     if (!inv) throw new Error('Tagihan tidak ditemukan');
     
@@ -4805,8 +4810,9 @@ router.post('/whatsapp/broadcast', requireAdminSession, express.urlencoded({ ext
 router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
   try {
     const enabled = req.body && req.body.enabled ? true : false;
+    const billingEnabled = req.body && req.body.billing_enabled ? true : false;
     const delay = req.body && req.body.delay ? parseInt(req.body.delay) : null;
-    const next = { whatsapp_auto_billing_enabled: enabled };
+    const next = { whatsapp_auto_billing_enabled: enabled, whatsapp_billing_to_customer_enabled: billingEnabled };
     if (delay != null && Number.isFinite(delay) && delay >= 1 && delay <= 60) {
       next.whatsapp_broadcast_delay = delay;
     }
@@ -4815,7 +4821,7 @@ router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ 
       db.saveAppSetting('whatsapp_auto_billing_message', msg);
     }
     saveSettings(next);
-    req.session._msg = { type: 'success', text: `Pengingat tagihan otomatis ${enabled ? 'diaktifkan' : 'dimatikan'}.` };
+    req.session._msg = { type: 'success', text: `Pengingat tagihan otomatis ${enabled ? 'diaktifkan' : 'dimatikan'}. Notifikasi tagihan ke pelanggan ${billingEnabled ? 'diaktifkan' : 'dimatikan'}.` };
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal menyimpan pengaturan: ' + e.message };
   }
