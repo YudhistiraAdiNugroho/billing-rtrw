@@ -689,6 +689,27 @@ export async function sendWA(to, text) {
   }
 }
 
+export async function sendWAImage(to, imageBuffer, caption = '') {
+  if (!currentSock || whatsappStatus.connection !== 'open') {
+    logger.warn('WhatsApp: Gagal kirim pesan, bot belum terhubung.');
+    return false;
+  }
+  try {
+    let digits = String(to || '').replace(/\D/g, '');
+    if (digits.startsWith('0')) {
+      digits = '62' + digits.slice(1);
+    }
+    const jid = String(to || '').includes('@') ? String(to) : `${digits}@s.whatsapp.net`;
+    const img = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer || []);
+    if (!img.length) return false;
+    await currentSock.sendMessage(jid, { image: img, caption: String(caption || '') });
+    return true;
+  } catch (e) {
+    logger.error('Gagal kirim WA image:', e.message);
+    return false;
+  }
+}
+
 export async function restartWhatsAppBot() {
   logger.info('WhatsApp: Memulai ulang bot...');
   if (currentSock) {

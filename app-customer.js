@@ -1,9 +1,12 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const dns = require('dns');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const crypto = require('crypto');
 const multer = require('multer');
+const QRCode = require('qrcode');
+const Jimp = require('jimp');
 const { logger } = require('./config/logger');
 const db = require('./config/database');
 const customerSvc = require('./services/customerService');
@@ -287,6 +290,103 @@ function genRandomCode(len = 6) {
     out += String(Math.floor(Math.random() * 10));
   }
   return out;
+}
+
+function normalizeQrisPayload(raw) {
+  let s = String(raw || '').replace(/[\r\n\t]+/g, '').trim();
+  const idx = s.indexOf('000201');
+  if (idx > 0) s = s.slice(idx);
+  const lastCrc = s.lastIndexOf('6304');
+  if (lastCrc >= 0 && s.length >= lastCrc + 8) {
+    s = s.slice(0, lastCrc + 8);
+  }
+  return s;
+}
+
+function crc16CcittFalse(input) {
+  const s = String(input || '');
+  let crc = 0xffff;
+  for (let i = 0; i < s.length; i++) {
+    crc ^= (s.charCodeAt(i) & 0xff) << 8;
+    for (let b = 0; b < 8; b++) {
+      if (crc & 0x8000) crc = ((crc << 1) ^ 0x1021) & 0xffff;
+      else crc = (crc << 1) & 0xffff;
+    }
+  }
+  return crc & 0xffff;
+}
+
+function parseEmvTlvString(input) {
+  const raw = String(input || '').replace(/[\r\n\t]+/g, '').trim();
+  if (!raw) throw new Error('QRIS payload kosong');
+  if (raw.length < 8) throw new Error('QRIS payload terlalu pendek');
+  const items = [];
+  let i = 0;
+  while (i < raw.length) {
+    if (i + 4 > raw.length) throw new Error('QRIS payload TLV tidak valid');
+    const tag = raw.slice(i, i + 2);
+    const lenStr = raw.slice(i + 2, i + 4);
+    if (!/^\d{2}$/.test(lenStr)) throw new Error('QRIS payload TLV length tidak valid');
+    const len = Number(lenStr);
+    const start = i + 4;
+    const end = start + len;
+    if (end > raw.length) throw new Error('QRIS payload TLV length melebihi data');
+    const value = raw.slice(start, end);
+    items.push({ tag, value });
+    i = end;
+  }
+  return items;
+}
+
+function buildEmvTlvString(items) {
+  const list = Array.isArray(items) ? items : [];
+  let out = '';
+  for (const it of list) {
+    const tag = String(it?.tag || '');
+    const value = String(it?.value ?? '');
+    const len = value.length;
+    if (!/^\d{2}$/.test(tag)) throw new Error('Tag TLV tidak valid');
+    if (len > 99) throw new Error('TLV length > 99 tidak didukung');
+    out += tag + String(len).padStart(2, '0') + value;
+  }
+  return out;
+}
+
+function convertStaticQrisToDynamic(staticPayload, amount) {
+  const amt = Math.max(0, Math.floor(Number(amount || 0) || 0));
+  if (!amt) throw new Error('Nominal QRIS dinamis tidak valid');
+  const source = parseEmvTlvString(staticPayload)
+    .filter(x => x && x.tag)
+    .map(x => ({ tag: String(x.tag), value: String(x.value ?? '') }));
+  const managed = new Set(['54', '55', '56', '57', '63']);
+  const result = [];
+  let amountInserted = false;
+  for (const el of source) {
+    if (managed.has(el.tag)) continue;
+    if (el.tag === '01') {
+      result.push({ tag: '01', value: '12' });
+      continue;
+    }
+    if (el.tag === '58' && !amountInserted) {
+      result.push({ tag: '54', value: String(amt) });
+      amountInserted = true;
+    }
+    result.push(el);
+  }
+  if (!amountInserted) result.push({ tag: '54', value: String(amt) });
+  const body = buildEmvTlvString(result);
+  const partial = body + '6304';
+  const crc = crc16CcittFalse(partial).toString(16).toUpperCase().padStart(4, '0');
+  return partial + crc;
+}
+
+async function buildQrisJpgFromSettings(settings, amount) {
+  const payloadRaw = String(settings?.qris_static_payload || '');
+  const payload = normalizeQrisPayload(payloadRaw);
+  if (!payload) throw new Error('QRIS payload belum diatur');
+  const dynamic = convertStaticQrisToDynamic(payload, amount);
+  const png = await QRCode.toBuffer(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });
+  return await Jimp.read(png).then(img => img.quality(90).background(0xffffffff).getBufferAsync(Jimp.MIME_JPEG));
 }
 
 async function trySendWaToBuyer(settings, phone, message, orderId) {
@@ -731,6 +831,66 @@ app.get('/admin/manifest.webmanifest', (req, res) => {
   });
 });
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/uploads/qris/:filename', async (req, res) => {
+  const wantsHtml = () => String(req.get('accept') || '').toLowerCase().includes('text/html');
+  const sendPretty = (status, title, detail) => {
+    if (!wantsHtml()) return res.status(status).send(title);
+    const baseUrl = String(getSetting('app_url', '') || `${req.headers['x-forwarded-proto'] || req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+    const loginLink = `${baseUrl}/customer/login`;
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    return res.status(status).send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:system-ui,Segoe UI,Arial; margin:0; background:#0b1220; color:#e5e7eb} .wrap{max-width:520px;margin:0 auto;padding:24px} .card{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:14px;padding:18px} h1{font-size:18px;margin:0 0 8px} p{margin:0 0 12px;color:#cbd5e1;line-height:1.45} a{display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px}</style></head><body><div class="wrap"><div class="card"><h1>${title}</h1><p>${detail || ''}</p><a href="${loginLink}">Buka Portal Pelanggan</a></div></div></body></html>`);
+  };
+  try {
+    const filename = String(req.params.filename || '');
+    const safeName = path.basename(filename);
+    if (!safeName || safeName !== filename) return sendPretty(404, 'QRIS tidak ditemukan', 'Link QRIS tidak valid.');
+
+    const filePath = path.join(__dirname, 'public', 'uploads', 'qris', safeName);
+    try {
+      await fs.promises.access(filePath, fs.constants.R_OK);
+      return res.sendFile(filePath);
+    } catch {}
+
+    const settings = getSettingsWithCache();
+    const payload = normalizeQrisPayload(String(settings?.qris_static_payload || ''));
+    if (payload) {
+      const png = await QRCode.toBuffer(payload, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });
+      const jpg = await Jimp.read(png).then(img => img.quality(90).background(0xffffffff).getBufferAsync(Jimp.MIME_JPEG));
+      res.set('Content-Type', 'image/jpeg');
+      res.set('Cache-Control', 'no-store');
+      return res.status(200).send(jpg);
+    }
+
+    const url = String(settings?.qris_static_qr_url || '').trim();
+    if (url && !url.endsWith(`/uploads/qris/${safeName}`)) return res.redirect(url);
+    return sendPretty(404, 'QRIS tidak ditemukan', 'Gambar QRIS upload tidak tersedia. Silakan gunakan link QRIS terbaru dari portal pelanggan.');
+  } catch {
+    return sendPretty(404, 'QRIS tidak ditemukan', 'Gagal memuat QRIS.');
+  }
+});
+
+app.get('/qris/static.jpg', async (req, res) => {
+  const wantsHtml = () => String(req.get('accept') || '').toLowerCase().includes('text/html');
+  const sendPretty = (status, title, detail) => {
+    if (!wantsHtml()) return res.status(status).send(title);
+    const baseUrl = String(getSetting('app_url', '') || `${req.headers['x-forwarded-proto'] || req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+    const loginLink = `${baseUrl}/customer/login`;
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    return res.status(status).send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:system-ui,Segoe UI,Arial; margin:0; background:#0b1220; color:#e5e7eb} .wrap{max-width:520px;margin:0 auto;padding:24px} .card{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:14px;padding:18px} h1{font-size:18px;margin:0 0 8px} p{margin:0 0 12px;color:#cbd5e1;line-height:1.45} a{display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px}</style></head><body><div class="wrap"><div class="card"><h1>${title}</h1><p>${detail || ''}</p><a href="${loginLink}">Buka Portal Pelanggan</a></div></div></body></html>`);
+  };
+  try {
+    const amount = Math.max(0, Math.floor(Number(req.query.amount || 0) || 0));
+    if (!amount) return sendPretty(400, 'Nominal belum ada', 'Tambahkan parameter amount, contoh: ?amount=3948');
+    const settings = getSettingsWithCache();
+    const jpg = await buildQrisJpgFromSettings(settings, amount);
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).send(jpg);
+  } catch (e) {
+    return sendPretty(404, 'QRIS tidak ditemukan', 'QRIS belum diatur oleh admin atau payload QRIS tidak valid.');
+  }
+});
 
 app.get('/broadcast', (req, res) => {
   res.redirect('/admin/whatsapp/broadcast');

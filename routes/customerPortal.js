@@ -16,6 +16,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const QRCode = require('qrcode');
+const Jimp = require('jimp');
 
 // Configure multer for customer photo uploads
 const storage = multer.diskStorage({
@@ -403,18 +404,12 @@ function convertStaticQrisToDynamic(staticPayload, amount) {
 
 async function getStaticQrisQrUrlForAmount(settings, amountUnique) {
   const payload = getStaticQrisPayload(settings);
-  if (payload) {
-    try {
-      const dynamic = convertStaticQrisToDynamic(payload, amountUnique);
-      return await QRCode.toDataURL(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 320 });
-    } catch (e) {
-      const msg = String(e?.message || e || '');
-      const head = payload.slice(0, 24);
-      const tail = payload.slice(Math.max(0, payload.length - 24));
-      logger.error(`[QRIS] Dynamic QR build failed: ${msg} (payload_len=${payload.length} head=${head} tail=${tail})`);
-    }
-  }
-  return getStaticQrisQrUrl(settings);
+  const url = getStaticQrisQrUrl(settings);
+  const enabled = Boolean(payload || url);
+  if (!enabled) return '';
+  const amt = Math.max(0, Math.floor(Number(amountUnique || 0) || 0));
+  if (!amt) return '';
+  return `/customer/qris/static.jpg?amount=${encodeURIComponent(String(amt))}`;
 }
 
 function getFirstAdminWaDigits(settings) {
@@ -447,6 +442,57 @@ function isQrisAmountAvailable(amount, opts = {}) {
 
   return true;
 }
+
+router.get('/qris/static.jpg', async (req, res) => {
+  const wantsHtml = () => String(req.get('accept') || '').toLowerCase().includes('text/html');
+  const sendPretty = (status, title, detail) => {
+    if (!wantsHtml()) return res.status(status).send(title);
+    const baseUrl = getBaseUrl(req, getSettingsWithCache());
+    const loginLink = `${baseUrl}/customer/login`;
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    return res.status(status).send(`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:system-ui,Segoe UI,Arial; margin:0; background:#0b1220; color:#e5e7eb} .wrap{max-width:520px;margin:0 auto;padding:24px} .card{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:14px;padding:18px} h1{font-size:18px;margin:0 0 8px} p{margin:0 0 12px;color:#cbd5e1;line-height:1.45} a{display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px}</style></head><body><div class="wrap"><div class="card"><h1>${title}</h1><p>${detail || ''}</p><a href="${loginLink}">Buka Portal Pelanggan</a></div></div></body></html>`);
+  };
+  try {
+    const amount = Math.max(0, Math.floor(Number(req.query.amount || 0) || 0));
+    if (!amount) return sendPretty(400, 'Nominal belum ada', 'Tambahkan parameter amount, contoh: ?amount=3948');
+    const settings = getSettingsWithCache();
+
+    const payload = getStaticQrisPayload(settings);
+    if (payload) {
+      try {
+        const dynamic = convertStaticQrisToDynamic(payload, amount);
+        const png = await QRCode.toBuffer(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });
+        const jpg = await Jimp.read(png).then(img => img.quality(90).background(0xffffffff).getBufferAsync(Jimp.MIME_JPEG));
+        res.set('Content-Type', 'image/jpeg');
+        res.set('Cache-Control', 'no-store');
+        return res.status(200).send(jpg);
+      } catch (e) {
+        const msg = String(e?.message || e || '');
+        const head = payload.slice(0, 24);
+        const tail = payload.slice(Math.max(0, payload.length - 24));
+        logger.error(`[QRIS] Dynamic QR build failed: ${msg} (payload_len=${payload.length} head=${head} tail=${tail})`);
+      }
+    }
+
+    const url = getStaticQrisQrUrl(settings);
+    if (url) {
+      const match = url.match(/^\/uploads\/qris\/([^/?#]+)$/i);
+      if (match && match[1]) {
+        const safeName = path.basename(match[1]);
+        const filePath = path.join(__dirname, '../public/uploads/qris', safeName);
+        try {
+          await fs.promises.access(filePath, fs.constants.R_OK);
+          return res.sendFile(filePath);
+        } catch {}
+      }
+      return res.redirect(url);
+    }
+
+    return sendPretty(404, 'QRIS tidak ditemukan', 'QRIS belum diatur oleh admin atau payload QRIS tidak valid.');
+  } catch {
+    return sendPretty(404, 'QRIS tidak ditemukan', 'Gagal memuat QRIS.');
+  }
+});
 
 function ensureInvoiceQrisUnique(inv, force = false) {
   const invId = Number(inv?.id || 0);
