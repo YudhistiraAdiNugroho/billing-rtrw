@@ -17,6 +17,7 @@ const path = require('path');
 const fs = require('fs');
 const QRCode = require('qrcode');
 const Jimp = require('jimp');
+const { BinaryBitmap, HybridBinarizer, RGBLuminanceSource, MultiFormatReader, BarcodeFormat, DecodeHintType } = require('@zxing/library');
 
 // Configure multer for customer photo uploads
 const storage = multer.diskStorage({
@@ -303,11 +304,8 @@ function getStaticQrisQrUrl(settings) {
   return url || '';
 }
 
-function getStaticQrisPayload(settings) {
-  const enabledRaw = settings?.qris_static_enabled;
-  if (enabledRaw === false || enabledRaw === 'false' || enabledRaw === 0 || enabledRaw === '0') return '';
-  const raw = String(settings?.qris_static_payload || '');
-  let s = raw.replace(/[\r\n\t]+/g, '').trim();
+function normalizeQrisPayloadRaw(raw) {
+  let s = String(raw || '').replace(/[\r\n\t]+/g, '').trim();
   const idx = s.indexOf('000201');
   if (idx > 0) s = s.slice(idx);
   const lastCrc = s.lastIndexOf('6304');
@@ -315,6 +313,12 @@ function getStaticQrisPayload(settings) {
     s = s.slice(0, lastCrc + 8);
   }
   return s;
+}
+
+function getStaticQrisPayload(settings) {
+  const enabledRaw = settings?.qris_static_enabled;
+  if (enabledRaw === false || enabledRaw === 'false' || enabledRaw === 0 || enabledRaw === '0') return '';
+  return normalizeQrisPayloadRaw(settings?.qris_static_payload || '');
 }
 
 function crc16CcittFalse(input) {
@@ -402,14 +406,60 @@ function convertStaticQrisToDynamic(staticPayload, amount) {
   return partial + crc;
 }
 
-async function getStaticQrisQrUrlForAmount(settings, amountUnique) {
-  const payload = getStaticQrisPayload(settings);
+let qrisDecodedCache = { file: '', mtimeMs: 0, payload: '' };
+async function tryDecodeQrisPayloadFromUploadedQr(settings) {
   const url = getStaticQrisQrUrl(settings);
-  const enabled = Boolean(payload || url);
-  if (!enabled) return '';
+  const match = url.match(/^\/uploads\/qris\/([^/?#]+)$/i);
+  if (!match || !match[1]) return '';
+  const safeName = path.basename(String(match[1]));
+  const filePath = path.join(__dirname, '../public/uploads/qris', safeName);
+  let st = null;
+  try {
+    st = await fs.promises.stat(filePath);
+  } catch {
+    return '';
+  }
+  if (qrisDecodedCache.file === safeName && qrisDecodedCache.mtimeMs === st.mtimeMs && qrisDecodedCache.payload) {
+    return qrisDecodedCache.payload;
+  }
+  try {
+    const buf = await fs.promises.readFile(filePath);
+    const img = await Jimp.read(buf);
+    const rgba = new Uint8ClampedArray(img.bitmap.data.buffer, img.bitmap.data.byteOffset, img.bitmap.data.byteLength);
+    const source = new RGBLuminanceSource(rgba, img.bitmap.width, img.bitmap.height);
+    const bitmap = new BinaryBitmap(new HybridBinarizer(source));
+    const reader = new MultiFormatReader();
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
+    reader.setHints(hints);
+    const decoded = reader.decode(bitmap);
+    const text = typeof decoded?.getText === 'function' ? decoded.getText() : String(decoded?.text || '');
+    const payload = normalizeQrisPayloadRaw(text);
+    if (!payload) return '';
+    qrisDecodedCache = { file: safeName, mtimeMs: st.mtimeMs, payload };
+    return payload;
+  } catch {
+    return '';
+  }
+}
+
+async function getStaticQrisQrUrlForAmount(settings, amountUnique) {
   const amt = Math.max(0, Math.floor(Number(amountUnique || 0) || 0));
   if (!amt) return '';
-  return `/customer/qris/static.jpg?amount=${encodeURIComponent(String(amt))}`;
+  let payload = getStaticQrisPayload(settings);
+  if (!payload) payload = await tryDecodeQrisPayloadFromUploadedQr(settings);
+  if (payload) {
+    try {
+      const dynamic = convertStaticQrisToDynamic(payload, amt);
+      return await QRCode.toDataURL(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 320 });
+    } catch (e) {
+      const msg = String(e?.message || e || '');
+      const head = payload.slice(0, 24);
+      const tail = payload.slice(Math.max(0, payload.length - 24));
+      logger.error(`[QRIS] Dynamic QR build failed: ${msg} (payload_len=${payload.length} head=${head} tail=${tail})`);
+    }
+  }
+  return getStaticQrisQrUrl(settings);
 }
 
 function getFirstAdminWaDigits(settings) {
@@ -457,7 +507,8 @@ router.get('/qris/static.jpg', async (req, res) => {
     if (!amount) return sendPretty(400, 'Nominal belum ada', 'Tambahkan parameter amount, contoh: ?amount=3948');
     const settings = getSettingsWithCache();
 
-    const payload = getStaticQrisPayload(settings);
+    let payload = getStaticQrisPayload(settings);
+    if (!payload) payload = await tryDecodeQrisPayloadFromUploadedQr(settings);
     if (payload) {
       try {
         const dynamic = convertStaticQrisToDynamic(payload, amount);

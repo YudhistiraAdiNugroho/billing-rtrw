@@ -2390,10 +2390,10 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
     let qrisAmountUnique = Number(inv.qris_amount_unique || 0) || 0;
     let qrisCode = Number(inv.qris_unique_code || 0) || 0;
     const qrisQrUrl = String(getSetting('qris_static_qr_url', '') || '').trim();
-    const qrisPayload = String(getSetting('qris_static_payload', '') || '').replace(/[\r\n\t]+/g, '').trim();
+    const qrisPayloadSetting = String(getSetting('qris_static_payload', '') || '');
     const qrisEnabledRaw = getSetting('qris_static_enabled', true);
     const qrisEnabled = !(qrisEnabledRaw === false || qrisEnabledRaw === 'false' || qrisEnabledRaw === 0 || qrisEnabledRaw === '0');
-    const hasStaticQris = qrisEnabled && (!!qrisQrUrl || !!qrisPayload);
+    const hasStaticQris = qrisEnabled && (!!qrisQrUrl || !!String(qrisPayloadSetting || '').trim());
 
     if (hasStaticQris && String(inv.status) === 'unpaid' && (!qrisAmountUnique || !qrisCode)) {
       const invId = Number(inv.id);
@@ -2519,6 +2519,49 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
       return partial + crc;
     };
 
+    let _decodedCache = global.__adminQrisDecodedCache || { file: '', mtimeMs: 0, payload: '' };
+    const decodeQrisPayloadFromUploadedQr = async () => {
+      const m = String(qrisQrUrl || '').match(/^\/uploads\/qris\/([^/?#]+)$/i);
+      if (!m || !m[1]) return '';
+      const safeName = path.basename(String(m[1]));
+      const filePath = path.join(__dirname, '../public/uploads/qris', safeName);
+      let st = null;
+      try {
+        st = await fs.promises.stat(filePath);
+      } catch {
+        return '';
+      }
+      if (_decodedCache.file === safeName && _decodedCache.mtimeMs === st.mtimeMs && _decodedCache.payload) {
+        return _decodedCache.payload;
+      }
+      try {
+        const buf = await fs.promises.readFile(filePath);
+        const img = await Jimp.read(buf);
+        const rgba = new Uint8ClampedArray(img.bitmap.data.buffer, img.bitmap.data.byteOffset, img.bitmap.data.byteLength);
+        const source = new RGBLuminanceSource(rgba, img.bitmap.width, img.bitmap.height);
+        const bitmap = new BinaryBitmap(new HybridBinarizer(source));
+        const reader = new MultiFormatReader();
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
+        reader.setHints(hints);
+        const decoded = reader.decode(bitmap);
+        const text = typeof decoded?.getText === 'function' ? decoded.getText() : String(decoded?.text || '');
+        const payload = normalizeQrisPayload(text);
+        if (!payload) return '';
+        _decodedCache = { file: safeName, mtimeMs: st.mtimeMs, payload };
+        global.__adminQrisDecodedCache = _decodedCache;
+        return payload;
+      } catch {
+        return '';
+      }
+    };
+
+    const resolveQrisStaticPayload = async () => {
+      const fromSetting = normalizeQrisPayload(qrisPayloadSetting);
+      if (fromSetting) return fromSetting;
+      return await decodeQrisPayloadFromUploadedQr();
+    };
+
     // Hitung Tagihan
     const unpaidInvoices = billingSvc.getUnpaidInvoicesByCustomerId(customer.id);
     const totalTagihan = unpaidInvoices.reduce((sum, i) => sum + i.amount, 0);
@@ -2543,6 +2586,8 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
     const template = db.getAppSetting('whatsapp_auto_billing_message', defaultAutoBilling);
 
     const isQrisCase = (qrisAmountUnique > 0 && qrisCode > 0);
+    const qrisJpgLink = `${baseUrl}/customer/qris/static.jpg?amount=${encodeURIComponent(String(qrisAmountUnique))}`;
+    const qrisPortalLink = `${baseUrl}/customer/payment/create/${encodeURIComponent(String(inv.id))}?method=QRIS_STATIC`;
     const qrisJpgCaption = isQrisCase
       ? templateQris
           .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
@@ -2550,7 +2595,7 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
           .replace(/{{paket}}/gi, inv.package_name || '-')
           .replace(/{{qris_nominal}}/gi, Number(qrisAmountUnique).toLocaleString('id-ID'))
           .replace(/{{qris_kode}}/gi, String(qrisCode).padStart(3, '0'))
-          .replace(/{{qris_qr}}/gi, `QRIS terlampir (gambar).\n🔗 Backup JPG: ${baseUrl}/customer/qris/static.jpg?amount=${encodeURIComponent(String(qrisAmountUnique))}`)
+          .replace(/{{qris_qr}}/gi, `QRIS terlampir (gambar).\n🔗 QRIS JPG: ${qrisJpgLink}\n🔐 Portal (Download): ${qrisPortalLink}`)
       : '';
 
     const formattedMsg = isQrisCase
@@ -2560,7 +2605,7 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
           .replace(/{{paket}}/gi, inv.package_name || '-')
           .replace(/{{qris_nominal}}/gi, Number(qrisAmountUnique).toLocaleString('id-ID'))
           .replace(/{{qris_kode}}/gi, String(qrisCode).padStart(3, '0'))
-          .replace(/{{qris_qr}}/gi, `🔗 QRIS JPG: ${baseUrl}/customer/qris/static.jpg?amount=${encodeURIComponent(String(qrisAmountUnique))}`)
+          .replace(/{{qris_qr}}/gi, `🔗 QRIS JPG: ${qrisJpgLink}\n🔐 Portal (Download): ${qrisPortalLink}`)
       : template
           .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
           .replace(/{{tagihan}}/gi, totalTagihan.toLocaleString('id-ID'))
@@ -2569,9 +2614,9 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
           .replace(/{{link}}/gi, loginLink);
 
     let sent = false;
-    if (isQrisCase && qrisPayload) {
+    if (isQrisCase) {
       try {
-        const payloadNorm = normalizeQrisPayload(qrisPayload);
+        const payloadNorm = await resolveQrisStaticPayload();
         if (payloadNorm) {
           const dynamic = convertStaticQrisToDynamic(payloadNorm, qrisAmountUnique);
           const png = await QRCode.toBuffer(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });

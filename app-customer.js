@@ -10,6 +10,7 @@ const Jimp = require('jimp');
 const { logger } = require('./config/logger');
 const db = require('./config/database');
 const customerSvc = require('./services/customerService');
+const billingSvc = require('./services/billingService');
 const mikrotikService = require('./services/mikrotikService');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { scheduleAutoBackup } = require('./services/backupService');
@@ -403,6 +404,32 @@ async function trySendWaToBuyer(settings, phone, message, orderId) {
   }
 }
 
+async function trySendWaPaymentSuccess(settings, invoiceId, methodLabel) {
+  if (!settings || !settings.whatsapp_enabled) return;
+  try {
+    const inv = billingSvc.getInvoiceById(invoiceId);
+    if (!inv) return;
+    const phone = String(inv.customer_phone || '').trim();
+    if (!phone) return;
+    const { sendWA, whatsappStatus } = await import('./services/whatsappBot.mjs');
+    if (whatsappStatus.connection !== 'open') throw new Error('Bot WhatsApp belum terhubung');
+    const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
+    const template = db.getAppSetting('whatsapp_payment_success_message', defaultSuccess);
+    const periode = `${inv.period_month}/${inv.period_year}`;
+    const total = Number(inv.amount || 0).toLocaleString('id-ID');
+    const metode = String(methodLabel || '').trim() || 'QRIS';
+    const msg = String(template || defaultSuccess)
+      .replace(/{{nama}}/gi, inv.customer_name || 'Pelanggan')
+      .replace(/{{periode}}/gi, periode)
+      .replace(/{{total}}/gi, total)
+      .replace(/{{metode}}/gi, metode);
+    logger.info(`[WEBHOOK][payment-notif] Sending WA success notif to ${phone} inv=${invoiceId} method=${metode}`);
+    await sendWA(phone, msg);
+  } catch (e) {
+    logger.error(`[WEBHOOK][payment-notif] WA success notif failed: ${e?.message || e}`);
+  }
+}
+
 async function fulfillVoucherOrder(settings, orderId) {
   const ord = selectVoucherOrderById.get(orderId);
   if (!ord) throw new Error('Order tidak ditemukan');
@@ -608,6 +635,8 @@ app.post('/api/webhook/v1/payment-notif', multer().any(), async (req, res) => {
               }
             }
 
+            const methodLabel = service ? `QRIS (${String(service)})` : 'QRIS';
+            try { await trySendWaPaymentSuccess(getSettingsWithCache(), invId, methodLabel); } catch {}
             logger.info(`[WEBHOOK][payment-notif] MATCH invoice=${invId} amount=${amount}`);
           }
           } else if (Array.isArray(vCandidates) && vCandidates.length === 1) {

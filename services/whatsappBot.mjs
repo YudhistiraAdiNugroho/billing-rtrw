@@ -368,7 +368,7 @@ function parseCommand(text, isAdmin) {
 
   // Admin Billing & Pelanggan
   if (isAdmin && cmd === 'ringkasan') return { cmd: 'ringkasan', admin: true };
-  if (isAdmin && cmd === 'lunas' && parts.length >= 2) return { cmd: 'lunas', admin: true, targetId: parts[1] };
+  if (isAdmin && cmd === 'lunas' && parts.length >= 2) return { cmd: 'lunas', admin: true, targetId: rest || parts.slice(1).join(' ') };
   if (isAdmin && cmd === 'generate' && parts.length >= 3) return { cmd: 'generate', admin: true, month: parts[1], year: parts[2] };
   if (isAdmin && cmd === 'isolir' && parts.length >= 2) return { cmd: 'isolir', admin: true, targetId: parts[1] };
   if (isAdmin && cmd === 'buka' && parts.length >= 2) return { cmd: 'buka', admin: true, targetId: parts[1] };
@@ -1019,16 +1019,40 @@ export async function startWhatsAppBot() {
 
         if (parsed.admin && parsed.cmd === 'lunas') {
           try {
-            let targetInvId = parsed.targetId;
-            let targetInv = billingSvc.getInvoiceById(targetInvId);
+            const keyRaw = String(parsed.targetId || '').trim();
+            if (!keyRaw) return await reply('❌ Format: `lunas IDTAGIHAN` atau `lunas nama/nohp/pppoe/tag`');
+
+            let targetInvId = null;
+            let targetInv = null;
+            const isNumeric = /^\d+$/.test(keyRaw);
+            if (isNumeric) {
+              targetInvId = Number(keyRaw);
+              targetInv = billingSvc.getInvoiceById(targetInvId);
+            }
 
             // If not found by ID, try find customer and their oldest unpaid invoice
             if (!targetInv) {
-              const cust = customerSvc.findCustomerByAny(parsed.targetId);
+              let cust =
+                (isNumeric ? customerSvc.getCustomerById(Number(keyRaw)) : null) ||
+                customerSvc.findCustomerByAny(keyRaw);
+
+              if (!cust) {
+                const candidates = customerSvc.getAllCustomers(keyRaw) || [];
+                const unique = Array.from(new Map(candidates.map(c => [c.id, c])).values());
+                if (unique.length === 1) {
+                  cust = customerSvc.getCustomerById(unique[0].id);
+                } else if (unique.length > 1) {
+                  const top = unique.slice(0, 5).map(c =>
+                    `- ID:${c.id} • ${c.name || '-'} • ${c.phone || '-'} • PPPoE:${c.pppoe_username || '-'}`
+                  ).join('\n');
+                  return await reply(`⚠️ Nama/ID tidak spesifik. Ditemukan ${unique.length} pelanggan:\n\n${top}\n\nKirim ulang: \`lunas IDPELANGGAN\` atau \`lunas NOHP/PPPOE/TAG\``);
+                }
+              }
+
               if (cust) {
                 const unpaid = billingSvc.getUnpaidInvoicesByCustomerId(cust.id);
                 if (unpaid && unpaid.length > 0) {
-                  targetInv = unpaid[0]; // Take the oldest one
+                  targetInv = unpaid[0];
                   targetInvId = targetInv.id;
                 } else {
                   return await reply(`✅ Pelanggan *${cust.name}* tidak memiliki tagihan menunggak.`);
@@ -1036,7 +1060,7 @@ export async function startWhatsAppBot() {
               }
             }
 
-            if (!targetInv) return await reply(`❌ Tagihan atau Pelanggan *${parsed.targetId}* tidak ditemukan.`);
+            if (!targetInv) return await reply(`❌ Tagihan atau Pelanggan *${keyRaw}* tidak ditemukan.`);
 
             billingSvc.markAsPaid(targetInvId, 'WA Bot Admin', 'Paid via WhatsApp Command');
 
