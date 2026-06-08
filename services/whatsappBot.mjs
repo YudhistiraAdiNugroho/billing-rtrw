@@ -229,6 +229,7 @@ function formatInfo(data) {
     `🌐 *PPPoE IP:* ${data.pppoeIP}`,
     `👤 *PPPoE User:* ${data.pppoeUsername}`,
     `⏳ *Uptime:* ${data.uptime}`,
+    `⏳ *PPPoE Uptime:* ${data.pppoeUptime || '-'}`,
     `📱 *User WiFi (2.4G):* ${data.totalAssociations}`,
     `🔧 *Model:* ${data.model}`,
     `🏷️ *Serial Number:* ${data.serialNumber}`,
@@ -440,7 +441,45 @@ ${footerInfo}`;
   const lines = devices.map((d, i) => {
     const num = String(i + 1).padStart(2, '0');
     const tags = Array.isArray(d._tags) ? d._tags.join(', ') : String(d._tags || '-');
-    const pppoeUsername = d.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username?._value || '-';
+    
+    let pppoeUsername = '-';
+    try {
+      if (d.InternetGatewayDevice?.WANDevice) {
+        for (const wanKey of Object.keys(d.InternetGatewayDevice.WANDevice)) {
+          if (wanKey.startsWith('_')) continue;
+          const wanDev = d.InternetGatewayDevice.WANDevice[wanKey];
+          if (wanDev?.WANConnectionDevice) {
+            for (const connKey of Object.keys(wanDev.WANConnectionDevice)) {
+              if (connKey.startsWith('_')) continue;
+              const connDev = wanDev.WANConnectionDevice[connKey];
+              if (connDev?.WANPPPConnection) {
+                for (const pppKey of Object.keys(connDev.WANPPPConnection)) {
+                  if (pppKey.startsWith('_')) continue;
+                  const pppConn = connDev.WANPPPConnection[pppKey];
+                  if (pppConn?.Username?._value) {
+                    pppoeUsername = pppConn.Username._value;
+                    break;
+                  }
+                }
+              }
+              if (pppoeUsername !== '-') break;
+            }
+          }
+          if (pppoeUsername !== '-') break;
+        }
+      }
+      if (pppoeUsername === '-' && d.Device?.PPP?.Interface) {
+        for (const pppKey of Object.keys(d.Device.PPP.Interface)) {
+          if (pppKey.startsWith('_')) continue;
+          const pppInt = d.Device.PPP.Interface[pppKey];
+          if (pppInt?.Username?._value) {
+            pppoeUsername = pppInt.Username._value;
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+
     const li = d._lastInform ? formatDateLocal(d._lastInform) : '-';
     return `${num}. 🏷️ *${tags}*
    � PPPoE: ${pppoeUsername}

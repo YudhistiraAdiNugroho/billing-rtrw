@@ -4,6 +4,253 @@ const { logger } = require('./logger');
 const db = require('./database');
 const { getSetting } = require('./settingsManager');
 
+// ─── Built-in ACS Helpers ────────────────────────────────────────────────────
+
+/** Check if built-in ACS mode is active */
+function isBuiltinAcsEnabled() {
+  return getSetting('use_builtin_acs', false) === true || getSetting('use_builtin_acs', false) === 'true';
+}
+
+/**
+ * Inflate flat params object into nested GenieACS-style structure.
+ * e.g. { "InternetGatewayDevice.DeviceInfo.SerialNumber": "ABC" }
+ * becomes { InternetGatewayDevice: { DeviceInfo: { SerialNumber: { _value: "ABC" } } } }
+ */
+function inflateParams(flatObj) {
+  const result = {};
+  for (const [key, value] of Object.entries(flatObj)) {
+    const parts = key.split('.');
+    let current = result;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (i === parts.length - 1) {
+        current[part] = { _value: value, _type: typeof value === 'number' ? 'xsd:unsignedInt' : 'xsd:string', _timestamp: new Date().toISOString() };
+      } else {
+        if (!current[part] || typeof current[part] !== 'object' || current[part]._value !== undefined) {
+          current[part] = {};
+        }
+        current = current[part];
+      }
+    }
+  }
+  return result;
+}
+
+/** Convert a builtin acs_devices row into GenieACS-compatible device object */
+function builtinRowToDevice(row) {
+  if (!row) return null;
+  let params = {};
+  try { params = JSON.parse(row.params || '{}'); } catch (e) { /* ignore */ }
+  let tags = [];
+  try { tags = JSON.parse(row.tags || '[]'); } catch (e) { /* ignore */ }
+  tags = tags.filter(t => t !== 'bootstrapped');
+
+  const device = inflateParams(params);
+  device._id = row.id;
+  device._tags = tags;
+  device._lastInform = row.last_inform;
+  device._registered = row.created_at;
+  device._acs_server_id = 'builtin';
+  device._acs_server_name = 'Built-in ACS';
+
+  // Set GenieACS special _deviceId root property
+  device._deviceId = {
+    _SerialNumber: row.serial_number || '',
+    _Manufacturer: row.manufacturer || '',
+    _ProductClass: row.product_class || '',
+    _OUI: row.oui || ''
+  };
+
+  // Set DeviceID structure as strings (GenieACS standard)
+  device.DeviceID = {
+    SerialNumber: row.serial_number || '',
+    Manufacturer: row.manufacturer || '',
+    ProductClass: row.product_class || '',
+    OUI: row.oui || ''
+  };
+
+  return device;
+}
+
+/** Parse GenieACS-style query filter for SQLite */
+function matchesQuery(device, query) {
+  if (!query || Object.keys(query).length === 0) return true;
+  for (const [key, condition] of Object.entries(query)) {
+    if (key === '$or') {
+      if (!Array.isArray(condition)) return false;
+      const anyMatch = condition.some(sub => matchesQuery(device, sub));
+      if (!anyMatch) return false;
+      continue;
+    }
+    if (key === '$and') {
+      if (!Array.isArray(condition)) return false;
+      const allMatch = condition.every(sub => matchesQuery(device, sub));
+      if (!allMatch) return false;
+      continue;
+    }
+    // Get value from nested device object
+    const parts = key.split('.');
+    let val = device;
+    for (const p of parts) {
+      if (val && typeof val === 'object') {
+        val = val[p];
+      } else {
+        val = undefined;
+        break;
+      }
+    }
+    if (val && val._value !== undefined) val = val._value;
+
+    // Handle condition types
+    if (condition && typeof condition === 'object' && !Array.isArray(condition)) {
+      if ('$exists' in condition) {
+        const exists = val !== undefined && val !== null;
+        if (condition.$exists !== exists) return false;
+      }
+      if ('$ne' in condition) {
+        if (Array.isArray(condition.$ne) && condition.$ne.length === 0) {
+          if (!Array.isArray(val) || val.length === 0) return false;
+        } else if (val === condition.$ne) return false;
+      }
+      if ('$not' in condition) {
+        if (condition.$not && typeof condition.$not === 'object' && '$size' in condition.$not) {
+          if (Array.isArray(val) && val.length === condition.$not.$size) return false;
+        }
+      }
+    } else {
+      // Direct equality
+      if (key === '_tags') {
+        if (!Array.isArray(device._tags) || !device._tags.includes(condition)) return false;
+      } else if (key === '_id') {
+        if (device._id !== condition) return false;
+      } else {
+        if (String(val) !== String(condition)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Create a proxy object that mimics axios interface but operates on local SQLite.
+ * This is the core of the adapter pattern - all downstream code using
+ * createAxiosInstance() will transparently use local DB when builtin ACS is active.
+ */
+function createBuiltinAxiosProxy() {
+  return {
+    get: async (url, config = {}) => {
+      const params = config.params || {};
+      
+      // GET /devices
+      if (url === '/devices' || url === '/devices/') {
+        let rows = [];
+        try {
+          const limit = params.limit || 999999;
+          rows = db.prepare('SELECT * FROM acs_devices ORDER BY last_inform DESC LIMIT ?').all(limit);
+        } catch (e) {
+          logger.error(`[BuiltinACS] Error querying devices: ${e.message}`);
+        }
+        
+        let devices = rows.map(builtinRowToDevice);
+        
+        // Apply query filter
+        if (params.query) {
+          try {
+            const queryObj = typeof params.query === 'string' ? JSON.parse(params.query) : params.query;
+            devices = devices.filter(d => matchesQuery(d, queryObj));
+          } catch (e) {
+            logger.debug(`[BuiltinACS] Query parse error: ${e.message}`);
+          }
+        }
+        
+        return { data: devices, status: 200 };
+      }
+      
+      // GET /devices/:id
+      const deviceMatch = url.match(/^\/devices\/(.+)$/);
+      if (deviceMatch) {
+        const deviceId = decodeURIComponent(deviceMatch[1]);
+        const row = db.prepare('SELECT * FROM acs_devices WHERE id = ?').get(deviceId);
+        if (!row) {
+          const err = new Error(`Device ${deviceId} not found`);
+          err.response = { status: 404, data: 'Not found' };
+          throw err;
+        }
+        return { data: builtinRowToDevice(row), status: 200 };
+      }
+      
+      return { data: [], status: 200 };
+    },
+    
+    post: async (url, data = {}, config = {}) => {
+      // POST /devices/:id/tasks
+      const taskMatch = url.match(/^\/devices\/(.+)\/tasks$/);
+      if (taskMatch) {
+        const deviceId = decodeURIComponent(taskMatch[1]);
+        const taskName = data.name || 'unknown';
+        const payload = JSON.stringify(data);
+        const now = new Date().toISOString();
+        
+        try {
+          const result = db.prepare(
+            'INSERT INTO acs_tasks (device_id, name, payload, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+          ).run(deviceId, taskName, payload, 'pending', now, now);
+          
+          logger.info(`[BuiltinACS] Task '${taskName}' created for device ${deviceId}, id=${result.lastInsertRowid}`);
+          
+          // Trigger connection request asynchronously
+          try {
+            const acsService = require('../services/acsServerService');
+            acsService.triggerConnectionRequest(deviceId).catch(() => {});
+          } catch (e) { /* service not loaded yet */ }
+          
+          return { data: { _id: String(result.lastInsertRowid), name: taskName, device: deviceId }, status: 202 };
+        } catch (e) {
+          logger.error(`[BuiltinACS] Error creating task: ${e.message}`);
+          return { data: {}, status: 500 };
+        }
+      }
+      
+      return { data: {}, status: 200 };
+    },
+    
+    put: async (url, data = {}, config = {}) => {
+      // PUT /devices/:id — update tags
+      const deviceMatch = url.match(/^\/devices\/(.+)$/);
+      if (deviceMatch) {
+        const deviceId = decodeURIComponent(deviceMatch[1]);
+        const now = new Date().toISOString();
+        
+        if (data._tags) {
+          try {
+            db.prepare('UPDATE acs_devices SET tags = ?, updated_at = ? WHERE id = ?')
+              .run(JSON.stringify(data._tags), now, deviceId);
+            return { data: {}, status: 200 };
+          } catch (e) {
+            logger.error(`[BuiltinACS] Error updating tags: ${e.message}`);
+          }
+        }
+      }
+      return { data: {}, status: 200 };
+    },
+    
+    delete: async (url, config = {}) => {
+      const deviceMatch = url.match(/^\/devices\/(.+)$/);
+      if (deviceMatch) {
+        const deviceId = decodeURIComponent(deviceMatch[1]);
+        try {
+          db.prepare('DELETE FROM acs_devices WHERE id = ?').run(deviceId);
+          db.prepare('DELETE FROM acs_tasks WHERE device_id = ?').run(deviceId);
+          return { data: {}, status: 200 };
+        } catch (e) {
+          logger.error(`[BuiltinACS] Error deleting device: ${e.message}`);
+        }
+      }
+      return { data: {}, status: 200 };
+    }
+  };
+}
+
 // Import WhatsApp notification function
 let sendMonitoringAlert = null;
 (async () => {
@@ -24,6 +271,15 @@ const GENIEACS_PASSWORD = process.env.GENIEACS_PASSWORD;
 // Helper: Get all ACS servers from database
 function getAllACSServers() {
     try {
+        if (isBuiltinAcsEnabled()) {
+            return [{
+                id: 'builtin',
+                name: 'Built-in ACS',
+                url: 'local',
+                status: 'active'
+            }];
+        }
+
         const legacyUrl = getSetting('genieacs_url', GENIEACS_URL);
         const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
         const legacyPass = getSetting('genieacs_password', GENIEACS_PASSWORD);
@@ -55,6 +311,40 @@ function getAllACSServers() {
 
 // Helper: Get specific ACS server by ID
 function getACSServer(serverId) {
+    if (!serverId) {
+        if (isBuiltinAcsEnabled()) {
+            return {
+                id: 'builtin',
+                name: 'Built-in ACS',
+                url: 'local',
+                status: 'active'
+            };
+        }
+        const legacyUrl = getSetting('genieacs_url', GENIEACS_URL);
+        const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
+        const legacyPass = getSetting('genieacs_password', GENIEACS_PASSWORD);
+        if (legacyUrl) {
+            return {
+                id: 'legacy',
+                name: 'Default ACS',
+                url: legacyUrl,
+                username: legacyUser,
+                password: legacyPass,
+                status: 'active'
+            };
+        }
+        return null;
+    }
+
+    if (serverId === 'builtin') {
+        return {
+            id: 'builtin',
+            name: 'Built-in ACS',
+            url: 'local',
+            status: 'active'
+        };
+    }
+    
     if (serverId === 'legacy') {
         const legacyUrl = getSetting('genieacs_url', GENIEACS_URL);
         const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
@@ -84,6 +374,11 @@ function getACSServer(serverId) {
 
 // Helper: Create axios instance for specific server
 function createAxiosInstance(server) {
+    // Built-in ACS: return proxy object that mimics axios but uses SQLite
+    if (server && (server.id === 'builtin' || server.url === 'local')) {
+        return createBuiltinAxiosProxy();
+    }
+    
     const config = {
         baseURL: server.url.endsWith('/') ? server.url.slice(0, -1) : server.url,
         timeout: 30000,
@@ -130,9 +425,16 @@ const genieacsApi = {
             for (const server of servers) {
                 try {
                     const instance = createAxiosInstance(server);
-                    const response = await instance.get('/devices', {
-                        timeout: 45000
-                    });
+                    let response;
+                    try {
+                        response = await instance.get('/devices', {
+                            timeout: 45000
+                        });
+                    } catch (e) {
+                        response = await instance.get('/api/devices', {
+                            timeout: 45000
+                        });
+                    }
                     
                     const devices = response.data || [];
                     // Add server info to each device
@@ -167,14 +469,26 @@ const genieacsApi = {
                 try {
                     const instance = createAxiosInstance(server);
                     // Don't use projection - get full device data
-                    const response = await instance.get('/devices', {
-                        params: {
-                            'query': JSON.stringify({
-                                '_tags': phoneNumber
-                            })
-                        },
-                        timeout: 15000 // Increase timeout for full data
-                    });
+                    let response;
+                    try {
+                        response = await instance.get('/devices', {
+                            params: {
+                                'query': JSON.stringify({
+                                    '_tags': phoneNumber
+                                })
+                            },
+                            timeout: 15000
+                        });
+                    } catch (e) {
+                        response = await instance.get('/api/devices', {
+                            params: {
+                                'query': JSON.stringify({
+                                    '_tags': phoneNumber
+                                })
+                            },
+                            timeout: 15000
+                        });
+                    }
 
                     if (response.data && response.data.length > 0) {
                         const device = response.data[0];
@@ -274,7 +588,7 @@ const genieacsApi = {
             logger.debug(`[GenieACS] Formatted parameter values count: ${parameterValues.length}`);
 
             // Get server instance
-            const server = serverId ? getACSServer(serverId) : null;
+            const server = serverId ? getACSServer(serverId) : (isBuiltinAcsEnabled() ? getACSServer('builtin') : null);
             const instance = server ? createAxiosInstance(server) : axiosInstance;
 
             // Kirim task ke GenieACS
@@ -312,7 +626,7 @@ const genieacsApi = {
 
     async reboot(deviceId, serverId = null) {
         try {
-            const server = serverId ? getACSServer(serverId) : null;
+            const server = serverId ? getACSServer(serverId) : (isBuiltinAcsEnabled() ? getACSServer('builtin') : null);
             const instance = server ? createAxiosInstance(server) : axiosInstance;
             
             const task = {
@@ -332,7 +646,7 @@ const genieacsApi = {
 
     async factoryReset(deviceId, serverId = null) {
         try {
-            const server = serverId ? getACSServer(serverId) : null;
+            const server = serverId ? getACSServer(serverId) : (isBuiltinAcsEnabled() ? getACSServer('builtin') : null);
             const instance = server ? createAxiosInstance(server) : axiosInstance;
             
             const task = {
@@ -352,6 +666,11 @@ const genieacsApi = {
 
     async getDeviceParameters(deviceId, parameterNames) {
         try {
+            if (isBuiltinAcsEnabled()) {
+                const instance = createBuiltinAxiosProxy();
+                const response = await instance.get(`/devices/${encodeURIComponent(deviceId)}`);
+                return response.data;
+            }
             const queryString = parameterNames.map(name => `query=${encodeURIComponent(name)}`).join('&');
             const response = await axiosInstance.get(`/devices/${encodeURIComponent(deviceId)}?${queryString}`);
             return response.data;
@@ -364,6 +683,13 @@ const genieacsApi = {
     async getDeviceInfo(deviceId) {
         try {
             logger.debug(`[GenieACS] Getting device info for device ID: ${deviceId}`);
+            
+            // Built-in ACS mode
+            if (isBuiltinAcsEnabled()) {
+                const instance = createBuiltinAxiosProxy();
+                const response = await instance.get(`/devices/${encodeURIComponent(deviceId)}`);
+                return response.data;
+            }
             
             // Mendapatkan device detail
             const deviceResponse = await axios.get(`${GENIEACS_URL}/devices/${encodeURIComponent(deviceId)}`, {
@@ -389,6 +715,17 @@ const genieacsApi = {
     async getVirtualParameters(deviceId) {
         try {
             logger.debug(`[GenieACS] Getting virtual parameters for device ID: ${deviceId}`);
+            
+            // Built-in ACS mode: return device data directly (params already stored)
+            if (isBuiltinAcsEnabled()) {
+                const instance = createBuiltinAxiosProxy();
+                try {
+                    const response = await instance.get(`/devices/${encodeURIComponent(deviceId)}`);
+                    return response.data;
+                } catch (e) {
+                    return null;
+                }
+            }
             
             const virtualParams = [
                 // Serial Number
@@ -520,8 +857,8 @@ async function monitorRXPower(threshold = -27) {
                     
                     // Ambil PPPoE username dari parameter perangkat
                     pppoeUsername = 
-                        device.InternetGatewayDevice?.WANDevice?.[1]?.WANConnectionDevice?.[1]?.WANPPPConnection?.[1]?.Username?._value ||
-                        device.InternetGatewayDevice?.WANDevice?.[0]?.WANConnectionDevice?.[0]?.WANPPPConnection?.[0]?.Username?._value ||
+                        device.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username?._value ||
+                        device.InternetGatewayDevice?.WANDevice?.['0']?.WANConnectionDevice?.['0']?.WANPPPConnection?.['0']?.Username?._value ||
                         device.VirtualParameters?.pppoeUsername?._value ||
                         "Unknown";
                     
@@ -686,7 +1023,7 @@ function getDeviceSerialNumber(device) {
         
         return 'Unknown';
     } catch (error) {
-        console.error('Error getting device serial number:', error);
+        logger.error('Error getting device serial number:', error);
         return 'Unknown';
     }
 }
@@ -694,11 +1031,11 @@ function getDeviceSerialNumber(device) {
 // Fungsi untuk memantau perangkat yang tidak aktif (offline)
 async function monitorOfflineDevices(thresholdHours = 24) {
     try {
-        console.log(`Memulai pemantauan perangkat offline dengan threshold ${thresholdHours} jam`);
+        logger.info(`[Offline] Memulai pemantauan perangkat offline dengan threshold ${thresholdHours} jam`);
         
         // Ambil semua perangkat
         const devices = await genieacsApi.getDevices();
-        console.log(`Memeriksa status untuk ${devices.length} perangkat...`);
+        logger.info(`[Offline] Memeriksa status untuk ${devices.length} perangkat...`);
         
         const offlineDevices = [];
         const now = new Date();
@@ -708,7 +1045,7 @@ async function monitorOfflineDevices(thresholdHours = 24) {
         for (const device of devices) {
             try {
                 if (!device._lastInform) {
-                    console.log(`Perangkat ${device._id} tidak memiliki lastInform`);
+                    logger.info(`[Offline] Perangkat ${device._id} tidak memiliki lastInform`);
                     continue;
                 }
                 
@@ -725,10 +1062,10 @@ async function monitorOfflineDevices(thresholdHours = 24) {
                     };
                     
                     offlineDevices.push(deviceInfo);
-                    console.log(`Perangkat offline: ${deviceInfo.id}, Offline selama: ${deviceInfo.offlineHours} jam`);
+                    logger.info(`[Offline] Perangkat offline: ${deviceInfo.id}, Offline selama: ${deviceInfo.offlineHours} jam`);
                 }
             } catch (deviceError) {
-                console.error(`Error memeriksa status untuk perangkat ${device._id}:`, deviceError);
+                logger.error(`[Offline] Error memeriksa status untuk perangkat ${device._id}: ${deviceError.message || String(deviceError)}`);
             }
         }
         
@@ -765,7 +1102,7 @@ async function monitorOfflineDevices(thresholdHours = 24) {
             
             logger.info(`[Offline] Pesan peringatan perangkat offline terkirim untuk ${offlineDevices.length} perangkat`);
         } else {
-            console.log('Tidak ada perangkat yang offline lebih dari threshold');
+            logger.info('[Offline] Tidak ada perangkat yang offline lebih dari threshold');
         }
         
         return {
@@ -774,7 +1111,7 @@ async function monitorOfflineDevices(thresholdHours = 24) {
             message: `${offlineDevices.length} perangkat offline lebih dari ${thresholdHours} jam`
         };
     } catch (error) {
-        console.error('Error memantau perangkat offline:', error);
+        logger.error(`[Offline] Error memantau perangkat offline: ${error.message || String(error)}`);
         return {
             success: false,
             message: `Error memantau perangkat offline: ${error.message}`,
@@ -830,6 +1167,7 @@ module.exports = {
     getAllACSServers,
     getACSServer,
     createAxiosInstance,
+    isBuiltinAcsEnabled,
     
     // GenieACS API methods (now support multi-server)
     getDevices: genieacsApi.getDevices,

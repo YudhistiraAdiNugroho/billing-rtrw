@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const axios = require('axios');
+const rawAxios = require('axios');
 const db = require('../config/database');
 const { getSetting, getSettings } = require('../config/settingsManager');
 const sidebarMenuSvc = require('../services/sidebarMenuService');
@@ -8,9 +8,59 @@ const customerDevice = require('../services/customerDeviceService');
 const mikrotikSvc = require('../services/mikrotikService');
 const fs = require('fs');
 const path = require('path');
+const { createAxiosInstance, isBuiltinAcsEnabled } = require('../config/genieacs');
+
+// Proxy axios to support local built-in ACS proxy
+const axios = {
+    get: async (url, config = {}) => {
+        if (isBuiltinAcsEnabled() && (url.startsWith('local/') || url === 'local')) {
+            const path = url.replace(/^local/, '');
+            const instance = createAxiosInstance({ id: 'builtin', url: 'local' });
+            return instance.get(path, config);
+        }
+        return rawAxios.get(url, config);
+    },
+    post: async (url, data, config = {}) => {
+        if (isBuiltinAcsEnabled() && url.startsWith('local/')) {
+            const path = url.replace(/^local/, '');
+            const instance = createAxiosInstance({ id: 'builtin', url: 'local' });
+            return instance.post(path, data, config);
+        }
+        return rawAxios.post(url, data, config);
+    },
+    delete: async (url, config = {}) => {
+        if (isBuiltinAcsEnabled() && url.startsWith('local/')) {
+            const path = url.replace(/^local/, '');
+            const instance = createAxiosInstance({ id: 'builtin', url: 'local' });
+            return instance.delete(path, config);
+        }
+        return rawAxios.delete(url, config);
+    },
+    put: async (url, data, config = {}) => {
+        if (isBuiltinAcsEnabled() && url.startsWith('local/')) {
+            const path = url.replace(/^local/, '');
+            const instance = createAxiosInstance({ id: 'builtin', url: 'local' });
+            return instance.put(path, data, config);
+        }
+        return rawAxios.put(url, data, config);
+    }
+};
 
 // Helper for DB queries (using better-sqlite3)
 function getACSServers(id = null) {
+    if (isBuiltinAcsEnabled()) {
+        const builtinServer = {
+            id: 'builtin',
+            name: 'Built-in ACS',
+            url: 'local',
+            status: 'active'
+        };
+        if (id && id !== 'all') {
+            return id === 'builtin' ? [builtinServer] : [];
+        }
+        return [builtinServer];
+    }
+
     const legacyACS = getLegacyACS();
     const legacyServer = legacyACS.acs_url ? { 
         id: 'legacy', 
@@ -90,33 +140,310 @@ function getNestedValue(obj, path) {
     }
 }
 
-// Standard paths for RX Power and PPPoE
+// Standard paths for RX Power
 const RX_POWER_PATHS = [
     'VirtualParameters.RXPower',
     'VirtualParameters.RXpower',
     'VirtualParameters.rx_power',
     'VirtualParameters.redaman',
     'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANOAM.RXPower',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_HW_OpticalSignal.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_GponInterfaceConfig.RxPower',
+    'InternetGatewayDevice.WANDevice.1.X_GponInterafceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_GponInterafceConfig.RxPower',
+    'InternetGatewayDevice.WANDevice.1.X_ZTE_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_ZTE_GponInterfaceConfig.RxPower',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_ZTE_OpticalSignal.RXPower',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_ZTE_OpticalSignal.RxPower',
+    'InternetGatewayDevice.WANDevice.1.X_HW_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_HW_GponInterfaceConfig.RxPower',
+    'InternetGatewayDevice.WANDevice.1.X_ZTE-COM_WANPONInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_FH_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CMCC_EponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CMCC_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CT-COM_EponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CT-COM_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CU_WANEPONInterfaceConfig.OpticalTransceiver.RXPower',
+    'Device.Optical.Interface.1.OpticalSignalLevel',
     'Device.XPON.Interface.1.Stats.RXPower',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANDSLDiagnostics.FECOutput' // some devices
 ];
 
-const PPPOE_PATHS = [
-    'VirtualParameters.PPPoEUser',
-    'VirtualParameters.pppoe_user',
-    'VirtualParameters.pppoeUsername',
-    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username',
-    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.Username',
-    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username'
+// PPPoE IP search keys matching user's template
+const PPPOE_IP_KEYS = [
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.1.WANPPPConnection.2.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.2.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.5.WANPPPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.WANPPPConnection.*.ExternalIPAddress',
+    'Device.PPP.Interface.1.ExternalIPAddress',
+    'Device.IP.Interface.1.IPv4Address.1.IPAddress'
 ];
 
-const IP_PATHS = [
-    'VirtualParameters.IPAddress',
-    'VirtualParameters.ip_address',
-    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress',
-    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress'
+// PPPoE Username search keys matching user's template
+const PPPOE_USER_KEYS = [
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username',
+    'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.1.WANPPPConnection.2.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.2.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.2.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.2.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.5.WANPPPConnection.1.Username',
+    'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.WANPPPConnection.*.Username',
+    'Device.PPP.Interface.1.Username',
+    'Device.PPP.Interface.2.Username',
+    'Device.PPP.Interface.3.Username'
 ];
+
+function getWildcardMatches(device, path) {
+    const parts = path.split('.');
+    const results = [];
+
+    function recurse(current, index, currentPathParts) {
+        if (current === undefined || current === null) return;
+        
+        if (index === parts.length) {
+            let val = current;
+            if (typeof current === 'object' && '_value' in current) {
+                val = current._value;
+            }
+            results.push({
+                path: currentPathParts.join('.'),
+                value: val
+            });
+            return;
+        }
+
+        const part = parts[index];
+        if (part === '*') {
+            if (typeof current === 'object') {
+                for (const key of Object.keys(current)) {
+                    if (!key.startsWith('_')) {
+                        recurse(current[key], index + 1, [...currentPathParts, key]);
+                    }
+                }
+            }
+        } else {
+            if (typeof current === 'object') {
+                const targetLower = part.toLowerCase();
+                for (const key of Object.keys(current)) {
+                    if (key.toLowerCase() === targetLower) {
+                        recurse(current[key], index + 1, [...currentPathParts, key]);
+                    }
+                }
+            }
+        }
+    }
+
+    recurse(device, 0, []);
+    return results;
+}
+
+function getDeviceParameterValue(device, keys, filterFn) {
+    for (const key of keys) {
+        const matches = getWildcardMatches(device, key);
+        for (const match of matches) {
+            if (filterFn) {
+                if (filterFn(match.path, match.value, device)) {
+                    return match.value;
+                }
+            } else if (match.value !== undefined && match.value !== null && match.value !== '') {
+                return match.value;
+            }
+        }
+    }
+    return '';
+}
+
+function extractPppoeIp(d) {
+    const ip = getDeviceParameterValue(d, PPPOE_IP_KEYS, (matchedPath, value, device) => {
+        if (!value || value === '0.0.0.0' || value === '-') return false;
+        
+        if (matchedPath.includes('WANPPPConnection.')) {
+            const connectionTypePath = matchedPath.replace('ExternalIPAddress', 'ConnectionType');
+            const connTypeMatches = getWildcardMatches(device, connectionTypePath);
+            if (connTypeMatches.length > 0 && connTypeMatches[0].value === 'bridge') {
+                return false;
+            }
+        }
+        return true;
+    });
+    
+    if (ip) return ip;
+    if (d._ip && d._ip !== '-' && d._ip !== '0.0.0.0') return d._ip;
+    return '-';
+}
+
+function extractPppoeUser(d) {
+    const user = getDeviceParameterValue(d, PPPOE_USER_KEYS, (matchedPath, value, device) => {
+        if (!value || value === '-') return false;
+        
+        if (matchedPath.includes('WANPPPConnection.')) {
+            const connectionTypePath = matchedPath.replace('Username', 'ConnectionType');
+            const connTypeMatches = getWildcardMatches(device, connectionTypePath);
+            if (connTypeMatches.length > 0 && connTypeMatches[0].value === 'PPPoE_Bridged') {
+                return false;
+            }
+        }
+        return true;
+    });
+    
+    return user || '-';
+}
+
+function formatUptime(seconds) {
+    if (!seconds || seconds === 'N/A' || seconds === '-') return seconds || '-';
+    if (typeof seconds === 'string' && (seconds.includes('d') || seconds.includes(':')) && isNaN(seconds)) {
+        return seconds;
+    }
+    const totalSecs = parseInt(seconds, 10);
+    if (isNaN(totalSecs)) return seconds || '-';
+    const days = Math.floor(totalSecs / 86400);
+    const rem = totalSecs % 86400;
+    let hrs = Math.floor(rem / 3600);
+    if (hrs < 10) hrs = "0" + hrs;
+    const rem2 = rem % 3600;
+    let mins = Math.floor(rem2 / 60);
+    if (mins < 10) mins = "0" + mins;
+    let secs = rem2 % 60;
+    if (secs < 10) secs = "0" + secs;
+    return days + "d " + hrs + ":" + mins + ":" + secs;
+}
+
+const PPPOE_UPTIME_KEYS = [
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Uptime',
+    'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.1.WANPPPConnection.2.Uptime',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.Uptime',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.2.Uptime',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.Uptime',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.Uptime',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.5.WANPPPConnection.1.Uptime',
+    'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.WANPPPConnection.*.Uptime',
+    'Device.PPP.Interface.1.UpTime'
+];
+
+function extractPppoeUptime(d) {
+    let uptimeVal = getDeviceParameterValue(d, PPPOE_UPTIME_KEYS, (matchedPath, value, device) => {
+        if (value === undefined || value === null || value === '' || value === '-') return false;
+        
+        if (matchedPath.toLowerCase().includes('wanpppconnection')) {
+            const connTypePath = matchedPath.substring(0, matchedPath.toLowerCase().lastIndexOf('.uptime')) + '.ConnectionType';
+            const connTypeMatches = getWildcardMatches(device, connTypePath);
+            if (connTypeMatches.length > 0 && connTypeMatches[0].value === 'PPPoE_Bridged') {
+                return false;
+            }
+        }
+        return true;
+    });
+
+    if (!uptimeVal || uptimeVal === '-') {
+        const UPTIME_PATHS = [
+            'VirtualParameters.getdeviceuptime',
+            'InternetGatewayDevice.DeviceInfo.UpTime',
+            'Device.DeviceInfo.UpTime'
+        ];
+        for (const path of UPTIME_PATHS) {
+            const val = getNestedValue(d, path);
+            if (val && val !== '-' && val !== '') {
+                uptimeVal = val;
+                break;
+            }
+        }
+    }
+
+    if (uptimeVal) {
+        return formatUptime(uptimeVal);
+    }
+    return '-';
+}
+
+function formatRxPower(val) {
+    if (val === undefined || val === null || val === '-' || val === '') return '-';
+    const num = parseFloat(val);
+    if (isNaN(num)) return val;
+    if (num > 0) {
+        const dbVal = 30 + (Math.log10(num * Math.pow(10, -7)) * 10);
+        return (Math.ceil(dbVal * 100) / 100).toFixed(2);
+    }
+    return String(num);
+}
+
+function extractRxPower(d) {
+    let rxPower = '-';
+    for (const path of RX_POWER_PATHS) {
+        const val = getNestedValue(d, path);
+        if (val && val !== '-') {
+            rxPower = val;
+            break;
+        }
+    }
+    return formatRxPower(rxPower);
+}
+
+function extractSsid(d) {
+    const SSID_PATHS = [
+        'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID',
+        'Device.WiFi.SSID.1.SSID',
+        'Device.WiFi.SSID.2.SSID'
+    ];
+    for (const path of SSID_PATHS) {
+        const val = getNestedValue(d, path);
+        if (val && val !== '-' && val !== '') return val;
+    }
+    return '-';
+}
+
+function extractSoftwareVersion(d) {
+    const SW_PATHS = [
+        'InternetGatewayDevice.DeviceInfo.SoftwareVersion',
+        'Device.DeviceInfo.SoftwareVersion'
+    ];
+    for (const path of SW_PATHS) {
+        const val = getNestedValue(d, path);
+        if (val && val !== '-' && val !== '') return val;
+    }
+    return '-';
+}
+
+function extractUptime(d) {
+    const UPTIME_PATHS = [
+        'VirtualParameters.getdeviceuptime',
+        'InternetGatewayDevice.DeviceInfo.UpTime',
+        'Device.DeviceInfo.UpTime'
+    ];
+    for (const path of UPTIME_PATHS) {
+        const val = getNestedValue(d, path);
+        if (val && val !== '-' && val !== '') {
+            if (typeof val === 'string' && (val.includes('d') || val.includes(':')) && isNaN(val)) {
+                return val;
+            }
+            const totalSecs = parseInt(val, 10);
+            if (isNaN(totalSecs)) return val;
+            const days = Math.floor(totalSecs / 86400);
+            const rem = totalSecs % 86400;
+            
+            let hrs = Math.floor(rem / 3600);
+            if (hrs < 10) hrs = "0" + hrs;
+            
+            const rem2 = rem % 3600;
+            let mins = Math.floor(rem2 / 60);
+            if (mins < 10) mins = "0" + mins;
+            
+            let secs = rem2 % 60;
+            if (secs < 10) secs = "0" + secs;
+            
+            return days + "d " + hrs + ":" + mins + ":" + secs;
+        }
+    }
+    return '-';
+}
 
 // Middleware: Require Admin Session
 const requireAdmin = (req, res, next) => {
@@ -313,36 +640,13 @@ async function fetchDevicesFromACS(server, vParams = [], paths = {}, options = {
 
         const devices = devicesData.map(d => {
             // Fallback PPPoE
-            let pppoeUser = '-';
-            for (const path of PPPOE_PATHS) {
-                const val = getNestedValue(d, path);
-                if (val && val !== '-') {
-                    pppoeUser = val;
-                    break;
-                }
-            }
+            let pppoeUser = extractPppoeUser(d);
 
             // Fallback RX Power
-            let rxPower = '-';
-            for (const path of RX_POWER_PATHS) {
-                const val = getNestedValue(d, path);
-                if (val && val !== '-') {
-                    rxPower = val;
-                    break;
-                }
-            }
+            let rxPower = extractRxPower(d);
 
             // Fallback IP
-            let ip = d._ip || '-';
-            if (ip === '-') {
-                for (const path of IP_PATHS) {
-                    const val = getNestedValue(d, path);
-                    if (val && val !== '-') {
-                        ip = val;
-                        break;
-                    }
-                }
-            }
+            let ip = extractPppoeIp(d);
 
             // Customer Name
             const customerName = getNestedValue(d, 'VirtualParameters.CustomerName') || 
@@ -353,7 +657,7 @@ async function fetchDevicesFromACS(server, vParams = [], paths = {}, options = {
                 id: d._id,
                 sn: d._deviceId?._SerialNumber || d._id,
                 last_inform: d._lastInform,
-                isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < 300000) : false,
+                isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < 900000) : false,
                 manufacturer: d._deviceId?._Manufacturer || '-',
                 model: d._deviceId?._ProductClass || '-',
                 customer_name: customerName,
@@ -412,25 +716,11 @@ router.get('/', async (req, res) => {
                         
                         if (Array.isArray(response.data)) {
                             const devices = response.data.map(d => {
-                                let rxPower = '-';
-                                for (const path of RX_POWER_PATHS) {
-                                    const val = getNestedValue(d, path);
-                                    if (val && val !== '-') { rxPower = val; break; }
-                                }
+                                 let rxPower = extractRxPower(d);
                                 
-                                let pppoeUser = '-';
-                                for (const path of PPPOE_PATHS) {
-                                    const val = getNestedValue(d, path);
-                                    if (val && val !== '-') { pppoeUser = val; break; }
-                                }
+                                let pppoeUser = extractPppoeUser(d);
                                 
-                                let ip = d._ip || '-';
-                                if (ip === '-') {
-                                    for (const path of IP_PATHS) {
-                                        const val = getNestedValue(d, path);
-                                        if (val && val !== '-') { ip = val; break; }
-                                    }
-                                }
+                                let ip = extractPppoeIp(d);
                                 
                                 const customerName = getNestedValue(d, 'VirtualParameters.CustomerName') ||
                                                     getNestedValue(d, 'VirtualParameters.customer_name') || '-';
@@ -439,7 +729,7 @@ router.get('/', async (req, res) => {
                                     id: d._id,
                                     sn: d._deviceId?._SerialNumber || d._id,
                                     last_inform: d._lastInform,
-                                    isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < 300000) : false,
+                                    isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < 900000) : false,
                                     manufacturer: d._deviceId?._Manufacturer || '-',
                                     model: d._deviceId?._ProductClass || '-',
                                     rx_power: rxPower,
@@ -524,41 +814,18 @@ router.get('/device/:deviceId', async (req, res) => {
         if (!deviceData) return res.status(404).send('Device not found');
 
         const lastInform = deviceData._lastInform;
-        const isOnline = lastInform ? (Date.now() - new Date(lastInform).getTime() < 300000) : false;
+        const isOnline = lastInform ? (Date.now() - new Date(lastInform).getTime() < 900000) : false;
 
         // Fallbacks for detail page using the same logic as listing
-        let rxPower = '-';
-        for (const path of RX_POWER_PATHS) {
-            const val = getNestedValue(deviceData, path);
-            if (val && val !== '-') {
-                rxPower = val;
-                break;
-            }
-        }
+        let rxPower = extractRxPower(deviceData);
 
-        let pppoeUser = '-';
-        for (const path of PPPOE_PATHS) {
-            const val = getNestedValue(deviceData, path);
-            if (val && val !== '-') {
-                pppoeUser = val;
-                break;
-            }
-        }
+        let pppoeUser = extractPppoeUser(deviceData);
 
         const customerName = getNestedValue(deviceData, 'VirtualParameters.CustomerName') || 
                             getNestedValue(deviceData, 'VirtualParameters.customer_name') || 
                             '-';
 
-        let ip = deviceData._ip || '-';
-        if (ip === '-') {
-            for (const path of IP_PATHS) {
-                const val = getNestedValue(deviceData, path);
-                if (val && val !== '-') {
-                    ip = val;
-                    break;
-                }
-            }
-        }
+        let ip = extractPppoeIp(deviceData);
 
         const rawClients = await getLANHosts(deviceData._id, server);
         const clients = (Array.isArray(rawClients) ? rawClients : []).map((c) => ({
@@ -576,14 +843,15 @@ router.get('/device/:deviceId', async (req, res) => {
                 phone: deviceData._id,
                 serialNumber: deviceData._deviceId?._SerialNumber || deviceData._id,
                 model: deviceData._deviceId?._ProductClass || '-',
-                softwareVersion: '-',
+                softwareVersion: extractSoftwareVersion(deviceData),
                 status: isOnline ? 'Online' : 'Offline',
                 lastInform: lastInform || null,
                 rxPower: rxPower,
                 pppoeIP: ip,
                 pppoeUsername: pppoeUser,
-                ssid: getNestedValue(deviceData, 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID') || '-',
-                uptime: '-'
+                pppoeUptime: extractPppoeUptime(deviceData),
+                ssid: extractSsid(deviceData),
+                uptime: extractUptime(deviceData)
             },
             clients,
             isOnline,
@@ -761,9 +1029,29 @@ router.post('/api/refresh/:deviceId', requireAdmin, async (req, res) => {
         if (servers.length === 0) return res.json({ success: false, message: 'ACS not found' });
         
         const server = servers[0];
-        const baseUrl = normalizeUrl(server.url);
         const deviceId = String(req.params.deviceId || '');
         
+        if (isBuiltinAcsEnabled() && (server.id === 'builtin' || server.url === 'local')) {
+            // Built-in ACS: Clear bootstrapped tag and trigger connection request to force rebuild parameter database
+            const device = db.prepare('SELECT tags FROM acs_devices WHERE id = ?').get(deviceId);
+            if (device) {
+                let tags = [];
+                try { tags = JSON.parse(device.tags || '[]'); } catch (_) {}
+                tags = tags.filter(t => t !== 'bootstrapped');
+                
+                const now = new Date().toISOString();
+                db.prepare('UPDATE acs_devices SET tags = ?, updated_at = ? WHERE id = ?')
+                  .run(JSON.stringify(tags), now, deviceId);
+            }
+            
+            // Trigger connection request asynchronously
+            const acsService = require('../services/acsServerService');
+            acsService.triggerConnectionRequest(deviceId).catch(() => {});
+            
+            return res.json({ success: true, message: 'Sinkronisasi ulang dimulai (Bootstrap reset)' });
+        }
+        
+        const baseUrl = normalizeUrl(server.url);
         await axios.post(
             `${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`,
             { name: 'refreshObject', objectName: '' },

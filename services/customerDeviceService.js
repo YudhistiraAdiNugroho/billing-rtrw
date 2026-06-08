@@ -24,11 +24,19 @@ async function searchDeviceAcrossServers(query, fullData = true) {
         if (!fullData) {
           params.projection = '_id,_tags';
         }
-        
-        const response = await instance.get('/devices', {
-          params,
-          timeout: 15000 // Increase timeout for full data
-        });
+
+        let response;
+        try {
+          response = await instance.get('/devices', {
+            params,
+            timeout: 15000
+          });
+        } catch (e) {
+          response = await instance.get('/api/devices', {
+            params,
+            timeout: 15000
+          });
+        }
         
         if (response.data && response.data.length > 0) {
           const device = response.data[0];
@@ -108,18 +116,61 @@ async function resolveDeviceToken(input) {
 }
 
 const parameterPaths = {
+  serialNumber: [
+    'DeviceID.SerialNumber',
+    'InternetGatewayDevice.DeviceInfo.SerialNumber',
+    'Device.DeviceInfo.SerialNumber'
+  ],
+  model: [
+    'DeviceID.ProductClass',
+    'InternetGatewayDevice.DeviceInfo.ModelName',
+    'Device.DeviceInfo.ModelName',
+    'ModelName'
+  ],
+  softwareVersion: [
+    'InternetGatewayDevice.DeviceInfo.SoftwareVersion',
+    'Device.DeviceInfo.SoftwareVersion'
+  ],
+  ssid: [
+    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID',
+    'Device.WiFi.SSID.1.SSID',
+    'Device.WiFi.SSID.2.SSID'
+  ],
   rxPower: [
     'VirtualParameters.RXPower',
     'VirtualParameters.redaman',
     'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANOAM.RXPower',
-    'Device.Optical.Interface.1.OpticalSignalLevel'
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_HW_OpticalSignal.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_GponInterfaceConfig.RxPower',
+    'InternetGatewayDevice.WANDevice.1.X_GponInterafceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_GponInterafceConfig.RxPower',
+    'InternetGatewayDevice.WANDevice.1.X_ZTE_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_ZTE_GponInterfaceConfig.RxPower',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_ZTE_OpticalSignal.RXPower',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_ZTE_OpticalSignal.RxPower',
+    'InternetGatewayDevice.WANDevice.1.X_HW_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_HW_GponInterfaceConfig.RxPower',
+    'InternetGatewayDevice.WANDevice.1.X_ZTE-COM_WANPONInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_FH_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CMCC_EponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CMCC_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CT-COM_EponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CT-COM_GponInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.X_CU_WANEPONInterfaceConfig.OpticalTransceiver.RXPower',
+    'Device.Optical.Interface.1.OpticalSignalLevel',
+    'Device.XPON.Interface.1.Stats.RXPower'
   ],
   pppoeIP: [
     'VirtualParameters.pppoeIP',
     'VirtualParameters.pppIP',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.ExternalIPAddress',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANIPConnection.1.ExternalIPAddress',
     'Device.PPP.Interface.1.ExternalIPAddress',
     'Device.IP.Interface.1.IPv4Address.1.IPAddress'
   ],
@@ -129,6 +180,10 @@ const parameterPaths = {
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username',
     'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.3.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.2.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.Username',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.2.Username',
     'Device.PPP.Interface.1.Username',
     'Device.PPP.Interface.2.Username',
     'Device.PPP.Interface.3.Username'
@@ -148,6 +203,219 @@ const parameterPaths = {
   ]
 };
 
+// PPPoE IP search keys matching user's template
+const PPPOE_IP_KEYS = [
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress',
+  'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.1.WANPPPConnection.2.ExternalIPAddress',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.ExternalIPAddress',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.2.ExternalIPAddress',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.ExternalIPAddress',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.ExternalIPAddress',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.5.WANPPPConnection.1.ExternalIPAddress',
+  'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.WANPPPConnection.*.ExternalIPAddress',
+  'Device.PPP.Interface.1.ExternalIPAddress',
+  'Device.IP.Interface.1.IPv4Address.1.IPAddress'
+];
+
+// PPPoE Username search keys matching user's template
+const PPPOE_USER_KEYS = [
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username',
+  'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.1.WANPPPConnection.2.Username',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.Username',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.2.Username',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.Username',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.2.Username',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.Username',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.2.Username',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.5.WANPPPConnection.1.Username',
+  'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.WANPPPConnection.*.Username',
+  'Device.PPP.Interface.1.Username',
+  'Device.PPP.Interface.2.Username',
+  'Device.PPP.Interface.3.Username'
+];
+
+function getNestedValue(obj, path) {
+  try {
+    const parts = path.split('.');
+    let current = obj;
+    for (const part of parts) {
+      if (!current) return null;
+      current = current[part];
+    }
+    if (current && typeof current === 'object' && '_value' in current) {
+      return current._value;
+    }
+    if (current && typeof current === 'object' && current.hasOwnProperty('_value')) {
+      return current._value;
+    }
+    return current;
+  } catch (e) {
+    return null;
+  }
+}
+
+function getWildcardMatches(device, path) {
+  const parts = path.split('.');
+  const results = [];
+
+  function recurse(current, index, currentPathParts) {
+    if (current === undefined || current === null) return;
+    
+    if (index === parts.length) {
+      let val = current;
+      if (typeof current === 'object' && '_value' in current) {
+        val = current._value;
+      }
+      results.push({
+        path: currentPathParts.join('.'),
+        value: val
+      });
+      return;
+    }
+
+    const part = parts[index];
+    if (part === '*') {
+      if (typeof current === 'object') {
+        for (const key of Object.keys(current)) {
+          if (!key.startsWith('_')) {
+            recurse(current[key], index + 1, [...currentPathParts, key]);
+          }
+        }
+      }
+    } else {
+      if (typeof current === 'object') {
+        const targetLower = part.toLowerCase();
+        for (const key of Object.keys(current)) {
+          if (key.toLowerCase() === targetLower) {
+            recurse(current[key], index + 1, [...currentPathParts, key]);
+          }
+        }
+      }
+    }
+  }
+
+  recurse(device, 0, []);
+  return results;
+}
+
+function getDeviceParameterValue(device, keys, filterFn) {
+  for (const key of keys) {
+    const matches = getWildcardMatches(device, key);
+    for (const match of matches) {
+      if (filterFn) {
+        if (filterFn(match.path, match.value, device)) {
+          return match.value;
+        }
+      } else if (match.value !== undefined && match.value !== null && match.value !== '') {
+        return match.value;
+      }
+    }
+  }
+  return '';
+}
+
+function extractPppoeIp(d) {
+  const ip = getDeviceParameterValue(d, PPPOE_IP_KEYS, (matchedPath, value, device) => {
+    if (!value || value === '0.0.0.0' || value === '-') return false;
+    
+    if (matchedPath.includes('WANPPPConnection.')) {
+      const connectionTypePath = matchedPath.replace('ExternalIPAddress', 'ConnectionType');
+      const connTypeMatches = getWildcardMatches(device, connectionTypePath);
+      if (connTypeMatches.length > 0 && connTypeMatches[0].value === 'bridge') {
+        return false;
+      }
+    }
+    return true;
+  });
+  
+  if (ip) return ip;
+  if (d._ip && d._ip !== '-' && d._ip !== '0.0.0.0') return d._ip;
+  return 'N/A';
+}
+
+function extractPppoeUser(d) {
+  const user = getDeviceParameterValue(d, PPPOE_USER_KEYS, (matchedPath, value, device) => {
+    if (!value || value === '-') return false;
+    
+    if (matchedPath.includes('WANPPPConnection.')) {
+      const connectionTypePath = matchedPath.replace('Username', 'ConnectionType');
+      const connTypeMatches = getWildcardMatches(device, connectionTypePath);
+      if (connTypeMatches.length > 0 && connTypeMatches[0].value === 'PPPoE_Bridged') {
+        return false;
+      }
+    }
+    return true;
+  });
+  
+  return user || 'N/A';
+}
+
+function formatUptime(seconds) {
+  if (!seconds || seconds === 'N/A' || seconds === '-') return seconds || 'N/A';
+  if (typeof seconds === 'string' && (seconds.includes('d') || seconds.includes(':')) && isNaN(seconds)) {
+    return seconds;
+  }
+  const totalSecs = parseInt(seconds, 10);
+  if (isNaN(totalSecs)) return seconds || 'N/A';
+  const days = Math.floor(totalSecs / 86400);
+  const rem = totalSecs % 86400;
+  let hrs = Math.floor(rem / 3600);
+  if (hrs < 10) hrs = "0" + hrs;
+  const rem2 = rem % 3600;
+  let mins = Math.floor(rem2 / 60);
+  if (mins < 10) mins = "0" + mins;
+  let secs = rem2 % 60;
+  if (secs < 10) secs = "0" + secs;
+  return days + "d " + hrs + ":" + mins + ":" + secs;
+}
+
+const PPPOE_UPTIME_KEYS = [
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Uptime',
+  'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.1.WANPPPConnection.2.Uptime',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.Uptime',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.2.Uptime',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.Uptime',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.Uptime',
+  'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.5.WANPPPConnection.1.Uptime',
+  'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.WANPPPConnection.*.Uptime',
+  'Device.PPP.Interface.1.UpTime'
+];
+
+function extractPppoeUptime(d) {
+  let uptimeVal = getDeviceParameterValue(d, PPPOE_UPTIME_KEYS, (matchedPath, value, device) => {
+    if (value === undefined || value === null || value === '' || value === '-') return false;
+    
+    if (matchedPath.toLowerCase().includes('wanpppconnection')) {
+      const connTypePath = matchedPath.substring(0, matchedPath.toLowerCase().lastIndexOf('.uptime')) + '.ConnectionType';
+      const connTypeMatches = getWildcardMatches(device, connTypePath);
+      if (connTypeMatches.length > 0 && connTypeMatches[0].value === 'PPPoE_Bridged') {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (!uptimeVal || uptimeVal === '-') {
+    const UPTIME_PATHS = [
+      'VirtualParameters.getdeviceuptime',
+      'InternetGatewayDevice.DeviceInfo.UpTime',
+      'Device.DeviceInfo.UpTime'
+    ];
+    for (const path of UPTIME_PATHS) {
+      const val = getNestedValue(d, path);
+      if (val && val !== '-' && val !== '') {
+        uptimeVal = val;
+        break;
+      }
+    }
+  }
+
+  if (uptimeVal) {
+    return formatUptime(uptimeVal);
+  }
+  return 'N/A';
+}
+
 function getParameterWithPaths(device, paths) {
   let values = [];
   for (const p of paths) {
@@ -163,6 +431,10 @@ function getParameterWithPaths(device, paths) {
       }
     }
     if (value !== undefined && value !== null && value !== '' && value !== 'N/A') {
+      const isIpPath = p.toLowerCase().includes('ipaddress') || p.toLowerCase().includes('pppoeip') || p.toLowerCase().includes('pppip') || p.toLowerCase().includes('pppusername') || p.toLowerCase().includes('pppoeusername');
+      if (isIpPath && String(value) === '0.0.0.0') {
+        continue;
+      }
       const isCountParam = p.includes('TotalAssociations') || 
                            p.includes('AssociatedDeviceNumberOfEntries') || 
                            p.includes('HostNumberOfEntries');
@@ -223,11 +495,8 @@ function phoneFromPnJid(jid) {
 function mapDeviceData(device, tag) {
   if (!device) return null;
 
-  const ssid =
-    device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.SSID?._value ||
-    device?.Device?.WiFi?.SSID?.['1']?.SSID?._value ||
-    device?.Device?.WiFi?.SSID?.['1']?.SSID ||
-    '-';
+  const ssid = getParameterWithPaths(device, parameterPaths.ssid);
+  const ssidDisplay = ssid === 'N/A' ? '-' : ssid;
 
   const lastInform =
     device?._lastInform
@@ -274,9 +543,16 @@ function mapDeviceData(device, tag) {
     }
   } catch (e) {}
 
-  const rxPower = getParameterWithPaths(device, parameterPaths.rxPower);
-  const pppoeIP = getParameterWithPaths(device, parameterPaths.pppoeIP);
-  const pppoeUsername = getParameterWithPaths(device, parameterPaths.pppUsername);
+  let rxPower = getParameterWithPaths(device, parameterPaths.rxPower);
+  if (rxPower !== 'N/A' && rxPower !== '-' && rxPower !== '') {
+    const num = parseFloat(rxPower);
+    if (!isNaN(num) && num > 0) {
+      const dbVal = 30 + (Math.log10(num * Math.pow(10, -7)) * 10);
+      rxPower = (Math.ceil(dbVal * 100) / 100).toFixed(2);
+    }
+  }
+  const pppoeIP = extractPppoeIp(device);
+  const pppoeUsername = extractPppoeUser(device);
   const uptimeRaw = getParameterWithPaths(device, parameterPaths.uptime);
   let totalAssociations = getParameterWithPaths(device, parameterPaths.userConnected);
 
@@ -286,53 +562,54 @@ function mapDeviceData(device, tag) {
   }
 
   function formatUptime(seconds) {
-    if (!seconds || isNaN(seconds) || seconds === 'N/A') return seconds || 'N/A';
-    const s = parseInt(seconds, 10);
-    const d = Math.floor(s / 86400);
-    const h = Math.floor((s % 86400) / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    if (d > 0) return `${d} hari ${h} jam ${m} menit`;
-    if (h > 0) return `${h} jam ${m} menit`;
-    return `${m} menit`;
+    if (!seconds || seconds === 'N/A' || seconds === '-') return seconds || 'N/A';
+    if (typeof seconds === 'string' && (seconds.includes('d') || seconds.includes(':')) && isNaN(seconds)) {
+      return seconds;
+    }
+    const totalSecs = parseInt(seconds, 10);
+    if (isNaN(totalSecs)) return seconds || 'N/A';
+    const days = Math.floor(totalSecs / 86400);
+    const rem = totalSecs % 86400;
+    
+    let hrs = Math.floor(rem / 3600);
+    if (hrs < 10) hrs = "0" + hrs;
+    
+    const rem2 = rem % 3600;
+    let mins = Math.floor(rem2 / 60);
+    if (mins < 10) mins = "0" + mins;
+    
+    let secs = rem2 % 60;
+    if (secs < 10) secs = "0" + secs;
+    
+    return days + "d " + hrs + ":" + mins + ":" + secs;
   }
   const uptime = formatUptime(uptimeRaw);
+  const pppoeUptime = extractPppoeUptime(device);
 
-  const serialNumber = device?.DeviceID?.SerialNumber || 
-                       device?.InternetGatewayDevice?.DeviceInfo?.SerialNumber?._value || 
-                       device?.Device?.DeviceInfo?.SerialNumber?._value || 
-                       device?.Device?.DeviceInfo?.SerialNumber || '-';
-                       
-  const productClass = device?.DeviceID?.ProductClass || 
-                       device?.InternetGatewayDevice?.DeviceInfo?.ProductClass?._value || 
-                       device?.Device?.DeviceInfo?.ProductClass || '-';
-                       
-  const softwareVersion = device?.InternetGatewayDevice?.DeviceInfo?.SoftwareVersion?._value || 
-                          device?.Device?.DeviceInfo?.SoftwareVersion?._value || 
-                          device?.Device?.DeviceInfo?.SoftwareVersion || '-';
-                          
-  const model = device?.InternetGatewayDevice?.DeviceInfo?.ModelName?._value || 
-                device?.Device?.DeviceInfo?.ModelName?._value || 
-                device?.Device?.DeviceInfo?.ModelName || 
-                device?.ModelName || '-';
+  const serialNumber = getParameterWithPaths(device, parameterPaths.serialNumber);
+  const productClass = getParameterWithPaths(device, parameterPaths.model);
+  const softwareVersion = getParameterWithPaths(device, parameterPaths.softwareVersion);
+  const model = productClass;
 
   let lokasi = device?._tags || '-';
   if (Array.isArray(lokasi)) lokasi = lokasi.join(', ');
 
   return {
     phone: tag,
-    ssid,
+    ssid: ssidDisplay,
     status,
     lastInform,
     connectedUsers,
-    rxPower,
-    pppoeIP,
-    pppoeUsername,
-    serialNumber,
-    productClass,
+    rxPower: rxPower === 'N/A' ? '-' : rxPower,
+    pppoeIP: pppoeIP === 'N/A' ? '-' : pppoeIP,
+    pppoeUsername: pppoeUsername === 'N/A' ? '-' : pppoeUsername,
+    pppoeUptime: pppoeUptime === 'N/A' ? '-' : pppoeUptime,
+    serialNumber: serialNumber === 'N/A' ? '-' : serialNumber,
+    productClass: productClass === 'N/A' ? '-' : productClass,
     lokasi,
-    softwareVersion,
-    model,
-    uptime,
+    softwareVersion: softwareVersion === 'N/A' ? '-' : softwareVersion,
+    model: model === 'N/A' ? '-' : model,
+    uptime: uptime === 'N/A' ? '-' : uptime,
     totalAssociations
   };
 }
@@ -354,6 +631,7 @@ function fallbackCustomer(tag) {
     rxPower: '-',
     pppoeIP: '-',
     pppoeUsername: '-',
+    pppoeUptime: '-',
     serialNumber: '-',
     productClass: '-',
     lokasi: '-',
@@ -377,32 +655,57 @@ async function updateSSID(tag, newSSID, actor = null) {
     const instance = genieacsApi.createAxiosInstance(server);
     const tasksUrl = `/devices/${deviceId}/tasks`;
 
-    const trySet = async (path, value) => {
-      try {
-        await instance.post(tasksUrl, {
-          name: 'setParameterValues',
-          parameterValues: [[path, value, 'xsd:string']]
-        }, { timeout: 15000 });
-        return true;
-      } catch (e) {
-        return false;
+    const parameterValues = [];
+    
+    // Check supported paths in DB
+    const db = require('../config/database');
+    const row = db.prepare('SELECT params FROM acs_devices WHERE id = ?').get(device._id);
+    const flatParams = row && row.params ? JSON.parse(row.params) : null;
+    
+    if (flatParams) {
+      // SSID 2.4G paths
+      const paths24G = [
+        'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID',
+        'Device.WiFi.SSID.1.SSID'
+      ];
+      paths24G.forEach(p => {
+        if (flatParams[p] !== undefined) {
+          parameterValues.push([p, newSSID, 'xsd:string']);
+        }
+      });
+      
+      // SSID 5G paths
+      const paths5G = [
+        'Device.WiFi.SSID.2.SSID'
+      ];
+      for (const idx of [5, 6, 7, 8]) {
+        paths5G.push(`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${idx}.SSID`);
       }
-    };
-
-    let ok = false;
-    ok = (await trySet('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID', newSSID)) || ok;
-    ok = (await trySet('Device.WiFi.SSID.1.SSID', newSSID)) || ok;
-
-    const newSSID5G = `${newSSID}-5G`;
-    for (const idx of [5, 6, 7, 8]) {
-      try {
-        const ok5 = await trySet(`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${idx}.SSID`, newSSID5G);
-        if (ok5) ok = true;
-        break;
-      } catch (e) {}
+      paths5G.forEach(p => {
+        if (flatParams[p] !== undefined) {
+          parameterValues.push([p, `${newSSID}-5G`, 'xsd:string']);
+        }
+      });
+    }
+    
+    // Fallback if no parameters match or device not bootstrapped yet
+    if (parameterValues.length === 0) {
+      parameterValues.push(
+        ['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID', newSSID, 'xsd:string'],
+        ['Device.WiFi.SSID.1.SSID', newSSID, 'xsd:string']
+      );
     }
 
-    ok = (await trySet('Device.WiFi.SSID.2.SSID', newSSID5G)) || ok;
+    let ok = false;
+    try {
+      await instance.post(tasksUrl, {
+        name: 'setParameterValues',
+        parameterValues: parameterValues
+      }, { timeout: 20000 });
+      ok = true;
+    } catch (e) {
+      logger.error(`[updateSSID] Failed to set SSID: ${e.message}`);
+    }
 
     try {
       await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'InternetGatewayDevice.LANDevice.1.WLANConfiguration' }, { timeout: 15000 });
@@ -459,42 +762,67 @@ async function updatePassword(tag, newPassword, actor = null) {
 
     logger.info(`[updatePassword] Setting password for device ${deviceId}, tag ${tag}`);
 
-    const trySet = async (path) => {
-      try {
-        await instance.post(tasksUrl, {
-          name: 'setParameterValues',
-          parameterValues: [[path, pw, 'xsd:string']]
-        }, { timeout: 15000 });
-        return true;
-      } catch (e) {
-        return false;
+    const parameterValues = [];
+    
+    // Check supported paths in DB
+    const db = require('../config/database');
+    const row = db.prepare('SELECT params FROM acs_devices WHERE id = ?').get(device._id);
+    const flatParams = row && row.params ? JSON.parse(row.params) : null;
+    
+    if (flatParams) {
+      // 2.4G password paths
+      const paths24G = [
+        'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase',
+        'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.KeyPassphrase',
+        'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.PreSharedKey',
+        'Device.WiFi.AccessPoint.1.Security.KeyPassphrase',
+        'Device.WiFi.AccessPoint.1.Security.PreSharedKey'
+      ];
+      paths24G.forEach(p => {
+        if (flatParams[p] !== undefined) {
+          parameterValues.push([p, pw, 'xsd:string']);
+        }
+      });
+      
+      // 5G password paths
+      const paths5G = [
+        'Device.WiFi.AccessPoint.2.Security.KeyPassphrase',
+        'Device.WiFi.AccessPoint.2.Security.PreSharedKey'
+      ];
+      for (const idx of [5, 6, 7, 8]) {
+        paths5G.push(
+          `InternetGatewayDevice.LANDevice.1.WLANConfiguration.${idx}.KeyPassphrase`,
+          `InternetGatewayDevice.LANDevice.1.WLANConfiguration.${idx}.PreSharedKey.1.KeyPassphrase`,
+          `InternetGatewayDevice.LANDevice.1.WLANConfiguration.${idx}.PreSharedKey.1.PreSharedKey`
+        );
       }
-    };
-
-    let ok = false;
-
-    ok = (await trySet('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase')) || ok;
-    ok = (await trySet('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.KeyPassphrase')) || ok;
-    ok = (await trySet('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.PreSharedKey')) || ok;
-
-    ok = (await trySet('Device.WiFi.AccessPoint.1.Security.KeyPassphrase')) || ok;
-    ok = (await trySet('Device.WiFi.AccessPoint.1.Security.PreSharedKey')) || ok;
-
-    // Set password 5GHz (index 5-8)
-    for (const idx of [5, 6, 7, 8]) {
-      try {
-        const ok1 = await trySet(`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${idx}.KeyPassphrase`);
-        const ok2 = await trySet(`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${idx}.PreSharedKey.1.KeyPassphrase`);
-        const ok3 = await trySet(`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${idx}.PreSharedKey.1.PreSharedKey`);
-        if (ok1 || ok2 || ok3) ok = true;
-        break;
-      } catch (e) {
-        logger.debug(`[updatePassword] 5GHz WLAN.${idx} not available or failed: ${e.message}`);
-      }
+      paths5G.forEach(p => {
+        if (flatParams[p] !== undefined) {
+          parameterValues.push([p, pw, 'xsd:string']);
+        }
+      });
+    }
+    
+    // Fallback if no parameters match or device not bootstrapped yet
+    if (parameterValues.length === 0) {
+      parameterValues.push(
+        ['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase', pw, 'xsd:string'],
+        ['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.KeyPassphrase', pw, 'xsd:string'],
+        ['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.PreSharedKey', pw, 'xsd:string'],
+        ['Device.WiFi.AccessPoint.1.Security.KeyPassphrase', pw, 'xsd:string']
+      );
     }
 
-    ok = (await trySet('Device.WiFi.AccessPoint.2.Security.KeyPassphrase')) || ok;
-    ok = (await trySet('Device.WiFi.AccessPoint.2.Security.PreSharedKey')) || ok;
+    let ok = false;
+    try {
+      await instance.post(tasksUrl, {
+        name: 'setParameterValues',
+        parameterValues: parameterValues
+      }, { timeout: 20000 });
+      ok = true;
+    } catch (e) {
+      logger.error(`[updatePassword] Failed to set password: ${e.message}`);
+    }
 
     // Refresh object
     try {
@@ -593,14 +921,26 @@ async function listDevicesWithTags(limit = 250) {
     for (const query of queries) {
       try {
         const instance = genieacsApi.createAxiosInstance(server);
-        const response = await instance.get(`/devices`, {
-          params: {
-            query: JSON.stringify(query),
-            limit: maxLimit,
-            projection
-          },
-          timeout: 45000
-        });
+        let response;
+        try {
+          response = await instance.get(`/devices`, {
+            params: {
+              query: JSON.stringify(query),
+              limit: maxLimit,
+              projection
+            },
+            timeout: 45000
+          });
+        } catch (e) {
+          response = await instance.get(`/api/devices`, {
+            params: {
+              query: JSON.stringify(query),
+              limit: maxLimit,
+              projection
+            },
+            timeout: 45000
+          });
+        }
         const rows = Array.isArray(response.data) ? response.data : [];
         if (rows.length > 0) {
           rows.forEach(d => {
@@ -638,13 +978,16 @@ async function listAllDevices(limit = 999999, acsId = null) {
   const promises = servers.map(async (server) => {
     try {
       const instance = genieacsApi.createAxiosInstance(server);
-      const response = await instance.get(`/devices`, {
-        params: {
-          limit,
-          projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
-        },
-        timeout: 8000 // Reduce timeout to 8 seconds so a slow server doesn't block forever
-      });
+      const params = {
+        limit,
+        projection: '_id,_tags,_lastInform,DeviceID.SerialNumber,VirtualParameters,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.2.Username,InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress,Device.PPP.Interface.1.Username,Device.PPP.Interface.1.ExternalIPAddress,InternetGatewayDevice.DeviceInfo.ModelName,InternetGatewayDevice.DeviceInfo.SoftwareVersion,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations,InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations,InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries,Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries,Device.Hosts.HostNumberOfEntries,InternetGatewayDevice.LANDevice.1.Hosts.Host,Device.Hosts.Host'
+      };
+      let response;
+      try {
+        response = await instance.get(`/devices`, { params, timeout: 8000 });
+      } catch (e) {
+        response = await instance.get(`/api/devices`, { params, timeout: 8000 });
+      }
       const rows = Array.isArray(response.data) ? response.data : [];
       rows.forEach(d => {
         d._acs_server_id = server.id;

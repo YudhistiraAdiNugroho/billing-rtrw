@@ -3350,6 +3350,7 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     newSettings.login_otp_enabled = (newSettings.login_otp_enabled === 'true');
     newSettings.telegram_enabled = (newSettings.telegram_enabled === 'true');
     newSettings.auto_backup_enabled = (newSettings.auto_backup_enabled === 'true');
+    newSettings.use_builtin_acs = (newSettings.use_builtin_acs === 'true' || newSettings.use_builtin_acs === true);
 
     const success = saveSettings(newSettings);
     if (success) {
@@ -3704,20 +3705,22 @@ router.get('/api/devices', requireAdmin, async (req, res) => {
     const result = await customerDevice.listAllDevices(999999);
     if (!result.ok) return res.json({ error: result.message });
     let devices = result.devices.map(d => {
-      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id);
+      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id) || {};
+      const tagsArr = Array.isArray(d._tags) ? d._tags.filter(Boolean).map(String) : [];
       return {
-        id: d._id, tags: d._tags || [],
-        serialNumber: mapped.serialNumber,
+        id: String(d._id || ''),
+        tags: tagsArr,
+        serialNumber: String(mapped.serialNumber || '-'),
         lastInform: d._lastInform,
-        status: mapped.status.toLowerCase(),
-        pppoeIP: mapped.pppoeIP,
-        pppoeUsername: mapped.pppoeUsername,
-        rxPower: mapped.rxPower,
-        uptime: mapped.uptime,
-        model: mapped.model,
-        softwareVersion: mapped.softwareVersion,
-        userConnected: mapped.totalAssociations,
-        ssid: mapped.ssid
+        status: String(mapped.status || 'unknown').toLowerCase(),
+        pppoeIP: String(mapped.pppoeIP || '-'),
+        pppoeUsername: String(mapped.pppoeUsername || '-'),
+        rxPower: String(mapped.rxPower || '-'),
+        uptime: String(mapped.uptime || '-'),
+        model: String(mapped.model || '-'),
+        softwareVersion: String(mapped.softwareVersion || '-'),
+        userConnected: mapped.totalAssociations ?? '-',
+        ssid: String(mapped.ssid || '-')
       };
     });
     if (search) { 
@@ -3727,12 +3730,12 @@ router.get('/api/devices', requireAdmin, async (req, res) => {
       const matchingPppoes = new Set(billingCustomers.map(c => c.pppoe_username?.toLowerCase()).filter(Boolean));
 
       devices = devices.filter(d => 
-        d.id.toLowerCase().includes(s) ||
-        d.tags.some(t => t.toLowerCase().includes(s) || matchingTags.has(t.toLowerCase())) || 
-        d.serialNumber.toLowerCase().includes(s) || 
-        (d.pppoeIP && d.pppoeIP.toLowerCase().includes(s)) ||
-        (d.pppoeUsername && d.pppoeUsername !== 'N/A' && d.pppoeUsername.toLowerCase().includes(s)) ||
-        (d.pppoeUsername && matchingPppoes.has(d.pppoeUsername.toLowerCase()))
+        String(d.id || '').toLowerCase().includes(s) ||
+        (Array.isArray(d.tags) && d.tags.some(t => String(t || '').toLowerCase().includes(s) || matchingTags.has(String(t || '').toLowerCase()))) || 
+        String(d.serialNumber || '').toLowerCase().includes(s) || 
+        String(d.pppoeIP || '').toLowerCase().includes(s) ||
+        (String(d.pppoeUsername || '') !== 'N/A' && String(d.pppoeUsername || '').toLowerCase().includes(s)) ||
+        matchingPppoes.has(String(d.pppoeUsername || '').toLowerCase())
       ); 
     }
     if (status && status !== 'all') devices = devices.filter(d => d.status === status);

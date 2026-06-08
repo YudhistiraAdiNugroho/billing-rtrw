@@ -50,34 +50,44 @@ async function checkDependencies() {
   // 2. Check GenieACS
   try {
     const { getSetting } = require('../config/settingsManager');
-    const acsUrl = getSetting('genieacs_url', 'http://localhost:7557');
-    const username = getSetting('genieacs_username', '');
-    const password = getSetting('genieacs_password', '');
+    const { isBuiltinAcsEnabled } = require('../config/genieacs');
     
-    // Try to get devices list to verify GenieACS is working
-    const devicesUrl = `${acsUrl}/devices?limit=1`;
-    const config = {
-      timeout: 5000,
-      validateStatus: (status) => status < 500 // Accept any status < 500
-    };
-    
-    if (username && password) {
-      config.auth = { username, password };
-    }
-    
-    const response = await axios.get(devicesUrl, config);
-    
-    // If we get a response (even 401), GenieACS is online
-    if (response.status === 200 || response.status === 401) {
+    if (isBuiltinAcsEnabled()) {
+      const count = db.prepare('SELECT COUNT(*) as c FROM acs_devices').get();
       results.genieacs = {
         status: 'online',
-        message: response.status === 200 ? 'GenieACS is responding' : 'GenieACS online (auth required)'
+        message: `Built-in ACS active (${count.c} devices)`
       };
     } else {
-      results.genieacs = {
-        status: 'warning',
-        message: `GenieACS responding with status ${response.status}`
+      const acsUrl = getSetting('genieacs_url', 'http://localhost:7557');
+      const username = getSetting('genieacs_username', '');
+      const password = getSetting('genieacs_password', '');
+      
+      // Try to get devices list to verify GenieACS is working
+      const devicesUrl = `${acsUrl}/devices?limit=1`;
+      const config = {
+        timeout: 5000,
+        validateStatus: (status) => status < 500 // Accept any status < 500
       };
+      
+      if (username && password) {
+        config.auth = { username, password };
+      }
+      
+      const response = await axios.get(devicesUrl, config);
+      
+      // If we get a response (even 401), GenieACS is online
+      if (response.status === 200 || response.status === 401) {
+        results.genieacs = {
+          status: 'online',
+          message: response.status === 200 ? 'GenieACS is responding' : 'GenieACS online (auth required)'
+        };
+      } else {
+        results.genieacs = {
+          status: 'warning',
+          message: `GenieACS responding with status ${response.status}`
+        };
+      }
     }
   } catch (err) {
     // Check if it's a connection error or timeout

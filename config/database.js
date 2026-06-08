@@ -917,6 +917,45 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_payroll_slips_status ON payroll_slips(status);
 `);
 
+// ─── BUILT-IN ACS (TR-069) ──────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS acs_devices (
+    id TEXT PRIMARY KEY,
+    serial_number TEXT,
+    manufacturer TEXT,
+    product_class TEXT,
+    oui TEXT,
+    software_version TEXT,
+    hardware_version TEXT,
+    ip_address TEXT,
+    connection_request_url TEXT,
+    connection_request_user TEXT,
+    connection_request_pass TEXT,
+    tags TEXT DEFAULT '[]',
+    params TEXT DEFAULT '{}',
+    last_inform DATETIME,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE TABLE IF NOT EXISTS acs_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    payload TEXT DEFAULT '{}',
+    status TEXT DEFAULT 'pending',
+    result TEXT,
+    retry_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_acs_devices_sn ON acs_devices(serial_number);
+  CREATE INDEX IF NOT EXISTS idx_acs_devices_inform ON acs_devices(last_inform);
+  CREATE INDEX IF NOT EXISTS idx_acs_tasks_device ON acs_tasks(device_id);
+  CREATE INDEX IF NOT EXISTS idx_acs_tasks_status ON acs_tasks(status);
+`);
+
 // Tambahkan kategori pengeluaran default jika belum ada
 try {
   db.exec(`
