@@ -30,7 +30,7 @@ const { getSetting, getNowLocal } = require('../config/settingsManager');
 
 // Versioned bootstrap migration — only runs once per version change
 try {
-  const BOOTSTRAP_VERSION = 3; // Increment this when bootstrap parameters change
+  const BOOTSTRAP_VERSION = 4; // v4: Added CMCC, CT-COM, CU, FH, ZTE-COM vendor RX Power paths
   const migRow = db.prepare("SELECT value FROM app_settings WHERE key = 'acs_bootstrap_version'").get();
   const currentVersion = migRow ? parseInt(migRow.value, 10) : 0;
   if (currentVersion < BOOTSTRAP_VERSION) {
@@ -547,20 +547,33 @@ function queueBootstrapTasksIfNeeded(deviceId, currentParams) {
           }
         }
         
-        // Optical RX Power
+        // Optical RX Power — Standard paths
         groups.push(['InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_HW_OpticalSignal.RXPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.X_GponInterfaceConfig.RXPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.X_GponInterfaceConfig.RxPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.X_GponInterafceConfig.RXPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.X_GponInterafceConfig.RxPower']);
+        // ZTE vendor paths
         groups.push(['InternetGatewayDevice.WANDevice.1.X_ZTE_GponInterfaceConfig.RXPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.X_ZTE_GponInterfaceConfig.RxPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_ZTE_OpticalSignal.RXPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.X_ZTE_OpticalSignal.RxPower']);
+        groups.push(['InternetGatewayDevice.WANDevice.1.X_ZTE-COM_WANPONInterfaceConfig.RXPower']);
+        // Huawei vendor paths
         groups.push(['InternetGatewayDevice.WANDevice.1.X_HW_GponInterfaceConfig.RXPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.X_HW_GponInterfaceConfig.RxPower']);
         groups.push(['InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANOAM.RXPower']);
+        // FiberHome vendor paths
+        groups.push(['InternetGatewayDevice.WANDevice.1.X_FH_GponInterfaceConfig.RXPower']);
+        // China Mobile (CMCC) vendor paths
+        groups.push(['InternetGatewayDevice.WANDevice.1.X_CMCC_EponInterfaceConfig.RXPower']);
+        groups.push(['InternetGatewayDevice.WANDevice.1.X_CMCC_GponInterfaceConfig.RXPower']);
+        // China Telecom (CT) vendor paths
+        groups.push(['InternetGatewayDevice.WANDevice.1.X_CT-COM_EponInterfaceConfig.RXPower']);
+        groups.push(['InternetGatewayDevice.WANDevice.1.X_CT-COM_GponInterfaceConfig.RXPower']);
+        // China Unicom (CU) vendor paths
+        groups.push(['InternetGatewayDevice.WANDevice.1.X_CU_WANEPONInterfaceConfig.OpticalTransceiver.RXPower']);
         
         // Active associations
         groups.push(['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations', 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations', 'InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries']);
