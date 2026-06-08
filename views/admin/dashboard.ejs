@@ -524,12 +524,16 @@ async function loadDevices() {
   try {
     const search = document.getElementById('search-device')?.value || '';
     const status = document.getElementById('filter-status')?.value || 'all';
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (status && status !== 'all') params.set('status', status);
     let url = '/admin/api/devices';
-    if (search) url += '&search=' + encodeURIComponent(search);
-    if (status && status !== 'all') url += '&status=' + status;
+    const qs = params.toString();
+    if (qs) url += '?' + qs;
 
     const res = await fetch(url);
     const data = await res.json();
+    if (data && data.error) throw new Error(data.error);
     devicesData = data.devices || [];
 
     document.getElementById('device-count').textContent = devicesData.length + I18N.devicesSuffix;
@@ -804,7 +808,7 @@ function refreshAll() {
 
 loadStats();
 loadDevices();
-// setInterval(refreshAll, 30000); // Dihilangkan sesuai permintaan user
+setInterval(refreshAll, 30000);
 
 // ── CHECK IF SHOULD GO TO MONITORING TAB (from sidebar link) ──
 if (window.location.hash === '#monitoring') showTab('monitoring');

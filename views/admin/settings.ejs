@@ -238,18 +238,41 @@
         <!-- GenieACS & MikroTik -->
         <div>
           <h6 style="font-size:13px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px"><i class="bi bi-router"></i> <%= t('admin.settings.external_api', 'API Eksternal') %></h6>
-          <div class="fg">
-            <label class="fl">GenieACS API URL</label>
-            <input class="fc" name="genieacs_url" value="<%= settings.genieacs_url || '' %>" placeholder="http://192.168.8.89:7557">
-          </div>
-          <div class="form-row">
-            <div class="fg">
-              <label class="fl">GenieACS Username</label>
-              <input class="fc" name="genieacs_username" value="<%= settings.genieacs_username || '' %>">
+          
+          <div class="fg" style="margin-bottom:16px; background:rgba(59,130,246,0.08); padding:12px; border-radius:8px; border:1px dashed rgba(59,130,246,0.3);">
+            <label class="fl" style="display:flex; align-items:center; gap:8px; font-weight:bold; cursor:pointer; margin:0;">
+              <input type="checkbox" name="use_builtin_acs" value="true" id="use_builtin_acs" <%= settings.use_builtin_acs ? 'checked' : '' %> onchange="toggleAcsFields()">
+              Gunakan Built-in ACS Server (TR-069)
+            </label>
+            <div style="font-size:10px; color:var(--muted); margin-top:4px; padding-left:20px;">
+              Jika diaktifkan, aplikasi akan bertindak sebagai server ACS TR-069 sendiri (endpoint: <span class="mono" style="font-weight:700;">/acs</span>) tanpa perlu server GenieACS terpisah.
             </div>
+          </div>
+
+          <script>
+            function toggleAcsFields() {
+              const chk = document.getElementById('use_builtin_acs');
+              const fields = document.getElementById('genieacs_external_fields');
+              if (chk && fields) {
+                fields.style.display = chk.checked ? 'none' : 'block';
+              }
+            }
+          </script>
+
+          <div id="genieacs_external_fields" style="<%= settings.use_builtin_acs ? 'display:none;' : '' %>">
             <div class="fg">
-              <label class="fl">GenieACS Password</label>
-              <input class="fc" type="password" name="genieacs_password" value="<%= settings.genieacs_password || '' %>">
+              <label class="fl">GenieACS API URL</label>
+              <input class="fc" name="genieacs_url" value="<%= settings.genieacs_url || '' %>" placeholder="http://192.168.8.89:7557">
+            </div>
+            <div class="form-row">
+              <div class="fg">
+                <label class="fl">GenieACS Username</label>
+                <input class="fc" name="genieacs_username" value="<%= settings.genieacs_username || '' %>">
+              </div>
+              <div class="fg">
+                <label class="fl">GenieACS Password</label>
+                <input class="fc" type="password" name="genieacs_password" value="<%= settings.genieacs_password || '' %>">
+              </div>
             </div>
           </div>
 
