@@ -1040,6 +1040,52 @@ async function triggerConnectionRequest(deviceId) {
   });
 }
 
+function parseWwwAuthenticate(header) {
+  const params = {};
+  const cleanHeader = header.replace(/^Digest\s+/i, '');
+  const parts = cleanHeader.split(/,\s*/);
+  for (const part of parts) {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx > 0) {
+      const key = part.substring(0, eqIdx).trim();
+      let val = part.substring(eqIdx + 1).trim();
+      if (val.startsWith('"') && val.endsWith('"')) {
+        val = val.substring(1, val.length - 1);
+      }
+      params[key] = val;
+    }
+  }
+  return params;
+}
+
+function buildDigestAuthorization(method, uri, authParams, username, password) {
+  const realm = authParams.realm;
+  const nonce = authParams.nonce;
+  const opaque = authParams.opaque;
+  const qop = authParams.qop;
+  
+  const ha1 = crypto.createHash('md5').update(`${username}:${realm}:${password}`).digest('hex');
+  const ha2 = crypto.createHash('md5').update(`${method}:${uri}`).digest('hex');
+  
+  let authHeader = `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}"`;
+  
+  if (qop) {
+    const nc = '00000001';
+    const cnonce = crypto.randomBytes(8).toString('hex');
+    const response = crypto.createHash('md5').update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest('hex');
+    authHeader += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}", response="${response}"`;
+  } else {
+    const response = crypto.createHash('md5').update(`${ha1}:${nonce}:${ha2}`).digest('hex');
+    authHeader += `, response="${response}"`;
+  }
+  
+  if (opaque) {
+    authHeader += `, opaque="${opaque}"`;
+  }
+  
+  return authHeader;
+}
+
 async function performConnectionRequest(deviceId) {
   try {
     const device = db.prepare('SELECT * FROM acs_devices WHERE id = ?').get(deviceId);
@@ -1067,42 +1113,60 @@ async function performConnectionRequest(deviceId) {
       rejectUnauthorized: false, // Self-signed certs on CPE devices
     };
 
-    // Basic auth
     const crUser = device.connection_request_user || '';
     const crPass = device.connection_request_pass || '';
+
+    // Initialize with Basic Auth
     if (crUser) {
       options.auth = `${crUser}:${crPass}`;
     }
 
     return new Promise((resolve) => {
-      const req = transport.request(options, (resp) => {
-        // Consume response data to free up memory
-        resp.resume();
-        logger.info(`[ACS] Connection request to ${deviceId} returned HTTP ${resp.statusCode}`);
-
-        // Handle 401 Digest Auth challenge if basic auth failed
-        if (resp.statusCode === 401 && resp.headers['www-authenticate'] && crUser) {
-          logger.debug(`[ACS] Got 401 from ${deviceId}, attempting digest auth`);
-          // For simplicity, retry with auth header in URL (some CPEs accept this)
-          resolve({ success: true, message: `Connection request sent (HTTP ${resp.statusCode} – auth challenge)` });
-          return;
+      const executeRequest = (authHeader = null) => {
+        const reqOptions = { ...options };
+        if (authHeader) {
+          delete reqOptions.auth;
+          reqOptions.headers = reqOptions.headers || {};
+          reqOptions.headers['Authorization'] = authHeader;
         }
 
-        resolve({ success: true, message: `Connection request sent (HTTP ${resp.statusCode})` });
-      });
+        const req = transport.request(reqOptions, (resp) => {
+          resp.resume();
+          logger.info(`[ACS] Connection request to ${deviceId} returned HTTP ${resp.statusCode}`);
 
-      req.on('error', (err) => {
-        logger.warn(`[ACS] Connection request to ${deviceId} failed: ${err.message}`);
-        resolve({ success: false, message: `Connection request failed: ${err.message}` });
-      });
+          if (resp.statusCode === 401 && resp.headers['www-authenticate'] && crUser && !authHeader) {
+            const wwwAuth = resp.headers['www-authenticate'];
+            logger.info(`[ACS] Got 401 challenge from ${deviceId}, retrying with Digest Auth`);
+            try {
+              const authParams = parseWwwAuthenticate(wwwAuth);
+              const digestHeader = buildDigestAuthorization('GET', options.path, authParams, crUser, crPass);
+              executeRequest(digestHeader);
+            } catch (err) {
+              logger.error(`[ACS] Failed to construct Digest Auth: ${err.message}`);
+              resolve({ success: false, message: `Digest Auth failure: ${err.message}` });
+            }
+            return;
+          }
 
-      req.on('timeout', () => {
-        req.destroy();
-        logger.warn(`[ACS] Connection request to ${deviceId} timed out`);
-        resolve({ success: false, message: 'Connection request timed out' });
-      });
+          resolve({ success: resp.statusCode < 400, message: `Connection request completed with HTTP ${resp.statusCode}` });
+        });
 
-      req.end();
+        req.on('error', (err) => {
+          logger.warn(`[ACS] Connection request to ${deviceId} failed: ${err.message}`);
+          resolve({ success: false, message: `Connection request failed: ${err.message}` });
+        });
+
+        req.on('timeout', () => {
+          req.destroy();
+          logger.warn(`[ACS] Connection request to ${deviceId} timed out`);
+          resolve({ success: false, message: 'Connection request timed out' });
+        });
+
+        req.end();
+      };
+
+      // Start first connection request attempt
+      executeRequest();
     });
   } catch (err) {
     logger.error(`[ACS] Connection request error for ${deviceId}: ${err.message}`);

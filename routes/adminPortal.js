@@ -3720,7 +3720,9 @@ router.get('/api/devices', requireAdmin, async (req, res) => {
         model: String(mapped.model || '-'),
         softwareVersion: String(mapped.softwareVersion || '-'),
         userConnected: mapped.totalAssociations ?? '-',
-        ssid: String(mapped.ssid || '-')
+        ssid: String(mapped.ssid || '-'),
+        acs_server_id: d._acs_server_id || 'legacy',
+        acs_server_name: d._acs_server_name || 'Default ACS'
       };
     });
     if (search) { 
@@ -5577,8 +5579,14 @@ router.post('/onu-provision/scan-unconfigured', requireAdminSession, restrictToA
     } else if (oltConfig.vendor === 'Huawei') {
       const { frame, slot, pon } = req.body;
       onus = await onuProvisionSvc.huaweiGetUnconfiguredONUs(oltConfig, frame, slot, pon);
+    } else if (oltConfig.vendor === 'HSGQ' || oltConfig.vendor === 'Hioso') {
+      const { pon } = req.body;
+      if (!pon) {
+        return res.json({ success: false, error: 'PON interface harus diisi' });
+      }
+      onus = await onuProvisionSvc.hsgqGetUnconfiguredONUs(oltConfig, pon);
     } else {
-      return res.json({ success: false, error: 'Vendor OLT tidak didukung' });
+      return res.json({ success: false, error: 'Vendor OLT tidak didukung untuk scanning otomatis' });
     }
     
     res.json({ success: true, onus });
@@ -5678,6 +5686,16 @@ router.post('/onu-provision/provision', requireAdminSession, restrictToAdmin, ex
         result = await onuProvisionSvc.zteProvisionONU(oltConfig, req.body);
       } else if (vendor === 'Huawei') {
         result = await onuProvisionSvc.huaweiProvisionONU(oltConfig, req.body);
+      } else if (vendor === 'Fiberhome') {
+        result = await onuProvisionSvc.fiberhomeProvisionONU(oltConfig, req.body);
+      } else if (vendor === 'VSOL') {
+        result = await onuProvisionSvc.vsolProvisionONU(oltConfig, req.body);
+      } else if (vendor === 'CData') {
+        result = await onuProvisionSvc.cdataProvisionONU(oltConfig, req.body);
+      } else if (vendor === 'HSGQ') {
+        result = await onuProvisionSvc.hsgqProvisionONU(oltConfig, req.body);
+      } else if (vendor === 'Hioso') {
+        result = await onuProvisionSvc.hiosoProvisionONU(oltConfig, req.body);
       } else {
         throw new Error('Vendor tidak didukung');
       }

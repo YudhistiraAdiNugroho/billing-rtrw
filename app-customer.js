@@ -90,6 +90,43 @@ app.use(session({
   name: 'customer.sid'
 }));
 
+// Middleware Proteksi CSRF berbasis Referer/Origin (Aman untuk production tanpa merubah EJS)
+app.use((req, res, next) => {
+  const method = req.method;
+  if (['POST', 'PUT', 'DELETE'].includes(method)) {
+    const origin = req.headers.origin;
+    const referer = req.headers.referer;
+    const host = req.headers.host;
+
+    // Kecualikan webhook eksternal, ACS server TR-069, atau payment gateway callback
+    const isWebhook = req.path.startsWith('/api/webhook') || req.path.startsWith('/webhook') || req.path === '/customer/payment/callback';
+    const isAcs = req.path.startsWith('/acs');
+    if (isWebhook || isAcs) {
+      return next();
+    }
+
+    try {
+      if (origin) {
+        const originHost = new URL(origin).host;
+        if (originHost !== host) {
+          logger.warn(`[CSRF] Blocked request from unauthorized origin: ${origin} (host: ${host})`);
+          return res.status(403).json({ error: 'Forbidden - Invalid Origin (CSRF Protection)' });
+        }
+      } else if (referer) {
+        const refererHost = new URL(referer).host;
+        if (refererHost !== host) {
+          logger.warn(`[CSRF] Blocked request from unauthorized referer: ${referer} (host: ${host})`);
+          return res.status(403).json({ error: 'Forbidden - Invalid Referer (CSRF Protection)' });
+        }
+      }
+    } catch (e) {
+      logger.error(`[CSRF] Parsing referer/origin failed: ${e.message}`);
+      return res.status(403).json({ error: 'Forbidden - Invalid Referer/Origin Format' });
+    }
+  }
+  next();
+});
+
 // i18n middleware (aman: hanya teks UI, tidak mengubah logic fitur)
 app.use((req, res, next) => {
   if (req.query && typeof req.query.lang === 'string') {
@@ -924,6 +961,11 @@ app.get('/qris/static.jpg', async (req, res) => {
 app.get('/broadcast', (req, res) => {
   res.redirect('/admin/whatsapp/broadcast');
 });
+
+// Mount built-in ACS server endpoint (TR-069)
+const acsServerService = require('./services/acsServerService');
+app.post('/acs', express.raw({ type: ['text/xml', 'application/soap+xml', 'application/xml', 'text/plain'], limit: '2mb' }), acsServerService.handleCwmpRequest);
+
 // Mount customer portal
 const customerPortal = require('./routes/customerPortal');
 app.use('/customer', customerPortal);

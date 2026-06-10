@@ -2,6 +2,22 @@ const { Client } = require('ssh2');
 const { logger } = require('../config/logger');
 const { getSetting } = require('../config/settingsManager');
 
+function sanitizeCliInput(val) {
+  if (val === undefined || val === null) return '';
+  return String(val).replace(/[\r\n]+/g, ' ').trim();
+}
+
+function sanitizeParams(params) {
+  const clean = {};
+  if (!params || typeof params !== 'object') return clean;
+  for (const k of Object.keys(params)) {
+    clean[k] = typeof params[k] === 'string'
+      ? params[k].replace(/[\r\n]+/g, ' ').trim()
+      : params[k];
+  }
+  return clean;
+}
+
 /**
  * ONU Provision Service
  * Support untuk:
@@ -68,7 +84,9 @@ class ONUProvisionService {
 
         const writeNext = () => {
           if (cmdIndex < cmdList.length) {
-            const cmd = cmdList[cmdIndex++];
+            const rawCmd = cmdList[cmdIndex++];
+            // Defense-in-depth: strip newlines from commands to make sure no multiline command gets injected
+            const cmd = sanitizeCliInput(rawCmd);
             logger.info(`SSH command sent: ${cmd}`);
             stream.write(cmd + '\n');
           } else {
@@ -112,10 +130,11 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      const cleanPon = sanitizeCliInput(pon);
       
       const commands = [
         'enable',
-        `show gpon onu uncfg gpon-olt_${pon}`
+        `show gpon onu uncfg gpon-olt_${cleanPon}`
       ];
       
       const output = await this.executeCommands(conn, commands);
@@ -186,6 +205,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       
       const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
@@ -255,20 +275,212 @@ class ONUProvisionService {
   }
 
   /**
+   * HSGQ / HIOSO - Get unconfigured ONUs
+   */
+  async hsgqGetUnconfiguredONUs(oltConfig, pon) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      const cleanPon = sanitizeCliInput(pon);
+      const ponLower = String(cleanPon || '').toLowerCase();
+      const isEpon = ponLower.includes('epon');
+      
+      const commands = ['enable'];
+      if (isEpon) {
+        commands.push(`show onu unregister`);
+      } else {
+        const ponInterface = ponLower.includes('gpon') ? cleanPon : `gpon-olt_${cleanPon}`;
+        commands.push(`show gpon onu uncfg ${ponInterface}`);
+      }
+      
+      const output = await this.executeCommands(conn, commands);
+      const onus = this.parseHSGQUnconfiguredONUs(output, cleanPon, oltConfig.vendor);
+      conn.end();
+      
+      return onus;
+    } catch (error) {
+      if (conn) conn.end();
+      logger.error(`${oltConfig.vendor} get unconfigured ONUs error:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Parse HSGQ/HIOSO unconfigured ONUs output
+   */
+  parseHSGQUnconfiguredONUs(output, pon, vendor) {
+    const onus = [];
+    const lines = output.split('\n');
+    
+    for (const line of lines) {
+      const macMatch = line.match(/([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})|([0-9A-Fa-f]{12})/);
+      const snMatch = line.match(/([A-Z]{4}[0-9A-F]{8})/i);
+      
+      if (macMatch || snMatch) {
+        const sn = snMatch ? snMatch[1] : macMatch[0];
+        const onuIdMatch = line.match(/(?:onu|index)\s*(\d+)/i) || line.match(/^\s*(\d+)/);
+        const onuId = onuIdMatch ? onuIdMatch[1] : (onus.length + 1).toString();
+        
+        onus.push({
+          pon,
+          onuId,
+          model: 'Unknown',
+          sn,
+          vendor: vendor || 'HSGQ'
+        });
+      }
+    }
+    
+    return onus;
+  }
+
+  /**
+   * HSGQ OLT - Provision ONU (Supports EPON & GPON)
+   */
+  async hsgqProvisionONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
+      
+      const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
+      
+      const ponLower = String(pon || '').toLowerCase();
+      const isEpon = ponLower.includes('epon');
+      
+      const cmds = [
+        'enable',
+        'config'
+      ];
+
+      if (isEpon) {
+        cmds.push(`interface ${pon}`);
+        cmds.push(`onu add ${onuId} mac ${sn}`);
+        cmds.push(`onu ${onuId} name ${name}`);
+        if (vlan) {
+          cmds.push(`onu ${onuId} vlan mode tag vlan ${vlan}`);
+        }
+      } else {
+        const ponInterface = ponLower.includes('gpon') ? pon : `gpon-olt_${pon}`;
+        cmds.push(`interface ${ponInterface}`);
+        cmds.push(`onu ${onuId} type ${params.onuType || 'HSGQ-ONU'} sn ${sn}`);
+        cmds.push('exit');
+        const onuInterface = ponLower.includes('gpon') ? `${pon}:${onuId}` : `gpon-onu_${pon}:${onuId}`;
+        cmds.push(`interface ${onuInterface}`);
+        cmds.push(`name ${name}`);
+        cmds.push(`tcont 1 profile ${bandwidth || 'default'}`);
+        cmds.push('gemport 1 tcont 1');
+        cmds.push('exit');
+        cmds.push(`pon-onu-mng ${onuInterface}`);
+        cmds.push(`service 1 gemport 1 vlan ${vlan}`);
+        cmds.push(`vlan port eth_0/1 mode tag vlan ${vlan}`);
+        cmds.push('exit');
+      }
+      
+      cmds.push('write');
+      
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      
+      const features = [];
+      if (wifiSsid) features.push('WiFi');
+      if (lanMode) features.push(`LAN Mode: ${lanMode}`);
+      if (tr069AcsUrl) features.push('TR069');
+      
+      return { 
+        success: true, 
+        message: `ONU provisioned successfully on HSGQ${features.length > 0 ? ' with ' + features.join(', ') : ''}` 
+      };
+    } catch (error) {
+      if (conn) conn.end();
+      logger.error('HSGQ provision ONU error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * HIOSO OLT - Provision ONU (Supports EPON & GPON)
+   */
+  async hiosoProvisionONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
+      
+      const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
+      
+      const ponLower = String(pon || '').toLowerCase();
+      const isEpon = ponLower.includes('epon') || (!ponLower.includes('gpon'));
+      
+      const cmds = [
+        'enable',
+        'config'
+      ];
+
+      if (isEpon) {
+        const epInterface = ponLower.includes('epon') ? pon : `epon 0/${pon}`;
+        cmds.push(`interface ${epInterface}`);
+        cmds.push(`onu add ${onuId} mac ${sn}`);
+        cmds.push(`onu ${onuId} name ${name}`);
+        if (vlan) {
+          cmds.push(`onu ${onuId} vlan mode tag vlan ${vlan}`);
+        }
+      } else {
+        const gpInterface = ponLower.includes('gpon') ? pon : `gpon-olt_1/${pon}`;
+        cmds.push(`interface ${gpInterface}`);
+        cmds.push(`onu ${onuId} type ${params.onuType || 'HIOSO-ONU'} sn ${sn}`);
+        cmds.push('exit');
+        const onuInterface = ponLower.includes('gpon') ? `${pon}:${onuId}` : `gpon-onu_1/${pon}:${onuId}`;
+        cmds.push(`interface ${onuInterface}`);
+        cmds.push(`name ${name}`);
+        cmds.push(`tcont 1 profile ${bandwidth || 'default'}`);
+        cmds.push('gemport 1 tcont 1');
+        cmds.push('exit');
+        cmds.push(`pon-onu-mng ${onuInterface}`);
+        cmds.push(`service 1 gemport 1 vlan ${vlan}`);
+        cmds.push(`vlan port eth_0/1 mode tag vlan ${vlan}`);
+        cmds.push('exit');
+      }
+      
+      cmds.push('write');
+      
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      
+      const features = [];
+      if (wifiSsid) features.push('WiFi');
+      if (lanMode) features.push(`LAN Mode: ${lanMode}`);
+      if (tr069AcsUrl) features.push('TR069');
+      
+      return { 
+        success: true, 
+        message: `ONU provisioned successfully on HIOSO${features.length > 0 ? ' with ' + features.join(', ') : ''}` 
+      };
+    } catch (error) {
+      if (conn) conn.end();
+      logger.error('HIOSO provision ONU error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Huawei MA5800 - Get unconfigured ONUs
    */
   async huaweiGetUnconfiguredONUs(oltConfig, frame, slot, pon) {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      const cleanFrame = sanitizeCliInput(frame);
+      const cleanSlot = sanitizeCliInput(slot);
+      const cleanPon = sanitizeCliInput(pon);
       
       const commands = [
         'enable',
-        `display ont autofind ${frame}/${slot}/${pon}`
+        `display ont autofind ${cleanFrame}/${cleanSlot}/${cleanPon}`
       ];
       
       const output = await this.executeCommands(conn, commands);
-      const onus = this.parseHuaweiUnconfiguredONUs(output, frame, slot, pon);
+      const onus = this.parseHuaweiUnconfiguredONUs(output, cleanFrame, cleanSlot, cleanPon);
       conn.end();
       
       return onus;
@@ -368,6 +580,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       
       const { frame, slot, pon, onuId, sn, name, vlan, bandwidth, lineProfile, srvProfile, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
@@ -432,6 +645,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       
       const { frame, slot, pon, onuId, sn, name, vlan, lineProfile, srvProfile, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
@@ -498,6 +712,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       
       const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
@@ -572,6 +787,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       
       const { pon, onuId, sn, name, vlan, bandwidth, wifiSsid, wifiPassword, lanMode, pppoeUsername, pppoePassword, tr069AcsUrl, tr069AcsUsername, tr069AcsPassword, tr069PeriodicInform } = params;
       
@@ -749,12 +965,24 @@ class ONUProvisionService {
    * Delete ONU
    */
   async deleteONU(oltConfig, vendor, params) {
-    if (vendor === 'ZTE') {
+    params = sanitizeParams(params);
+    const v = String(vendor || '').toUpperCase();
+    if (v === 'ZTE') {
       return this.zteDeleteONU(oltConfig, params);
-    } else if (vendor === 'Huawei') {
+    } else if (v === 'HUAWEI') {
       return this.huaweiDeleteONU(oltConfig, params);
+    } else if (v === 'FIBERHOME') {
+      return this.fiberhomeDeleteONU(oltConfig, params);
+    } else if (v === 'VSOL') {
+      return this.vsolDeleteONU(oltConfig, params);
+    } else if (v === 'CDATA') {
+      return this.cdataDeleteONU(oltConfig, params);
+    } else if (v === 'HSGQ') {
+      return this.hsgqDeleteONU(oltConfig, params);
+    } else if (v === 'HIOSO') {
+      return this.hiosoDeleteONU(oltConfig, params);
     }
-    throw new Error('Unsupported vendor');
+    throw new Error(`Unsupported vendor: ${vendor}`);
   }
 
   /**
@@ -764,6 +992,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       const { pon, onuId } = params;
       const cmds = [
         'enable',
@@ -789,6 +1018,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       const { frame, slot, pon, onuId } = params;
       const cmds = [
         'enable',
@@ -801,6 +1031,156 @@ class ONUProvisionService {
       await this.executeCommands(conn, cmds);
       conn.end();
       return { success: true, message: 'ONU deleted successfully' };
+    } catch (error) {
+      if (conn) conn.end();
+      throw error;
+    }
+  }
+
+  /**
+   * Fiberhome - Delete ONU
+   */
+  async fiberhomeDeleteONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
+      const { frame, slot, pon, onuId } = params;
+      const cmds = [
+        'enable',
+        'config',
+        `interface gpon ${frame}/${slot}`,
+        `ont delete ${pon} ${onuId}`,
+        'quit'
+      ];
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      return { success: true, message: 'ONU deleted successfully on Fiberhome' };
+    } catch (error) {
+      if (conn) conn.end();
+      throw error;
+    }
+  }
+
+  /**
+   * VSOL - Delete ONU
+   */
+  async vsolDeleteONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
+      const { pon, onuId } = params;
+      const cmds = [
+        'enable',
+        'configure terminal',
+        `interface gpon-olt_${pon}`,
+        `no onu ${onuId}`,
+        'exit'
+      ];
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      return { success: true, message: 'ONU deleted successfully on VSOL' };
+    } catch (error) {
+      if (conn) conn.end();
+      throw error;
+    }
+  }
+
+  /**
+   * C-Data - Delete ONU
+   */
+  async cdataDeleteONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
+      const { pon, onuId } = params;
+      const cmds = [
+        'enable',
+        'configure terminal',
+        `interface gpon-olt_${pon}`,
+        `no onu ${onuId}`,
+        'exit'
+      ];
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      return { success: true, message: 'ONU deleted successfully on C-Data' };
+    } catch (error) {
+      if (conn) conn.end();
+      throw error;
+    }
+  }
+
+  /**
+   * HSGQ - Delete ONU (Supports EPON & GPON)
+   */
+  async hsgqDeleteONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
+      const { pon, onuId } = params;
+      const ponLower = String(pon || '').toLowerCase();
+      const isEpon = ponLower.includes('epon');
+      
+      const cmds = [
+        'enable',
+        'config'
+      ];
+      
+      if (isEpon) {
+        cmds.push(`interface ${pon}`);
+        cmds.push(`no onu ${onuId}`);
+      } else {
+        const ponInterface = ponLower.includes('gpon') ? pon : `gpon-olt_${pon}`;
+        cmds.push(`interface ${ponInterface}`);
+        cmds.push(`no onu ${onuId}`);
+      }
+      cmds.push('exit');
+      cmds.push('write');
+      
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      return { success: true, message: 'ONU deleted successfully on HSGQ' };
+    } catch (error) {
+      if (conn) conn.end();
+      throw error;
+    }
+  }
+
+  /**
+   * HIOSO - Delete ONU (Supports EPON & GPON)
+   */
+  async hiosoDeleteONU(oltConfig, params) {
+    let conn;
+    try {
+      conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
+      const { pon, onuId } = params;
+      const ponLower = String(pon || '').toLowerCase();
+      const isEpon = ponLower.includes('epon') || (!ponLower.includes('gpon'));
+      
+      const cmds = [
+        'enable',
+        'config'
+      ];
+      
+      if (isEpon) {
+        const epInterface = ponLower.includes('epon') ? pon : `epon 0/${pon}`;
+        cmds.push(`interface ${epInterface}`);
+        cmds.push(`no onu ${onuId}`);
+      } else {
+        const gpInterface = ponLower.includes('gpon') ? pon : `gpon-olt_1/${pon}`;
+        cmds.push(`interface ${gpInterface}`);
+        cmds.push(`no onu ${onuId}`);
+      }
+      cmds.push('exit');
+      cmds.push('write');
+      
+      await this.executeCommands(conn, cmds);
+      conn.end();
+      return { success: true, message: 'ONU deleted successfully on HIOSO' };
     } catch (error) {
       if (conn) conn.end();
       throw error;
@@ -894,6 +1274,10 @@ class ONUProvisionService {
         results.onu = await this.vsolProvisionONU(oltConfig, params);
       } else if (vendor === 'CData') {
         results.onu = await this.cdataProvisionONU(oltConfig, params);
+      } else if (vendor === 'HSGQ') {
+        results.onu = await this.hsgqProvisionONU(oltConfig, params);
+      } else if (vendor === 'Hioso') {
+        results.onu = await this.hiosoProvisionONU(oltConfig, params);
       } else {
         throw new Error(`Unsupported vendor: ${vendor}`);
       }
@@ -936,6 +1320,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       const { frame, board, port, onuId } = params;
       const cmds = [];
       
@@ -971,6 +1356,7 @@ class ONUProvisionService {
     let conn;
     try {
       conn = await this.connectSSH(oltConfig);
+      params = sanitizeParams(params);
       const { frame, board, port, onuId, newName } = params;
       const cmds = [];
       

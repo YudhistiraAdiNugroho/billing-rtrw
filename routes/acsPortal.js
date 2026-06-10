@@ -1063,6 +1063,88 @@ router.post('/api/refresh/:deviceId', requireAdmin, async (req, res) => {
     }
 });
 
+// POST /admin/acs/api/bulk/refresh
+router.post('/api/bulk/refresh', requireAdmin, async (req, res) => {
+    try {
+        const { devices } = req.body;
+        if (!Array.isArray(devices) || devices.length === 0) {
+            return res.status(400).json({ success: false, message: 'Daftar perangkat wajib diisi' });
+        }
+        
+        const promises = devices.map(async (d) => {
+            const deviceId = String(d.id || '');
+            const acsId = String(d.acsId || '');
+            const servers = getACSServers(acsId);
+            if (servers.length === 0) return { id: deviceId, success: false, message: 'ACS tidak ditemukan' };
+            const server = servers[0];
+            
+            if (isBuiltinAcsEnabled() && (server.id === 'builtin' || server.url === 'local')) {
+                // Built-in ACS: Clear bootstrapped tag and trigger connection request to force rebuild parameter database
+                const device = db.prepare('SELECT tags FROM acs_devices WHERE id = ?').get(deviceId);
+                if (device) {
+                    let tags = [];
+                    try { tags = JSON.parse(device.tags || '[]'); } catch (_) {}
+                    tags = tags.filter(t => t !== 'bootstrapped');
+                    
+                    const now = new Date().toISOString();
+                    db.prepare('UPDATE acs_devices SET tags = ?, updated_at = ? WHERE id = ?')
+                      .run(JSON.stringify(tags), now, deviceId);
+                }
+                
+                // Trigger connection request asynchronously
+                const acsService = require('../services/acsServerService');
+                acsService.triggerConnectionRequest(deviceId).catch(() => {});
+                
+                return { id: deviceId, success: true, message: 'Sinkronisasi ulang dimulai (Bootstrap reset)' };
+            }
+            
+            const baseUrl = normalizeUrl(server.url);
+            await axios.post(
+                `${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`,
+                { name: 'refreshObject', objectName: '' },
+                { ...getAxiosConfig(server), timeout: 10000 }
+            );
+            return { id: deviceId, success: true, message: 'Refresh task queued' };
+        });
+        
+        await Promise.allSettled(promises);
+        res.json({ success: true, message: `Berhasil mengirim perintah summon untuk ${devices.length} perangkat.` });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /admin/acs/api/bulk/delete
+router.post('/api/bulk/delete', requireAdmin, async (req, res) => {
+    try {
+        const { devices } = req.body;
+        if (!Array.isArray(devices) || devices.length === 0) {
+            return res.status(400).json({ success: false, message: 'Daftar perangkat wajib diisi' });
+        }
+        
+        const promises = devices.map(async (d) => {
+            const deviceId = String(d.id || '');
+            const acsId = String(d.acsId || '');
+            const servers = getACSServers(acsId);
+            if (servers.length === 0) return { id: deviceId, success: false, message: 'ACS tidak ditemukan' };
+            const server = servers[0];
+            const baseUrl = normalizeUrl(server.url);
+            
+            await axios.delete(
+                `${baseUrl}/devices/${encodeURIComponent(deviceId)}`,
+                getAxiosConfig(server)
+            );
+            return { id: deviceId, success: true };
+        });
+        
+        await Promise.allSettled(promises);
+        res.json({ success: true, message: `Berhasil menghapus ${devices.length} perangkat.` });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+
 // POST /admin/acs/api/sync/all
 router.post('/api/sync/all', requireAdmin, async (req, res) => {
     try {

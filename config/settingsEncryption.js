@@ -9,11 +9,15 @@ const { logger } = require('./logger');
 // PENTING: Ganti dengan key yang aman di production
 const MASTER_KEY = process.env.SETTINGS_MASTER_KEY || 'default-master-key-change-this-in-production';
 
+function getMasterKeyForString(keyStr) {
+  const hash = crypto.createHash('sha256');
+  hash.update(keyStr || '');
+  return hash.digest();
+}
+
 // Normalize master key ke 32 bytes untuk AES-256
 function getMasterKey() {
-  const hash = crypto.createHash('sha256');
-  hash.update(MASTER_KEY);
-  return hash.digest();
+  return getMasterKeyForString(MASTER_KEY);
 }
 
 // List field yang harus di-encrypt
@@ -55,6 +59,25 @@ function encryptValue(value) {
   }
 }
 
+function decryptWithKey(encryptedValue, key) {
+  const parts = encryptedValue.split(':');
+  if (parts.length !== 4) {
+    throw new Error('Invalid encrypted value format');
+  }
+  
+  const [prefix, ivHex, authTagHex, encrypted] = parts;
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+  
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  
+  return decrypted;
+}
+
 /**
  * Decrypt value
  */
@@ -62,28 +85,25 @@ function decryptValue(encryptedValue) {
   if (!encryptedValue || typeof encryptedValue !== 'string') return encryptedValue;
   if (!encryptedValue.startsWith('enc:')) return encryptedValue; // Belum di-encrypt
   
+  const primaryKey = getMasterKey();
   try {
-    const masterKey = getMasterKey();
-    const parts = encryptedValue.split(':');
-    
-    if (parts.length !== 4) {
-      logger.warn('[encryption] Invalid encrypted value format');
-      return encryptedValue;
-    }
-    
-    const [prefix, ivHex, authTagHex, encrypted] = parts;
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    
-    const decipher = crypto.createDecipheriv('aes-256-gcm', masterKey, iv);
-    decipher.setAuthTag(authTag);
-    
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return decrypted;
+    return decryptWithKey(encryptedValue, primaryKey);
   } catch (error) {
-    logger.error(`[encryption] Error decrypting value: ${error.message}`);
+    // If decryption fails, and primaryKey is not the default fallback key, try the fallback key
+    const defaultSecret = 'default-master-key-change-this-in-production';
+    if (MASTER_KEY !== defaultSecret) {
+      try {
+        const fallbackKey = getMasterKeyForString(defaultSecret);
+        const decrypted = decryptWithKey(encryptedValue, fallbackKey);
+        logger.info('[encryption] Successfully decrypted value using default fallback key. It will be re-encrypted using the new key upon next save.');
+        return decrypted;
+      } catch (fallbackError) {
+        // Both primary key and fallback key failed
+        logger.error(`[encryption] Error decrypting value (both primary and fallback keys failed): ${fallbackError.message}`);
+      }
+    } else {
+      logger.error(`[encryption] Error decrypting value: ${error.message}`);
+    }
     return encryptedValue;
   }
 }

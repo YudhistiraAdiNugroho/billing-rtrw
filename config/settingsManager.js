@@ -1,6 +1,15 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { logger } = require('./logger');
+
+let runtimeSessionSecret = null;
+function getSecureSessionSecretFallback() {
+  if (!runtimeSessionSecret) {
+    runtimeSessionSecret = crypto.randomBytes(32).toString('hex');
+  }
+  return runtimeSessionSecret;
+}
 
 // Cache untuk settings dengan timestamp
 let settingsCache = null;
@@ -15,6 +24,13 @@ let watcher = null;
 function getSettings() {
   try {
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) || {};
+    
+    // Secure fallback for session_secret
+    const defaultSecret = 'rahasia-portal-pelanggan-default-ganti-ini';
+    if (!settings.session_secret || settings.session_secret === defaultSecret) {
+      settings.session_secret = getSecureSessionSecretFallback();
+    }
+
     const fallbackTz = 'Asia/Jakarta';
     const tz = typeof settings.timezone === 'string' ? settings.timezone.trim() : '';
 

@@ -53,6 +53,7 @@ const BRAND_PROFILES = {
       sn_table:     '1.3.6.1.4.1.3320.101.10.1.1.3',
       tx_power_table: '1.3.6.1.4.1.3320.101.10.5.1.5',
       rx_power_table: '1.3.6.1.4.1.3320.101.10.5.1.6',
+      offline_reason_table: '1.3.6.1.4.1.3320.101.11.1.1.11',
       probe_oid:    '1.3.6.1.4.1.3320.101.10.1.1.26',
     },
     {
@@ -73,6 +74,7 @@ const BRAND_PROFILES = {
       sn_table:     '1.3.6.1.4.1.3320.101.10.1.1.3',
       tx_power_table: '1.3.6.1.4.1.3320.101.10.5.1.5',
       rx_power_table: '1.3.6.1.4.1.3320.101.10.5.1.6',
+      offline_reason_table: '1.3.6.1.4.1.3320.101.11.1.1.11',
       probe_oid:    '1.3.6.1.4.1.3320.101.10.1.1.26',
     },
   ],
@@ -83,6 +85,7 @@ const BRAND_PROFILES = {
       name_table:   '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.2',
       sn_table:     '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.6',
       rx_power_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.2', // 0.01 dBm
+      offline_reason_table: '1.3.6.1.4.1.3902.1082.500.10.2.3.8.1.7',
       probe_oid:    '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.9',
       unauth_sn_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.2',
       unauth_type_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.10',
@@ -97,6 +100,7 @@ const BRAND_PROFILES = {
       name_table:   '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.2',
       sn_table:     '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.3',
       rx_power_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.7.1.3',
+      offline_reason_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.8.1.7',
       probe_oid:    '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.10',
       unauth_sn_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.11.1.2',
       unauth_type_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.11.1.10',
@@ -128,6 +132,7 @@ const BRAND_PROFILES = {
       name_table:   '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.3',
       sn_table:     '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
       rx_power_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.4', // 0.01 dBm
+      offline_reason_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.24',
       probe_oid:    '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
       unauth_sn_table: '1.3.6.1.4.1.2011.6.128.1.1.2.45.1.4',
       unauth_type_table: '1.3.6.1.4.1.2011.6.128.1.1.2.45.1.5',
@@ -205,14 +210,14 @@ const SYSTEM_OIDS = {
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',      // ifHCOutOctets (uplink port 1)
   },
   hsgq: {
-    temp:      '1.3.6.1.4.1.25355.3.2.1.1.1.0',
-    cpu:       '1.3.6.1.4.1.25355.3.2.1.1.2.0',
-    ram:       '1.3.6.1.4.1.25355.3.2.1.1.3.0',
+    temp:      '1.3.6.1.4.1.3320.101.11.1.13.1',
+    cpu:       '1.3.6.1.4.1.3320.101.11.1.13.1',
+    ram:       '1.3.6.1.4.1.3320.101.11.1.14.1',
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
   zte: {
-    temp:      '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.10.1.1.1', // Temp sensor 1
+    temp:      '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.19.1.1.1', // Temp sensor (zxAnCardCpuTemp)
     cpu:       '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.10.1.1.1', // CPU Usage
     ram:       '1.3.6.1.4.1.3902.1082.500.10.2.2.4.1.11.1.1.1', // RAM Usage
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
@@ -642,41 +647,34 @@ const fetchHiosoOnuDetailViaTelnet = async (olt) => {
 
 // ─── CORE SNMP FUNCTIONS ─────────────────────────────────────────────────────
 
-/**
- * Lakukan SNMP getNext (walk manual) untuk satu OID base.
- * Kembalikan object { index: value }.
- */
 const slowWalk = async (session, baseOid, maxEntries = 5000) => {
-  let currentOid = baseOid;
-  let walkCount  = 0;
   const results  = {};
+  let walkCount  = 0;
 
-  while (true) {
-    try {
-      const vb = await new Promise((rv, rj) => {
-        session.getNext([currentOid], (err, vbs) => {
-          if (err) rj(err);
-          else rv(vbs[0]);
-        });
-      });
+  return new Promise((resolve) => {
+    session.subtree(
+      baseOid,
+      20, // maxRepetitions (GETBULK size)
+      (varbinds) => {
+        for (const vb of varbinds) {
+          if (!vb || vb.oid == null) continue;
+          if (snmp.isVarbindError(vb)) continue;
+          if (!oidUnderBase(vb.oid, baseOid)) continue;
 
-      // Berhenti jika tidak ada data, error, atau OID sudah keluar dari subtree
-      if (!vb || vb.oid == null) break;
-      if (vb.type === snmp.ObjectType.EndOfMibView || vb.type === snmp.ObjectType.NoSuchObject || vb.type === snmp.ObjectType.NoSuchInstance) break;
-      if (!oidUnderBase(vb.oid, baseOid)) break;
-
-      const idx = extractIdx(vb.oid, baseOid);
-      results[idx] = vb.value;
-      currentOid = normalizeOid(vb.oid);
-      walkCount++;
-
-      if (walkCount >= maxEntries) break;
-    } catch (e) {
-      break;
-    }
-  }
-
-  return results;
+          const idx = extractIdx(vb.oid, baseOid);
+          results[idx] = vb.value;
+          walkCount++;
+          if (walkCount >= maxEntries) {
+            break;
+          }
+        }
+      },
+      (error) => {
+        // Resolve results when done, ignoring errors
+        resolve(results);
+      }
+    );
+  });
 };
 
 const walkSample = async (session, baseOid, maxItems = 3) => {
@@ -1063,7 +1061,17 @@ const autoPickUplinkIfIndex = async (session) => {
   return candidates[0]?.idx || null;
 };
 
-const pickUplinkIfIndexByTraffic = async (session) => {
+const uplinkCache = new Map();
+
+const pickUplinkIfIndexByTraffic = async (session, oltId) => {
+  if (oltId) {
+    const now = Date.now();
+    const cached = uplinkCache.get(oltId);
+    if (cached && (now - cached.timestamp < 3600000)) { // 1 hour cache
+      return cached.ifIndex;
+    }
+  }
+
   const candidates = await autoPickUplinkCandidates(session);
   if (candidates.length === 0) return null;
 
@@ -1072,7 +1080,7 @@ const pickUplinkIfIndexByTraffic = async (session) => {
 
   for (const c of top) {
     const first = await readInterfaceOctets(session, c.idx);
-    await new Promise(rv => setTimeout(rv, 250));
+    await new Promise(rv => setTimeout(rv, 100)); // Jedah scan lebih cepat (100ms)
     const second = await readInterfaceOctets(session, c.idx);
 
     const wrap64 = BigInt(1) << BigInt(64);
@@ -1096,7 +1104,11 @@ const pickUplinkIfIndexByTraffic = async (session) => {
     if (!best || sum > best.sum) best = { idx: c.idx, sum };
   }
 
-  return best?.idx || candidates[0].idx;
+  const ifIndex = best?.idx || candidates[0].idx;
+  if (oltId && ifIndex) {
+    uplinkCache.set(oltId, { ifIndex, timestamp: Date.now() });
+  }
+  return ifIndex;
 };
 
 const readInterfaceOctets = async (session, ifIndex) => {
@@ -1127,7 +1139,7 @@ const readInterfaceOctets = async (session, ifIndex) => {
  * Ambil system metrics (temp, cpu, ram, uplink) untuk brand tertentu.
  * Mengisi field stats secara langsung.
  */
-const fetchSystemMetrics = async (session, brandKey, stats) => {
+const fetchSystemMetrics = async (session, brandKey, stats, oltId) => {
   const oids = SYSTEM_OIDS[brandKey] || SYSTEM_OIDS.hioso;
   try {
     const [temp, cpu, ram, rx, tx] = await snmpGet(session, [
@@ -1144,7 +1156,7 @@ const fetchSystemMetrics = async (session, brandKey, stats) => {
       if (c != null) stats.temp = `${c.toFixed(1)}°C`;
     }
 
-    const ifIndex = await pickUplinkIfIndexByTraffic(session);
+    const ifIndex = await pickUplinkIfIndexByTraffic(session, oltId);
     if (ifIndex) {
       const first = await readInterfaceOctets(session, ifIndex);
       await new Promise(rv => setTimeout(rv, 800));
@@ -1270,6 +1282,106 @@ const decodeRxPower = (brand, val) => {
   return rx.toFixed(2);
 };
 
+function translateOfflineReason(brand, rawValue) {
+  if (rawValue == null) return null;
+  const valNum = bufferToInt(rawValue);
+  if (valNum == null) {
+    const valStr = String(rawValue).trim().toLowerCase();
+    if (valStr.includes('dying_gasp') || valStr.includes('power_off') || valStr.includes('poweroff')) {
+      return 'Mati Listrik / Adaptor Dicabut';
+    }
+    if (valStr.includes('los') || valStr.includes('wire_down') || valStr.includes('link_down')) {
+      return 'Kabel Fiber Optik Putus (LOS)';
+    }
+    if (valStr.includes('mpcp') || valStr.includes('timeout') || valStr.includes('unregister')) {
+      return 'Koneksi Terputus / Redaman Drop';
+    }
+    if (valStr.includes('manual') || valStr.includes('deactive')) {
+      return 'Dimatikan dari OLT (Deactive)';
+    }
+    return valStr;
+  }
+
+  const bKey = String(brand || '').toLowerCase();
+  
+  if (bKey === 'zte') {
+    switch (valNum) {
+      case 2:
+      case 3:
+        return 'Kabel Fiber Optik Putus (LOS)';
+      case 4:
+        return 'Loss of Frame (Gangguan Sinyal)';
+      case 5:
+        return 'Signal Failure (Gangguan Sinyal)';
+      case 8:
+        return 'Gagal Otorisasi / Registrasi';
+      case 9:
+        return 'Mati Listrik / Adaptor Dicabut';
+      case 10:
+        return 'Dimatikan dari OLT (Deactive)';
+      case 12:
+        return 'ONU Reboot';
+      case 13:
+        return 'ONU Dimatikan';
+      default:
+        return `Penyebab Lain (${valNum})`;
+    }
+  }
+
+  if (bKey === 'huawei') {
+    switch (valNum) {
+      case 1:
+      case 2:
+        return 'Kabel Fiber Optik Putus (LOS)';
+      case 3:
+        return 'Loss of Frame (Gangguan Sinyal)';
+      case 4:
+        return 'Signal Failure (Gangguan Sinyal)';
+      case 7:
+        return 'Gagal Deaktivasi';
+      case 8:
+        return 'Dimatikan dari OLT (Deactive)';
+      case 9:
+        return 'ONU Reboot / Reset';
+      case 10:
+        return 'ONU Re-registrasi';
+      case 13:
+        return 'Mati Listrik / Adaptor Dicabut';
+      case 31:
+      case 32:
+      case 33:
+        return 'Reset oleh Pelanggan (Tombol/Sistem)';
+      case 30:
+        return 'Modul Optik Dimatikan';
+      default:
+        return `Penyebab Lain (${valNum})`;
+    }
+  }
+
+  if (bKey === 'hioso' || bKey === 'hsgq') {
+    switch (valNum) {
+      case 2:
+        return 'Normal / Berhasil Terkoneksi';
+      case 3:
+        return 'Koneksi Terputus (MPCP Down)';
+      case 4:
+        return 'Gangguan Link (OAM Down)';
+      case 7:
+        return 'Dimatikan dari OLT (Admin Down)';
+      case 8:
+        return 'Kabel Fiber Optik Putus (Wire Down)';
+      case 9:
+        return 'Mati Listrik / Adaptor Dicabut (Power Off)';
+      case 255:
+        return 'Penyebab tidak diketahui';
+      default:
+        return `Penyebab Lain (${valNum})`;
+    }
+  }
+
+  return `Kode (${valNum})`;
+}
+
 // ─── MAIN: getOltStats ────────────────────────────────────────────────────────
 
 async function getOltStats(id, full = false) {
@@ -1373,28 +1485,30 @@ async function getOltStats(id, full = false) {
         const detectedBrandKey = activeProfile.__brandKey || brandKey;
         const onlineVals = getOnlineValues(detectedBrandKey, activeProfile);
 
-        await fetchSystemMetrics(session, detectedBrandKey, stats);
-        if (full) {
-          await fetchCardMetrics(session, detectedBrandKey, stats);
-          await fetchUnauthOnus(session, activeProfile, stats);
-        }
+        // Start system metrics concurrently
+        const systemMetricsPromise = fetchSystemMetrics(session, detectedBrandKey, stats, olt.id);
 
         // 4. Mode Counter (ZTE)
         if (activeProfile.is_counter) {
-          const onlineMap = await slowWalk(session, activeProfile.status_table);
-          const totalMap  = await slowWalk(session, activeProfile.name_table);
+          const [onlineMap, totalMap] = await Promise.all([
+            slowWalk(session, activeProfile.status_table),
+            slowWalk(session, activeProfile.name_table)
+          ]);
 
           stats.onus_online  = Object.values(onlineMap).reduce((s, v) => s + (bufferToInt(v) || 0), 0);
           stats.onus_total   = Object.values(totalMap).reduce((s, v) => s + (bufferToInt(v) || 0), 0);
           stats.onus_offline = Math.max(0, stats.onus_total - stats.onus_online);
 
+          await systemMetricsPromise;
           safeResolve(stats);
           return;
         }
 
         // 5. Mode Table (Hioso, VSOL, HSGQ, etc)
-        const statusMap = await slowWalk(session, activeProfile.status_table);
-        const nameMap   = await slowWalk(session, activeProfile.name_table);
+        const [statusMap, nameMap] = await Promise.all([
+          slowWalk(session, activeProfile.status_table),
+          slowWalk(session, activeProfile.name_table)
+        ]);
 
         let snMap = {};
         let rxMap = {};
@@ -1402,16 +1516,48 @@ async function getOltStats(id, full = false) {
         let distMap = {};
         let fwMap = {};
         let upMap = {};
+        let reasonMap = {};
 
         if (full) {
-          const snPick = await pickSnTable(session, activeProfile);
-          snMap = snPick.map || {};
-          if (activeProfile.rx_power_table) rxMap = await slowWalk(session, activeProfile.rx_power_table);
-          if (activeProfile.tx_power_table) txMap = await slowWalk(session, activeProfile.tx_power_table);
-          if (activeProfile.distance_table) distMap = await slowWalk(session, activeProfile.distance_table);
-          if (activeProfile.firmware_table) fwMap = await slowWalk(session, activeProfile.firmware_table);
-          if (activeProfile.uptime_table)   upMap = await slowWalk(session, activeProfile.uptime_table);
+          const walkPromises = [];
+
+          // Walk OLT cards & unauth ONUs in parallel
+          walkPromises.push(fetchCardMetrics(session, detectedBrandKey, stats));
+          walkPromises.push(fetchUnauthOnus(session, activeProfile, stats));
+
+          // 1. Pick SN Table
+          const snPickPromise = pickSnTable(session, activeProfile).then(res => snMap = res.map || {});
+          walkPromises.push(snPickPromise);
+
+          // 2. Rx Power
+          if (activeProfile.rx_power_table) {
+            walkPromises.push(slowWalk(session, activeProfile.rx_power_table).then(res => rxMap = res));
+          }
+          // 3. Tx Power
+          if (activeProfile.tx_power_table) {
+            walkPromises.push(slowWalk(session, activeProfile.tx_power_table).then(res => txMap = res));
+          }
+          // 4. Distance
+          if (activeProfile.distance_table) {
+            walkPromises.push(slowWalk(session, activeProfile.distance_table).then(res => distMap = res));
+          }
+          // 5. Firmware
+          if (activeProfile.firmware_table) {
+            walkPromises.push(slowWalk(session, activeProfile.firmware_table).then(res => fwMap = res));
+          }
+          // 6. Uptime
+          if (activeProfile.uptime_table) {
+            walkPromises.push(slowWalk(session, activeProfile.uptime_table).then(res => upMap = res));
+          }
+          // 7. Offline Reason
+          if (activeProfile.offline_reason_table) {
+            walkPromises.push(slowWalk(session, activeProfile.offline_reason_table).then(res => reasonMap = res));
+          }
+
+          await Promise.all(walkPromises);
         }
+
+        await systemMetricsPromise;
 
         const allIndices = new Set([...Object.keys(statusMap), ...Object.keys(nameMap)]);
         stats.onus_total = allIndices.size;
@@ -1462,12 +1608,16 @@ async function getOltStats(id, full = false) {
             const rxShown = rx === 'N/A' ? rx : rx + ' dBm';
             const txShown = tx === 'N/A' ? tx : tx + ' dBm';
 
+            const rawReason = getByIdx(reasonMap, idx);
+            const offlineReason = translateOfflineReason(detectedBrandKey, rawReason);
+
             onus.push({
               index: idx,
               id: onuId || '-',
               name,
               sn,
               status: isUp ? 'Online' : 'Offline',
+              offline_reason: isUp ? null : (offlineReason || null),
               tx: txShown,
               rx: rxShown,
               distance,
@@ -1479,11 +1629,6 @@ async function getOltStats(id, full = false) {
 
         stats.onus_weak = weakCount;
         stats.onus = onus.sort((a, b) => a.name.localeCompare(b.name));
-
-        if (full) {
-          await enrichOnusWithAcsData(stats.onus);
-        }
-
         safeResolve(stats);
       } catch (err) {
         stats.error = err.message;
