@@ -118,7 +118,7 @@
       </div>
       <div class="card-bd">
         <form method="POST" action="/admin/onu-provision/configure-olt">
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+          <div class="form-row3">
             <div class="fg">
               <label class="fl">Vendor OLT</label>
               <select class="fs" name="vendor" id="oltVendor" required onchange="toggleVendorFields()">
@@ -141,7 +141,7 @@
               <input type="number" class="fc" name="port" value="<%= oltConfig?.port || 22 %>" placeholder="22" required>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:16px">
+          <div class="form-row2" style="margin-top:16px">
             <div class="fg">
               <label class="fl">Username</label>
               <input type="text" class="fc" name="username" value="<%= oltConfig?.username || '' %>" placeholder="admin" required>
@@ -193,7 +193,7 @@
               <input type="text" class="fc" id="scanPon" placeholder="1/1/1">
             </div>
           <% } else { %>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+            <div class="form-row3">
               <div class="fg">
                 <label class="fl">Frame</label>
                 <input type="number" class="fc" id="scanFrame" value="0" min="0">
@@ -340,7 +340,7 @@
                   <input type="checkbox" id="enableWifi" onchange="toggleWifiFields()" style="width:20px;height:20px;cursor:pointer">
                 </label>
                 <div id="wifiFields" style="display:none;padding-top:12px;border-top:1px solid rgba(71,85,105,.3)">
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                  <div class="form-row2">
                     <div class="fg" style="margin:0">
                       <label class="fl">WiFi SSID</label>
                       <input type="text" class="fc" name="wifiSsid" placeholder="MyWiFi-Network">
@@ -375,7 +375,7 @@
                   </div>
                   <!-- PPPoE for Router Mode -->
                   <div id="onuPppoeFields" style="display:none">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-row2">
                       <div class="fg" style="margin:0">
                         <label class="fl">PPPoE Username</label>
                         <input type="text" class="fc" name="pppoeUsername" placeholder="user@internet">
@@ -438,7 +438,7 @@
                       <input type="text" class="fc" name="tr069AcsUrl" placeholder="http://acs.example.com:7547">
                       <div class="hint" style="font-size:11px;margin-top:4px">Format: http://host:port atau https://host:port</div>
                     </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-row2">
                       <div class="fg" style="margin:0">
                         <label class="fl">ACS Username (Optional)</label>
                         <input type="text" class="fc" name="tr069AcsUsername" placeholder="acs_user">
