@@ -220,6 +220,7 @@
                   <td>
                     <div class="odps-actions">
                       <button type="button" class="btn btn-sm btn-p" data-odp-id="<%= Number(o.id) %>" onclick="editOdpFromBtn(this)" title="<%= t('common.edit', 'Edit') %>"><i class="bi bi-pencil"></i></button>
+                      <button type="button" class="btn btn-sm btn-d" data-odp-id="<%= Number(o.id) %>" onclick="deleteOdpFromBtn(this)" title="Hapus"><i class="bi bi-trash"></i></button>
                       <button type="button" class="btn btn-sm btn-ghost" data-odp-id="<%= Number(o.id) %>" onclick="focusOdpFromBtn(this)" title="<%= t('admin.map.odp_list.focus', 'Fokus') %>"><i class="bi bi-geo-alt"></i></button>
                     </div>
                   </td>
@@ -734,6 +735,18 @@
   function editOdpFromBtn(btn) {
     if (!btn || !btn.dataset) return;
     editOdpById(btn.dataset.odpId);
+  }
+
+  function deleteOdpFromBtn(btn) {
+    if (!btn || !btn.dataset) return;
+    const odpId = btn.dataset.odpId;
+    if (confirm('Apakah Anda yakin ingin menghapus ODP ini?')) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = `/admin/odps/${odpId}/delete`;
+      document.body.appendChild(form);
+      form.submit();
+    }
   }
 
   function focusOdpFromBtn(btn) {

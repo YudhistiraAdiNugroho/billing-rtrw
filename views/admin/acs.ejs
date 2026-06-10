@@ -113,10 +113,23 @@
                         <a href="/admin/acs" class="btn btn-g btn-sm"><i class="bi bi-x"></i> Reset</a>
                     <% } %>
                 </form>
+                
+                <!-- Bulk Actions Panel -->
+                <div id="bulkActionsPanel" style="display: none; background: rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.15); padding: 12px 20px; border-radius: 12px; margin-bottom: 20px; align-items: center; justify-content: space-between;">
+                    <div style="font-size: 13px; font-weight: 600; color: var(--text);">
+                        <span id="selectedCount">0</span> perangkat terpilih
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-p btn-sm" onclick="bulkSummon()" style="background: var(--primary);"><i class="fas fa-sync-alt"></i> Summon Terpilih</button>
+                        <button class="btn btn-d btn-sm" onclick="bulkDelete()" style="background: var(--danger);"><i class="fas fa-trash"></i> Hapus Terpilih</button>
+                    </div>
+                </div>
+
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="selectAllDevices" onchange="toggleSelectAll(this)"></th>
                                 <th>Device ID / SN</th>
                                 <th>Customer Name</th>
                                 <th>IP Address</th>
@@ -130,6 +143,9 @@
                         <tbody>
                             <% devices.forEach(d => { %>
                             <tr>
+                                <td>
+                                    <input type="checkbox" class="device-checkbox" data-id="<%= d.id %>" data-acs="<%= d.acs_server_id || selectedAcsId %>" onchange="updateBulkPanel()">
+                                </td>
                                 <td>
                                     <a href="/admin/acs/device/<%= encodeURIComponent(d.id) %>?acsId=<%= d.acs_server_id || selectedAcsId %>" class="device-link">
                                         <div style="font-weight:700; color:var(--primary);"><%= d.sn %></div>
@@ -150,6 +166,7 @@
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <button class="btn-action" onclick="refreshDevice('<%= d.id %>')" title="Refresh Device"><i class="fas fa-sync"></i></button>
                                         <button class="btn-action" onclick="openAddWanModal('<%= d.id %>', '<%= d.acs_server_id || selectedAcsId %>', '<%= d.sn %>', '<%= d.manufacturer || "" %>', '<%= d.model || "" %>')" title="Add WAN All-in-One"><i class="fas fa-network-wired"></i></button>
+                                        <button class="btn-action danger" onclick="deleteDevice('<%= d.id %>', '<%= d.acs_server_id || selectedAcsId %>')" title="Hapus Perangkat"><i class="fas fa-trash"></i></button>
                                     </div>
                                 </td>
                             </tr>
@@ -763,6 +780,93 @@ async function syncAllACS() {
     alert(d.message);
     if(d.success) location.reload();
 }
+
+function toggleSelectAll(master) {
+    const checkboxes = document.querySelectorAll('.device-checkbox');
+    checkboxes.forEach(cb => cb.checked = master.checked);
+    updateBulkPanel();
+}
+
+function updateBulkPanel() {
+    const checkboxes = document.querySelectorAll('.device-checkbox:checked');
+    const panel = document.getElementById('bulkActionsPanel');
+    const countSpan = document.getElementById('selectedCount');
+    
+    if (checkboxes.length > 0) {
+        panel.style.display = 'flex';
+        countSpan.textContent = checkboxes.length;
+    } else {
+        panel.style.display = 'none';
+        document.getElementById('selectAllDevices').checked = false;
+    }
+}
+
+function getSelectedDevices() {
+    const checkboxes = document.querySelectorAll('.device-checkbox:checked');
+    const devices = [];
+    checkboxes.forEach(cb => {
+        devices.push({
+            id: cb.dataset.id,
+            acsId: cb.dataset.acs
+        });
+    });
+    return devices;
+}
+
+async function bulkSummon() {
+    const devices = getSelectedDevices();
+    if (devices.length === 0) return;
+    if (!confirm(`Summon / Sinkronisasi ulang ${devices.length} perangkat?`)) return;
+    
+    try {
+        const res = await fetch('/admin/acs/api/bulk/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ devices })
+        });
+        const d = await res.json();
+        alert(d.message);
+        if (d.success) location.reload();
+    } catch (err) {
+        alert('Gagal memproses bulk summon: ' + err.message);
+    }
+}
+
+async function bulkDelete() {
+    const devices = getSelectedDevices();
+    if (devices.length === 0) return;
+    if (!confirm(`HAPUS ${devices.length} perangkat dari database ACS?\n(Tindakan ini tidak dapat dibatalkan)`)) return;
+    
+    try {
+        const res = await fetch('/admin/acs/api/bulk/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ devices })
+        });
+        const d = await res.json();
+        alert(d.message);
+        if (d.success) location.reload();
+    } catch (err) {
+        alert('Gagal memproses bulk delete: ' + err.message);
+    }
+}
+
+async function deleteDevice(deviceId, acsId) {
+    if (!confirm('Hapus perangkat ' + deviceId + ' dari database ACS?')) return;
+    try {
+        const res = await fetch('/admin/acs/api/device/' + encodeURIComponent(deviceId), {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ acsId })
+        });
+        const d = await res.json();
+        alert(d.message);
+        if (d.success) location.reload();
+    } catch (err) {
+        alert('Gagal menghapus perangkat: ' + err.message);
+    }
+}
+
 </script>
 </body>
 </html>

@@ -128,6 +128,8 @@
                 <option value="Fiberhome" <%= oltConfig?.vendor === 'Fiberhome' ? 'selected' : '' %>>Fiberhome AN5516</option>
                 <option value="VSOL" <%= oltConfig?.vendor === 'VSOL' ? 'selected' : '' %>>VSOL V1600/V2400</option>
                 <option value="CData" <%= oltConfig?.vendor === 'CData' ? 'selected' : '' %>>C-Data FD1600/FD1800</option>
+                <option value="HSGQ" <%= oltConfig?.vendor === 'HSGQ' ? 'selected' : '' %>>HSGQ EPON/GPON</option>
+                <option value="Hioso" <%= oltConfig?.vendor === 'Hioso' ? 'selected' : '' %>>HIOSO EPON/GPON</option>
               </select>
             </div>
             <div class="fg">
@@ -247,7 +249,7 @@
           <form method="POST" action="/admin/onu-provision/provision">
             <input type="hidden" name="vendor" value="<%= oltConfig.vendor %>">
             
-            <% if (oltConfig.vendor === 'ZTE' || oltConfig.vendor === 'VSOL' || oltConfig.vendor === 'CData') { %>
+            <% if (oltConfig.vendor === 'ZTE' || oltConfig.vendor === 'VSOL' || oltConfig.vendor === 'CData' || oltConfig.vendor === 'HSGQ' || oltConfig.vendor === 'Hioso') { %>
               <!-- ZTE, VSOL, C-Data use similar PON interface format -->
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
                 <div class="fg">
@@ -497,14 +499,14 @@ async function scanUnconfiguredONUs() {
   const vendor = '<%= oltConfig && oltConfig.vendor ? oltConfig.vendor : "" %>';
   let params = {};
   
-  if (vendor === 'ZTE') {
+  if (vendor === 'ZTE' || vendor === 'VSOL' || vendor === 'CData' || vendor === 'HSGQ' || vendor === 'Hioso') {
     const pon = document.getElementById('scanPon').value;
     if (!pon) {
-      alert('Masukkan PON interface (contoh: 1/1/1)');
+      alert('Masukkan PON interface (contoh: 1/1/1 atau epon 0/1)');
       return;
     }
     params.pon = pon;
-  } else if (vendor === 'Huawei') {
+  } else if (vendor === 'Huawei' || vendor === 'Fiberhome') {
     params.frame = document.getElementById('scanFrame').value;
     params.slot = document.getElementById('scanSlot').value;
     params.pon = document.getElementById('scanPonNum').value;
@@ -572,7 +574,7 @@ function provisionONU(onuDataStr) {
   switchTab('provision');
   
   // Fill form based on vendor
-  if (onu.vendor === 'ZTE') {
+  if (onu.vendor === 'ZTE' || onu.vendor === 'VSOL' || onu.vendor === 'CData' || onu.vendor === 'HSGQ' || onu.vendor === 'Hioso') {
     document.querySelector('[name="pon"]').value = onu.pon;
     document.querySelector('[name="onuId"]').value = onu.onuId;
     document.querySelector('[name="sn"]').value = onu.sn;

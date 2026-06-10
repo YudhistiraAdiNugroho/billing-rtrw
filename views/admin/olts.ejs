@@ -746,7 +746,10 @@ async function loadOltDashboard(id) {
           <td>${index + 1}</td>
           <td><code class="sn-mac">${onu.id || '-'}</code></td>
           <td><code class="sn-mac">${onu.sn || '-'}</code></td>
-          <td><span class="status-pill-v2 ${statusClass}"><i class="bi bi-circle-fill" style="font-size:6px;"></i> ${formatStatus(statusVal) || '-'}</span></td>
+          <td>
+            <span class="status-pill-v2 ${statusClass}"><i class="bi bi-circle-fill" style="font-size:6px;"></i> ${formatStatus(statusVal) || '-'}</span>
+            ${!isOnline && onu.offline_reason ? `<div class="text-danger small mt-1" style="font-size: 11px; font-weight: 500;"><i class="bi bi-exclamation-octagon"></i> ${onu.offline_reason}</div>` : ''}
+          </td>
           <td><span class="power-badge">${onu.tx || 'N/A'}</span></td>
           <td><span class="power-badge ${rxClass}">${onu.rx || 'N/A'}</span></td>
           <td><span class="small text-muted">${onu.distance != null ? onu.distance : '-'}</span></td>

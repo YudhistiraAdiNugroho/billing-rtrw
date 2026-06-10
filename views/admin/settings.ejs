@@ -259,7 +259,7 @@
             }
           </script>
 
-          <div id="genieacs_external_fields" style="<%= settings.use_builtin_acs ? 'display:none;' : '' %>">
+          <div id="genieacs_external_fields" <% if (settings.use_builtin_acs) { %>style="display:none;"<% } %>>
             <div class="fg">
               <label class="fl">GenieACS API URL</label>
               <input class="fc" name="genieacs_url" value="<%= settings.genieacs_url || '' %>" placeholder="http://192.168.8.89:7557">
@@ -501,6 +501,24 @@
                 <div style="font-size:10px; color:var(--muted)">Gunakan tombol <span style="font-weight:700">QR</span> di menu Billing untuk membuat nominal unik per invoice.</div>
               </div>
             <% } %>
+
+            <!-- Webhook Integration for MacroDroid -->
+            <div style="margin-top: 15px; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 15px;">
+              <h6 style="font-size:11px; margin-bottom: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;"><i class="bi bi-phone"></i> Webhook Notifikasi SMS/E-Wallet (MacroDroid)</h6>
+              <div class="fg">
+                <label class="fl">Link Webhook MacroDroid (URL POST)</label>
+                <div style="display:flex;gap:8px">
+                  <% 
+                    const base = settings.public_base_url ? settings.public_base_url.replace(/\/+$/, '') : '';
+                    const secret = process.env.MY_WEBHOOK_SECRET || '';
+                    const macroWebhookUrl = base ? (base + '/api/webhook/v1/payment-notif?secret_key=' + secret) : '/api/webhook/v1/payment-notif?secret_key=' + secret;
+                  %>
+                  <input class="fc" id="macro_webhook_url" readonly value="<%= macroWebhookUrl %>">
+                  <button type="button" class="btn btn-g" onclick="copyInput('macro_webhook_url', 'Link Webhook')"><i class="bi bi-copy"></i></button>
+                </div>
+                <div style="font-size:10px; color:var(--muted); margin-top:4px">Kirimkan request HTTP POST ke URL ini dari MacroDroid Anda (sudah termasuk kunci rahasia).</div>
+              </div>
+            </div>
           </div>
 
           <!-- Tripay Section -->
@@ -635,6 +653,14 @@
 </div>
 
 <script>
+function copyInput(id, name) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.select();
+    document.execCommand('copy');
+    alert(name + ' berhasil disalin!');
+  }
+}
 function copyWebhook() {
   const el = document.getElementById('webhook_url');
   el.select();

@@ -252,6 +252,17 @@
         </div>
       </div>
 
+      <!-- Bulk Actions Panel -->
+      <div id="monBulkActionsPanel" style="display: none; background: rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.15); padding: 12px 20px; border-radius: 12px; margin-bottom: 16px; align-items: center; justify-content: space-between;">
+          <div style="font-size: 13px; font-weight: 600; color: var(--text);">
+              <span id="monSelectedCount">0</span> perangkat terpilih
+          </div>
+          <div style="display: flex; gap: 8px;">
+              <button class="btn btn-p btn-sm" onclick="bulkMonSummon()" style="background: var(--primary);"><i class="bi bi-lightning-charge"></i> Summon Terpilih</button>
+              <button class="btn btn-d btn-sm" onclick="bulkMonDelete()" style="background: var(--danger);"><i class="bi bi-trash"></i> Hapus Terpilih</button>
+          </div>
+      </div>
+
       <!-- Device Table -->
       <div class="card">
         <div class="card-hd">
@@ -266,6 +277,7 @@
           <table class="dtbl">
             <thead>
               <tr>
+                <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllMonDevices" onchange="toggleSelectAllMon(this)"></th>
                 <th>#</th>
                 <th><%= t('admin.dashboard.table.tag_customer', 'Tag / Pelanggan') %></th>
                 <th><%= t('admin.dashboard.table.device', 'Perangkat') %></th>
@@ -275,7 +287,7 @@
               </tr>
             </thead>
             <tbody id="devices-tbody">
-              <tr><td colspan="6" class="text-center text-muted" style="padding:32px"><%= t('admin.dashboard.loading_devices', 'Memuat perangkat...') %></td></tr>
+              <tr><td colspan="7" class="text-center text-muted" style="padding:32px"><%= t('admin.dashboard.loading_devices', 'Memuat perangkat...') %></td></tr>
             </tbody>
           </table>
         </div>
@@ -539,13 +551,16 @@ async function loadDevices() {
     document.getElementById('device-count').textContent = devicesData.length + I18N.devicesSuffix;
 
     if (devicesData.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:32px">' + I18N.noDevicesFound + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:32px">' + I18N.noDevicesFound + '</td></tr>';
     } else {
       tbody.innerHTML = devicesData.map((d, i) => {
         const isOn = d.status === 'online';
         const tagStr = d.tags.join(', ') || '-';
         const lastInformStr = d.lastInform ? new Date(d.lastInform).toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
         return `<tr>
+          <td style="text-align: center;">
+            <input type="checkbox" class="mon-device-checkbox" data-id="${d.id}" data-acs="${d.acs_server_id || 'legacy'}" onchange="updateMonBulkPanel()">
+          </td>
           <td class="text-muted">${i + 1}</td>
           <td>
             <span class="badge bm">${tagStr}</span>
@@ -568,10 +583,14 @@ async function loadDevices() {
             <div style="font-size:11px;color:var(--muted)" title="Uptime"><i class="bi bi-clock-history"></i> ${d.uptime}</div>
           </td>
           <td>
-            <button class="btn btn-g btn-icon btn-sm" title="${I18N.titleDetail}" onclick="showDetail('${d.tags[0] || d.id}')"><i class="bi bi-eye"></i></button>
-            <button class="btn btn-p btn-icon btn-sm" title="${I18N.titleEditSsid}" onclick="editSsid('${d.tags[0] || d.id}', '${(d.ssid || '').replace(/'/g, "\\'")}')"><i class="bi bi-wifi"></i></button>
-            <button class="btn btn-g btn-icon btn-sm" title="${I18N.titleEditPassword}" onclick="editPassword('${d.tags[0] || d.id}')"><i class="bi bi-key"></i></button>
-            <button class="btn btn-d btn-icon btn-sm" title="${I18N.titleReboot}" onclick="rebootDevice('${d.tags[0] || d.id}')"><i class="bi bi-power"></i></button>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <button class="btn btn-g btn-icon btn-sm" title="${I18N.titleDetail}" onclick="showDetail('${d.tags[0] || d.id}')"><i class="bi bi-eye"></i></button>
+              <button class="btn btn-p btn-icon btn-sm" title="Summon / Sinkronisasi Ulang" onclick="summonMonDevice('${d.id}', '${d.acs_server_id || 'legacy'}')"><i class="bi bi-lightning-charge"></i></button>
+              <button class="btn btn-p btn-icon btn-sm" title="${I18N.titleEditSsid}" onclick="editSsid('${d.tags[0] || d.id}', '${(d.ssid || '').replace(/'/g, "\\'")}')"><i class="bi bi-wifi"></i></button>
+              <button class="btn btn-g btn-icon btn-sm" title="${I18N.titleEditPassword}" onclick="editPassword('${d.tags[0] || d.id}')"><i class="bi bi-key"></i></button>
+              <button class="btn btn-d btn-icon btn-sm" title="${I18N.titleReboot}" onclick="rebootDevice('${d.tags[0] || d.id}')"><i class="bi bi-power"></i></button>
+              <button class="btn btn-d btn-icon btn-sm" title="Hapus Perangkat" onclick="deleteMonDevice('${d.id}', '${d.acs_server_id || 'legacy'}')"><i class="bi bi-trash"></i></button>
+            </div>
           </td>
         </tr>`;
       }).join('');
@@ -899,6 +918,109 @@ function showGenieACSMessage(msg, type) {
   const icons = { success: 'check-circle', danger: 'x-circle', info: 'info-circle' };
   messageDiv.innerHTML = '<i class="bi bi-' + icons[type] + '"></i> ' + msg;
 }
+
+function toggleSelectAllMon(master) {
+  const checkboxes = document.querySelectorAll('.mon-device-checkbox');
+  checkboxes.forEach(cb => cb.checked = master.checked);
+  updateMonBulkPanel();
+}
+
+function updateMonBulkPanel() {
+  const checkboxes = document.querySelectorAll('.mon-device-checkbox:checked');
+  const panel = document.getElementById('monBulkActionsPanel');
+  const countSpan = document.getElementById('monSelectedCount');
+  
+  if (checkboxes.length > 0) {
+    panel.style.display = 'flex';
+    countSpan.textContent = checkboxes.length;
+  } else {
+    panel.style.display = 'none';
+    document.getElementById('selectAllMonDevices').checked = false;
+  }
+}
+
+function getSelectedMonDevices() {
+  const checkboxes = document.querySelectorAll('.mon-device-checkbox:checked');
+  const devices = [];
+  checkboxes.forEach(cb => {
+    devices.push({
+      id: cb.dataset.id,
+      acsId: cb.dataset.acs
+    });
+  });
+  return devices;
+}
+
+async function bulkMonSummon() {
+  const devices = getSelectedMonDevices();
+  if (devices.length === 0) return;
+  if (!confirm(`Summon / Sinkronisasi ulang ${devices.length} perangkat?`)) return;
+  
+  try {
+    const res = await fetch('/admin/acs/api/bulk/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ devices })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success ? 's' : 'd');
+    if (d.success) setTimeout(refreshAll, 1500);
+  } catch (err) {
+    showToast('Gagal memproses bulk summon: ' + err.message, 'd');
+  }
+}
+
+async function bulkMonDelete() {
+  const devices = getSelectedMonDevices();
+  if (devices.length === 0) return;
+  if (!confirm(`HAPUS ${devices.length} perangkat dari database ACS?\n(Tindakan ini tidak dapat dibatalkan)`)) return;
+  
+  try {
+    const res = await fetch('/admin/acs/api/bulk/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ devices })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success ? 's' : 'd');
+    if (d.success) setTimeout(refreshAll, 1500);
+  } catch (err) {
+    showToast('Gagal memproses bulk delete: ' + err.message, 'd');
+  }
+}
+
+async function summonMonDevice(deviceId, acsId) {
+  if (!confirm('Summon / Sinkronisasi ulang perangkat ' + deviceId + '?')) return;
+  try {
+    const res = await fetch('/admin/acs/api/refresh/' + encodeURIComponent(deviceId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acsId })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success ? 's' : 'd');
+    if (d.success) setTimeout(refreshAll, 1500);
+  } catch (err) {
+    showToast('Gagal mengirim summon: ' + err.message, 'd');
+  }
+}
+
+async function deleteMonDevice(deviceId, acsId) {
+  if (!confirm('Hapus perangkat ' + deviceId + ' dari database ACS?')) return;
+  try {
+    const res = await fetch('/admin/acs/api/device/' + encodeURIComponent(deviceId), {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acsId })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success ? 's' : 'd');
+    if (d.success) setTimeout(refreshAll, 1500);
+  } catch (err) {
+    showToast('Gagal menghapus perangkat: ' + err.message, 'd');
+  }
+}
+
 </script>
 </body>
 </html>
