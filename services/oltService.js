@@ -1384,7 +1384,61 @@ function translateOfflineReason(brand, rawValue) {
 
 // ─── MAIN: getOltStats ────────────────────────────────────────────────────────
 
+async function limitConcurrency(tasks, limit) {
+  const results = [];
+  const executing = new Set();
+  for (const task of tasks) {
+    const p = Promise.resolve().then(() => task());
+    results.push(p);
+    executing.add(p);
+    const clean = () => executing.delete(p);
+    p.then(clean, clean);
+    if (executing.size >= limit) {
+      await Promise.race(executing);
+    }
+  }
+  return Promise.all(results);
+}
+
+const statsCache = new Map();
+const pendingPromises = new Map();
+
 async function getOltStats(id, full = false) {
+  const cacheKey = `${id}:${full}`;
+  const now = Date.now();
+  const cached = statsCache.get(cacheKey);
+  const cacheDuration = full ? 15000 : 10000; // 15s cache for full table, 10s for summary
+
+  if (cached && (now - cached.timestamp < cacheDuration)) {
+    logger.info(`[oltService] Returning cached stats for OLT ${id} (full: ${full})`);
+    return cached.data;
+  }
+
+  if (pendingPromises.has(cacheKey)) {
+    logger.info(`[oltService] Coalescing concurrent stats request for OLT ${id} (full: ${full})`);
+    return pendingPromises.get(cacheKey);
+  }
+
+  const promise = (async () => {
+    try {
+      const result = await getOltStatsInternal(id, full);
+      if (result && !result.error) {
+        statsCache.set(cacheKey, {
+          data: result,
+          timestamp: Date.now()
+        });
+      }
+      return result;
+    } finally {
+      pendingPromises.delete(cacheKey);
+    }
+  })();
+
+  pendingPromises.set(cacheKey, promise);
+  return promise;
+}
+
+async function getOltStatsInternal(id, full = false) {
   const olt = getOltById(id);
   if (!olt) return null;
 
@@ -1519,42 +1573,41 @@ async function getOltStats(id, full = false) {
         let reasonMap = {};
 
         if (full) {
-          const walkPromises = [];
+          const tasks = [];
 
-          // Walk OLT cards & unauth ONUs in parallel
-          walkPromises.push(fetchCardMetrics(session, detectedBrandKey, stats));
-          walkPromises.push(fetchUnauthOnus(session, activeProfile, stats));
+          // Walk OLT cards & unauth ONUs
+          tasks.push(() => fetchCardMetrics(session, detectedBrandKey, stats));
+          tasks.push(() => fetchUnauthOnus(session, activeProfile, stats));
 
           // 1. Pick SN Table
-          const snPickPromise = pickSnTable(session, activeProfile).then(res => snMap = res.map || {});
-          walkPromises.push(snPickPromise);
+          tasks.push(() => pickSnTable(session, activeProfile).then(res => snMap = res.map || {}));
 
           // 2. Rx Power
           if (activeProfile.rx_power_table) {
-            walkPromises.push(slowWalk(session, activeProfile.rx_power_table).then(res => rxMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.rx_power_table).then(res => rxMap = res));
           }
           // 3. Tx Power
           if (activeProfile.tx_power_table) {
-            walkPromises.push(slowWalk(session, activeProfile.tx_power_table).then(res => txMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.tx_power_table).then(res => txMap = res));
           }
           // 4. Distance
           if (activeProfile.distance_table) {
-            walkPromises.push(slowWalk(session, activeProfile.distance_table).then(res => distMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.distance_table).then(res => distMap = res));
           }
           // 5. Firmware
           if (activeProfile.firmware_table) {
-            walkPromises.push(slowWalk(session, activeProfile.firmware_table).then(res => fwMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.firmware_table).then(res => fwMap = res));
           }
           // 6. Uptime
           if (activeProfile.uptime_table) {
-            walkPromises.push(slowWalk(session, activeProfile.uptime_table).then(res => upMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.uptime_table).then(res => upMap = res));
           }
           // 7. Offline Reason
           if (activeProfile.offline_reason_table) {
-            walkPromises.push(slowWalk(session, activeProfile.offline_reason_table).then(res => reasonMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.offline_reason_table).then(res => reasonMap = res));
           }
 
-          await Promise.all(walkPromises);
+          await limitConcurrency(tasks, 2);
         }
 
         await systemMetricsPromise;
