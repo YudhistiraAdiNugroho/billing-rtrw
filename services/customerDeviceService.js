@@ -7,6 +7,7 @@ const { getSettingsWithCache } = require('../config/settingsManager');
 const auditTrail = require('./auditTrailService');
 const { logger } = require('../config/logger');
 const genieacsApi = require('../config/genieacs');
+const mikrotikService = require('./mikrotikService');
 
 // Helper: Search device across all servers (always get full data)
 async function searchDeviceAcrossServers(query, fullData = true) {
@@ -492,7 +493,7 @@ function phoneFromPnJid(jid) {
   return user.replace(/\D/g, '') || null;
 }
 
-function mapDeviceData(device, tag) {
+function mapDeviceData(device, tag, isPppoeActive = false) {
   if (!device) return null;
 
   const ssid = getParameterWithPaths(device, parameterPaths.ssid);
@@ -514,6 +515,10 @@ function mapDeviceData(device, tag) {
   } else if (device?.Events?.Inform) {
     const diffMs = Date.now() - new Date(device.Events.Inform).getTime();
     status = diffMs < 15 * 60 * 1000 ? 'Online' : 'Offline';
+  }
+
+  if (status !== 'Online' && isPppoeActive) {
+    status = 'Online';
   }
 
   let connectedUsers = [];
@@ -618,7 +623,19 @@ async function getCustomerDeviceData(tag) {
   const base = await resolveDeviceToken(tag);
   if (!base || !base._id) return null;
   const device = await fetchFullDevice(base._id);
-  return mapDeviceData(device, tag);
+  
+  let isPppoeActive = false;
+  try {
+    const pppoeUser = extractPppoeUser(device);
+    if (pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-') {
+      const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
+      if (activeSessionsMap.has(pppoeUser.toLowerCase())) {
+        isPppoeActive = true;
+      }
+    }
+  } catch (e) {}
+
+  return mapDeviceData(device, tag, isPppoeActive);
 }
 
 function fallbackCustomer(tag) {
@@ -1044,6 +1061,7 @@ module.exports = {
   fetchFullDevice,
   resolveDeviceToken,
   mapDeviceData,
+  extractPppoeUser,
   getCustomerDeviceData,
   fallbackCustomer,
   updateSSID,

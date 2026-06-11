@@ -616,7 +616,7 @@ async function getLANHosts(deviceId, serverConfig) {
 // ============================================
 
 async function fetchDevicesFromACS(server, vParams = [], paths = {}, options = {}) {
-    const { page = 1, limit = null } = options;
+    const { page = 1, limit = null, activeSessionsMap = null } = options;
     try {
         const baseUrl = normalizeUrl(server.url);
         // Gabungkan proyeksi dasar dengan path pencarian
@@ -638,6 +638,8 @@ async function fetchDevicesFromACS(server, vParams = [], paths = {}, options = {
         const hasMore = limit !== null && response.data.length > limit;
         const devicesData = hasMore ? response.data.slice(0, limit) : response.data;
 
+        const sessionsMap = activeSessionsMap || (await mikrotikSvc.getActivePppoeSessionsMap().catch(() => new Map()));
+
         const devices = devicesData.map(d => {
             // Fallback PPPoE
             let pppoeUser = extractPppoeUser(d);
@@ -653,11 +655,14 @@ async function fetchDevicesFromACS(server, vParams = [], paths = {}, options = {
                                 getNestedValue(d, 'VirtualParameters.customer_name') || 
                                 '-';
 
+            const isOnline = (d._lastInform && (Date.now() - new Date(d._lastInform).getTime() < 900000)) ||
+                             (pppoeUser && pppoeUser !== '-' && sessionsMap.has(pppoeUser.toLowerCase()));
+
             return {
                 id: d._id,
                 sn: d._deviceId?._SerialNumber || d._id,
                 last_inform: d._lastInform,
-                isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < 900000) : false,
+                isOnline: isOnline,
                 manufacturer: d._deviceId?._Manufacturer || '-',
                 model: d._deviceId?._ProductClass || '-',
                 customer_name: customerName,
@@ -685,6 +690,7 @@ router.get('/', async (req, res) => {
         const searchQuery = String(req.query.q || '').trim() || null;
         const acsServers = getACSServers();
         const legacyACS = getLegacyACS();
+        const activeSessionsMap = await mikrotikSvc.getActivePppoeSessionsMap().catch(() => new Map());
         
         const activeServers = acsServers.length > 0 ? acsServers :
             (legacyACS.acs_url ? [{ id: 'legacy', name: 'Default ACS', url: legacyACS.acs_url, username: legacyACS.acs_user, password: legacyACS.acs_pass }] : []);
@@ -725,11 +731,14 @@ router.get('/', async (req, res) => {
                                 const customerName = getNestedValue(d, 'VirtualParameters.CustomerName') ||
                                                     getNestedValue(d, 'VirtualParameters.customer_name') || '-';
                                 
+                                const isOnline = (d._lastInform && (Date.now() - new Date(d._lastInform).getTime() < 900000)) ||
+                                                 (pppoeUser && pppoeUser !== '-' && activeSessionsMap.has(pppoeUser.toLowerCase()));
+                                
                                 return {
                                     id: d._id,
                                     sn: d._deviceId?._SerialNumber || d._id,
                                     last_inform: d._lastInform,
-                                    isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < 900000) : false,
+                                    isOnline: isOnline,
                                     manufacturer: d._deviceId?._Manufacturer || '-',
                                     model: d._deviceId?._ProductClass || '-',
                                     rx_power: rxPower,
@@ -748,7 +757,7 @@ router.get('/', async (req, res) => {
                 }
             } else {
                 // Normal mode: fetch all devices
-                const results = await Promise.allSettled(targetServers.map(s => fetchDevicesFromACS(s, [], legacyACS)));
+                const results = await Promise.allSettled(targetServers.map(s => fetchDevicesFromACS(s, [], legacyACS, { activeSessionsMap })));
                 results.forEach(r => { if (r.status === 'fulfilled') allDevices = allDevices.concat(r.value.devices); });
             }
         }
@@ -813,13 +822,15 @@ router.get('/device/:deviceId', async (req, res) => {
         const deviceData = Array.isArray(response.data) && response.data.length > 0 ? response.data[0] : null;
         if (!deviceData) return res.status(404).send('Device not found');
 
+        let pppoeUser = extractPppoeUser(deviceData);
+        const activeSessionsMap = await mikrotikSvc.getActivePppoeSessionsMap().catch(() => new Map());
+
         const lastInform = deviceData._lastInform;
-        const isOnline = lastInform ? (Date.now() - new Date(lastInform).getTime() < 900000) : false;
+        const isOnline = (lastInform && (Date.now() - new Date(lastInform).getTime() < 900000)) ||
+                         (pppoeUser && pppoeUser !== '-' && activeSessionsMap.has(pppoeUser.toLowerCase()));
 
         // Fallbacks for detail page using the same logic as listing
         let rxPower = extractRxPower(deviceData);
-
-        let pppoeUser = extractPppoeUser(deviceData);
 
         const customerName = getNestedValue(deviceData, 'VirtualParameters.CustomerName') || 
                             getNestedValue(deviceData, 'VirtualParameters.customer_name') || 

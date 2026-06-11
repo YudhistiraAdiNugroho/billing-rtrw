@@ -413,6 +413,105 @@ function startCronJobs() {
     }
   });
 
+  // 8. Auto-Refresh ACS Devices & Sync IPs - Setiap 5 Menit
+  cron.schedule('*/5 * * * *', async () => {
+    const enabled = getSetting('use_builtin_acs', false) === true || getSetting('use_builtin_acs', false) === 'true';
+    if (!enabled) return;
+
+    logger.info('[CRON] Menjalankan sinkronisasi dan auto-refresh ACS Devices...');
+    try {
+      const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap();
+      const acsDevices = db.prepare('SELECT id, ip_address, connection_request_url, params, last_inform FROM acs_devices').all();
+
+      const acsServerService = require('./acsServerService');
+      let triggeredCount = 0;
+      let ipUpdatedCount = 0;
+
+      for (const dev of acsDevices) {
+        let params = {};
+        try { params = JSON.parse(dev.params || '{}'); } catch (_) {}
+
+        // Extract PPPoE user
+        let pppoeUser = '';
+        const pppoeUserKeys = [
+          'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username',
+          'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANPPPConnection.1.Username',
+          'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1.Username',
+          'Device.PPP.Interface.1.Username',
+          'VirtualParameters.pppoeUsername',
+          'VirtualParameters.pppUsername'
+        ];
+        for (const key of pppoeUserKeys) {
+          if (params[key] && params[key] !== '-') {
+            pppoeUser = params[key];
+            break;
+          }
+        }
+        
+        if (!pppoeUser) {
+          for (const key of Object.keys(params)) {
+            if (key.toLowerCase().includes('wanpppconnection') && key.toLowerCase().endsWith('.username') && params[key]) {
+              pppoeUser = params[key];
+              break;
+            }
+          }
+        }
+
+        if (!pppoeUser || pppoeUser === '-') continue;
+
+        const activeSession = activeSessionsMap.get(pppoeUser.toLowerCase());
+        if (activeSession) {
+          const currentIp = activeSession.ip;
+          
+          if (currentIp && currentIp !== dev.ip_address) {
+            logger.info(`[ACS-Sync] IP address changed for device ${dev.id} (${pppoeUser}): ${dev.ip_address} -> ${currentIp}`);
+            
+            let newCrUrl = dev.connection_request_url || '';
+            if (newCrUrl) {
+              try {
+                if (newCrUrl.startsWith('http')) {
+                  const urlObj = new URL(newCrUrl);
+                  urlObj.hostname = currentIp;
+                  newCrUrl = urlObj.toString();
+                } else {
+                  newCrUrl = newCrUrl.replace(/(https?:\/\/)([^:/]+)(.*)/, `$1${currentIp}$3`);
+                }
+              } catch (e) {
+                newCrUrl = newCrUrl.replace(/(https?:\/\/)([^:/]+)(.*)/, `$1${currentIp}$3`);
+              }
+            } else {
+              newCrUrl = `http://${currentIp}:58000/`;
+            }
+
+            const now = new Date().toISOString();
+            db.prepare('UPDATE acs_devices SET ip_address = ?, connection_request_url = ?, updated_at = ? WHERE id = ?')
+              .run(currentIp, newCrUrl, now, dev.id);
+            
+            ipUpdatedCount++;
+            
+            dev.ip_address = currentIp;
+            dev.connection_request_url = newCrUrl;
+          }
+
+          const lastInformTime = dev.last_inform ? new Date(dev.last_inform).getTime() : 0;
+          const isStale = (Date.now() - lastInformTime) > 15 * 60 * 1000;
+
+          if (isStale) {
+            logger.info(`[ACS-Sync] Device ${dev.id} (${pppoeUser}) is active on MikroTik but offline/stale in ACS. Triggering connection request to refresh data.`);
+            acsServerService.triggerConnectionRequest(dev.id).catch(err => {
+              logger.warn(`[ACS-Sync] Failed to trigger connection request for ${dev.id}: ${err.message}`);
+            });
+            triggeredCount++;
+          }
+        }
+      }
+
+      logger.info(`[CRON] Selesai sinkronisasi ACS. IP diperbarui: ${ipUpdatedCount}, Connection requests dipicu: ${triggeredCount}`);
+    } catch (e) {
+      logger.error(`[CRON] Error Auto-Refresh ACS: ${e.message}`);
+    }
+  });
+
   logger.info('[CRON] Semua tugas penjadwalan telah aktif.');
 }
 

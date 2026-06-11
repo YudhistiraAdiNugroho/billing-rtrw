@@ -459,8 +459,11 @@ router.get('/api/devices', requireTechSession, async (req, res) => {
     const result = await customerDevice.listAllDevices(999999, acs);
     if (!result.ok) return res.json({ error: result.message });
     
+    const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
     let devices = result.devices.map(d => {
-      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id);
+      const pppoeUser = customerDevice.extractPppoeUser(d);
+      const isPppoeActive = pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-' && activeSessionsMap.has(pppoeUser.toLowerCase());
+      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id, isPppoeActive);
       const pu = String(mapped.pppoeUsername || '').trim();
       const puKey = pu && pu !== 'N/A' ? pu.toLowerCase() : '';
       let customer = puKey ? byPppoe.get(puKey) : null;

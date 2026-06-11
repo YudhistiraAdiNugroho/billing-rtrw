@@ -3704,8 +3704,13 @@ router.get('/api/devices', requireAdmin, async (req, res) => {
     const { search, status, limit = 999999, offset = 0 } = req.query;
     const result = await customerDevice.listAllDevices(999999);
     if (!result.ok) return res.json({ error: result.message });
+    const mikrotikService = require('../services/mikrotikService');
+    const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
+
     let devices = result.devices.map(d => {
-      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id) || {};
+      const pppoeUser = customerDevice.extractPppoeUser(d);
+      const isPppoeActive = pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-' && activeSessionsMap.has(pppoeUser.toLowerCase());
+      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id, isPppoeActive) || {};
       const tagsArr = Array.isArray(d._tags) ? d._tags.filter(Boolean).map(String) : [];
       return {
         id: String(d._id || ''),

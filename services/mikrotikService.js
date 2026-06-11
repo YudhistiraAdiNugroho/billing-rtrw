@@ -710,6 +710,31 @@ async function getPppoeActive(routerId = null) {
   }
 }
 
+async function getActivePppoeSessionsMap() {
+  const routers = getAllRouters().filter(r => r.is_active === 1 || r.is_active === '1' || r.is_active === true);
+  const sessionsMap = new Map();
+  for (const r of routers) {
+    try {
+      const actives = await getPppoeActive(r.id);
+      for (const s of actives) {
+        if (s.name) {
+          sessionsMap.set(s.name.toLowerCase(), {
+            ip: s.address,
+            uptime: s.uptime,
+            callerId: s['caller-id'] || '',
+            routerId: r.id,
+            routerName: r.name
+          });
+        }
+      }
+    } catch (err) {
+      logger.error(`[MikroTik] Failed to get active PPPoE sessions from router ${r.name}: ${err.message}`);
+    }
+  }
+  return sessionsMap;
+}
+
+
 async function getHotspotActive(routerId = null) {
   const ck = cacheKey(routerId, 'hotspotActive');
   const cached = getCachedList(ck, 5000); // Increased cache from 3s to 5s for better performance
@@ -1640,6 +1665,7 @@ module.exports = {
   upsertHotspotUser,
   getHotspotProfiles,
   getPppoeActive,
+  getActivePppoeSessionsMap,
   getHotspotActive,
   getIpPools,
   addPppoeProfile,
