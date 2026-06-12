@@ -114,6 +114,15 @@ function findCustomerProfileByLoginId(loginId) {
   }) || null;
 }
 
+function buildCustomerDeviceTokens(loginId, profile) {
+  const tokenCandidates = [];
+  for (const value of [loginId, profile?.phone, profile?.pppoe_username, profile?.genieacs_tag]) {
+    const token = String(value ?? '').replace(/[\r\n\t]+/g, '').trim();
+    if (token && !tokenCandidates.includes(token)) tokenCandidates.push(token);
+  }
+  return tokenCandidates;
+}
+
 /** Rute portal yang boleh diakses saat status suspended (bayar publik, logout, dll.) */
 function isSuspendedPortalExemptPath(reqPath) {
   const p = String(reqPath || '');
@@ -1806,25 +1815,27 @@ router.get('/dashboard', async (req, res) => {
     delete req.session._msg;
   }
   
-  // Data dari GenieACS - use PPPoE username if available, fallback to phone
-  const pppoeUsername = req.session.pppoe_username || loginId;
-  const deviceData = await getCustomerDeviceData(pppoeUsername);
-  
-  // Data dari Billing DB (Coba cari pakai loginId atau pppoeUsername)
-  let searchToken = loginId;
-  if (deviceData && deviceData.pppoeUsername) {
-    searchToken = deviceData.pppoeUsername;
+  const profile =
+    findCustomerProfileByLoginId(loginId) ||
+    (req.session.pppoe_username ? findCustomerProfileByLoginId(req.session.pppoe_username) : null);
+
+  const uniqueCandidates = Array.from(new Set([
+    req.session.pppoe_username,
+    ...(buildCustomerDeviceTokens(loginId, profile))
+  ].map(v => String(v || '').trim()).filter(Boolean)));
+
+  let deviceData = null;
+  for (const token of uniqueCandidates) {
+    deviceData = await getCustomerDeviceData(token);
+    if (deviceData) break;
   }
   
+  const searchToken =
+    (deviceData && deviceData.pppoeUsername) ||
+    (profile && String(profile.pppoe_username || '').trim()) ||
+    loginId;
+  
   const invoices = billingSvc.getInvoicesByAny(searchToken);
-  const profile = customerSvc.getAllCustomers().find(c => {
-    const cleanLogin = loginId.replace(/\D/g, '');
-    const cleanDb = (c.phone || '').replace(/\D/g, '');
-    return cleanDb === cleanLogin || 
-           c.phone === loginId || 
-           c.genieacs_tag === loginId || 
-           c.pppoe_username === (deviceData ? deviceData.pppoeUsername : null);
-  });
   
   // Ambil tiket keluhan pelanggan
   let tickets = [];
@@ -2063,11 +2074,7 @@ router.post('/change-ssid', async (req, res) => {
   if (!loginId) return res.redirect('/customer/login');
   const { ssid } = req.body;
   const profile = findCustomerProfileByLoginId(loginId);
-  const tokenCandidates = [];
-  for (const v of [loginId, profile?.phone, profile?.pppoe_username, profile?.genieacs_tag]) {
-    const s = String(v ?? '').replace(/[\r\n\t]+/g, '').trim();
-    if (s && !tokenCandidates.includes(s)) tokenCandidates.push(s);
-  }
+  const tokenCandidates = buildCustomerDeviceTokens(loginId, profile);
   let ok = false;
   for (const token of tokenCandidates) {
     ok = await updateSSID(token, ssid);
@@ -2083,7 +2090,6 @@ router.post('/change-ssid', async (req, res) => {
     try {
       const settings = getSettingsWithCache();
       if (settings.whatsapp_enabled) {
-        const profile = findCustomerProfileByLoginId(phone);
         if (profile && profile.phone) {
           const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
           if (whatsappStatus && whatsappStatus.connection === 'open') {
@@ -2116,11 +2122,7 @@ router.post('/change-password', async (req, res) => {
   }
 
   const profile = findCustomerProfileByLoginId(loginId);
-  const tokenCandidates = [];
-  for (const v of [loginId, profile?.phone, profile?.pppoe_username, profile?.genieacs_tag]) {
-    const s = String(v ?? '').replace(/[\r\n\t]+/g, '').trim();
-    if (s && !tokenCandidates.includes(s)) tokenCandidates.push(s);
-  }
+  const tokenCandidates = buildCustomerDeviceTokens(loginId, profile);
   let ok = false;
   for (const token of tokenCandidates) {
     ok = await updatePassword(token, password);
@@ -2136,7 +2138,6 @@ router.post('/change-password', async (req, res) => {
     try {
       const settings = getSettingsWithCache();
       if (settings.whatsapp_enabled) {
-        const profile = findCustomerProfileByLoginId(phone);
         if (profile && profile.phone) {
           const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
           if (whatsappStatus && whatsappStatus.connection === 'open') {
@@ -2168,6 +2169,69 @@ router.post('/reboot', async (req, res) => {
     : { type: 'danger', text: r.message || 'Gagal reboot.' };
 
   res.redirect('/customer/dashboard');
+});
+
+router.post('/api/device/refresh', async (req, res) => {
+  const loginId = String(req.session?.phone ?? '').replace(/[\r\n\t]+/g, '').trim();
+  if (!loginId) return res.status(401).json({ ok: false, message: 'Unauthorized' });
+
+  const profile = findCustomerProfileByLoginId(loginId);
+  const tokenCandidates = Array.from(new Set([
+    req.session?.pppoe_username,
+    ...buildCustomerDeviceTokens(loginId, profile)
+  ].map(v => String(v || '').trim()).filter(Boolean)));
+
+  let result = null;
+  for (const token of tokenCandidates) {
+    result = await customerDevice.requestRefresh(token, {
+      type: 'customer',
+      id: profile?.id || null,
+      name: profile?.name || loginId,
+      ip: req.ip,
+      userAgent: req.headers['user-agent']
+    });
+    if (result && result.ok) break;
+  }
+
+  if (!result) {
+    result = { ok: false, message: 'Perangkat tidak ditemukan.' };
+  }
+
+  return res.json(result);
+});
+
+router.get('/api/device/sync-status', async (req, res) => {
+  const loginId = String(req.session?.phone ?? '').replace(/[\r\n\t]+/g, '').trim();
+  if (!loginId) return res.status(401).json({ ok: false, message: 'Unauthorized' });
+
+  const profile = findCustomerProfileByLoginId(loginId);
+  const tokenCandidates = Array.from(new Set([
+    req.session?.pppoe_username,
+    ...buildCustomerDeviceTokens(loginId, profile)
+  ].map(v => String(v || '').trim()).filter(Boolean)));
+
+  let deviceData = null;
+  for (const token of tokenCandidates) {
+    deviceData = await customerDevice.getCustomerDeviceData(token);
+    if (deviceData) break;
+  }
+
+  if (!deviceData) {
+    return res.json({ ok: false, found: false, message: 'Perangkat tidak ditemukan.' });
+  }
+
+  return res.json({
+    ok: true,
+    found: true,
+    status: deviceData.status,
+    lastInform: deviceData.lastInform,
+    lastInformAgo: deviceData.lastInformAgo,
+    lastSync: deviceData.lastSync,
+    lastSyncAgo: deviceData.lastSyncAgo,
+    syncInProgress: !!deviceData.syncInProgress,
+    syncPendingCount: Number(deviceData.syncPendingCount || 0),
+    syncStatusLabel: String(deviceData.syncStatusLabel || 'Idle')
+  });
 });
 
 router.post('/change-tag', async (req, res) => {

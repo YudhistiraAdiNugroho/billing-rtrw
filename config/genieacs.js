@@ -49,6 +49,7 @@ function builtinRowToDevice(row) {
   device._id = row.id;
   device._tags = tags;
   device._lastInform = row.last_inform;
+  device._updatedAt = row.updated_at;
   device._registered = row.created_at;
   device._acs_server_id = 'builtin';
   device._acs_server_name = 'Built-in ACS';

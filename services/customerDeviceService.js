@@ -3,6 +3,7 @@
  * Updated to support multi-server GenieACS setup.
  */
 const axios = require('axios');
+const db = require('../config/database');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const auditTrail = require('./auditTrailService');
 const { logger } = require('../config/logger');
@@ -71,16 +72,14 @@ async function findDeviceByTag(tag) {
 
 async function findDeviceByPppoe(pppoeUser) {
   try {
-    const query = {
-      $or: [
-        { "VirtualParameters.pppoeUsername": pppoeUser },
-        { "VirtualParameters.pppUsername": pppoeUser },
-        { "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username": pppoeUser },
-        { "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username._value": pppoeUser },
-        { "Device.PPP.Interface.1.Username": pppoeUser },
-        { "Device.PPP.Interface.1.Username._value": pppoeUser }
-      ]
-    };
+    const user = String(pppoeUser || '').trim();
+    if (!user) return null;
+    const keys = [
+      'VirtualParameters.pppoeUsername',
+      'VirtualParameters.pppUsername',
+      ...PPPOE_USER_KEYS
+    ];
+    const query = { $or: keys.map(k => ({ [k]: user })) };
     // Get full data by default
     return await searchDeviceAcrossServers(query, true);
   } catch (e) {
@@ -197,6 +196,10 @@ const parameterPaths = {
   userConnected: [
     'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations',
     'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations',
+    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDeviceNumberOfEntries',
+    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AssociatedDeviceNumberOfEntries',
+    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Associations',
+    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Associations',
     'InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries',
     'Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries',
     'Device.WiFi.AccessPoint.2.AssociatedDeviceNumberOfEntries',
@@ -370,6 +373,84 @@ function formatUptime(seconds) {
   return days + "d " + hrs + ":" + mins + ":" + secs;
 }
 
+function formatDeviceTimestamp(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleString('id-ID');
+}
+
+function formatRelativeTime(value) {
+  if (!value) return '-';
+  const ts = new Date(value).getTime();
+  if (!Number.isFinite(ts)) return '-';
+  const diffMs = Date.now() - ts;
+  if (diffMs < 0) return 'baru saja';
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return `${sec} detik lalu`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} menit lalu`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour} jam lalu`;
+  const day = Math.floor(hour / 24);
+  return `${day} hari lalu`;
+}
+
+function collectRefreshObjects(device) {
+  const objects = [];
+  const isTr181 = !!device?.Device;
+
+  if (isTr181) {
+    objects.push('Device.Hosts.Host');
+    objects.push('Device.WiFi.AccessPoint.1.AssociatedDevice');
+    if (device?.Device?.WiFi?.AccessPoint?.['2']) {
+      objects.push('Device.WiFi.AccessPoint.2.AssociatedDevice');
+    }
+  } else {
+    objects.push('InternetGatewayDevice.LANDevice.1.Hosts.Host');
+    objects.push('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice');
+    if (device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['5']) {
+      objects.push('InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AssociatedDevice');
+    }
+  }
+
+  return Array.from(new Set(objects));
+}
+
+function getBuiltinSyncState(deviceId) {
+  const empty = {
+    syncInProgress: false,
+    syncPendingCount: 0,
+    syncLastQueueAt: '',
+    syncLastQueueLabel: '-',
+    syncStatusLabel: 'Idle'
+  };
+  if (!deviceId) return empty;
+
+  try {
+    const pending = db.prepare(
+      `SELECT COUNT(*) AS count, MAX(created_at) AS last_queue_at
+       FROM acs_tasks
+       WHERE device_id = ?
+         AND name IN ('refreshObject', 'getParameterValues', 'getParameterNames')
+         AND status IN ('pending', 'in_progress')`
+    ).get(deviceId);
+
+    const count = Number(pending?.count || 0);
+    const lastQueueAt = String(pending?.last_queue_at || '');
+    return {
+      syncInProgress: count > 0,
+      syncPendingCount: count,
+      syncLastQueueAt: lastQueueAt,
+      syncLastQueueLabel: formatDeviceTimestamp(lastQueueAt),
+      syncStatusLabel: count > 0 ? `Sinkronisasi berjalan (${count})` : 'Idle'
+    };
+  } catch (e) {
+    logger.debug(`[CustomerDevice] Failed reading ACS sync state for ${deviceId}: ${e.message}`);
+    return empty;
+  }
+}
+
 const PPPOE_UPTIME_KEYS = [
   'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Uptime',
   'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.1.WANPPPConnection.2.Uptime',
@@ -499,14 +580,15 @@ function mapDeviceData(device, tag, isPppoeActive = false) {
   const ssid = getParameterWithPaths(device, parameterPaths.ssid);
   const ssidDisplay = ssid === 'N/A' ? '-' : ssid;
 
-  const lastInform =
-    device?._lastInform
-      ? new Date(device._lastInform).toLocaleString('id-ID')
-      : device?.Events?.Inform
-        ? new Date(device.Events.Inform).toLocaleString('id-ID')
-        : device?.InternetGatewayDevice?.DeviceInfo?.['1']?.LastInform?._value
-          ? new Date(device.InternetGatewayDevice.DeviceInfo['1'].LastInform._value).toLocaleString('id-ID')
-          : '-';
+  const lastInformRaw =
+    device?._lastInform ||
+    device?.Events?.Inform ||
+    device?.InternetGatewayDevice?.DeviceInfo?.['1']?.LastInform?._value ||
+    '';
+  const lastInform = formatDeviceTimestamp(lastInformRaw);
+  const lastSyncRaw = device?._updatedAt || lastInformRaw || '';
+  const lastSync = formatDeviceTimestamp(lastSyncRaw);
+  const syncState = getBuiltinSyncState(device?._id);
 
   let status = 'Unknown';
   if (device?._lastInform) {
@@ -546,7 +628,59 @@ function mapDeviceData(device, tag, isPppoeActive = false) {
         }
       }
     }
+
+    const assocCandidates = [
+      device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.AssociatedDevice,
+      device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['5']?.AssociatedDevice,
+      device?.Device?.WiFi?.AccessPoint?.['1']?.AssociatedDevice,
+      device?.Device?.WiFi?.AccessPoint?.['2']?.AssociatedDevice
+    ];
+    for (const assoc of assocCandidates) {
+      if (!assoc || typeof assoc !== 'object') continue;
+      for (const key in assoc) {
+        if (key === '_value' || key === '_type' || key === '_timestamp') continue;
+        if (isNaN(key)) continue;
+        const entry = assoc[key];
+        const mac =
+          (typeof entry?.MACAddress === 'object' ? entry?.MACAddress?._value : entry?.MACAddress) ||
+          (typeof entry?.AssociatedDeviceMACAddress === 'object' ? entry?.AssociatedDeviceMACAddress?._value : entry?.AssociatedDeviceMACAddress) ||
+          '-';
+        const ip =
+          (typeof entry?.IPAddress === 'object' ? entry?.IPAddress?._value : entry?.IPAddress) ||
+          (typeof entry?.IP === 'object' ? entry?.IP?._value : entry?.IP) ||
+          '-';
+        const hostname =
+          (typeof entry?.HostName === 'object' ? entry?.HostName?._value : entry?.HostName) ||
+          (typeof entry?.DeviceName === 'object' ? entry?.DeviceName?._value : entry?.DeviceName) ||
+          '-';
+        const ssidName =
+          (typeof entry?.SSID === 'object' ? entry?.SSID?._value : entry?.SSID) ||
+          (typeof entry?.WLANConfiguration === 'object' ? entry?.WLANConfiguration?._value : entry?.WLANConfiguration) ||
+          '';
+        if (!mac || mac === '-') continue;
+        connectedUsers.push({
+          hostname: hostname || '-',
+          ip: ip || '-',
+          mac: mac || '-',
+          iface: ssidName ? `WiFi ${ssidName}` : 'WiFi',
+          status: 'Online'
+        });
+      }
+    }
   } catch (e) {}
+
+  try {
+    const seen = new Set();
+    connectedUsers = connectedUsers.filter((u) => {
+      const mac = String(u?.mac || '').toUpperCase();
+      const ip = String(u?.ip || '');
+      const key = mac ? `${mac}|${ip}` : ip;
+      if (!key) return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  } catch {}
 
   let rxPower = getParameterWithPaths(device, parameterPaths.rxPower);
   if (rxPower !== 'N/A' && rxPower !== '-' && rxPower !== '') {
@@ -564,6 +698,12 @@ function mapDeviceData(device, tag, isPppoeActive = false) {
   // Fallback: If N/A or 0, count from connectedUsers list (LAN + WLAN)
   if ((totalAssociations === 'N/A' || totalAssociations === 0 || totalAssociations === '0') && connectedUsers.length > 0) {
     totalAssociations = connectedUsers.filter(u => u.status === 'Online').length;
+  }
+  if (totalAssociations === 'N/A' || totalAssociations === '-' || totalAssociations === '' || totalAssociations === null || totalAssociations === undefined) {
+    totalAssociations = 0;
+  }
+  if (typeof totalAssociations === 'string' && /^\d+$/.test(totalAssociations)) {
+    totalAssociations = parseInt(totalAssociations, 10);
   }
 
   function formatUptime(seconds) {
@@ -604,6 +744,16 @@ function mapDeviceData(device, tag, isPppoeActive = false) {
     ssid: ssidDisplay,
     status,
     lastInform,
+    lastInformRaw: lastInformRaw || '',
+    lastInformAgo: formatRelativeTime(lastInformRaw),
+    lastSync,
+    lastSyncRaw: lastSyncRaw || '',
+    lastSyncAgo: formatRelativeTime(lastSyncRaw),
+    syncInProgress: !!syncState.syncInProgress,
+    syncPendingCount: Number(syncState.syncPendingCount || 0),
+    syncLastQueueAt: syncState.syncLastQueueAt || '',
+    syncLastQueueLabel: syncState.syncLastQueueLabel || '-',
+    syncStatusLabel: syncState.syncStatusLabel || 'Idle',
     connectedUsers,
     rxPower: rxPower === 'N/A' ? '-' : rxPower,
     pppoeIP: pppoeIP === 'N/A' ? '-' : pppoeIP,
@@ -644,6 +794,13 @@ function fallbackCustomer(tag) {
     ssid: '-',
     status: 'Tidak ditemukan',
     lastInform: '-',
+    lastInformAgo: '-',
+    lastSync: '-',
+    lastSyncAgo: '-',
+    syncInProgress: false,
+    syncPendingCount: 0,
+    syncLastQueueLabel: '-',
+    syncStatusLabel: 'Idle',
     connectedUsers: [],
     rxPower: '-',
     pppoeIP: '-',
@@ -873,6 +1030,74 @@ async function updatePassword(tag, newPassword, actor = null) {
   }
 }
 
+async function requestRefresh(tag, actor = null) {
+  try {
+    const device = await resolveDeviceToken(tag);
+    if (!device || !device._id) {
+      return { ok: false, message: 'Perangkat tidak ditemukan.' };
+    }
+
+    const server = device._acs_server_id
+      ? genieacsApi.getACSServer(device._acs_server_id)
+      : genieacsApi.getACSServer('legacy');
+    if (!server) {
+      return { ok: false, message: 'Server ACS tidak ditemukan.' };
+    }
+
+    if (server.id === 'builtin') {
+      try {
+        const pending = db.prepare(
+          `SELECT COUNT(*) AS c
+           FROM acs_tasks
+           WHERE device_id = ?
+             AND name IN ('refreshObject', 'getParameterValues', 'getParameterNames')
+             AND status IN ('pending', 'in_progress')`
+        ).get(device._id);
+        if (pending && pending.c > 0) {
+          return { ok: true, message: 'Sinkronisasi ONU masih berjalan. Mohon tunggu sebentar.' };
+        }
+      } catch (e) {
+        logger.debug(`[CustomerDevice] Unable to check pending ACS tasks for ${device._id}: ${e.message}`);
+      }
+    }
+
+    const instance = genieacsApi.createAxiosInstance(server);
+    const tasksUrl = `/devices/${encodeURIComponent(device._id)}/tasks`;
+    const refreshObjects = collectRefreshObjects(device);
+
+    for (const objectName of refreshObjects) {
+      await instance.post(tasksUrl, { name: 'refreshObject', objectName }, { timeout: 15000 });
+    }
+
+    if (actor) {
+      auditTrail.logAuditTrail({
+        action: 'REFRESH_DEVICE',
+        entity_type: 'device',
+        entity_id: tag,
+        actor_type: actor.type || 'unknown',
+        actor_id: actor.id || null,
+        actor_name: actor.name || null,
+        details: {
+          device_id: device._id,
+          refreshObjects
+        },
+        ip_address: actor.ip || null,
+        user_agent: actor.userAgent || null
+      });
+    }
+
+    return {
+      ok: true,
+      message: `Sinkronisasi ONU dimulai. ${refreshObjects.length} jalur TR-069 dipoll.`,
+      deviceId: device._id,
+      acsServerId: server.id
+    };
+  } catch (e) {
+    logger.error(`[CustomerDevice] Error requesting refresh for ${tag}: ${e.message}`);
+    return { ok: false, message: 'Gagal memulai sinkronisasi ONU.' };
+  }
+}
+
 async function requestReboot(tag, actor = null) {
   const device = await resolveDeviceToken(tag);
   if (!device || !device._id) return { ok: false, message: 'Perangkat tidak ditemukan.' };
@@ -1064,6 +1289,7 @@ module.exports = {
   extractPppoeUser,
   getCustomerDeviceData,
   fallbackCustomer,
+  requestRefresh,
   updateSSID,
   updatePassword,
   requestReboot,

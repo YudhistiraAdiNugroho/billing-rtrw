@@ -50,6 +50,24 @@ try {
   logger.error(`[ACS] Failed bootstrap migration: ${err.message}`);
 }
 
+// Cleanup stale monitoring tasks from older ACS task formats so they don't keep faulting after restart.
+try {
+  db.prepare(
+    `DELETE FROM acs_tasks
+     WHERE status IN ('pending', 'in_progress')
+       AND name IN ('getParameterValues', 'refreshObject')
+       AND (
+         payload LIKE '%WLANConfiguration.5.AssociatedDevice%' OR
+         payload LIKE '%WLANConfiguration.5.TotalAssociations%' OR
+         payload LIKE '%WLANConfiguration.5.AssociatedDeviceNumberOfEntries%' OR
+         payload LIKE '%Hosts.HostNumberOfEntries%' OR
+         payload LIKE '%AssociatedDeviceNumberOfEntries%'
+       )`
+  ).run();
+} catch (err) {
+  logger.error(`[ACS] Failed stale monitoring task cleanup: ${err.message}`);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SOAP NAMESPACES & CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -68,6 +86,8 @@ const SESSION_TIMEOUT_MS = 120_000; // 120 seconds
 
 /** @type {Map<string, {deviceId:string, step:string, currentTaskId:number|null, lastActivity:number}>} */
 const sessions = new Map();
+const lastDeviceByIp = new Map();
+const recentFaultLogs = new Map();
 
 /** Periodically clean expired sessions (every 60 s) */
 setInterval(() => {
@@ -84,6 +104,13 @@ setInterval(() => {
   const cutoff = Date.now() - 5 * 60 * 1000;
   for (const [deviceId, ts] of lastTriggerTimes) {
     if (ts < cutoff) lastTriggerTimes.delete(deviceId);
+  }
+}, 5 * 60 * 1000);
+
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [key, ts] of recentFaultLogs) {
+    if (ts < cutoff) recentFaultLogs.delete(key);
   }
 }, 5 * 60 * 1000);
 
@@ -196,6 +223,18 @@ function parseParameterValues(xml) {
  */
 function parseGetParameterValuesResponse(xml) {
   return parseParameterValues(xml);
+}
+
+function parseGetParameterNamesResponse(xml) {
+  const names = [];
+  const structRe = /<(?:[\w-]+:)?ParameterInfoStruct>([\s\S]*?)<\/(?:[\w-]+:)?ParameterInfoStruct>/gi;
+  let m;
+  while ((m = structRe.exec(xml)) !== null) {
+    const block = m[1];
+    const name = xmlValue(block, 'Name');
+    if (name) names.push(name);
+  }
+  return names;
 }
 
 /**
@@ -318,23 +357,29 @@ ${names}
   );
 }
 
-/**
- * Build GetParameterNames for subtree refresh (refreshObject).
- * Actually uses GetParameterValues with the object path ending in "."
- * to get all child parameters.
- */
-function buildRefreshObject(cwmpId, objectName) {
-  // If objectName is empty or doesn't end with '.', append '.'
+function buildGetParameterNames(cwmpId, objectName, nextLevel = 0) {
   let path = objectName || '';
   if (path && !path.endsWith('.')) path += '.';
-
+  const nl = nextLevel ? '1' : '0';
   return soapEnvelopeWrap(cwmpId,
-    `<cwmp:GetParameterValues>
-      <ParameterNames soap-enc:arrayType="xsd:string[1]">
-        <string>${escapeXml(path)}</string>
-      </ParameterNames>
-    </cwmp:GetParameterValues>`
+    `<cwmp:GetParameterNames>
+      <ParameterPath>${escapeXml(path)}</ParameterPath>
+      <NextLevel>${nl}</NextLevel>
+    </cwmp:GetParameterNames>`
   );
+}
+
+/**
+ * Build GetParameterNames for subtree refresh (refreshObject).
+ */
+function buildRefreshObject(cwmpId, objectName) {
+  return buildGetParameterNames(cwmpId, objectName, 0);
+}
+
+function normalizeObjectPath(objectName) {
+  let path = String(objectName || '').trim();
+  if (path && !path.endsWith('.')) path += '.';
+  return path;
 }
 
 /**
@@ -343,9 +388,10 @@ function buildRefreshObject(cwmpId, objectName) {
  * @param {string} objectName – e.g. "InternetGatewayDevice.WANDevice.1.WANConnectionDevice."
  */
 function buildAddObject(cwmpId, objectName) {
+  const normalizedObjectName = normalizeObjectPath(objectName);
   return soapEnvelopeWrap(cwmpId,
     `<cwmp:AddObject>
-      <ObjectName>${escapeXml(objectName)}</ObjectName>
+      <ObjectName>${escapeXml(normalizedObjectName)}</ObjectName>
       <ParameterKey></ParameterKey>
     </cwmp:AddObject>`
   );
@@ -390,6 +436,30 @@ function upsertDevice(deviceId, deviceInfo, params, ipAddress) {
     || params['Device.ManagementServer.ConnectionRequestPassword']
     || '';
 
+  // Extract IP address from connection request URL if valid, to bypass NAT/masquerade
+  let ipToSave = ipAddress;
+  if (connReqUrl) {
+    try {
+      const cleanUrl = connReqUrl.trim();
+      if (cleanUrl.startsWith('http')) {
+        const urlObj = new URL(cleanUrl);
+        if (urlObj.hostname && urlObj.hostname !== '0.0.0.0' && urlObj.hostname !== '127.0.0.1' && !urlObj.hostname.startsWith('169.254.')) {
+          ipToSave = urlObj.hostname;
+        }
+      } else {
+        const match = cleanUrl.match(/(?:https?:\/\/)?([^:/]+)/);
+        if (match && match[1] && match[1] !== '0.0.0.0' && match[1] !== '127.0.0.1' && !match[1].startsWith('169.254.')) {
+          ipToSave = match[1];
+        }
+      }
+    } catch (_) {}
+  }
+  
+  // Clean IPv6 mapped IPv4 prefix
+  if (ipToSave && ipToSave.startsWith('::ffff:')) {
+    ipToSave = ipToSave.slice(7);
+  }
+
   // Check if device exists
   const existing = db.prepare('SELECT id, params, tags FROM acs_devices WHERE id = ?').get(deviceId);
 
@@ -422,7 +492,7 @@ function upsertDevice(deviceId, deviceInfo, params, ipAddress) {
       deviceInfo.OUI,
       swVer,
       hwVer,
-      ipAddress,
+      ipToSave,
       connReqUrl, connReqUrl,
       connReqUser, connReqUser,
       connReqPass, connReqPass,
@@ -447,7 +517,7 @@ function upsertDevice(deviceId, deviceInfo, params, ipAddress) {
       deviceInfo.OUI,
       swVer,
       hwVer,
-      ipAddress,
+      ipToSave,
       connReqUrl,
       connReqUser,
       connReqPass,
@@ -575,8 +645,7 @@ function queueBootstrapTasksIfNeeded(deviceId, currentParams) {
         // China Unicom (CU) vendor paths
         groups.push(['InternetGatewayDevice.WANDevice.1.X_CU_WANEPONInterfaceConfig.OpticalTransceiver.RXPower']);
         
-        // Active associations
-        groups.push(['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations', 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations', 'InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries']);
+        // Active associations/client lists will be refreshed via object enumeration to avoid 9005 faults.
       }
 
       // Add 'bootstrapped' tag to prevent infinite bootstrap loops
@@ -594,6 +663,22 @@ function queueBootstrapTasksIfNeeded(deviceId, currentParams) {
           `INSERT INTO acs_tasks (device_id, name, payload, status, created_at, updated_at)
            VALUES (?, 'getParameterValues', ?, 'pending', ?, ?)`
         ).run(deviceId, payloadStr, now, now);
+      }
+
+      const refreshObjects = isTr181
+        ? [
+            'Device.Hosts.Host',
+            'Device.WiFi.AccessPoint.1.AssociatedDevice'
+          ]
+        : [
+            'InternetGatewayDevice.LANDevice.1.Hosts.Host',
+            'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice'
+          ];
+      for (const objectName of refreshObjects) {
+        db.prepare(
+          `INSERT INTO acs_tasks (device_id, name, payload, status, created_at, updated_at)
+           VALUES (?, 'refreshObject', ?, 'pending', ?, ?)`
+        ).run(deviceId, JSON.stringify({ objectName }), now, now);
       }
 
       // Queue task to configure Periodic Inform (300 seconds)
@@ -615,6 +700,39 @@ function queueBootstrapTasksIfNeeded(deviceId, currentParams) {
   }
 }
 
+function queueRealtimeMonitoringTasks(deviceId, currentParams) {
+  try {
+    const pending = db.prepare("SELECT COUNT(*) as c FROM acs_tasks WHERE device_id = ? AND name IN ('getParameterValues','getParameterNames','refreshObject') AND status IN ('pending','in_progress')").get(deviceId);
+    if (pending && pending.c > 0) return;
+
+    const lastDone = db.prepare("SELECT updated_at FROM acs_tasks WHERE device_id = ? AND name IN ('getParameterValues','getParameterNames','refreshObject') AND status = 'completed' ORDER BY updated_at DESC LIMIT 1").get(deviceId);
+    if (lastDone && lastDone.updated_at) {
+      const diffMs = Date.now() - new Date(lastDone.updated_at).getTime();
+      if (diffMs < 60_000) return;
+    }
+
+    const isTr181 = Object.keys(currentParams || {}).some(k => String(k).startsWith('Device.'));
+    const now = nowLocal();
+    const refreshObjects = isTr181
+      ? [
+          'Device.Hosts.Host',
+          'Device.WiFi.AccessPoint.1.AssociatedDevice'
+        ]
+      : [
+          'InternetGatewayDevice.LANDevice.1.Hosts.Host',
+          'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice'
+        ];
+    for (const objectName of refreshObjects) {
+      db.prepare(
+        `INSERT INTO acs_tasks (device_id, name, payload, status, created_at, updated_at)
+         VALUES (?, 'refreshObject', ?, 'pending', ?, ?)`
+      ).run(deviceId, JSON.stringify({ objectName }), now, now);
+    }
+  } catch (err) {
+    logger.error(`[ACS] Error in queueRealtimeMonitoringTasks for ${deviceId}: ${err.message}`);
+  }
+}
+
 /**
  * Get the next pending task for a device.
  */
@@ -624,6 +742,68 @@ function getNextPendingTask(deviceId) {
      WHERE device_id = ? AND status = 'pending'
      ORDER BY id ASC LIMIT 1`
   ).get(deviceId) || null;
+}
+
+function getTaskById(taskId) {
+  return db.prepare(
+    `SELECT * FROM acs_tasks WHERE id = ? LIMIT 1`
+  ).get(taskId) || null;
+}
+
+function applyTemplateVariables(value, templateVars) {
+  const vars = templateVars && typeof templateVars === 'object' ? templateVars : {};
+  if (Array.isArray(value)) {
+    return value.map(item => applyTemplateVariables(item, vars));
+  }
+  if (value && typeof value === 'object') {
+    const next = {};
+    for (const [k, v] of Object.entries(value)) {
+      next[k] = applyTemplateVariables(v, vars);
+    }
+    return next;
+  }
+  if (typeof value !== 'string' || !value.includes('{{')) return value;
+  return value.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key) => {
+    if (!(key in vars)) return match;
+    const resolved = vars[key];
+    return resolved == null ? '' : String(resolved);
+  });
+}
+
+function enqueueFollowupTasks(deviceId, followupTasks, templateVars) {
+  if (!deviceId || !Array.isArray(followupTasks) || followupTasks.length === 0) return 0;
+  const now = nowLocal();
+  const insertTask = db.prepare(
+    `INSERT INTO acs_tasks (device_id, name, payload, status, created_at, updated_at)
+     VALUES (?, ?, ?, 'pending', ?, ?)`
+  );
+  let created = 0;
+
+  for (const spec of followupTasks) {
+    if (!spec || typeof spec !== 'object') continue;
+    const taskName = String(spec.name || '').trim();
+    if (!taskName) continue;
+
+    const rawPayload = (spec.payload && typeof spec.payload === 'object' && !Array.isArray(spec.payload))
+      ? spec.payload
+      : Object.fromEntries(Object.entries(spec).filter(([key]) => key !== 'name'));
+    const hydratedPayload = applyTemplateVariables(rawPayload, templateVars);
+
+    if (spec.instanceVariable && !hydratedPayload.instanceVariable) {
+      hydratedPayload.instanceVariable = spec.instanceVariable;
+    }
+    if (templateVars && typeof templateVars === 'object' && Object.keys(templateVars).length > 0) {
+      hydratedPayload.templateVars = {
+        ...(hydratedPayload.templateVars && typeof hydratedPayload.templateVars === 'object' ? hydratedPayload.templateVars : {}),
+        ...templateVars
+      };
+    }
+
+    insertTask.run(deviceId, taskName, JSON.stringify(hydratedPayload), now, now);
+    created += 1;
+  }
+
+  return created;
 }
 
 /**
@@ -644,6 +824,23 @@ function failTask(taskId, error) {
   db.prepare(
     `UPDATE acs_tasks SET status = 'failed', result = ?, retry_count = retry_count + 1, updated_at = ? WHERE id = ?`
   ).run(error ? JSON.stringify(error) : null, now, taskId);
+}
+
+function shouldThrottleFaultLog(deviceId, fault, taskName, payload) {
+  const normalizedPayload = String(payload || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+  const key = [
+    String(deviceId || '-'),
+    String(fault?.faultCode || '-'),
+    String(taskName || '-'),
+    normalizedPayload
+  ].join('|');
+  const now = Date.now();
+  const lastSeen = recentFaultLogs.get(key) || 0;
+  recentFaultLogs.set(key, now);
+  return !!lastSeen && (now - lastSeen) < 10 * 60 * 1000;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -675,6 +872,13 @@ function buildTaskSoap(cwmpId, task) {
       const names = payload.parameterNames || payload.names || [];
       if (!Array.isArray(names) || names.length === 0) return null;
       return buildGetParameterValues(cwmpId, names);
+    }
+
+    case 'getParameterNames': {
+      const objName = payload.objectName || payload.object || payload.parameterPath || '';
+      const nextLevel = payload.nextLevel ? 1 : 0;
+      if (!objName) return null;
+      return buildGetParameterNames(cwmpId, objName, nextLevel);
     }
 
     case 'refreshObject': {
@@ -744,7 +948,7 @@ const handleCwmpRequest = async (req, res) => {
 
     // ── EMPTY POST (step 2 or 3) ───────────────────────────────────────────
     if (!body || body.trim().length === 0) {
-      return handleEmptyPost(session, sid, res);
+      return handleEmptyPost(session, sid, res, cpeIp);
     }
 
     // ── INFORM ─────────────────────────────────────────────────────────────
@@ -766,6 +970,9 @@ const handleCwmpRequest = async (req, res) => {
     if (hasCwmpMethod(body, 'GetParameterValuesResponse')) {
       return handleGetParameterValuesResponse(body, session, sid, res);
     }
+    if (hasCwmpMethod(body, 'GetParameterNamesResponse')) {
+      return handleGetParameterNamesResponse(body, session, sid, res);
+    }
     if (hasCwmpMethod(body, 'AddObjectResponse')) {
       return handleAddObjectResponse(body, session, sid, res);
     }
@@ -779,7 +986,7 @@ const handleCwmpRequest = async (req, res) => {
     // ── UNKNOWN / UNRECOGNIZED ─────────────────────────────────────────────
     // Treat as empty post (next task or 204)
     logger.debug(`[ACS] Unrecognized SOAP body from session ${sid.substring(0, 8)}, treating as empty`);
-    return handleEmptyPost(session, sid, res);
+    return handleEmptyPost(session, sid, res, cpeIp);
 
   } catch (err) {
     logger.error(`[ACS] Error handling CWMP request: ${err.message}`);
@@ -819,6 +1026,17 @@ function handleInform(body, session, sid, cpeIp, res) {
 
   // Queue bootstrap parameter fetch if needed
   queueBootstrapTasksIfNeeded(deviceId, mergedParams);
+  queueRealtimeMonitoringTasks(deviceId, mergedParams);
+
+  if (cpeIp) {
+    lastDeviceByIp.set(String(cpeIp), { deviceId, ts: Date.now() });
+    if (lastDeviceByIp.size > 5000) {
+      const now = Date.now();
+      for (const [k, v] of lastDeviceByIp.entries()) {
+        if (!v || (now - (v.ts || 0)) > 10 * 60 * 1000) lastDeviceByIp.delete(k);
+      }
+    }
+  }
 
   // Update session
   session.deviceId = deviceId;
@@ -833,10 +1051,18 @@ function handleInform(body, session, sid, cpeIp, res) {
 //  HANDLER: Empty POST (check task queue)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function handleEmptyPost(session, sid, res) {
+function handleEmptyPost(session, sid, res, cpeIp = '') {
   if (!session.deviceId) {
-    // No active session device – nothing to do
-    return res.status(204).set('Content-Type', 'text/xml; charset=utf-8').send('');
+    const ipKey = String(cpeIp || '').trim();
+    if (ipKey) {
+      const rec = lastDeviceByIp.get(ipKey);
+      if (rec && rec.deviceId && (Date.now() - (rec.ts || 0)) < SESSION_TIMEOUT_MS) {
+        session.deviceId = rec.deviceId;
+        session.step = 'inferred';
+        logger.info(`[ACS] Inferred session deviceId=${rec.deviceId} from IP=${ipKey}`);
+      }
+    }
+    if (!session.deviceId) return res.status(204).set('Content-Type', 'text/xml; charset=utf-8').send('');
   }
 
   // Look for a pending task for this device
@@ -855,7 +1081,7 @@ function handleEmptyPost(session, sid, res) {
     // Invalid task – mark as failed and try next
     logger.warn(`[ACS] Could not build SOAP for task ${task.id} (${task.name}), marking failed`);
     failTask(task.id, { error: 'Could not build SOAP request for task' });
-    return handleEmptyPost(session, sid, res);
+    return handleEmptyPost(session, sid, res, cpeIp);
   }
 
   // Update session – we are now waiting for the response to this task
@@ -948,13 +1174,99 @@ function handleGetParameterValuesResponse(body, session, sid, res) {
   return handleEmptyPost(session, sid, res);
 }
 
+function handleGetParameterNamesResponse(body, session, sid, res) {
+  const taskId = session.currentTaskId;
+  const names = parseGetParameterNamesResponse(body);
+
+  if (taskId) {
+    logger.info(`[ACS] Task ${taskId} (getParameterNames/refreshObject) completed for device ${session.deviceId} – ${names.length} names`);
+    completeTask(taskId, { names });
+  }
+
+  if (taskId && session.deviceId && Array.isArray(names) && names.length > 0) {
+    try {
+      const taskRow = db.prepare('SELECT name, payload FROM acs_tasks WHERE id = ?').get(taskId);
+      let objectName = '';
+      if (taskRow && taskRow.payload) {
+        try {
+          const pl = JSON.parse(taskRow.payload || '{}');
+          objectName = String(pl.objectName || pl.object || '');
+        } catch {}
+      }
+
+      const wantedHostSuffixes = [
+        '.HostName',
+        '.IPAddress',
+        '.MACAddress',
+        '.InterfaceType',
+        '.Active',
+        '.LeaseTimeRemaining',
+        '.RemainingLeaseTime'
+      ];
+      const wantedAssocSuffixes = [
+        '.AssociatedDeviceMACAddress',
+        '.MACAddress',
+        '.IPAddress',
+        '.HostName',
+        '.DeviceName'
+      ];
+      let filtered = names;
+      const obj = String(objectName || '');
+      if (obj.includes('Hosts.Host')) {
+        filtered = names.filter(n => wantedHostSuffixes.some(s => String(n).endsWith(s)));
+      } else if (obj.includes('AssociatedDevice')) {
+        filtered = names.filter(n => wantedAssocSuffixes.some(s => String(n).endsWith(s)));
+      }
+
+      const max = 200;
+      if (filtered.length > max) filtered = filtered.slice(0, max);
+
+      if (filtered.length > 0) {
+        const now = nowLocal();
+        const payloadStr = JSON.stringify({ parameterNames: filtered });
+        db.prepare(
+          `INSERT INTO acs_tasks (device_id, name, payload, status, created_at, updated_at)
+           VALUES (?, 'getParameterValues', ?, 'pending', ?, ?)`
+        ).run(session.deviceId, payloadStr, now, now);
+      }
+    } catch (err) {
+      logger.error(`[ACS] Failed to enqueue getParameterValues after getParameterNames for ${session.deviceId}: ${err.message}`);
+    }
+  }
+
+  session.step = 'response_received';
+  session.currentTaskId = null;
+  session.lastActivity = Date.now();
+
+  return handleEmptyPost(session, sid, res);
+}
+
 function handleAddObjectResponse(body, session, sid, res) {
   const taskId = session.currentTaskId;
   const result = parseAddObjectResponse(body);
+  const taskRow = taskId ? getTaskById(taskId) : null;
+  let taskPayload = {};
+  try { taskPayload = JSON.parse(taskRow?.payload || '{}'); } catch (_) { taskPayload = {}; }
 
   if (taskId) {
     logger.info(`[ACS] Task ${taskId} (addObject) completed – instance=${result.instanceNumber}`);
     completeTask(taskId, result);
+  }
+
+  if (session.deviceId && Array.isArray(taskPayload.followup) && taskPayload.followup.length > 0) {
+    const inheritedVars = taskPayload.templateVars && typeof taskPayload.templateVars === 'object'
+      ? taskPayload.templateVars
+      : {};
+    const instanceVarName = String(taskPayload.instanceVariable || taskPayload.instanceVar || 'instanceNumber').trim();
+    const nextVars = { ...inheritedVars };
+    if (instanceVarName && result.instanceNumber != null && result.instanceNumber !== '') {
+      nextVars[instanceVarName] = String(result.instanceNumber);
+    }
+
+    const created = enqueueFollowupTasks(session.deviceId, taskPayload.followup, nextVars);
+    if (created > 0) {
+      logger.info(`[ACS] Enqueued ${created} follow-up task(s) after addObject for ${session.deviceId}`);
+    }
   }
 
   session.step = 'response_received';
@@ -971,7 +1283,26 @@ function handleAddObjectResponse(body, session, sid, res) {
 function handleFault(fault, session, sid, res) {
   const taskId = session.currentTaskId;
 
-  logger.warn(`[ACS] SOAP Fault from device ${session.deviceId}: code=${fault.faultCode} string=${fault.faultString}`);
+  try {
+    let taskInfo = '';
+    let taskName = '';
+    let taskPayload = '';
+    if (taskId) {
+      const row = db.prepare('SELECT name, payload FROM acs_tasks WHERE id = ?').get(taskId);
+      if (row) {
+        taskName = String(row.name || '');
+        taskPayload = String(row.payload || '');
+        taskInfo = ` task=${taskName} payload=${taskPayload.substring(0, 500)}`;
+      }
+    }
+    const det = fault.detail ? String(fault.detail).replace(/\s+/g, ' ').trim().slice(0, 500) : '';
+    const repeated = shouldThrottleFaultLog(session.deviceId, fault, taskName, taskPayload);
+    const message = `[ACS] SOAP Fault from device ${session.deviceId}: code=${fault.faultCode} string=${fault.faultString}${det ? ' detail=' + det : ''}${taskInfo}`;
+    if (repeated) logger.debug(`${message} (repeat suppressed)`);
+    else logger.warn(message);
+  } catch (e) {
+    logger.warn(`[ACS] SOAP Fault from device ${session.deviceId}: code=${fault.faultCode} string=${fault.faultString}`);
+  }
 
   if (taskId) {
     failTask(taskId, fault);

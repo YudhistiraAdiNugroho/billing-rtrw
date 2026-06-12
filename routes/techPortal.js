@@ -13,7 +13,42 @@ const path = require('path');
 const fs = require('fs');
 const { uploadAttendance, removeAttendanceFile } = require('../middleware/attendanceUpload');
 const genieacsApi = require('../config/genieacs');
-const axios = require('axios');
+const rawAxios = require('axios');
+
+const axios = {
+  get: async (url, config = {}) => {
+    if (genieacsApi.isBuiltinAcsEnabled() && (url.startsWith('local/') || url === 'local')) {
+      const reqPath = url.replace(/^local/, '');
+      const instance = genieacsApi.createAxiosInstance({ id: 'builtin', url: 'local' });
+      return instance.get(reqPath, config);
+    }
+    return rawAxios.get(url, config);
+  },
+  post: async (url, data, config = {}) => {
+    if (genieacsApi.isBuiltinAcsEnabled() && url.startsWith('local/')) {
+      const reqPath = url.replace(/^local/, '');
+      const instance = genieacsApi.createAxiosInstance({ id: 'builtin', url: 'local' });
+      return instance.post(reqPath, data, config);
+    }
+    return rawAxios.post(url, data, config);
+  },
+  delete: async (url, config = {}) => {
+    if (genieacsApi.isBuiltinAcsEnabled() && url.startsWith('local/')) {
+      const reqPath = url.replace(/^local/, '');
+      const instance = genieacsApi.createAxiosInstance({ id: 'builtin', url: 'local' });
+      return instance.delete(reqPath, config);
+    }
+    return rawAxios.delete(url, config);
+  },
+  put: async (url, data, config = {}) => {
+    if (genieacsApi.isBuiltinAcsEnabled() && url.startsWith('local/')) {
+      const reqPath = url.replace(/^local/, '');
+      const instance = genieacsApi.createAxiosInstance({ id: 'builtin', url: 'local' });
+      return instance.put(reqPath, data, config);
+    }
+    return rawAxios.put(url, data, config);
+  }
+};
 
 // Configure multer for photo uploads
 const storage = multer.diskStorage({
@@ -723,6 +758,19 @@ router.get('/api/attendance/history', requireTechSession, (req, res) => {
 
 // Helpers for GenieACS Server DB access inside Technician Portal
 function getACSServers(id = null) {
+    if (genieacsApi.isBuiltinAcsEnabled()) {
+        const builtinServer = {
+            id: 'builtin',
+            name: 'Built-in ACS',
+            url: 'local',
+            status: 'active'
+        };
+        if (id && id !== 'all') {
+            return id === 'builtin' ? [builtinServer] : [];
+        }
+        return [builtinServer];
+    }
+
     const legacyACS = getLegacyACS();
     const legacyServer = legacyACS.acs_url ? { 
         id: 'legacy', 
@@ -775,6 +823,172 @@ function getAxiosConfig(server) {
 function normalizeUrl(url) {
     if (!url) return '';
     return url.endsWith('/') ? url.slice(0, -1) : url;
+}
+
+function toBool(value) {
+    return value === true || value === 'true' || value === 'on' || value === 1 || value === '1';
+}
+
+function normalizeSelectionArray(value) {
+    const items = Array.isArray(value) ? value : (value ? [value] : []);
+    return Array.from(new Set(
+        items.map(v => String(v || '').trim()).filter(Boolean)
+    ));
+}
+
+function buildSingleParamTasks(parameterValues) {
+    return (parameterValues || [])
+        .filter(pv => Array.isArray(pv) && pv.length >= 2 && pv[0])
+        .map(pv => ({
+            name: 'setParameterValues',
+            payload: { parameterValues: [pv] }
+        }));
+}
+
+function buildBuiltinAddWanWorkflow({
+    mode,
+    parsedVlan,
+    pppoeUser,
+    pppoePass,
+    dhcp,
+    lanPorts,
+    wlanSsids,
+    configureWifi,
+    wifiSsid24,
+    wifiPass24,
+    wifiSsid5,
+    wifiPass5,
+    manufacturer,
+    wlanConfig
+}) {
+    const isPppoe = mode === 'pppoe';
+    const connectionType = isPppoe ? 'WANPPPConnection' : 'WANIPConnection';
+    const lanPortsArray = normalizeSelectionArray(lanPorts);
+    const wlanSsidsArray = normalizeSelectionArray(wlanSsids);
+    const baseConnPath = `InternetGatewayDevice.WANDevice.1.WANConnectionDevice.{{wanDeviceInstance}}.${connectionType}.{{wanConnectionInstance}}`;
+    const followup = [];
+
+    const baseParamValues = [
+        [`${baseConnPath}.Enable`, true, 'xsd:boolean'],
+        [`${baseConnPath}.ConnectionType`, isPppoe ? 'IP_Routed' : 'Bridged', 'xsd:string']
+    ];
+
+    if (isPppoe) {
+        baseParamValues.push(
+            [`${baseConnPath}.NATEnabled`, true, 'xsd:boolean'],
+            [`${baseConnPath}.Username`, pppoeUser, 'xsd:string'],
+            [`${baseConnPath}.Password`, pppoePass, 'xsd:string']
+        );
+    }
+
+    followup.push(...buildSingleParamTasks(baseParamValues));
+
+    const vendorParamValues = [];
+    if (manufacturer.includes('huawei')) {
+        vendorParamValues.push(
+            [`${baseConnPath}.X_HW_VLAN`, parsedVlan, 'xsd:unsignedInt'],
+            [`${baseConnPath}.X_HW_VLANID`, parsedVlan, 'xsd:unsignedInt'],
+            [`${baseConnPath}.X_HW_VLANMark`, true, 'xsd:boolean'],
+            [`${baseConnPath}.X_HW_WANMode`, isPppoe ? 'WAN_PPPOE' : 'WAN_BRIDGE', 'xsd:string']
+        );
+        if (lanPortsArray.length > 0) {
+            vendorParamValues.push([`${baseConnPath}.X_HW_LANBind`, lanPortsArray.join(','), 'xsd:string']);
+        }
+        if (wlanSsidsArray.length > 0) {
+            vendorParamValues.push([`${baseConnPath}.X_HW_SSIDBind`, wlanSsidsArray.join(','), 'xsd:string']);
+        }
+    } else if (manufacturer.includes('zte')) {
+        vendorParamValues.push(
+            [`${baseConnPath}.VLANIDMark`, parsedVlan, 'xsd:unsignedInt'],
+            [`${baseConnPath}.VLANID`, parsedVlan, 'xsd:unsignedInt'],
+            [`${baseConnPath}.X_ZTE_VLAN`, parsedVlan, 'xsd:unsignedInt'],
+            [`${baseConnPath}.VLANMode`, 1, 'xsd:unsignedInt']
+        );
+        if (lanPortsArray.length > 0) {
+            vendorParamValues.push([`${baseConnPath}.X_ZTE_LANBind`, lanPortsArray.join(','), 'xsd:string']);
+        }
+        if (wlanSsidsArray.length > 0) {
+            vendorParamValues.push([`${baseConnPath}.X_ZTE_SSIDBind`, wlanSsidsArray.join(','), 'xsd:string']);
+        }
+    } else {
+        vendorParamValues.push(
+            [`${baseConnPath}.VLANIDMark`, parsedVlan, 'xsd:unsignedInt'],
+            [`${baseConnPath}.VLANID`, parsedVlan, 'xsd:unsignedInt'],
+            [`${baseConnPath}.VLANMode`, 1, 'xsd:unsignedInt']
+        );
+    }
+
+    followup.push(...buildSingleParamTasks(vendorParamValues));
+
+    followup.push({
+        name: 'setParameterValues',
+        payload: {
+            parameterValues: [[
+                'InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.DHCPServerEnable',
+                toBool(dhcp),
+                'xsd:boolean'
+            ]]
+        }
+    });
+
+    const verifyNames = [
+        `${baseConnPath}.Enable`,
+        `${baseConnPath}.ConnectionType`,
+        `${baseConnPath}.ExternalIPAddress`,
+        `${baseConnPath}.Uptime`
+    ];
+    if (isPppoe) {
+        verifyNames.push(`${baseConnPath}.Username`, `${baseConnPath}.NATEnabled`);
+    }
+
+    const wifiParamValues = [];
+    const wlanObj = wlanConfig || {};
+    if (toBool(configureWifi)) {
+        if (wlanObj['1'] && wifiSsid24) {
+            wifiParamValues.push([`InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID`, wifiSsid24, 'xsd:string']);
+            verifyNames.push('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID');
+            if (wifiPass24) {
+                wifiParamValues.push(
+                    ['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.PreSharedKey', wifiPass24, 'xsd:string'],
+                    ['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase', wifiPass24, 'xsd:string']
+                );
+            }
+        }
+
+        const fiveGIndex = wlanObj['5'] ? '5' : (wlanObj['2'] ? '2' : null);
+        if (fiveGIndex && wifiSsid5) {
+            wifiParamValues.push([`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.SSID`, wifiSsid5, 'xsd:string']);
+            verifyNames.push(`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.SSID`);
+            if (wifiPass5) {
+                wifiParamValues.push(
+                    [`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.PreSharedKey.1.PreSharedKey`, wifiPass5, 'xsd:string'],
+                    [`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.KeyPassphrase`, wifiPass5, 'xsd:string']
+                );
+            }
+        }
+    }
+
+    followup.push(...buildSingleParamTasks(wifiParamValues));
+    followup.push({
+        name: 'getParameterValues',
+        payload: {
+            parameterNames: Array.from(new Set(verifyNames))
+        }
+    });
+
+    return {
+        name: 'addObject',
+        objectName: 'InternetGatewayDevice.WANDevice.1.WANConnectionDevice',
+        instanceVariable: 'wanDeviceInstance',
+        followup: [{
+            name: 'addObject',
+            payload: {
+                objectName: `InternetGatewayDevice.WANDevice.1.WANConnectionDevice.{{wanDeviceInstance}}.${connectionType}`,
+                instanceVariable: 'wanConnectionInstance',
+                followup
+            }
+        }]
+    };
 }
 
 function getNestedValue(obj, path) {
@@ -859,12 +1073,19 @@ router.post('/api/add-wan/:deviceId', requireTechSession, async (req, res) => {
         } = req.body;
         
         // 1. Validasi awal
-        const parsedVlan = parseInt(vlanId);
+        const normalizedMode = String(mode || '').trim().toLowerCase();
+        if (!['pppoe', 'bridge'].includes(normalizedMode)) {
+            return res.json({ success: false, message: 'Mode WAN tidak valid' });
+        }
+
+        const parsedVlan = parseInt(vlanId, 10);
         if (isNaN(parsedVlan) || parsedVlan < 1 || parsedVlan > 4094) {
             return res.json({ success: false, message: 'VLAN ID tidak valid (harus 1-4094)' });
         }
         
-        if (mode === 'pppoe' && (!pppoeUser || !pppoePass)) {
+        const trimmedPppoeUser = String(pppoeUser || '').trim();
+        const trimmedPppoePass = String(pppoePass || '').trim();
+        if (normalizedMode === 'pppoe' && (!trimmedPppoeUser || !trimmedPppoePass)) {
             return res.json({ success: false, message: 'Username dan password PPPoE wajib diisi untuk mode PPPoE' });
         }
         
@@ -876,11 +1097,11 @@ router.post('/api/add-wan/:deviceId', requireTechSession, async (req, res) => {
         const config = getAxiosConfig(server);
         
         // 2. Jika Auto-create MikroTik diaktifkan
-        if (mode === 'pppoe' && (autoCreateMikrotik === true || autoCreateMikrotik === 'true')) {
+        if (normalizedMode === 'pppoe' && toBool(autoCreateMikrotik)) {
             try {
                 await mikrotikService.createPppoeSecret({
-                    username: pppoeUser,
-                    password: pppoePass,
+                    username: trimmedPppoeUser,
+                    password: trimmedPppoePass,
                     profile: pppoeProfile || 'default'
                 });
             } catch (mErr) {
@@ -902,59 +1123,75 @@ router.post('/api/add-wan/:deviceId', requireTechSession, async (req, res) => {
         if (!deviceData) return res.json({ success: false, message: 'CPE/Device tidak ditemukan di GenieACS' });
         
         const manufacturer = (deviceData._deviceId?._Manufacturer || deviceData._deviceId?.Manufacturer || '').toLowerCase();
-        
+        const wlanConfig = deviceData.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration || {};
+        const isBuiltinServer = String(server.id || '').trim() === 'builtin' || baseUrl === 'local';
+
+        if (isBuiltinServer) {
+            const task = buildBuiltinAddWanWorkflow({
+                mode: normalizedMode,
+                parsedVlan,
+                pppoeUser: trimmedPppoeUser,
+                pppoePass: trimmedPppoePass,
+                dhcp,
+                lanPorts,
+                wlanSsids,
+                configureWifi,
+                wifiSsid24,
+                wifiPass24,
+                wifiSsid5,
+                wifiPass5,
+                manufacturer,
+                wlanConfig
+            });
+
+            await axios.post(`${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`, task, config);
+            return res.json({ success: true, message: 'Workflow Add WAN built-in berhasil dikirim. Task akan mengikuti instance asli dari ONU.' });
+        }
+
         const wanConnObj = deviceData.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice || {};
         const existingKeys = Object.keys(wanConnObj).map(Number).filter(n => !isNaN(n));
-        const nextInstance = existingKeys.length > 0 ? Math.max(...existingKeys) + 1 : 2; // Default start from 2 to protect management interface at 1
-        
-        // 4. Buat Tugas GenieACS untuk WAN
-        // Task 1: Add WANConnectionDevice
+        const nextInstance = existingKeys.length > 0 ? Math.max(...existingKeys) + 1 : 2;
+
         await axios.post(`${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`, {
             name: 'addObject',
-            objectName: 'InternetGatewayDevice.WANDevice.1.WANConnectionDevice'
+            objectName: 'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.'
         }, config);
-        
-        // Task 2: Add specific connection (WANPPPConnection or WANIPConnection)
-        const connectionType = mode === 'pppoe' ? 'WANPPPConnection' : 'WANIPConnection';
+
+        const connectionType = normalizedMode === 'pppoe' ? 'WANPPPConnection' : 'WANIPConnection';
         await axios.post(`${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`, {
             name: 'addObject',
-            objectName: `InternetGatewayDevice.WANDevice.1.WANConnectionDevice.${nextInstance}.${connectionType}`
+            objectName: `InternetGatewayDevice.WANDevice.1.WANConnectionDevice.${nextInstance}.${connectionType}.`
         }, config);
-        
-        // Task 3: Set Parameters
+
         const paramValues = [];
         const baseConnPath = `InternetGatewayDevice.WANDevice.1.WANConnectionDevice.${nextInstance}.${connectionType}.1`;
-        
         paramValues.push([`${baseConnPath}.Enable`, true, 'xsd:boolean']);
-        
-        const isPppoe = mode === 'pppoe';
-        if (isPppoe) {
-            paramValues.push([`${baseConnPath}.ConnectionType`, 'IP_Routed', 'xsd:string']);
-            paramValues.push([`${baseConnPath}.NATEnabled`, true, 'xsd:boolean']);
-            paramValues.push([`${baseConnPath}.Username`, pppoeUser, 'xsd:string']);
-            paramValues.push([`${baseConnPath}.Password`, pppoePass, 'xsd:string']);
+
+        if (normalizedMode === 'pppoe') {
+            paramValues.push(
+                [`${baseConnPath}.ConnectionType`, 'IP_Routed', 'xsd:string'],
+                [`${baseConnPath}.NATEnabled`, true, 'xsd:boolean'],
+                [`${baseConnPath}.Username`, trimmedPppoeUser, 'xsd:string'],
+                [`${baseConnPath}.Password`, trimmedPppoePass, 'xsd:string']
+            );
         } else {
             paramValues.push([`${baseConnPath}.ConnectionType`, 'Bridged', 'xsd:string']);
         }
-        
-        // Queue LAN DHCP Server toggle as a separate task using standard TR-098 path so that if the ONU doesn't support it, WAN provisioning doesn't fail
-        const dhcpParamValues = [];
-        const isDhcpEnabled = dhcp === true || dhcp === 'true' || dhcp === 'on';
-        dhcpParamValues.push([`InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.DHCPServerEnable`, isDhcpEnabled, 'xsd:boolean']);
+
         axios.post(`${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`, {
             name: 'setParameterValues',
-            parameterValues: dhcpParamValues
+            parameterValues: [[`InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.DHCPServerEnable`, toBool(dhcp), 'xsd:boolean']]
         }, config).catch(() => {});
-        
-        // VLAN & Port Binding Parameter Mapping berdasarkan vendor
-        const lanPortsArray = Array.isArray(lanPorts) ? lanPorts : (lanPorts ? [lanPorts] : []);
-        const wlanSsidsArray = Array.isArray(wlanSsids) ? wlanSsids : (wlanSsids ? [wlanSsids] : []);
-        
+
+        const lanPortsArray = normalizeSelectionArray(lanPorts);
+        const wlanSsidsArray = normalizeSelectionArray(wlanSsids);
         if (manufacturer.includes('huawei')) {
-            paramValues.push([`${baseConnPath}.X_HW_VLAN`, parsedVlan, 'xsd:unsignedInt']);
-            paramValues.push([`${baseConnPath}.X_HW_VLANID`, parsedVlan, 'xsd:unsignedInt']);
-            paramValues.push([`${baseConnPath}.X_HW_VLANMark`, true, 'xsd:boolean']);
-            paramValues.push([`${baseConnPath}.X_HW_WANMode`, isPppoe ? 'WAN_PPPOE' : 'WAN_BRIDGE', 'xsd:string']);
+            paramValues.push(
+                [`${baseConnPath}.X_HW_VLAN`, parsedVlan, 'xsd:unsignedInt'],
+                [`${baseConnPath}.X_HW_VLANID`, parsedVlan, 'xsd:unsignedInt'],
+                [`${baseConnPath}.X_HW_VLANMark`, true, 'xsd:boolean'],
+                [`${baseConnPath}.X_HW_WANMode`, normalizedMode === 'pppoe' ? 'WAN_PPPOE' : 'WAN_BRIDGE', 'xsd:string']
+            );
             if (lanPortsArray.length > 0) {
                 paramValues.push([`${baseConnPath}.X_HW_LANBind`, lanPortsArray.join(','), 'xsd:string']);
             }
@@ -962,10 +1199,12 @@ router.post('/api/add-wan/:deviceId', requireTechSession, async (req, res) => {
                 paramValues.push([`${baseConnPath}.X_HW_SSIDBind`, wlanSsidsArray.join(','), 'xsd:string']);
             }
         } else if (manufacturer.includes('zte')) {
-            paramValues.push([`${baseConnPath}.VLANIDMark`, parsedVlan, 'xsd:unsignedInt']);
-            paramValues.push([`${baseConnPath}.VLANID`, parsedVlan, 'xsd:unsignedInt']); // Standard VLAN ID path
-            paramValues.push([`${baseConnPath}.X_ZTE_VLAN`, parsedVlan, 'xsd:unsignedInt']);
-            paramValues.push([`${baseConnPath}.VLANMode`, 1, 'xsd:unsignedInt']); // 1 = Tag
+            paramValues.push(
+                [`${baseConnPath}.VLANIDMark`, parsedVlan, 'xsd:unsignedInt'],
+                [`${baseConnPath}.VLANID`, parsedVlan, 'xsd:unsignedInt'],
+                [`${baseConnPath}.X_ZTE_VLAN`, parsedVlan, 'xsd:unsignedInt'],
+                [`${baseConnPath}.VLANMode`, 1, 'xsd:unsignedInt']
+            );
             if (lanPortsArray.length > 0) {
                 paramValues.push([`${baseConnPath}.X_ZTE_LANBind`, lanPortsArray.join(','), 'xsd:string']);
             }
@@ -973,41 +1212,41 @@ router.post('/api/add-wan/:deviceId', requireTechSession, async (req, res) => {
                 paramValues.push([`${baseConnPath}.X_ZTE_SSIDBind`, wlanSsidsArray.join(','), 'xsd:string']);
             }
         } else {
-            // Fallback default
-            paramValues.push([`${baseConnPath}.VLANIDMark`, parsedVlan, 'xsd:unsignedInt']);
-            paramValues.push([`${baseConnPath}.VLANID`, parsedVlan, 'xsd:unsignedInt']); // Standard VLAN ID path
-            paramValues.push([`${baseConnPath}.VLANMode`, 1, 'xsd:unsignedInt']);
+            paramValues.push(
+                [`${baseConnPath}.VLANIDMark`, parsedVlan, 'xsd:unsignedInt'],
+                [`${baseConnPath}.VLANID`, parsedVlan, 'xsd:unsignedInt'],
+                [`${baseConnPath}.VLANMode`, 1, 'xsd:unsignedInt']
+            );
         }
-        
+
         await axios.post(`${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`, {
             name: 'setParameterValues',
             parameterValues: paramValues
         }, config);
-        
-        // 5. Tambahan: Konfigurasi Wi-Fi (jika dicentang)
-        if (configureWifi === true || configureWifi === 'true' || configureWifi === 'on') {
+
+        if (toBool(configureWifi)) {
             const wifiParamValues = [];
-            const wlanConfig = deviceData.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration || {};
-            
-            // 2.4GHz
             if (wlanConfig['1'] && wifiSsid24) {
                 wifiParamValues.push([`InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID`, wifiSsid24, 'xsd:string']);
                 if (wifiPass24) {
-                    wifiParamValues.push([`InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.PreSharedKey`, wifiPass24, 'xsd:string']);
-                    wifiParamValues.push([`InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase`, wifiPass24, 'xsd:string']);
+                    wifiParamValues.push(
+                        [`InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.PreSharedKey`, wifiPass24, 'xsd:string'],
+                        [`InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase`, wifiPass24, 'xsd:string']
+                    );
                 }
             }
-            
-            // 5GHz
+
             const fiveGIndex = wlanConfig['5'] ? '5' : (wlanConfig['2'] ? '2' : null);
             if (fiveGIndex && wifiSsid5) {
                 wifiParamValues.push([`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.SSID`, wifiSsid5, 'xsd:string']);
                 if (wifiPass5) {
-                    wifiParamValues.push([`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.PreSharedKey.1.PreSharedKey`, wifiPass5, 'xsd:string']);
-                    wifiParamValues.push([`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.KeyPassphrase`, wifiPass5, 'xsd:string']);
+                    wifiParamValues.push(
+                        [`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.PreSharedKey.1.PreSharedKey`, wifiPass5, 'xsd:string'],
+                        [`InternetGatewayDevice.LANDevice.1.WLANConfiguration.${fiveGIndex}.KeyPassphrase`, wifiPass5, 'xsd:string']
+                    );
                 }
             }
-            
+
             if (wifiParamValues.length > 0) {
                 await axios.post(`${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`, {
                     name: 'setParameterValues',
@@ -1015,8 +1254,7 @@ router.post('/api/add-wan/:deviceId', requireTechSession, async (req, res) => {
                 }, config);
             }
         }
-        
-        // Pemicu koneksi agar CPE langsung melakukan pembaruan (Connection Request)
+
         axios.post(`${baseUrl}/devices/${encodeURIComponent(deviceId)}/tasks`, {
             name: 'refreshObject',
             objectName: ''
