@@ -250,6 +250,9 @@
         <div class="realtime-bar" style="margin-left:auto">
           <span class="live-dot"></span> <%= t('admin.dashboard.realtime', 'Realtime Monitoring') %>
         </div>
+        <div class="realtime-bar">
+          <i class="bi bi-arrow-repeat"></i> TR-069 terakhir: <strong id="monitor-sync-time">-</strong>
+        </div>
       </div>
 
       <!-- Bulk Actions Panel -->
@@ -411,6 +414,7 @@
 // ── STATE ──────────────────────────────────────────────────────
 let devicesData = [];
 let donutChart = null;
+let fastRefreshTimer = null;
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -457,7 +461,11 @@ const I18N = {
   connectedDevicesTitlePrefix: "<%= t('admin.dashboard.connected_devices', 'Perangkat Terhubung') %>",
   noConnectedDevices: "<%= t('admin.dashboard.no_connected_devices', 'Tidak ada perangkat terhubung') %>",
   detailLoadFailed: "<%= t('admin.dashboard.detail_load_failed', 'Gagal memuat detail') %>",
-  offlineBadge: "<%= t('admin.dashboard.offline', 'Offline') %>"
+  offlineBadge: "<%= t('admin.dashboard.offline', 'Offline') %>",
+  lastInform: "Last Inform",
+  lastSync: "Last Sync",
+  syncNow: "Poll TR-069 Sekarang",
+  syncRunning: "Sinkronisasi berjalan"
 };
 
 // ── TABS ───────────────────────────────────────────────────────
@@ -555,12 +563,36 @@ async function loadDevices() {
     document.getElementById('device-count').textContent = devicesData.length + I18N.devicesSuffix;
 
     if (devicesData.length === 0) {
+      const monitorSyncEl = document.getElementById('monitor-sync-time');
+      if (monitorSyncEl) monitorSyncEl.textContent = '-';
       tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:32px">' + I18N.noDevicesFound + '</td></tr>';
     } else {
+      const latestSyncRaw = devicesData
+        .map(d => d.lastSync || d.lastInform || '')
+        .filter(Boolean)
+        .sort()
+        .reverse()[0];
+      const monitorSyncEl = document.getElementById('monitor-sync-time');
+      if (monitorSyncEl) {
+        monitorSyncEl.textContent = latestSyncRaw
+          ? new Date(latestSyncRaw).toLocaleString('id-ID', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+          : '-';
+      }
+      const lastUpdateEl = document.getElementById('last-update-time');
+      if (lastUpdateEl) {
+        const uiTime = new Date().toLocaleTimeString('id-ID', { timeZone: '<%= settings.timezone %>' });
+        lastUpdateEl.textContent = latestSyncRaw
+          ? `TR-069: ${new Date(latestSyncRaw).toLocaleString('id-ID', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })} | UI: ${uiTime}`
+          : `${I18N.updatePrefix} ${uiTime}`;
+      }
       tbody.innerHTML = devicesData.map((d, i) => {
         const isOn = d.status === 'online';
         const tagStr = d.tags.join(', ') || '-';
         const lastInformStr = d.lastInform ? new Date(d.lastInform).toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
+        const lastSyncStr = d.lastSync ? new Date(d.lastSync).toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : (d.lastSyncLabel || '-');
+        const syncBadge = d.syncInProgress
+          ? `<div style="font-size:11px;color:var(--warning);margin-top:4px"><i class="bi bi-arrow-repeat"></i> ${I18N.syncRunning} (${d.syncPendingCount || 0})</div>`
+          : `<div style="font-size:11px;color:var(--muted);margin-top:4px"><i class="bi bi-check2-circle"></i> ${d.syncStatusLabel || '-'}</div>`;
         return `<tr>
           <td style="text-align: center;">
             <input type="checkbox" class="mon-device-checkbox" data-id="${d.id}" data-acs="${d.acs_server_id || 'legacy'}" onchange="updateMonBulkPanel()">
@@ -568,7 +600,8 @@ async function loadDevices() {
           <td class="text-muted">${i + 1}</td>
           <td>
             <span class="badge bm">${tagStr}</span>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px" title="Last Inform"><i class="bi bi-clock"></i> ${lastInformStr}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px" title="${I18N.lastInform}"><i class="bi bi-clock"></i> ${lastInformStr}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px" title="${I18N.lastSync}"><i class="bi bi-arrow-repeat"></i> ${lastSyncStr}</div>
           </td>
           <td>
             <div class="fw6" style="font-size:13px">${d.model !== '-' ? d.model : I18N.onuDevice}</div>
@@ -585,11 +618,13 @@ async function loadDevices() {
             <div><span class="badge ${isOn ? 'ds-on' : 'ds-off'}"><span class="dot ${isOn ? 'dot-on' : 'dot-off'}"></span>${isOn ? I18N.online : I18N.offline}</span></div>
             <div style="font-size:11px;color:var(--muted);margin-top:4px" title="RX Power"><i class="bi bi-activity"></i> ${d.rxPower}</div>
             <div style="font-size:11px;color:var(--muted)" title="Uptime"><i class="bi bi-clock-history"></i> ${d.uptime}</div>
+            <div style="font-size:11px;color:var(--muted)" title="${I18N.lastSync}"><i class="bi bi-hourglass-split"></i> ${d.lastSyncAgo || '-'}</div>
+            ${syncBadge}
           </td>
           <td>
             <div style="display: flex; gap: 4px; align-items: center;">
               <button class="btn btn-g btn-icon btn-sm btn-dev-detail" title="${I18N.titleDetail}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-eye"></i></button>
-              <button class="btn btn-p btn-icon btn-sm btn-dev-summon" title="Summon / Sinkronisasi Ulang" data-id="${d.id}" data-acs="${d.acs_server_id || 'legacy'}"><i class="bi bi-lightning-charge"></i></button>
+              <button class="btn btn-p btn-icon btn-sm btn-dev-summon" title="${I18N.syncNow}" data-id="${d.id}" data-acs="${d.acs_server_id || 'legacy'}"><i class="bi bi-arrow-repeat"></i></button>
               <button class="btn btn-p btn-icon btn-sm btn-dev-wifi" title="${I18N.titleEditSsid}" data-tag="${(d.tags && d.tags[0]) || d.id}" data-ssid="${escHtml(d.ssid)}"><i class="bi bi-wifi"></i></button>
               <button class="btn btn-g btn-icon btn-sm btn-dev-pass" title="${I18N.titleEditPassword}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-key"></i></button>
               <button class="btn btn-d btn-icon btn-sm btn-dev-reboot" title="${I18N.titleReboot}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-power"></i></button>
@@ -622,6 +657,7 @@ async function loadDevices() {
 
     // Update offline list on dashboard
     renderOfflineList(devicesData.filter(d => d.status === 'offline').slice(0, 5));
+    scheduleFastRefreshIfNeeded();
 
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--danger)"><i class="bi bi-exclamation-circle"></i> ' + I18N.errorLoadData + '</td></tr>';
@@ -670,12 +706,14 @@ async function showDetail(tag) {
     const d   = await res.json();
     const isOn = String(d.status || '').toLowerCase() === 'online';
     const lastInformText = d.lastInform ? new Date(d.lastInform).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '-';
+    const lastSyncText = d.lastSync ? new Date(d.lastSync).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '-';
+    const syncStateText = d.syncInProgress ? `${I18N.syncRunning} (${d.syncPendingCount || 0})` : (d.syncStatusLabel || '-');
     const connected = Array.isArray(d.connectedUsers) ? d.connectedUsers : [];
     document.getElementById('device-detail').innerHTML = `
       <div style="padding:14px 16px;border-radius:12px;margin-bottom:16px;font-weight:700;border:1px solid var(--border);background:${isOn ? 'rgba(16,185,129,.10)' : 'rgba(239,68,68,.10)'};color:${isOn ? 'var(--success)' : 'var(--danger)'}">
         <i class="bi bi-circle-fill" style="font-size:10px"></i>
         ${isOn ? I18N.online : I18N.offline}
-        <span style="color:var(--muted);font-weight:600">— <%= t('admin.dashboard.detail.last_inform', 'Last Inform') %>: ${lastInformText}</span>
+        <span style="color:var(--muted);font-weight:600">— ${I18N.lastInform}: ${lastInformText} | ${I18N.lastSync}: ${lastSyncText} | Queue: ${syncStateText}</span>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
@@ -847,6 +885,17 @@ function showToast(msg, type = 's') {
 function refreshAll() {
   loadStats();
   loadDevices();
+}
+
+function scheduleFastRefreshIfNeeded() {
+  if (fastRefreshTimer) {
+    clearTimeout(fastRefreshTimer);
+    fastRefreshTimer = null;
+  }
+  if (!Array.isArray(devicesData) || !devicesData.some(d => d.syncInProgress)) return;
+  fastRefreshTimer = setTimeout(() => {
+    refreshAll();
+  }, 5000);
 }
 
 loadStats();

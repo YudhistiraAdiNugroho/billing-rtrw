@@ -402,6 +402,15 @@
             </div>
         </div>
 
+        <div id="addWanProgressBox" style="display:none; margin-top:16px; border:1px solid var(--border); border-radius:16px; padding:16px; background:rgba(59,130,246,0.04);">
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:8px;">
+                <strong style="font-size:13px; color:var(--text);"><i class="bi bi-diagram-3 me-1"></i>Progress Add WAN</strong>
+                <span id="addWanProgressBadge" class="text-primary" style="font-size:12px; font-weight:700;">Menunggu</span>
+            </div>
+            <div id="addWanProgressSummary" style="font-size:12px; color:var(--muted); margin-bottom:10px;">Workflow belum dimulai.</div>
+            <div id="addWanProgressList" style="display:grid; gap:8px;"></div>
+        </div>
+
       </form>
     </div>
     <div class="mf">
@@ -474,8 +483,13 @@ function switchTab(id, btn) {
 }
 
 function openModal(id) { document.getElementById(id).classList.add('show'); }
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
-document.querySelectorAll('.mo').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); }));
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+    if (id === 'addWanModal') stopAddWanProgressPolling();
+}
+document.querySelectorAll('.mo').forEach(m => m.addEventListener('click', e => {
+    if (e.target === m) closeModal(m.id);
+}));
 
 function openAddServerModal() {
     document.getElementById('acsServerModalTitle').innerHTML = '<i class="bi bi-server"></i> Add ACS Server';
@@ -659,8 +673,129 @@ async function toggleWifiFields() {
     }
 }
 
+let addWanProgressTimer = null;
+let addWanTrackingState = null;
+
+function stopAddWanProgressPolling() {
+    if (addWanProgressTimer) {
+        clearTimeout(addWanProgressTimer);
+        addWanProgressTimer = null;
+    }
+}
+
+function resetAddWanProgress() {
+    stopAddWanProgressPolling();
+    addWanTrackingState = null;
+    const box = document.getElementById('addWanProgressBox');
+    const badge = document.getElementById('addWanProgressBadge');
+    const summary = document.getElementById('addWanProgressSummary');
+    const list = document.getElementById('addWanProgressList');
+    if (box) box.style.display = 'none';
+    if (badge) {
+        badge.className = 'text-primary';
+        badge.textContent = 'Menunggu';
+    }
+    if (summary) {
+        summary.textContent = 'Workflow belum dimulai.';
+    }
+    if (list) {
+        list.innerHTML = '';
+    }
+}
+
+function renderAddWanProgress(data) {
+    const box = document.getElementById('addWanProgressBox');
+    const badge = document.getElementById('addWanProgressBadge');
+    const summary = document.getElementById('addWanProgressSummary');
+    const list = document.getElementById('addWanProgressList');
+    if (!box || !badge || !summary || !list) return;
+
+    box.style.display = 'block';
+    summary.textContent = data.summary || 'Workflow sedang diproses.';
+
+    if (data.hasFailure) {
+        badge.className = 'text-danger';
+        badge.textContent = 'Ada Gagal';
+    } else if (data.done) {
+        badge.className = 'text-success';
+        badge.textContent = 'Selesai';
+    } else {
+        badge.className = 'text-warning';
+        badge.textContent = 'Berjalan';
+    }
+
+    const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    list.innerHTML = tasks.map(task => {
+        const status = String(task.status || 'pending');
+        let statusClass = 'text-muted';
+        let statusLabel = 'Pending';
+        if (status === 'completed') {
+            statusClass = 'text-success';
+            statusLabel = 'Selesai';
+        } else if (status === 'failed') {
+            statusClass = 'text-danger';
+            statusLabel = 'Gagal';
+        } else if (status === 'in_progress') {
+            statusClass = 'text-warning';
+            statusLabel = 'Diproses';
+        }
+        return `
+            <div style="display:flex; justify-content:space-between; gap:12px; border:1px dashed var(--border); border-radius:12px; padding:10px 12px; background:rgba(15,23,42,0.08);">
+                <span style="font-size:12px; color:var(--text);">${task.label || task.name || 'Task ACS'}</span>
+                <span class="${statusClass}" style="font-size:12px; font-weight:700;">${statusLabel}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+async function pollAddWanProgress() {
+    if (!addWanTrackingState || !addWanTrackingState.deviceId) return;
+
+    const params = new URLSearchParams();
+    if (addWanTrackingState.workflowId) params.set('workflowId', addWanTrackingState.workflowId);
+    if (addWanTrackingState.rootTaskId) params.set('rootTaskId', String(addWanTrackingState.rootTaskId));
+
+    try {
+        const res = await fetch(`/admin/acs/api/add-wan-status/${encodeURIComponent(addWanTrackingState.deviceId)}?${params.toString()}`, {
+            cache: 'no-store'
+        });
+        const data = await res.json();
+        if (!data || !data.success) throw new Error(data && data.message ? data.message : 'Gagal membaca progress Add WAN');
+
+        renderAddWanProgress(data);
+
+        if (data.done) {
+            stopAddWanProgressPolling();
+            const btn = document.getElementById('btn-save-add-wan');
+            const txt = btn ? btn.querySelector('.btn-text') : null;
+            const ldr = btn ? btn.querySelector('.btn-loader') : null;
+            if (btn) btn.disabled = false;
+            if (txt) txt.style.display = 'inline-block';
+            if (ldr) ldr.style.display = 'none';
+            setTimeout(() => {
+                closeModal('addWanModal');
+                location.reload();
+            }, data.hasFailure ? 2500 : 1800);
+            return;
+        }
+
+        addWanProgressTimer = setTimeout(pollAddWanProgress, 4000);
+    } catch (err) {
+        stopAddWanProgressPolling();
+        const summary = document.getElementById('addWanProgressSummary');
+        if (summary) summary.textContent = 'Gagal membaca progress workflow Add WAN.';
+        const btn = document.getElementById('btn-save-add-wan');
+        const txt = btn ? btn.querySelector('.btn-text') : null;
+        const ldr = btn ? btn.querySelector('.btn-loader') : null;
+        if (btn) btn.disabled = false;
+        if (txt) txt.style.display = 'inline-block';
+        if (ldr) ldr.style.display = 'none';
+    }
+}
+
 // Open modal Add WAN All-in-One and populate basic details
 async function openAddWanModal(deviceId, acsId, sn, manufacturer, model) {
+    resetAddWanProgress();
     document.getElementById('wanDeviceId').value = deviceId;
     document.getElementById('wanAcsId').value = acsId;
     document.getElementById('lblWanSn').innerText = sn || deviceId;
@@ -759,9 +894,24 @@ async function submitAddWanForm(e) {
         const data = await res.json();
         
         if (data && data.success) {
-            alert(data.message);
-            closeModal('addWanModal');
-            location.reload();
+            if (data.trackingSupported) {
+                addWanTrackingState = {
+                    deviceId,
+                    workflowId: data.workflowId || '',
+                    rootTaskId: data.rootTaskId || ''
+                };
+                renderAddWanProgress({
+                    summary: data.message || 'Workflow Add WAN dimulai.',
+                    done: false,
+                    hasFailure: false,
+                    tasks: []
+                });
+                addWanProgressTimer = setTimeout(pollAddWanProgress, 1200);
+            } else {
+                alert(data.message);
+                closeModal('addWanModal');
+                location.reload();
+            }
         } else {
             alert(data.message || 'Gagal menjalankan provisioning');
         }

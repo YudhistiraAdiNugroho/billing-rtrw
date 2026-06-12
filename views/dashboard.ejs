@@ -222,6 +222,31 @@
       margin-bottom: 25px;
     }
 
+    .sync-panel {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      border-radius: 16px;
+      margin-bottom: 22px;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.72) 0%, rgba(30, 41, 59, 0.62) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.22);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+    }
+
+    .sync-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sync-meta-title {
+      color: #f8fafc;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
     .stat-card {
       background: linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.6) 100%);
       border: 1px solid rgba(99, 102, 241, 0.15);
@@ -813,6 +838,11 @@
         margin-bottom: 15px;
       }
 
+      .sync-panel {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
       .navbar-brand {
         font-size: 16px;
       }
@@ -916,6 +946,22 @@
                     <% } %>
                 </div>
                 <div class="card-body p-4">
+                  <div class="sync-panel" id="deviceSyncPanel" data-sync-in-progress="<%= customer.syncInProgress ? 'true' : 'false' %>">
+                    <div class="sync-meta">
+                      <div class="sync-meta-title"><i class="bi bi-arrow-repeat me-2"></i>Sinkronisasi TR-069</div>
+                      <div class="small text-muted">Last sync: <strong class="text-light" id="deviceLastSyncValue"><%= customer.lastSync || '-' %></strong> (<span id="deviceLastSyncAgo"><%= customer.lastSyncAgo || '-' %></span>)</div>
+                      <div class="small text-muted">Last inform: <strong class="text-light" id="deviceLastInformValue"><%= customer.lastInform || '-' %></strong> (<span id="deviceLastInformAgo"><%= customer.lastInformAgo || '-' %></span>)</div>
+                      <div class="small <%= customer.syncInProgress ? 'text-warning' : 'text-muted' %>" id="deviceQueueStatusWrap">
+                        Status queue: <strong class="text-light" id="deviceQueueStatus"><%= customer.syncStatusLabel || 'Idle' %></strong>
+                      </div>
+                    </div>
+                    <div class="d-flex flex-column align-items-stretch gap-2" style="min-width:220px">
+                      <button type="button" class="btn btn-action btn-ssid" id="btnDeviceRefresh" <%= customer.syncInProgress ? 'disabled' : '' %>>
+                        <i class="bi bi-arrow-repeat me-2"></i><%= customer.syncInProgress ? 'Sinkronisasi Berjalan...' : 'Poll ONU Sekarang' %>
+                      </button>
+                      <div id="deviceSyncNotice" class="small text-muted"><%= customer.syncInProgress ? ('Queue aktif: ' + (customer.syncPendingCount || 0) + ' task monitoring.') : '' %></div>
+                    </div>
+                  </div>
                   <div class="stats-grid">
                     <div class="stat-card">
                       <div class="stat-icon <%= customer.status === 'Online' ? 'online' : 'offline' %>">
@@ -1817,10 +1863,14 @@
   <script>
     let currentInvId = null;
     let pModal = null;
+    let deviceSyncPollTimer = null;
+    let deviceSyncWasRunning = false;
 
     document.addEventListener('DOMContentLoaded', () => {
       const modalEl = document.getElementById('paymentModal');
       if (modalEl) pModal = new bootstrap.Modal(modalEl);
+      const syncPanelEl = document.getElementById('deviceSyncPanel');
+      deviceSyncWasRunning = !!(syncPanelEl && syncPanelEl.dataset && syncPanelEl.dataset.syncInProgress === 'true');
     });
 
     function setTrafficText(el, text) {
@@ -2005,6 +2055,107 @@
       window.location.href = `/customer/payment/create/${currentInvId}?method=${method}`;
     }
 
+    function setDeviceSyncNotice(message, type) {
+      const el = document.getElementById('deviceSyncNotice');
+      if (!el) return;
+      const palette = {
+        success: '#86efac',
+        danger: '#fca5a5',
+        info: '#93c5fd'
+      };
+      el.textContent = message || '';
+      el.style.color = palette[type] || '#94a3b8';
+    }
+
+    function renderDeviceSyncState(data) {
+      const btn = document.getElementById('btnDeviceRefresh');
+      const queueWrap = document.getElementById('deviceQueueStatusWrap');
+      const queueStatus = document.getElementById('deviceQueueStatus');
+      const lastSyncValue = document.getElementById('deviceLastSyncValue');
+      const lastSyncAgo = document.getElementById('deviceLastSyncAgo');
+      const lastInformValue = document.getElementById('deviceLastInformValue');
+      const lastInformAgo = document.getElementById('deviceLastInformAgo');
+
+      if (queueStatus) queueStatus.textContent = data.syncStatusLabel || 'Idle';
+      if (lastSyncValue) lastSyncValue.textContent = data.lastSync || '-';
+      if (lastSyncAgo) lastSyncAgo.textContent = data.lastSyncAgo || '-';
+      if (lastInformValue) lastInformValue.textContent = data.lastInform || '-';
+      if (lastInformAgo) lastInformAgo.textContent = data.lastInformAgo || '-';
+
+      if (queueWrap) {
+        queueWrap.classList.toggle('text-warning', !!data.syncInProgress);
+        queueWrap.classList.toggle('text-muted', !data.syncInProgress);
+      }
+      if (btn) {
+        btn.disabled = !!data.syncInProgress;
+        btn.innerHTML = data.syncInProgress
+          ? '<i class="bi bi-arrow-repeat me-2"></i>Sinkronisasi Berjalan...'
+          : '<i class="bi bi-arrow-repeat me-2"></i>Poll ONU Sekarang';
+      }
+      if (data.syncInProgress) {
+        setDeviceSyncNotice(`Queue aktif: ${data.syncPendingCount || 0} task monitoring.`, 'info');
+      } else if (deviceSyncWasRunning) {
+        setDeviceSyncNotice('Sinkronisasi selesai. Memuat data terbaru...', 'success');
+      }
+    }
+
+    async function pollCustomerDeviceSyncStatus(forceReloadWhenDone = false) {
+      try {
+        const res = await fetch('/customer/api/device/sync-status', { cache: 'no-store' });
+        const data = await res.json();
+        if (!data || !data.ok || !data.found) return;
+
+        renderDeviceSyncState(data);
+        if (data.syncInProgress) {
+          deviceSyncWasRunning = true;
+          if (deviceSyncPollTimer) clearTimeout(deviceSyncPollTimer);
+          deviceSyncPollTimer = setTimeout(() => pollCustomerDeviceSyncStatus(forceReloadWhenDone), 4000);
+          return;
+        }
+
+        if (deviceSyncPollTimer) {
+          clearTimeout(deviceSyncPollTimer);
+          deviceSyncPollTimer = null;
+        }
+        if (deviceSyncWasRunning || forceReloadWhenDone) {
+          deviceSyncWasRunning = false;
+          setTimeout(() => window.location.reload(), 1500);
+        }
+      } catch (_) {
+        if (deviceSyncPollTimer) clearTimeout(deviceSyncPollTimer);
+        deviceSyncPollTimer = null;
+      }
+    }
+
+    async function requestCustomerDeviceRefresh() {
+      const btn = document.getElementById('btnDeviceRefresh');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Memproses...';
+      setDeviceSyncNotice('Memulai sinkronisasi ONU...', 'info');
+
+      try {
+        const res = await fetch('/customer/api/device/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        setDeviceSyncNotice(data.message || (data.ok ? 'Sinkronisasi dimulai.' : 'Gagal memulai sinkronisasi.'), data.ok ? 'success' : 'danger');
+        if (data.ok) {
+          deviceSyncWasRunning = true;
+          if (deviceSyncPollTimer) clearTimeout(deviceSyncPollTimer);
+          deviceSyncPollTimer = setTimeout(() => pollCustomerDeviceSyncStatus(true), 2500);
+          return;
+        }
+      } catch (err) {
+        setDeviceSyncNotice('Gagal memulai sinkronisasi ONU.', 'danger');
+      }
+      if (!deviceSyncWasRunning) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Poll ONU Sekarang';
+      }
+    }
+
     function openCustomerSectionByHash() {
       const hash = window.location.hash || '';
       const map = {
@@ -2026,6 +2177,18 @@
     });
     window.addEventListener('load', () => {
       setTimeout(openCustomerSectionByHash, 0);
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const refreshBtn = document.getElementById('btnDeviceRefresh');
+      const syncPanelEl = document.getElementById('deviceSyncPanel');
+      const initialSyncRunning = !!(syncPanelEl && syncPanelEl.dataset && syncPanelEl.dataset.syncInProgress === 'true');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', requestCustomerDeviceRefresh);
+      }
+      if (initialSyncRunning) {
+        pollCustomerDeviceSyncStatus(false);
+      }
     });
 
     const urlParams = new URLSearchParams(window.location.search);
