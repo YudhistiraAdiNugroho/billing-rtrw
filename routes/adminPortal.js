@@ -3706,11 +3706,18 @@ router.get('/api/devices', requireAdmin, async (req, res) => {
     if (!result.ok) return res.json({ error: result.message });
     const mikrotikService = require('../services/mikrotikService');
     const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
+    const activeIpsMap = await mikrotikService.getActiveStaticIpsMap().catch(() => new Map());
 
     let devices = result.devices.map(d => {
       const pppoeUser = customerDevice.extractPppoeUser(d);
-      const isPppoeActive = pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-' && activeSessionsMap.has(pppoeUser.toLowerCase());
-      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id, isPppoeActive) || {};
+      const staticIp = customerDevice.extractPppoeIp(d);
+      let isActive = false;
+      if (pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-') {
+        isActive = activeSessionsMap.has(pppoeUser.toLowerCase());
+      } else if (staticIp && staticIp !== 'N/A' && staticIp !== '-' && staticIp !== '0.0.0.0') {
+        isActive = activeIpsMap.has(staticIp.toLowerCase());
+      }
+      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id, isActive) || {};
       const tagsArr = Array.isArray(d._tags) ? d._tags.filter(Boolean).map(String) : [];
       return {
         id: String(d._id || ''),
@@ -3743,12 +3750,14 @@ router.get('/api/devices', requireAdmin, async (req, res) => {
       const billingCustomers = customerSvc.getAllCustomers(s);
       const matchingTags = new Set(billingCustomers.map(c => c.genieacs_tag?.toLowerCase()).filter(Boolean));
       const matchingPppoes = new Set(billingCustomers.map(c => c.pppoe_username?.toLowerCase()).filter(Boolean));
+      const matchingStaticIps = new Set(billingCustomers.map(c => c.static_ip?.toLowerCase()).filter(Boolean));
 
       devices = devices.filter(d => 
         String(d.id || '').toLowerCase().includes(s) ||
         (Array.isArray(d.tags) && d.tags.some(t => String(t || '').toLowerCase().includes(s) || matchingTags.has(String(t || '').toLowerCase()))) || 
         String(d.serialNumber || '').toLowerCase().includes(s) || 
         String(d.pppoeIP || '').toLowerCase().includes(s) ||
+        matchingStaticIps.has(String(d.pppoeIP || '').toLowerCase()) ||
         (String(d.pppoeUsername || '') !== 'N/A' && String(d.pppoeUsername || '').toLowerCase().includes(s)) ||
         matchingPppoes.has(String(d.pppoeUsername || '').toLowerCase())
       ); 
@@ -3888,24 +3897,32 @@ router.get('/api/mikrotik/users', requireAdmin, async (req, res) => {
 
 // ─── MIKROTIK MONITORING ───────────────────────────────────────────────────
 router.get('/mikrotik', requireAdminSession, requireSidebarMenuAccess('mikrotik'), (req, res) => {
-  // Hanya gunakan router dari settings.json (tidak dari database)
-  const settings = getSettings();
-  const router = {
-    id: null, // null = router dari settings.json
-    name: 'MikroTik (settings.json)',
-    host: settings.mikrotik_host || '',
-    user: settings.mikrotik_user || '',
-    port: settings.mikrotik_port || 8728,
-    is_active: true
-  };
-  
-  const routers = [router]; // Hanya 1 router
-  
+  // Gunakan router dari database (multi-router)
+  let routers = mikrotikService.getAllRouters();
+
+  // Fallback: Jika belum ada router di DB, tampilkan dari settings.json agar tetap kompatibel
+  if (!routers || routers.length === 0) {
+    const settings = getSettings();
+    if (settings.mikrotik_host) {
+      routers = [{
+        id: null,
+        name: 'Default (settings.json)',
+        host: settings.mikrotik_host,
+        user: settings.mikrotik_user || '',
+        port: settings.mikrotik_port || 8728,
+        is_active: true
+      }];
+    } else {
+      routers = [];
+    }
+  }
+
   res.render('admin/mikrotik', {
     title: 'Monitoring MikroTik', company: company(), activePage: 'mikrotik',
     routers, msg: flashMsg(req)
   });
 });
+
 
 router.get('/vouchers', requireAdminSession, (req, res) => {
   const routers = mikrotikService.getAllRouters();
