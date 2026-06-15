@@ -247,7 +247,11 @@
         <button class="btn btn-p btn-sm" id="btn-refresh" onclick="refreshAll()">
           <i class="bi bi-arrow-clockwise"></i> <%= t('common.refresh', 'Refresh') %>
         </button>
-        <div class="realtime-bar" style="margin-left:auto">
+        <label class="realtime-bar" style="margin-left:auto;cursor:pointer">
+          <input type="checkbox" id="auto-refresh-toggle" style="width:40px;height:20px;cursor:pointer;margin-right:8px" <%= '' %>">
+          <span style="font-size:12px">Auto Refresh</span>
+        </label>
+        <div class="realtime-bar">
           <span class="live-dot"></span> <%= t('admin.dashboard.realtime', 'Realtime Monitoring') %>
         </div>
         <div class="realtime-bar">
@@ -415,6 +419,8 @@
 let devicesData = [];
 let donutChart = null;
 let fastRefreshTimer = null;
+let autoRefreshTimer = null;
+let autoRefreshEnabled = localStorage.getItem('autoRefreshEnabled') === 'true'; // Default: false
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -539,11 +545,13 @@ function updateDonut(online, offline) {
 }
 
 // ── LOAD DEVICES ───────────────────────────────────────────────
-async function loadDevices() {
+async function loadDevices(isSilent = false) {
   const tbody   = document.getElementById('devices-tbody');
   const loading = document.getElementById('loading-devices');
-  loading.style.display = 'block';
-  tbody.innerHTML = '';
+  if (!isSilent) {
+    loading.style.display = 'block';
+    tbody.innerHTML = '';
+  }
 
   try {
     const search = document.getElementById('search-device')?.value || '';
@@ -881,10 +889,40 @@ function showToast(msg, type = 's') {
   setTimeout(() => { if(t.parentElement) t.style.animation = 'slideOutRight .3s ease forwards'; setTimeout(() => t.remove(), 300); }, 5000);
 }
 
+// ── AUTO REFRESH MANAGEMENT ────────────────────────────────────
+function toggleAutoRefresh(enabled) {
+  autoRefreshEnabled = enabled;
+  localStorage.setItem('autoRefreshEnabled', enabled ? 'true' : 'false');
+  
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+  
+  if (enabled) {
+    autoRefreshTimer = setInterval(() => refreshAll(true), 30000);
+  }
+}
+
+function initAutoRefreshToggle() {
+  const toggle = document.getElementById('auto-refresh-toggle');
+  if (!toggle) return;
+  
+  toggle.checked = autoRefreshEnabled;
+  toggle.addEventListener('change', function() {
+    toggleAutoRefresh(this.checked);
+    showToast(this.checked ? 'Auto Refresh diaktifkan' : 'Auto Refresh dinonaktifkan', this.checked ? 's' : 's');
+  });
+  
+  if (autoRefreshEnabled) {
+    autoRefreshTimer = setInterval(() => refreshAll(true), 30000);
+  }
+}
+
 // ── REFRESH ALL ────────────────────────────────────────────────
-function refreshAll() {
+function refreshAll(isSilent = false) {
   loadStats();
-  loadDevices();
+  loadDevices(isSilent);
 }
 
 function scheduleFastRefreshIfNeeded() {
@@ -894,13 +932,13 @@ function scheduleFastRefreshIfNeeded() {
   }
   if (!Array.isArray(devicesData) || !devicesData.some(d => d.syncInProgress)) return;
   fastRefreshTimer = setTimeout(() => {
-    refreshAll();
+    refreshAll(true);
   }, 5000);
 }
 
 loadStats();
 loadDevices();
-setInterval(refreshAll, 30000);
+initAutoRefreshToggle();
 
 // ── CHECK IF SHOULD GO TO MONITORING TAB (from sidebar link) ──
 if (window.location.hash === '#monitoring') showTab('monitoring');
