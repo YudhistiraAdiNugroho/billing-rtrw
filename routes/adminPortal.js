@@ -3859,8 +3859,16 @@ router.get('/api/devices', requireAdmin, async (req, res) => {
     const result = await customerDevice.listAllDevices(999999);
     if (!result.ok) return res.json({ error: result.message });
     const mikrotikService = require('../services/mikrotikService');
-    const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
-    const activeIpsMap = await mikrotikService.getActiveStaticIpsMap().catch(() => new Map());
+    let activeSessionsMap = new Map();
+    try {
+      activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
+    } catch (_) { /* fallback to empty map */ }
+    let activeIpsMap = new Map();
+    try {
+      if (typeof mikrotikService.getActiveStaticIpsMap === 'function') {
+        activeIpsMap = await mikrotikService.getActiveStaticIpsMap().catch(() => new Map());
+      }
+    } catch (_) { /* fallback to empty map */ }
 
     let devices = result.devices.map(d => {
       const pppoeUser = customerDevice.extractPppoeUser(d);

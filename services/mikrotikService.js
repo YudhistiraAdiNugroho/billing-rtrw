@@ -1833,5 +1833,7 @@ module.exports = {
   setHotspotUserDisabledMulti,
   deletePppoeSecretMulti,
   deleteHotspotUserMulti,
-  createPppoeSecretMulti
+  createPppoeSecretMulti,
+  getActiveStaticIpsMap,
+  isStaticIpActive
 };

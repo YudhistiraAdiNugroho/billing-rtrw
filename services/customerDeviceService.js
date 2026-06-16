@@ -1440,6 +1440,7 @@ module.exports = {
   resolveDeviceToken,
   mapDeviceData,
   extractPppoeUser,
+  extractPppoeIp,
   getCustomerDeviceData,
   fallbackCustomer,
   requestRefresh,
