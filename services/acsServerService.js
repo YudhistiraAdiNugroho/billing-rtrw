@@ -79,23 +79,87 @@ const XSI_NS  = 'http://www.w3.org/2001/XMLSchema-instance';
 const SOAP_ENC_NS = 'http://schemas.xmlsoap.org/soap/encoding/';
 
 const SESSION_TIMEOUT_MS = 120_000; // 120 seconds
+const MAX_TASKS_PER_DEVICE = 20; // Limit pending tasks per device
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  IN-MEMORY SESSION STORE
+//  PERSISTENT SESSION STORE (DB + IN-MEMORY CACHE)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** @type {Map<string, {deviceId:string, step:string, currentTaskId:number|null, lastActivity:number}>} */
-const sessions = new Map();
+const sessionCache = new Map();
 const lastDeviceByIp = new Map();
 const recentFaultLogs = new Map();
 
-/** Periodically clean expired sessions (every 60 s) */
-setInterval(() => {
-  const now = Date.now();
-  for (const [sid, sess] of sessions) {
-    if (now - sess.lastActivity > SESSION_TIMEOUT_MS) {
-      sessions.delete(sid);
+/** Load session from database or create new */
+function getOrCreateSessionPersistent(sessionId) {
+  // Check cache first
+  if (sessionCache.has(sessionId)) {
+    return sessionCache.get(sessionId);
+  }
+  
+  // Try to load from DB
+  try {
+    const stored = db.prepare(`
+      SELECT device_id, step, current_task_id, last_activity 
+      FROM acs_sessions WHERE session_id = ?
+    `).get(sessionId);
+    
+    if (stored) {
+      const session = {
+        deviceId: stored.device_id,
+        step: stored.step || 'init',
+        currentTaskId: stored.current_task_id,
+        lastActivity: Date.now()
+      };
+      sessionCache.set(sessionId, session);
+      return session;
     }
+  } catch (e) {
+    logger.debug(`Failed to load session from DB: ${e.message}`);
+  }
+  
+  // Return new empty session (will be persisted on update)
+  return {
+    deviceId: null,
+    step: 'init',
+    currentTaskId: null,
+    lastActivity: Date.now()
+  };
+}
+
+/** Persist session to database */
+function persistSession(sessionId, session) {
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO acs_sessions 
+      (session_id, device_id, step, current_task_id, last_activity)
+      VALUES (?, ?, ?, ?, NOW_LOCAL())
+    `).run(sessionId, session.deviceId || null, session.step || 'init', session.currentTaskId || null);
+    
+    // Update cache
+    sessionCache.set(sessionId, session);
+  } catch (e) {
+    logger.error(`Failed to persist session: ${e.message}`);
+  }
+}
+
+/** Cleanup expired sessions from DB (keep last 30 days) */
+setInterval(() => {
+  try {
+    const cutoffTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare(`
+      DELETE FROM acs_sessions WHERE last_activity < ?
+    `).run(cutoffTime);
+    
+    // Also clean session cache
+    const now = Date.now();
+    for (const [sid, sess] of sessionCache) {
+      if (now - sess.lastActivity > SESSION_TIMEOUT_MS) {
+        sessionCache.delete(sid);
+      }
+    }
+  } catch (e) {
+    logger.error(`Failed to cleanup sessions: ${e.message}`);
   }
 }, 60_000);
 
@@ -118,22 +182,46 @@ function generateSessionId() {
   return crypto.randomBytes(16).toString('hex');
 }
 
+/**
+ * Check and enforce task queue limits
+ */
+function checkTaskQueueLimit(deviceId) {
+  try {
+    const pending = db.prepare(`
+      SELECT COUNT(*) as cnt FROM acs_tasks 
+      WHERE device_id = ? AND status IN ('pending', 'in_progress')
+    `).get(deviceId);
+    
+    if (pending && pending.cnt >= MAX_TASKS_PER_DEVICE) {
+      logger.warn(`[ACS] Task queue full for device ${deviceId}: ${pending.cnt} pending tasks`);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    logger.error(`Failed to check task queue: ${e.message}`);
+    return true; // Allow if check fails
+  }
+}
+
 function getOrCreateSession(req, res) {
   // Try to read existing session from cookie
   const cookieHeader = req.headers.cookie || '';
   const match = cookieHeader.match(/(?:^|;\s*)acs_session=([^;]+)/);
   let sid = match ? match[1] : null;
 
-  if (sid && sessions.has(sid)) {
-    const sess = sessions.get(sid);
-    sess.lastActivity = Date.now();
-    return { sid, session: sess, isNew: false };
+  if (sid) {
+    const sess = getOrCreateSessionPersistent(sid);
+    if (sess && sess.deviceId) {
+      sess.lastActivity = Date.now();
+      persistSession(sid, sess);
+      return { sid, session: sess, isNew: false };
+    }
   }
 
   // Create new session
   sid = generateSessionId();
-  const session = { deviceId: null, step: null, currentTaskId: null, lastActivity: Date.now() };
-  sessions.set(sid, session);
+  const session = { deviceId: null, step: 'init', currentTaskId: null, lastActivity: Date.now() };
+  persistSession(sid, session);
   res.setHeader('Set-Cookie', `acs_session=${sid}; Path=/acs; HttpOnly`);
   return { sid, session, isNew: true };
 }
@@ -551,6 +639,12 @@ function mergeDeviceParams(deviceId, newParams) {
  */
 function queueBootstrapTasksIfNeeded(deviceId, currentParams) {
   try {
+    // Check task queue limit first
+    if (!checkTaskQueueLimit(deviceId)) {
+      logger.info(`[ACS] Skipping bootstrap for device ${deviceId} - task queue full`);
+      return;
+    }
+
     // Check if device is already tagged as bootstrapped to avoid infinite loops on unsupported features
     const device = db.prepare('SELECT tags FROM acs_devices WHERE id = ?').get(deviceId);
     if (!device) return;
@@ -702,6 +796,12 @@ function queueBootstrapTasksIfNeeded(deviceId, currentParams) {
 
 function queueRealtimeMonitoringTasks(deviceId, currentParams) {
   try {
+    // Check task queue limit first
+    if (!checkTaskQueueLimit(deviceId)) {
+      logger.debug(`[ACS] Skipping monitoring tasks for device ${deviceId} - task queue full`);
+      return;
+    }
+
     const pending = db.prepare("SELECT COUNT(*) as c FROM acs_tasks WHERE device_id = ? AND name IN ('getParameterValues','getParameterNames','refreshObject') AND status IN ('pending','in_progress')").get(deviceId);
     if (pending && pending.c > 0) return;
 
@@ -1043,6 +1143,7 @@ function handleInform(body, session, sid, cpeIp, res) {
   session.step = 'informed';
   session.currentTaskId = null;
   session.lastActivity = Date.now();
+  persistSession(sid, session);
 
   return sendSoapResponse(res, buildInformResponse(cwmpId));
 }
@@ -1088,6 +1189,7 @@ function handleEmptyPost(session, sid, res, cpeIp = '') {
   session.currentTaskId = task.id;
   session.step = 'task_sent';
   session.lastActivity = Date.now();
+  persistSession(sid, session);
 
   // Mark task as in-progress (optional, keeps it 'pending' until response)
   const now = nowLocal();
@@ -1144,6 +1246,7 @@ function handleTaskResponse(body, session, sid, taskType, res) {
   session.step = 'response_received';
   session.currentTaskId = null;
   session.lastActivity = Date.now();
+  persistSession(sid, session);
 
   // Check for next task
   return handleEmptyPost(session, sid, res);
@@ -1266,6 +1369,9 @@ function handleAddObjectResponse(body, session, sid, res) {
     const created = enqueueFollowupTasks(session.deviceId, taskPayload.followup, nextVars);
     if (created > 0) {
       logger.info(`[ACS] Enqueued ${created} follow-up task(s) after addObject for ${session.deviceId}`);
+      triggerConnectionRequest(session.deviceId).catch(err => {
+        logger.debug(`[ACS] Follow-up connection request failed for ${session.deviceId}: ${err.message}`);
+      });
     }
   }
 
@@ -1304,6 +1410,19 @@ function handleFault(fault, session, sid, res) {
     logger.warn(`[ACS] SOAP Fault from device ${session.deviceId}: code=${fault.faultCode} string=${fault.faultString}`);
   }
 
+  // Record fault to database
+  try {
+    const customerDevice = require('./customerDeviceService');
+    customerDevice.recordDeviceFault(
+      session.deviceId, 
+      fault.faultCode || 'UNKNOWN', 
+      fault.faultString || 'Unknown fault',
+      taskId
+    );
+  } catch (e) {
+    logger.debug(`Failed to record fault: ${e.message}`);
+  }
+
   if (taskId) {
     failTask(taskId, fault);
   }
@@ -1311,6 +1430,7 @@ function handleFault(fault, session, sid, res) {
   session.step = 'response_received';
   session.currentTaskId = null;
   session.lastActivity = Date.now();
+  persistSession(sid, session);
 
   // Try next task
   return handleEmptyPost(session, sid, res);

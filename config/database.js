@@ -917,7 +917,32 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_payroll_slips_status ON payroll_slips(status);
 `);
 
+// ─── CUSTOMER-ROUTER MAPPING ───────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS customer_routers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    router_id INTEGER NOT NULL REFERENCES routers(id) ON DELETE CASCADE,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    UNIQUE(customer_id, router_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_customer_routers_customer ON customer_routers(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_routers_router ON customer_routers(router_id);
+`);
+
 // ─── BUILT-IN ACS (TR-069) ──────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS acs_devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    router_id INTEGER NOT NULL REFERENCES routers(id) ON DELETE CASCADE,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    UNIQUE(customer_id, router_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_customer_routers_customer ON customer_routers(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_routers_router ON customer_routers(router_id);
+`);
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS acs_devices (
     id TEXT PRIMARY KEY,
@@ -950,10 +975,39 @@ db.exec(`
     updated_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
+  CREATE TABLE IF NOT EXISTS acs_sessions (
+    session_id TEXT PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    current_task_id INTEGER,
+    step TEXT DEFAULT 'init',
+    last_activity DATETIME DEFAULT (NOW_LOCAL()),
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    FOREIGN KEY (device_id) REFERENCES acs_devices(id) ON DELETE CASCADE,
+    FOREIGN KEY (current_task_id) REFERENCES acs_tasks(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS acs_device_faults (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id TEXT NOT NULL,
+    fault_code TEXT NOT NULL,
+    fault_string TEXT NOT NULL,
+    task_id INTEGER,
+    seen_count INTEGER DEFAULT 1,
+    first_seen DATETIME DEFAULT (NOW_LOCAL()),
+    last_seen DATETIME DEFAULT (NOW_LOCAL()),
+    resolved INTEGER DEFAULT 0,
+    resolved_at DATETIME,
+    FOREIGN KEY (device_id) REFERENCES acs_devices(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES acs_tasks(id) ON DELETE SET NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_acs_devices_sn ON acs_devices(serial_number);
   CREATE INDEX IF NOT EXISTS idx_acs_devices_inform ON acs_devices(last_inform);
   CREATE INDEX IF NOT EXISTS idx_acs_tasks_device ON acs_tasks(device_id);
   CREATE INDEX IF NOT EXISTS idx_acs_tasks_status ON acs_tasks(status);
+  CREATE INDEX IF NOT EXISTS idx_acs_sessions_device ON acs_sessions(device_id);
+  CREATE INDEX IF NOT EXISTS idx_acs_faults_device ON acs_device_faults(device_id);
+  CREATE INDEX IF NOT EXISTS idx_acs_faults_resolved ON acs_device_faults(resolved);
 `);
 
 // Tambahkan kategori pengeluaran default jika belum ada
@@ -984,8 +1038,11 @@ try {
   if (!custCols.find(c => c.name === 'balance')) {
     db.exec("ALTER TABLE customers ADD COLUMN balance INTEGER NOT NULL DEFAULT 0");
   }
+  if (!custCols.find(c => c.name === 'preferred_acs_server_id')) {
+    db.exec("ALTER TABLE customers ADD COLUMN preferred_acs_server_id TEXT DEFAULT 'auto'");
+  }
 } catch(e) {
-  console.error('Failed to migrate customers balance:', e);
+  console.error('Failed to migrate customers:', e);
 }
 
 module.exports = db;

@@ -5,6 +5,31 @@ const db = require('../config/database');
 const { logger } = require('../config/logger');
 const { getCurrentDateInTimezone } = require('../config/settingsManager');
 
+function getCustomerRouters(customerId) {
+  const routerIds = db.prepare('SELECT router_id FROM customer_routers WHERE customer_id = ?').all(customerId);
+  if (routerIds.length === 0) {
+    const customer = getCustomerById(customerId);
+    if (customer && customer.router_id) {
+      return [customer.router_id];
+    }
+    return [];
+  }
+  return routerIds.map(r => r.router_id);
+}
+
+function setCustomerRouters(customerId, routerIds) {
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM customer_routers WHERE customer_id = ?').run(customerId);
+    const insert = db.prepare('INSERT OR IGNORE INTO customer_routers (customer_id, router_id) VALUES (?, ?)');
+    for (const routerId of routerIds) {
+      if (routerId) {
+        insert.run(customerId, routerId);
+      }
+    }
+  });
+  tx();
+}
+
 // ─── CUSTOMERS ───────────────────────────────────────────────
 function getAllCustomers(search = '') {
   const now = getCurrentDateInTimezone();
@@ -28,11 +53,19 @@ function getAllCustomers(search = '') {
     LEFT JOIN odps odp ON c.odp_id = odp.id
     LEFT JOIN customer_usage u ON u.customer_id = c.id AND u.period_month = ${month} AND u.period_year = ${year}
   `;
+  let customers;
   if (search) {
     const s = `%${search}%`;
-    return db.prepare(base + ` WHERE c.name LIKE ? OR c.phone LIKE ? OR c.genieacs_tag LIKE ? OR c.address LIKE ? ORDER BY c.name ASC`).all(s, s, s, s);
+    customers = db.prepare(base + ` WHERE c.name LIKE ? OR c.phone LIKE ? OR c.genieacs_tag LIKE ? OR c.address LIKE ? ORDER BY c.name ASC`).all(s, s, s, s);
+  } else {
+    customers = db.prepare(base + ` ORDER BY c.name ASC`).all();
   }
-  return db.prepare(base + ` ORDER BY c.name ASC`).all();
+  // Attach router IDs to each customer
+  customers = customers.map(c => ({
+    ...c,
+    router_ids: getCustomerRouters(c.id)
+  }));
+  return customers;
 }
 
 function resetPromoCyclesUsed(customerId) {
@@ -57,7 +90,7 @@ function getCustomerById(id) {
 }
 
 function createCustomer(data) {
-  return db.prepare(`
+  const result = db.prepare(`
     INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
@@ -85,6 +118,15 @@ function createCustomer(data) {
     data.hotspot_profile || '',
     data.collector_id ? parseInt(data.collector_id) : null
   );
+  
+  // Handle router_ids array
+  if (data.router_ids && Array.isArray(data.router_ids)) {
+    setCustomerRouters(result.lastInsertRowid, data.router_ids.map(Number).filter(id => id));
+  } else if (data.router_id) {
+    setCustomerRouters(result.lastInsertRowid, [parseInt(data.router_id)]);
+  }
+  
+  return result;
 }
 
 function updateCustomer(id, data) {
@@ -126,6 +168,13 @@ function updateCustomer(id, data) {
   if (pkgChanged) {
     db.prepare('UPDATE customers SET promo_cycles_used = 0 WHERE id=?').run(id);
   }
+  
+  // Handle router_ids array
+  if (data.router_ids && Array.isArray(data.router_ids)) {
+    setCustomerRouters(id, data.router_ids.map(Number).filter(id => id));
+  } else if (data.router_id !== undefined) {
+    setCustomerRouters(id, data.router_id ? [parseInt(data.router_id)] : []);
+  }
 
   return result;
 }
@@ -137,68 +186,75 @@ function updateCustomerCablePath(id, path) {
 async function deleteCustomer(id) {
   const customer = getCustomerById(id);
   const mikrotikSvc = require('./mikrotikService');
+  const routerIds = getCustomerRouters(id);
   
   // Remove static IP if connection type is static
   if (customer && customer.connection_type === 'static' && customer.static_ip) {
-    try {
-      await mikrotikSvc.removeStaticIp(customer.static_ip, customer.router_id);
-    } catch (e) {
-      console.error('Failed to remove static IP from MikroTik during customer deletion:', e);
+    for (const routerId of routerIds) {
+      try {
+        await mikrotikSvc.removeStaticIp(customer.static_ip, routerId);
+      } catch (e) {
+        console.error(`Failed to remove static IP from MikroTik router ${routerId} during customer deletion:`, e);
+      }
     }
   }
   
   // Remove PPPoE secret if connection type is pppoe and username exists
   if (customer && customer.connection_type === 'pppoe' && customer.pppoe_username) {
-    try {
-      console.log(`[DELETE] Attempting to remove PPPoE secret: ${customer.pppoe_username} from router ${customer.router_id}`);
-      
-      // Get PPPoE secrets to find the ID
-      const secrets = await mikrotikSvc.getPppoeSecrets(customer.router_id);
-      console.log(`[DELETE] Found ${secrets.length} PPPoE secrets in MikroTik`);
-      
-      // Try to find by exact name match
-      let secret = secrets.find(s => s.name === customer.pppoe_username);
-      
-      // If not found, try case-insensitive match
-      if (!secret) {
-        const username = String(customer.pppoe_username || '').toLowerCase();
-        secret = secrets.find(s => String(s.name || '').toLowerCase() === username);
-      }
-      
-      if (secret) {
-        // Check both .id and id fields
-        const secretId = secret['.id'] || secret.id;
-        console.log(`[DELETE] Found secret with ID: ${secretId}, name: ${secret.name}`);
+    for (const routerId of routerIds) {
+      try {
+        console.log(`[DELETE] Attempting to remove PPPoE secret: ${customer.pppoe_username} from router ${routerId}`);
         
-        if (secretId) {
-          await mikrotikSvc.deletePppoeSecret(secretId, customer.router_id);
-          console.log(`[DELETE] Successfully removed PPPoE secret for ${customer.pppoe_username} from MikroTik`);
-        } else {
-          console.warn(`[DELETE] Secret found but no ID available for ${customer.pppoe_username}`);
+        // Get PPPoE secrets to find the ID
+        const secrets = await mikrotikSvc.getPppoeSecrets(routerId);
+        console.log(`[DELETE] Found ${secrets.length} PPPoE secrets in router ${routerId}`);
+        
+        // Try to find by exact name match
+        let secret = secrets.find(s => s.name === customer.pppoe_username);
+        
+        // If not found, try case-insensitive match
+        if (!secret) {
+          const username = String(customer.pppoe_username || '').toLowerCase();
+          secret = secrets.find(s => String(s.name || '').toLowerCase() === username);
         }
-      } else {
-        console.warn(`[DELETE] PPPoE secret for ${customer.pppoe_username} not found in MikroTik`);
-        console.log(`[DELETE] Available usernames: ${secrets.map(s => s.name).join(', ')}`);
+        
+        if (secret) {
+          // Check both .id and id fields
+          const secretId = secret['.id'] || secret.id;
+          console.log(`[DELETE] Found secret with ID: ${secretId}, name: ${secret.name}`);
+          
+          if (secretId) {
+            await mikrotikSvc.deletePppoeSecret(secretId, routerId);
+            console.log(`[DELETE] Successfully removed PPPoE secret for ${customer.pppoe_username} from router ${routerId}`);
+          } else {
+            console.warn(`[DELETE] Secret found but no ID available for ${customer.pppoe_username} on router ${routerId}`);
+          }
+        } else {
+          console.warn(`[DELETE] PPPoE secret for ${customer.pppoe_username} not found in router ${routerId}`);
+          console.log(`[DELETE] Available usernames: ${secrets.map(s => s.name).join(', ')}`);
+        }
+      } catch (e) {
+        console.error(`[DELETE] Failed to remove PPPoE secret from MikroTik router ${routerId} during customer deletion:`, e);
       }
-    } catch (e) {
-      console.error('[DELETE] Failed to remove PPPoE secret from MikroTik during customer deletion:', e);
     }
   }
   
   // Remove Hotspot user if connection type is hotspot and username exists
   if (customer && customer.connection_type === 'hotspot' && customer.hotspot_username) {
-    try {
-      // Get hotspot user to find the ID
-      const hotspotUser = await mikrotikSvc.getHotspotUserByName(customer.hotspot_username, customer.router_id);
-      
-      if (hotspotUser && hotspotUser.id) {
-        await mikrotikSvc.deleteHotspotUser(hotspotUser.id, customer.router_id);
-        console.log(`Successfully removed Hotspot user ${customer.hotspot_username} from MikroTik`);
-      } else {
-        console.warn(`Hotspot user ${customer.hotspot_username} not found in MikroTik`);
+    for (const routerId of routerIds) {
+      try {
+        // Get hotspot user to find the ID
+        const hotspotUser = await mikrotikSvc.getHotspotUserByName(customer.hotspot_username, routerId);
+        
+        if (hotspotUser && hotspotUser.id) {
+          await mikrotikSvc.deleteHotspotUser(hotspotUser.id, routerId);
+          console.log(`Successfully removed Hotspot user ${customer.hotspot_username} from router ${routerId}`);
+        } else {
+          console.warn(`Hotspot user ${customer.hotspot_username} not found in router ${routerId}`);
+        }
+      } catch (e) {
+        console.error(`Failed to remove Hotspot user from MikroTik router ${routerId} during customer deletion:`, e);
       }
-    } catch (e) {
-      console.error('Failed to remove Hotspot user from MikroTik during customer deletion:', e);
     }
   }
   
@@ -329,7 +385,11 @@ function findCustomerByAny(val) {
   const byPppoe = db.prepare('SELECT id FROM customers WHERE pppoe_username = ?').get(cleanVal);
   if (byPppoe) return getCustomerById(byPppoe.id);
 
-  // 4. Try MAC Address (Exact Match or Partial Match for ONU MAC format)
+  // 4. Try Static IP (Exact Match)
+  const byStaticIp = db.prepare('SELECT id FROM customers WHERE static_ip = ?').get(cleanVal);
+  if (byStaticIp) return getCustomerById(byStaticIp.id);
+
+  // 5. Try MAC Address (Exact Match or Partial Match for ONU MAC format)
   // Handle ONU MAC format like: F4B5AA-ZXHN%20F477-01FFFFFFFF011FFF23F4B5AA7D806FBA
   const byMac = db.prepare('SELECT id FROM customers WHERE mac_address = ?').get(cleanVal);
   if (byMac) return getCustomerById(byMac.id);
@@ -343,7 +403,7 @@ function findCustomerByAny(val) {
     }
   }
 
-  // 5. Try ID if numeric
+  // 6. Try ID if numeric
   if (/^\d+$/.test(cleanVal) && cleanVal.length < 8) {
     const c = getCustomerById(parseInt(cleanVal));
     if (c) return c;
@@ -358,6 +418,7 @@ async function suspendCustomer(id) {
   
   updateCustomer(id, { ...customer, status: 'suspended' });
   const mikrotikSvc = require('./mikrotikService');
+  const routerIds = getCustomerRouters(id);
 
   if (customer.connection_type === 'static' && customer.static_ip) {
     const pkg = getPackageById(customer.package_id);
@@ -369,24 +430,26 @@ async function suspendCustomer(id) {
       const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
       limit = `${upMbps}M/${downMbps}M`;
     }
-    await mikrotikSvc.manageStaticIp({
+    await mikrotikSvc.manageStaticIpMulti({
       ip: customer.static_ip,
       name: customer.name,
       limit: limit,
       isolate: true
-    }, customer.router_id);
+    }, routerIds);
   } else if (customer.pppoe_username) {
     const isolirProfile = customer.isolir_profile || 'isolir';
-    await mikrotikSvc.setPppoeProfile(customer.pppoe_username, isolirProfile, customer.router_id);
-    if (customer.router_id) {
-      try {
-        await mikrotikSvc.ensurePppProfileIsolirAddressListHook(isolirProfile, customer.router_id);
-      } catch (e) {
-        logger.warn(`[suspendCustomer] Hook profil isolir "${isolirProfile}" di router ${customer.router_id}: ${e.message}`);
+    await mikrotikSvc.setPppoeProfileMulti(customer.pppoe_username, isolirProfile, routerIds);
+    for (const routerId of routerIds) {
+      if (routerId) {
+        try {
+          await mikrotikSvc.ensurePppProfileIsolirAddressListHook(isolirProfile, routerId);
+        } catch (e) {
+          logger.warn(`[suspendCustomer] Hook profil isolir "${isolirProfile}" di router ${routerId}: ${e.message}`);
+        }
       }
     }
   } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
-    await mikrotikSvc.setHotspotUserDisabled(customer.hotspot_username, true, customer.router_id);
+    await mikrotikSvc.setHotspotUserDisabledMulti(customer.hotspot_username, true, routerIds);
   }
 
   // WhatsApp Notification
@@ -439,6 +502,7 @@ async function activateCustomer(id) {
   
   updateCustomer(id, { ...customer, status: 'active' });
   const mikrotikSvc = require('./mikrotikService');
+  const routerIds = getCustomerRouters(id);
 
   if (customer.connection_type === 'static' && customer.static_ip) {
     const pkg = getPackageById(customer.package_id);
@@ -450,26 +514,26 @@ async function activateCustomer(id) {
       const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
       limit = `${upMbps}M/${downMbps}M`;
     }
-    await mikrotikSvc.manageStaticIp({
+    await mikrotikSvc.manageStaticIpMulti({
       ip: customer.static_ip,
       name: customer.name,
       limit: limit,
       isolate: false
-    }, customer.router_id);
+    }, routerIds);
   } else if (customer.pppoe_username) {
     const pkg = getPackageById(customer.package_id);
     const targetProfile = pkg ? pkg.name : 'default';
-    await mikrotikSvc.setPppoeProfile(customer.pppoe_username, targetProfile, customer.router_id);
+    await mikrotikSvc.setPppoeProfileMulti(customer.pppoe_username, targetProfile, routerIds);
   } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
     const pkg = getPackageById(customer.package_id);
     const targetProfile = String(customer.hotspot_profile || '').trim() || (pkg ? pkg.name : '');
-    await mikrotikSvc.upsertHotspotUser({
+    await mikrotikSvc.upsertHotspotUserMulti({
       username: String(customer.hotspot_username || '').trim(),
       password: String(customer.hotspot_password || '').trim(),
       profile: targetProfile,
       macAddress: String(customer.mac_address || '').trim(),
       disabled: false
-    }, customer.router_id);
+    }, routerIds);
   }
   return true;
 }
@@ -478,5 +542,5 @@ module.exports = {
   getAllCustomers, getCustomerById, createCustomer, updateCustomer, deleteCustomer, getCustomerStats,
   getAllPackages, getPackageById, createPackage, updatePackage, deletePackage,
   suspendCustomer, activateCustomer, findCustomerByAny, updateCustomerCablePath,
-  resetPromoCyclesUsed
+  resetPromoCyclesUsed, getCustomerRouters, setCustomerRouters
 };

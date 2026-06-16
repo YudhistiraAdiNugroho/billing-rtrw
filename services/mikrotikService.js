@@ -734,6 +734,42 @@ async function getActivePppoeSessionsMap() {
   return sessionsMap;
 }
 
+async function getActiveStaticIpsMap() {
+  const routers = getAllRouters().filter(r => r.is_active === 1 || r.is_active === '1' || r.is_active === true);
+  const ipsMap = new Map();
+  for (const r of routers) {
+    try {
+      let conn = null;
+      try {
+        conn = await getConnection(r.id);
+        const arpRows = await conn.client.menu('/ip/arp').where('complete', 'true').get();
+        for (const arp of arpRows) {
+          const ip = String(arp['address'] || arp.address || '').trim();
+          const mac = String(arp['mac-address'] || arp['macAddress'] || arp.macAddress || arp.mac || '').trim();
+          if (ip) {
+            ipsMap.set(ip.toLowerCase(), {
+              ip: ip,
+              mac: mac,
+              routerId: r.id,
+              routerName: r.name
+            });
+          }
+        }
+      } finally {
+        if (conn && conn.api) conn.api.close();
+      }
+    } catch (err) {
+      logger.error(`[MikroTik] Failed to get active static IPs from router ${r.name}: ${err.message}`);
+    }
+  }
+  return ipsMap;
+}
+
+async function isStaticIpActive(ip) {
+  const activeIps = await getActiveStaticIpsMap();
+  return activeIps.has(String(ip).toLowerCase());
+}
+
 
 async function getHotspotActive(routerId = null) {
   const ck = cacheKey(routerId, 'hotspotActive');
@@ -1299,6 +1335,105 @@ function deleteRouter(id) {
   return db.prepare('DELETE FROM routers WHERE id = ?').run(id);
 }
 
+// Multi-router wrapper functions
+async function setPppoeProfileMulti(username, profileName, routerIds = []) {
+  const results = [];
+  for (const routerId of routerIds) {
+    try {
+      const res = await setPppoeProfile(username, profileName, routerId);
+      results.push({ routerId, success: true, result: res });
+    } catch (e) {
+      logger.error(`[MikroTik] Error setting PPPoE profile on router ${routerId}:`, e);
+      results.push({ routerId, success: false, error: e.message });
+    }
+  }
+  return results;
+}
+
+async function manageStaticIpMulti({ ip, name, limit, isolate }, routerIds = []) {
+  const results = [];
+  for (const routerId of routerIds) {
+    try {
+      const res = await manageStaticIp({ ip, name, limit, isolate }, routerId);
+      results.push({ routerId, success: true, result: res });
+    } catch (e) {
+      logger.error(`[MikroTik] Error managing static IP on router ${routerId}:`, e);
+      results.push({ routerId, success: false, error: e.message });
+    }
+  }
+  return results;
+}
+
+async function upsertHotspotUserMulti({ username, password, profile, macAddress, disabled }, routerIds = []) {
+  const results = [];
+  for (const routerId of routerIds) {
+    try {
+      const res = await upsertHotspotUser({ username, password, profile, macAddress, disabled }, routerId);
+      results.push({ routerId, success: true, result: res });
+    } catch (e) {
+      logger.error(`[MikroTik] Error upserting hotspot user on router ${routerId}:`, e);
+      results.push({ routerId, success: false, error: e.message });
+    }
+  }
+  return results;
+}
+
+async function setHotspotUserDisabledMulti(username, disabled, routerIds = []) {
+  const results = [];
+  for (const routerId of routerIds) {
+    try {
+      const res = await setHotspotUserDisabled(username, disabled, routerId);
+      results.push({ routerId, success: true, result: res });
+    } catch (e) {
+      logger.error(`[MikroTik] Error setting hotspot user disabled on router ${routerId}:`, e);
+      results.push({ routerId, success: false, error: e.message });
+    }
+  }
+  return results;
+}
+
+async function deletePppoeSecretMulti(secretId, routerIds = []) {
+  const results = [];
+  for (const routerId of routerIds) {
+    try {
+      const res = await deletePppoeSecret(secretId, routerId);
+      results.push({ routerId, success: true, result: res });
+    } catch (e) {
+      logger.error(`[MikroTik] Error deleting PPPoE secret on router ${routerId}:`, e);
+      results.push({ routerId, success: false, error: e.message });
+    }
+  }
+  return results;
+}
+
+async function deleteHotspotUserMulti(userId, routerIds = []) {
+  const results = [];
+  for (const routerId of routerIds) {
+    try {
+      const res = await deleteHotspotUser(userId, routerId);
+      results.push({ routerId, success: true, result: res });
+    } catch (e) {
+      logger.error(`[MikroTik] Error deleting hotspot user on router ${routerId}:`, e);
+      results.push({ routerId, success: false, error: e.message });
+    }
+  }
+  return results;
+}
+
+async function createPppoeSecretMulti({ username, password, profile, remoteAddress }, routerIds = []) {
+  const results = [];
+  for (const routerId of routerIds) {
+    try {
+      const res = await createPppoeSecret({ username, password, profile, remoteAddress, routerId });
+      results.push({ routerId, success: true, result: res });
+    } catch (e) {
+      logger.error(`[MikroTik] Error creating PPPoE secret on router ${routerId}:`, e);
+      results.push({ routerId, success: false, error: e.message });
+    }
+  }
+  return results;
+}
+
 /**
  * RouterOS (.rsc) untuk mengarahkan pelanggan di address-list LIST_ISOLIR ke portal billing
  * (HTTP/HTTPS ke IP server sesuai Pengaturan → app_url). Salin ke Terminal / Import.
@@ -1690,5 +1825,13 @@ module.exports = {
   ensurePppProfileIsolirAddressListHook,
   generateIsolirPortalScript,
   manageStaticIp,
-  removeStaticIp
+  removeStaticIp,
+  // Multi-router functions
+  setPppoeProfileMulti,
+  manageStaticIpMulti,
+  upsertHotspotUserMulti,
+  setHotspotUserDisabledMulti,
+  deletePppoeSecretMulti,
+  deleteHotspotUserMulti,
+  createPppoeSecretMulti
 };

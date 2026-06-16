@@ -198,6 +198,46 @@ function describeAddWanTask(task) {
     return name || 'Task ACS';
 }
 
+function redactTaskInfoForCopy(taskName, payload) {
+    const name = String(taskName || '').trim();
+    const p = payload && typeof payload === 'object' ? payload : {};
+
+    if (name === 'addObject') {
+        const objectName = String(p.objectName || p.object || '');
+        return objectName ? `object=${objectName}` : '';
+    }
+
+    if (name === 'setParameterValues') {
+        const pvs = Array.isArray(p.parameterValues) ? p.parameterValues : [];
+        const keys = pvs.map(x => (Array.isArray(x) ? x[0] : null)).filter(Boolean);
+        if (keys.length === 0) return '';
+        return `params=${keys.slice(0, 8).join(',')}${keys.length > 8 ? ',…' : ''}`;
+    }
+
+    if (name === 'getParameterValues') {
+        const names = Array.isArray(p.parameterNames) ? p.parameterNames : [];
+        if (names.length === 0) return '';
+        return `names=${names.slice(0, 8).join(',')}${names.length > 8 ? ',…' : ''}`;
+    }
+
+    return '';
+}
+
+function extractTaskError(resultStr) {
+    if (!resultStr) return '';
+    try {
+        const obj = JSON.parse(resultStr);
+        const code = obj.faultCode || obj.code || obj.statusCode || obj.status || '';
+        const msg = obj.faultString || obj.message || obj.error || '';
+        const parts = [];
+        if (code) parts.push(String(code));
+        if (msg) parts.push(String(msg));
+        return parts.join(' - ').trim();
+    } catch (_) {
+        return String(resultStr).slice(0, 180);
+    }
+}
+
 function buildBuiltinAddWanWorkflow({
     mode,
     parsedVlan,
@@ -1417,6 +1457,12 @@ router.get('/api/add-wan-status/:deviceId', requireAdmin, async (req, res) => {
         if (!workflowId && !Number.isFinite(rootTaskId)) {
             return res.status(400).json({ success: false, message: 'workflowId atau rootTaskId wajib diisi' });
         }
+        if (workflowId) {
+            const safe = /^[a-zA-Z0-9:._-]{6,160}$/.test(workflowId);
+            if (!safe) {
+                return res.status(400).json({ success: false, message: 'workflowId tidak valid' });
+            }
+        }
 
         let rows = [];
         if (workflowId) {
@@ -1448,7 +1494,8 @@ router.get('/api/add-wan-status/:deviceId', requireAdmin, async (req, res) => {
                 status: String(row.status || 'pending'),
                 updatedAt: row.updated_at || null,
                 label: describeAddWanTask({ name: row.name, payload }),
-                payload
+                payload,
+                result: row.result || null
             };
         });
 
@@ -1473,6 +1520,17 @@ router.get('/api/add-wan-status/:deviceId', requireAdmin, async (req, res) => {
             done,
             hasFailure: failed > 0,
             summary,
+            failedDetails: tasks
+                .filter(t => t.status === 'failed')
+                .slice(0, 25)
+                .map(t => ({
+                    id: t.id,
+                    name: t.name,
+                    label: t.label,
+                    updatedAt: t.updatedAt,
+                    error: extractTaskError(t.result),
+                    info: redactTaskInfoForCopy(t.name, t.payload)
+                })),
             tasks: tasks.map(t => ({
                 id: t.id,
                 name: t.name,
