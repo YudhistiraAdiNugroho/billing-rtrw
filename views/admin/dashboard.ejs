@@ -595,7 +595,31 @@ async function loadDevices(isSilent = false) {
       }
       tbody.innerHTML = devicesData.map((d, i) => {
         const isOn = d.status === 'online';
-        const tagStr = d.tags.join(', ') || '-';
+        // ── SMART TAG DISPLAY ──
+        // Jika ada tag, gunakan. Kalau tidak:
+        //   - TR069 built-in: Serial # Manufacturer (lebih identifiable)
+        //   - External ACS: Device ID
+        let tagDisplay = '';
+        let tagBadgeClass = 'bm';
+        let deviceIdentifier = d.id; // For action buttons
+        
+        if (d.tags && d.tags.length > 0) {
+          tagDisplay = d.tags.join(', ');
+          tagBadgeClass = 'bs';
+          deviceIdentifier = d.tags[0];
+        } else if (d.acs_server_id === 'builtin') {
+          // TR069 built-in: Serial # Manufacturer
+          const mfg = d.serialNumber ? `${d.serialNumber} • ${d.model || 'ONU'}` : d.id;
+          tagDisplay = mfg;
+          tagBadgeClass = 'bp';
+          deviceIdentifier = d.serialNumber || d.id;
+        } else {
+          // External ACS: Device ID
+          tagDisplay = d.id;
+          tagBadgeClass = 'bw';
+          deviceIdentifier = d.id;
+        }
+        
         const lastInformStr = d.lastInform ? new Date(d.lastInform).toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
         const lastSyncStr = d.lastSync ? new Date(d.lastSync).toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : (d.lastSyncLabel || '-');
         const syncBadge = d.syncInProgress
@@ -607,7 +631,7 @@ async function loadDevices(isSilent = false) {
           </td>
           <td class="text-muted">${i + 1}</td>
           <td>
-            <span class="badge bm">${tagStr}</span>
+            <span class="badge ${tagBadgeClass}">${escHtml(tagDisplay)}</span>
             <div style="font-size:11px;color:var(--muted);margin-top:4px" title="${I18N.lastInform}"><i class="bi bi-clock"></i> ${lastInformStr}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:2px" title="${I18N.lastSync}"><i class="bi bi-arrow-repeat"></i> ${lastSyncStr}</div>
           </td>
@@ -631,11 +655,11 @@ async function loadDevices(isSilent = false) {
           </td>
           <td>
             <div style="display: flex; gap: 4px; align-items: center;">
-              <button class="btn btn-g btn-icon btn-sm btn-dev-detail" title="${I18N.titleDetail}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-eye"></i></button>
+              <button class="btn btn-g btn-icon btn-sm btn-dev-detail" title="${I18N.titleDetail}" data-tag="${escHtml(deviceIdentifier)}" data-id="${d.id}"><i class="bi bi-eye"></i></button>
               <button class="btn btn-p btn-icon btn-sm btn-dev-summon" title="${I18N.syncNow}" data-id="${d.id}" data-acs="${d.acs_server_id || 'legacy'}"><i class="bi bi-arrow-repeat"></i></button>
-              <button class="btn btn-p btn-icon btn-sm btn-dev-wifi" title="${I18N.titleEditSsid}" data-tag="${(d.tags && d.tags[0]) || d.id}" data-ssid="${escHtml(d.ssid)}"><i class="bi bi-wifi"></i></button>
-              <button class="btn btn-g btn-icon btn-sm btn-dev-pass" title="${I18N.titleEditPassword}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-key"></i></button>
-              <button class="btn btn-d btn-icon btn-sm btn-dev-reboot" title="${I18N.titleReboot}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-power"></i></button>
+              <button class="btn btn-p btn-icon btn-sm btn-dev-wifi" title="${I18N.titleEditSsid}" data-tag="${escHtml(deviceIdentifier)}" data-id="${d.id}" data-ssid="${escHtml(d.ssid)}"><i class="bi bi-wifi"></i></button>
+              <button class="btn btn-g btn-icon btn-sm btn-dev-pass" title="${I18N.titleEditPassword}" data-tag="${escHtml(deviceIdentifier)}" data-id="${d.id}"><i class="bi bi-key"></i></button>
+              <button class="btn btn-d btn-icon btn-sm btn-dev-reboot" title="${I18N.titleReboot}" data-tag="${escHtml(deviceIdentifier)}" data-id="${d.id}"><i class="bi bi-power"></i></button>
               <button class="btn btn-d btn-icon btn-sm btn-dev-delete" title="Hapus Perangkat" data-id="${d.id}" data-acs="${d.acs_server_id || 'legacy'}"><i class="bi bi-trash"></i></button>
             </div>
           </td>
@@ -684,9 +708,17 @@ function renderOfflineList(offlineDevices) {
   }
   el.innerHTML = offlineDevices.map(d => {
     const ago = d.lastInform ? timeSince(new Date(d.lastInform)) : I18N.never;
+    let displayLabel = '';
+    if (d.tags && d.tags.length > 0) {
+      displayLabel = d.tags.join(', ');
+    } else if (d.acs_server_id === 'builtin') {
+      displayLabel = d.serialNumber || d.id;
+    } else {
+      displayLabel = d.id;
+    }
     return `<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="font-size:13px;font-weight:600">${d.tags.join(', ') || '-'}</div>
+        <div style="font-size:13px;font-weight:600">${escHtml(displayLabel)}</div>
         <div style="font-size:11px;color:var(--muted)">${d.serialNumber}</div>
       </div>
       <div style="text-align:right">
