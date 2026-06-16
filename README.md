@@ -149,6 +149,7 @@ Sistem manajemen ISP yang mengintegrasikan **penagihan**, **GenieACS**, **OLT (S
 ```bash
 git clone https://github.com/alijayanet/billing-rtrw.git
 cd billing-rtrw
+cp env-example.txt .env
 npm install
 ```
 
