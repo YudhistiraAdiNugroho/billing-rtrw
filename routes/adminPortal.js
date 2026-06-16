@@ -1551,6 +1551,7 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
         SELECT c.id, c.name, r.name as router_name 
         FROM customers c
         JOIN customer_routers cr ON c.id = cr.customer_id
+        JOIN routers r ON cr.router_id = r.id
         WHERE cr.router_id IN (${routerIds.map(() => '?').join(',')}) AND c.pppoe_username = ?
         LIMIT 1
       `).get(...routerIds, username);
@@ -1581,6 +1582,7 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
         SELECT c.id, c.name, r.name as router_name 
         FROM customers c
         JOIN customer_routers cr ON c.id = cr.customer_id
+        JOIN routers r ON cr.router_id = r.id
         WHERE cr.router_id IN (${routerIds.map(() => '?').join(',')}) AND c.hotspot_username = ?
         LIMIT 1
       `).get(...routerIds, username);
@@ -1711,6 +1713,7 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
         SELECT c.id, c.name, r.name as router_name 
         FROM customers c
         JOIN customer_routers cr ON c.id = cr.customer_id
+        JOIN routers r ON cr.router_id = r.id
         WHERE cr.router_id IN (${routerIds.map(() => '?').join(',')}) AND c.pppoe_username = ? AND c.id != ?
         LIMIT 1
       `).get(...routerIds, username, customerId);
@@ -1740,6 +1743,7 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
         SELECT c.id, c.name, r.name as router_name 
         FROM customers c
         JOIN customer_routers cr ON c.id = cr.customer_id
+        JOIN routers r ON cr.router_id = r.id
         WHERE cr.router_id IN (${routerIds.map(() => '?').join(',')}) AND c.hotspot_username = ? AND c.id != ?
         LIMIT 1
       `).get(...routerIds, username, customerId);
