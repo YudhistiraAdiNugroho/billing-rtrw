@@ -1,1 +1,1 @@
-MY_WEBHOOK_SECRET=alijaya060111
+MY_WEBHOOK_SECRET=Qris-Statik-key
