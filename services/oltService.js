@@ -647,14 +647,14 @@ const fetchHiosoOnuDetailViaTelnet = async (olt) => {
 
 // ─── CORE SNMP FUNCTIONS ─────────────────────────────────────────────────────
 
-const slowWalk = async (session, baseOid, maxEntries = 5000) => {
+const slowWalk = async (session, baseOid, maxEntries = 5000, maxRepetitions = 20) => {
   const results  = {};
   let walkCount  = 0;
 
   return new Promise((resolve) => {
     session.subtree(
       baseOid,
-      20, // maxRepetitions (GETBULK size)
+      maxRepetitions, // maxRepetitions (GETBULK size)
       (varbinds) => {
         for (const vb of varbinds) {
           if (!vb || vb.oid == null) continue;
@@ -1063,7 +1063,10 @@ const autoPickUplinkIfIndex = async (session) => {
 
 const uplinkCache = new Map();
 
-const pickUplinkIfIndexByTraffic = async (session, oltId) => {
+const pickUplinkIfIndexByTraffic = async (session, oltId, brandKey) => {
+  if (brandKey === 'hioso' || brandKey === 'hsgq' || brandKey === 'bdcom') {
+    return null;
+  }
   if (oltId) {
     const now = Date.now();
     const cached = uplinkCache.get(oltId);
@@ -1156,7 +1159,7 @@ const fetchSystemMetrics = async (session, brandKey, stats, oltId) => {
       if (c != null) stats.temp = `${c.toFixed(1)}°C`;
     }
 
-    const ifIndex = await pickUplinkIfIndexByTraffic(session, oltId);
+    const ifIndex = await pickUplinkIfIndexByTraffic(session, oltId, brandKey);
     if (ifIndex) {
       const first = await readInterfaceOctets(session, ifIndex);
       await new Promise(rv => setTimeout(rv, 800));
@@ -1178,10 +1181,34 @@ const fetchSystemMetrics = async (session, brandKey, stats, oltId) => {
         stats.uplink_tx = Number.isFinite(rate) ? Math.max(0, Math.round(rate)) : 0;
       }
     } else {
-      const rxN = bufferToInt(rx);
-      const txN = bufferToInt(tx);
-      if (rxN != null) stats.uplink_rx = rxN;
-      if (txN != null) stats.uplink_tx = txN;
+      // Calculate rate for hardcoded OIDs using two samples 800ms apart
+      const rx1 = rx;
+      const tx1 = tx;
+      if (rx1 != null || tx1 != null) {
+        await new Promise(rv => setTimeout(rv, 800));
+        const [rx2, tx2] = await snmpGet(session, [oids.uplink_rx, oids.uplink_tx]);
+
+        const seconds = 0.8;
+        const wrap64 = BigInt(1) << BigInt(64);
+
+        const rx1B = bufferToCounterBigInt(rx1);
+        const rx2B = bufferToCounterBigInt(rx2);
+        if (rx1B != null && rx2B != null) {
+          let delta = rx2B - rx1B;
+          if (delta < BigInt(0)) delta = delta + wrap64;
+          const rate = Number(delta) / seconds;
+          stats.uplink_rx = Number.isFinite(rate) ? Math.max(0, Math.round(rate)) : 0;
+        }
+
+        const tx1B = bufferToCounterBigInt(tx1);
+        const tx2B = bufferToCounterBigInt(tx2);
+        if (tx1B != null && tx2B != null) {
+          let delta = tx2B - tx1B;
+          if (delta < BigInt(0)) delta = delta + wrap64;
+          const rate = Number(delta) / seconds;
+          stats.uplink_tx = Number.isFinite(rate) ? Math.max(0, Math.round(rate)) : 0;
+        }
+      }
     }
 
     if (stats.cpu === 'N/A') {
@@ -1407,13 +1434,44 @@ async function getOltStats(id, full = false) {
   const cacheKey = `${id}:${full}`;
   const now = Date.now();
   const cached = statsCache.get(cacheKey);
-  const cacheDuration = full ? 15000 : 10000; // 15s cache for full table, 10s for summary
+  
+  // Cache duration: 5 minutes for full stats, 1 minute for summary
+  const cacheDuration = full ? 300000 : 60000;
+  // Stale threshold: trigger background update if cache is older than 2 minutes for full, 20s for summary
+  const staleThreshold = full ? 120000 : 20000;
 
-  if (cached && (now - cached.timestamp < cacheDuration)) {
-    logger.info(`[oltService] Returning cached stats for OLT ${id} (full: ${full})`);
-    return cached.data;
+  if (cached) {
+    const age = now - cached.timestamp;
+    
+    // If cache is fresh, return it immediately
+    if (age < staleThreshold) {
+      logger.info(`[oltService] Returning fresh cached stats for OLT ${id} (full: ${full})`);
+      return cached.data;
+    }
+    
+    // If cache is stale but not expired, return it immediately and trigger background refresh
+    if (age < cacheDuration) {
+      if (!pendingPromises.has(cacheKey)) {
+        logger.info(`[oltService] Cache stale (age: ${Math.round(age / 1000)}s). Triggering background stats refresh for OLT ${id} (full: ${full})`);
+        
+        // Run the refresh in the background
+        getOltStatsInternal(id, full).then(result => {
+          if (result && !result.error) {
+            statsCache.set(cacheKey, {
+              data: result,
+              timestamp: Date.now()
+            });
+            logger.info(`[oltService] Background stats refresh successful for OLT ${id} (full: ${full})`);
+          }
+        }).catch(err => {
+          logger.error(`[oltService] Background stats refresh error for OLT ${id}: ${err.message}`);
+        });
+      }
+      return cached.data;
+    }
   }
 
+  // If no cache or cache is fully expired, run foreground fetch
   if (pendingPromises.has(cacheKey)) {
     logger.info(`[oltService] Coalescing concurrent stats request for OLT ${id} (full: ${full})`);
     return pendingPromises.get(cacheKey);
@@ -1475,13 +1533,14 @@ async function getOltStatsInternal(id, full = false) {
     .reduce((acc, k) => acc.concat((BRAND_PROFILES[k] || []).map(p => ({ ...p, __brandKey: k }))), []);
   const allAvailableProfiles = [...selectedProfiles, ...otherProfiles];
 
-  const session = snmp.createSession(olt.host, community, {
+  const probeSession = snmp.createSession(olt.host, community, {
     port:     olt.snmp_port || 161,
-    timeout:  full ? 8000 : 5000,
-    retries:  full ? 2 : 1,
+    timeout:  2000,
+    retries:  0,
     version:  snmp.Version2c,
   });
 
+  let session = probeSession;
   let isResolved = false;
 
   return new Promise((resolve) => {
@@ -1493,7 +1552,7 @@ async function getOltStatsInternal(id, full = false) {
       resolve(data);
     };
 
-    const timeoutMs = full ? 60000 : 25000;
+    const timeoutMs = full ? 50000 : 15000;
     const globalTimeout = setTimeout(() => {
       stats.error = `Request Timeout (${Math.round(timeoutMs / 1000)}s)`;
       safeResolve(stats);
@@ -1503,7 +1562,7 @@ async function getOltStatsInternal(id, full = false) {
       try {
         // 1. Cek koneksi dasar (Uptime)
         const uptimeVbs = await new Promise(rv => {
-          session.get(['1.3.6.1.2.1.1.3.0'], (err, vbs) => {
+          probeSession.get(['1.3.6.1.2.1.1.3.0'], (err, vbs) => {
             if (err) {
               stats.error = err.message;
               rv([]);
@@ -1519,6 +1578,16 @@ async function getOltStatsInternal(id, full = false) {
 
         stats.uptime = decodeUptime(uptimeVbs[0].value);
         stats.status = 'Online';
+
+        // OLT is online! Close fast probe session and create robust session for walks
+        try { probeSession.close(); } catch (_) {}
+        const walkSession = snmp.createSession(olt.host, community, {
+          port:     olt.snmp_port || 161,
+          timeout:  2000,
+          retries:  1,
+          version:  snmp.Version2c,
+        });
+        session = walkSession;
 
         // 3. Deteksi profil yang cocok
         let activeProfile = null;
@@ -1539,30 +1608,23 @@ async function getOltStatsInternal(id, full = false) {
         const detectedBrandKey = activeProfile.__brandKey || brandKey;
         const onlineVals = getOnlineValues(detectedBrandKey, activeProfile);
 
-        // Start system metrics concurrently
-        const systemMetricsPromise = fetchSystemMetrics(session, detectedBrandKey, stats, olt.id);
-
         // 4. Mode Counter (ZTE)
         if (activeProfile.is_counter) {
-          const [onlineMap, totalMap] = await Promise.all([
-            slowWalk(session, activeProfile.status_table),
-            slowWalk(session, activeProfile.name_table)
-          ]);
+          const onlineMap = await slowWalk(session, activeProfile.status_table);
+          const totalMap = await slowWalk(session, activeProfile.name_table);
 
           stats.onus_online  = Object.values(onlineMap).reduce((s, v) => s + (bufferToInt(v) || 0), 0);
           stats.onus_total   = Object.values(totalMap).reduce((s, v) => s + (bufferToInt(v) || 0), 0);
           stats.onus_offline = Math.max(0, stats.onus_total - stats.onus_online);
 
-          await systemMetricsPromise;
+          await fetchSystemMetrics(session, detectedBrandKey, stats, olt.id);
           safeResolve(stats);
           return;
         }
 
         // 5. Mode Table (Hioso, VSOL, HSGQ, etc)
-        const [statusMap, nameMap] = await Promise.all([
-          slowWalk(session, activeProfile.status_table),
-          slowWalk(session, activeProfile.name_table)
-        ]);
+        const statusMap = await slowWalk(session, activeProfile.status_table, 5000, 20);
+        const nameMap = await slowWalk(session, activeProfile.name_table, 5000, 20);
 
         let snMap = {};
         let rxMap = {};
@@ -1582,35 +1644,35 @@ async function getOltStatsInternal(id, full = false) {
           // 1. Pick SN Table
           tasks.push(() => pickSnTable(session, activeProfile).then(res => snMap = res.map || {}));
 
-          // 2. Rx Power
+          // 2. Rx Power (use maxRepetitions = 5 for weak OLT physical tables)
           if (activeProfile.rx_power_table) {
-            tasks.push(() => slowWalk(session, activeProfile.rx_power_table).then(res => rxMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.rx_power_table, 5000, 5).then(res => rxMap = res));
           }
-          // 3. Tx Power
+          // 3. Tx Power (use maxRepetitions = 5 for weak OLT physical tables)
           if (activeProfile.tx_power_table) {
-            tasks.push(() => slowWalk(session, activeProfile.tx_power_table).then(res => txMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.tx_power_table, 5000, 5).then(res => txMap = res));
           }
-          // 4. Distance
+          // 4. Distance (use maxRepetitions = 5 for weak OLT physical tables)
           if (activeProfile.distance_table) {
-            tasks.push(() => slowWalk(session, activeProfile.distance_table).then(res => distMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.distance_table, 5000, 5).then(res => distMap = res));
           }
           // 5. Firmware
           if (activeProfile.firmware_table) {
-            tasks.push(() => slowWalk(session, activeProfile.firmware_table).then(res => fwMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.firmware_table, 5000, 20).then(res => fwMap = res));
           }
           // 6. Uptime
           if (activeProfile.uptime_table) {
-            tasks.push(() => slowWalk(session, activeProfile.uptime_table).then(res => upMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.uptime_table, 5000, 20).then(res => upMap = res));
           }
           // 7. Offline Reason
           if (activeProfile.offline_reason_table) {
-            tasks.push(() => slowWalk(session, activeProfile.offline_reason_table).then(res => reasonMap = res));
+            tasks.push(() => slowWalk(session, activeProfile.offline_reason_table, 5000, 20).then(res => reasonMap = res));
           }
 
-          await limitConcurrency(tasks, 2);
+          await limitConcurrency(tasks, 1);
         }
 
-        await systemMetricsPromise;
+        await fetchSystemMetrics(session, detectedBrandKey, stats, olt.id);
 
         const allIndices = new Set([...Object.keys(statusMap), ...Object.keys(nameMap)]);
         stats.onus_total = allIndices.size;

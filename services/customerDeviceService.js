@@ -60,12 +60,16 @@ async function searchDeviceAcrossServersParallel(query, fullData = true) {
         try {
           response = await instance.get('/devices', {
             params,
-            timeout: 10000
+            timeout: 3000
           });
         } catch (e) {
+          const isTimeout = e.code === 'ECONNABORTED' || e.code === 'ETIMEDOUT' || String(e.message || '').toLowerCase().includes('timeout');
+          if (isTimeout) {
+            throw e;
+          }
           response = await instance.get('/api/devices', {
             params,
-            timeout: 10000
+            timeout: 2000
           });
         }
         
@@ -108,6 +112,8 @@ async function searchDeviceAcrossServersParallel(query, fullData = true) {
     return null;
   }
 }
+
+const searchDeviceAcrossServers = searchDeviceAcrossServersParallel;
 
 async function findDeviceByTag(tag) {
   try {
@@ -187,18 +193,26 @@ async function resolveDeviceToken(input) {
   const token = String(input ?? '').replace(/[\r\n\t]+/g, '').trim();
   if (!token) return null;
 
-  const direct = await findDeviceByTag(token);
+  // 1. Combined single parallel query across all keys
+  const keys = [
+    '_id',
+    '_tags',
+    'VirtualParameters.pppoeUsername',
+    'VirtualParameters.pppUsername',
+    ...PPPOE_USER_KEYS,
+    'VirtualParameters.staticIp',
+    ...PPPOE_IP_KEYS,
+    'DeviceID.SerialNumber',
+    'InternetGatewayDevice.DeviceInfo.SerialNumber',
+    'Device.DeviceInfo.SerialNumber',
+    'VirtualParameters.serialNumber'
+  ];
+  const query = { $or: keys.map(k => ({ [k]: token })) };
+  
+  const direct = await searchDeviceAcrossServers(query, true);
   if (direct && direct._id) return direct;
 
-  const byPppoe = await findDeviceByPppoe(token);
-  if (byPppoe && byPppoe._id) return byPppoe;
-
-  const byStaticIp = await findDeviceByStaticIp(token);
-  if (byStaticIp && byStaticIp._id) return byStaticIp;
-
-  const bySerial = await findDeviceBySerialNumber(token);
-  if (bySerial && bySerial._id) return bySerial;
-
+  // 2. Fallback to tag variants if not found
   const found = await findDeviceWithTagVariants(token);
   if (found && found.device && found.device._id) return found.device;
 

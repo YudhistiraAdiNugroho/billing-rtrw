@@ -931,17 +931,16 @@ db.exec(`
 `);
 
 // ─── BUILT-IN ACS (TR-069) ──────────────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS acs_devices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    router_id INTEGER NOT NULL REFERENCES routers(id) ON DELETE CASCADE,
-    created_at DATETIME DEFAULT (NOW_LOCAL()),
-    UNIQUE(customer_id, router_id)
-  );
-  CREATE INDEX IF NOT EXISTS idx_customer_routers_customer ON customer_routers(customer_id);
-  CREATE INDEX IF NOT EXISTS idx_customer_routers_router ON customer_routers(router_id);
-`);
+// Drop acs_devices table if it was created with the incorrect schema (missing serial_number)
+try {
+  const tableInfo = db.prepare("PRAGMA table_info(acs_devices)").all();
+  if (tableInfo.length > 0 && !tableInfo.some(col => col.name === 'serial_number')) {
+    console.log('[DB] Dropping invalid acs_devices table (wrong schema)...');
+    db.exec("DROP TABLE acs_devices");
+  }
+} catch (e) {
+  console.error('[DB] Failed to check/drop invalid acs_devices table:', e.message);
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS acs_devices (
