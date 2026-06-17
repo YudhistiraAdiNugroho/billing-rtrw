@@ -247,11 +247,7 @@
         <button class="btn btn-p btn-sm" id="btn-refresh" onclick="refreshAll()">
           <i class="bi bi-arrow-clockwise"></i> <%= t('common.refresh', 'Refresh') %>
         </button>
-        <label class="realtime-bar" style="margin-left:auto;cursor:pointer">
-          <input type="checkbox" id="auto-refresh-toggle" style="width:40px;height:20px;cursor:pointer;margin-right:8px" <%= '' %>">
-          <span style="font-size:12px">Auto Refresh</span>
-        </label>
-        <div class="realtime-bar">
+        <div class="realtime-bar" style="margin-left:auto">
           <span class="live-dot"></span> <%= t('admin.dashboard.realtime', 'Realtime Monitoring') %>
         </div>
         <div class="realtime-bar">
@@ -419,8 +415,6 @@
 let devicesData = [];
 let donutChart = null;
 let fastRefreshTimer = null;
-let autoRefreshTimer = null;
-let autoRefreshEnabled = localStorage.getItem('autoRefreshEnabled') === 'true'; // Default: false
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -545,13 +539,11 @@ function updateDonut(online, offline) {
 }
 
 // ── LOAD DEVICES ───────────────────────────────────────────────
-async function loadDevices(isSilent = false) {
+async function loadDevices() {
   const tbody   = document.getElementById('devices-tbody');
   const loading = document.getElementById('loading-devices');
-  if (!isSilent) {
-    loading.style.display = 'block';
-    tbody.innerHTML = '';
-  }
+  loading.style.display = 'block';
+  tbody.innerHTML = '';
 
   try {
     const search = document.getElementById('search-device')?.value || '';
@@ -595,31 +587,7 @@ async function loadDevices(isSilent = false) {
       }
       tbody.innerHTML = devicesData.map((d, i) => {
         const isOn = d.status === 'online';
-        // ── SMART TAG DISPLAY ──
-        // Jika ada tag, gunakan. Kalau tidak:
-        //   - TR069 built-in: Serial # Manufacturer (lebih identifiable)
-        //   - External ACS: Device ID
-        let tagDisplay = '';
-        let tagBadgeClass = 'bm';
-        let deviceIdentifier = d.id; // For action buttons
-        
-        if (d.tags && d.tags.length > 0) {
-          tagDisplay = d.tags.join(', ');
-          tagBadgeClass = 'bs';
-          deviceIdentifier = d.tags[0];
-        } else if (d.acs_server_id === 'builtin') {
-          // TR069 built-in: Serial # Manufacturer
-          const mfg = d.serialNumber ? `${d.serialNumber} • ${d.model || 'ONU'}` : d.id;
-          tagDisplay = mfg;
-          tagBadgeClass = 'bp';
-          deviceIdentifier = d.serialNumber || d.id;
-        } else {
-          // External ACS: Device ID
-          tagDisplay = d.id;
-          tagBadgeClass = 'bw';
-          deviceIdentifier = d.id;
-        }
-        
+        const tagStr = d.tags.join(', ') || '-';
         const lastInformStr = d.lastInform ? new Date(d.lastInform).toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
         const lastSyncStr = d.lastSync ? new Date(d.lastSync).toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : (d.lastSyncLabel || '-');
         const syncBadge = d.syncInProgress
@@ -631,7 +599,7 @@ async function loadDevices(isSilent = false) {
           </td>
           <td class="text-muted">${i + 1}</td>
           <td>
-            <span class="badge ${tagBadgeClass}">${escHtml(tagDisplay)}</span>
+            <span class="badge bm">${tagStr}</span>
             <div style="font-size:11px;color:var(--muted);margin-top:4px" title="${I18N.lastInform}"><i class="bi bi-clock"></i> ${lastInformStr}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:2px" title="${I18N.lastSync}"><i class="bi bi-arrow-repeat"></i> ${lastSyncStr}</div>
           </td>
@@ -655,11 +623,11 @@ async function loadDevices(isSilent = false) {
           </td>
           <td>
             <div style="display: flex; gap: 4px; align-items: center;">
-              <button class="btn btn-g btn-icon btn-sm btn-dev-detail" title="${I18N.titleDetail}" data-tag="${escHtml(deviceIdentifier)}" data-id="${d.id}"><i class="bi bi-eye"></i></button>
+              <button class="btn btn-g btn-icon btn-sm btn-dev-detail" title="${I18N.titleDetail}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-eye"></i></button>
               <button class="btn btn-p btn-icon btn-sm btn-dev-summon" title="${I18N.syncNow}" data-id="${d.id}" data-acs="${d.acs_server_id || 'legacy'}"><i class="bi bi-arrow-repeat"></i></button>
-              <button class="btn btn-p btn-icon btn-sm btn-dev-wifi" title="${I18N.titleEditSsid}" data-tag="${escHtml(deviceIdentifier)}" data-id="${d.id}" data-ssid="${escHtml(d.ssid)}"><i class="bi bi-wifi"></i></button>
-              <button class="btn btn-g btn-icon btn-sm btn-dev-pass" title="${I18N.titleEditPassword}" data-tag="${escHtml(deviceIdentifier)}" data-id="${d.id}"><i class="bi bi-key"></i></button>
-              <button class="btn btn-d btn-icon btn-sm btn-dev-reboot" title="${I18N.titleReboot}" data-tag="${escHtml(deviceIdentifier)}" data-id="${d.id}"><i class="bi bi-power"></i></button>
+              <button class="btn btn-p btn-icon btn-sm btn-dev-wifi" title="${I18N.titleEditSsid}" data-tag="${(d.tags && d.tags[0]) || d.id}" data-ssid="${escHtml(d.ssid)}"><i class="bi bi-wifi"></i></button>
+              <button class="btn btn-g btn-icon btn-sm btn-dev-pass" title="${I18N.titleEditPassword}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-key"></i></button>
+              <button class="btn btn-d btn-icon btn-sm btn-dev-reboot" title="${I18N.titleReboot}" data-tag="${(d.tags && d.tags[0]) || d.id}"><i class="bi bi-power"></i></button>
               <button class="btn btn-d btn-icon btn-sm btn-dev-delete" title="Hapus Perangkat" data-id="${d.id}" data-acs="${d.acs_server_id || 'legacy'}"><i class="bi bi-trash"></i></button>
             </div>
           </td>
@@ -708,17 +676,9 @@ function renderOfflineList(offlineDevices) {
   }
   el.innerHTML = offlineDevices.map(d => {
     const ago = d.lastInform ? timeSince(new Date(d.lastInform)) : I18N.never;
-    let displayLabel = '';
-    if (d.tags && d.tags.length > 0) {
-      displayLabel = d.tags.join(', ');
-    } else if (d.acs_server_id === 'builtin') {
-      displayLabel = d.serialNumber || d.id;
-    } else {
-      displayLabel = d.id;
-    }
     return `<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="font-size:13px;font-weight:600">${escHtml(displayLabel)}</div>
+        <div style="font-size:13px;font-weight:600">${d.tags.join(', ') || '-'}</div>
         <div style="font-size:11px;color:var(--muted)">${d.serialNumber}</div>
       </div>
       <div style="text-align:right">
@@ -921,40 +881,10 @@ function showToast(msg, type = 's') {
   setTimeout(() => { if(t.parentElement) t.style.animation = 'slideOutRight .3s ease forwards'; setTimeout(() => t.remove(), 300); }, 5000);
 }
 
-// ── AUTO REFRESH MANAGEMENT ────────────────────────────────────
-function toggleAutoRefresh(enabled) {
-  autoRefreshEnabled = enabled;
-  localStorage.setItem('autoRefreshEnabled', enabled ? 'true' : 'false');
-  
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer);
-    autoRefreshTimer = null;
-  }
-  
-  if (enabled) {
-    autoRefreshTimer = setInterval(() => refreshAll(true), 30000);
-  }
-}
-
-function initAutoRefreshToggle() {
-  const toggle = document.getElementById('auto-refresh-toggle');
-  if (!toggle) return;
-  
-  toggle.checked = autoRefreshEnabled;
-  toggle.addEventListener('change', function() {
-    toggleAutoRefresh(this.checked);
-    showToast(this.checked ? 'Auto Refresh diaktifkan' : 'Auto Refresh dinonaktifkan', this.checked ? 's' : 's');
-  });
-  
-  if (autoRefreshEnabled) {
-    autoRefreshTimer = setInterval(() => refreshAll(true), 30000);
-  }
-}
-
 // ── REFRESH ALL ────────────────────────────────────────────────
-function refreshAll(isSilent = false) {
+function refreshAll() {
   loadStats();
-  loadDevices(isSilent);
+  loadDevices();
 }
 
 function scheduleFastRefreshIfNeeded() {
@@ -964,13 +894,13 @@ function scheduleFastRefreshIfNeeded() {
   }
   if (!Array.isArray(devicesData) || !devicesData.some(d => d.syncInProgress)) return;
   fastRefreshTimer = setTimeout(() => {
-    refreshAll(true);
+    refreshAll();
   }, 5000);
 }
 
 loadStats();
 loadDevices();
-initAutoRefreshToggle();
+setInterval(refreshAll, 30000);
 
 // ── CHECK IF SHOULD GO TO MONITORING TAB (from sidebar link) ──
 if (window.location.hash === '#monitoring') showTab('monitoring');

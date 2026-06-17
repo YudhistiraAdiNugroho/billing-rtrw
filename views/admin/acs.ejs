@@ -409,11 +409,6 @@
             </div>
             <div id="addWanProgressSummary" style="font-size:12px; color:var(--muted); margin-bottom:10px;">Workflow belum dimulai.</div>
             <div id="addWanProgressList" style="display:grid; gap:8px;"></div>
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
-                <button type="button" class="btn btn-g" id="btnCopyAddWanFailed" style="display:none" onclick="copyAddWanFailedLog()">
-                    <i class="bi bi-clipboard-check"></i> Copy Log Task Gagal
-                </button>
-            </div>
         </div>
 
       </form>
@@ -680,7 +675,6 @@ async function toggleWifiFields() {
 
 let addWanProgressTimer = null;
 let addWanTrackingState = null;
-let addWanLastProgressData = null;
 
 function stopAddWanProgressPolling() {
     if (addWanProgressTimer) {
@@ -692,12 +686,10 @@ function stopAddWanProgressPolling() {
 function resetAddWanProgress() {
     stopAddWanProgressPolling();
     addWanTrackingState = null;
-    addWanLastProgressData = null;
     const box = document.getElementById('addWanProgressBox');
     const badge = document.getElementById('addWanProgressBadge');
     const summary = document.getElementById('addWanProgressSummary');
     const list = document.getElementById('addWanProgressList');
-    const btnCopy = document.getElementById('btnCopyAddWanFailed');
     if (box) box.style.display = 'none';
     if (badge) {
         badge.className = 'text-primary';
@@ -709,66 +701,6 @@ function resetAddWanProgress() {
     if (list) {
         list.innerHTML = '';
     }
-    if (btnCopy) btnCopy.style.display = 'none';
-}
-
-async function copyTextToClipboard(text) {
-    const content = String(text || '').trim();
-    if (!content) return false;
-    try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(content);
-            return true;
-        }
-    } catch (_) {}
-
-    try {
-        const ta = document.createElement('textarea');
-        ta.value = content;
-        ta.setAttribute('readonly', 'readonly');
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        ta.style.top = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(ta);
-        return !!ok;
-    } catch (_) {
-        return false;
-    }
-}
-
-async function copyAddWanFailedLog() {
-    const data = addWanLastProgressData;
-    if (!data || !data.hasFailure) return;
-    const totals = data.totals || {};
-    const lines = [];
-    lines.push('[ADD WAN] Workflow Gagal (Built-in ACS)');
-    lines.push(`Ringkasan: ${data.summary || '-'}`);
-    lines.push(`Device: ${addWanTrackingState && addWanTrackingState.deviceId ? addWanTrackingState.deviceId : '-'}`);
-    lines.push(`WorkflowId: ${addWanTrackingState && addWanTrackingState.workflowId ? addWanTrackingState.workflowId : '-'}`);
-    lines.push(`Total: ${totals.total || 0}, Completed: ${totals.completed || 0}, Failed: ${totals.failed || 0}`);
-    lines.push('---');
-
-    const failedDetails = Array.isArray(data.failedDetails) ? data.failedDetails : [];
-    if (failedDetails.length > 0) {
-        failedDetails.forEach(item => {
-            const id = item.id != null ? String(item.id) : '-';
-            const label = String(item.label || item.name || 'Task ACS');
-            const err = String(item.error || 'Unknown error');
-            const info = item.info ? ` | info=${String(item.info)}` : '';
-            lines.push(`#${id} ${label} | error=${err}${info}`);
-        });
-    } else {
-        const tasks = Array.isArray(data.tasks) ? data.tasks : [];
-        tasks.filter(t => String(t.status) === 'failed').forEach(t => {
-            lines.push(`#${t.id} ${t.label || t.name || 'Task ACS'} | status=failed`);
-        });
-    }
-
-    const ok = await copyTextToClipboard(lines.join('\n'));
-    alert(ok ? 'Log task gagal berhasil dicopy.' : 'Gagal copy log. Silakan coba browser lain.');
 }
 
 function renderAddWanProgress(data) {
@@ -776,12 +708,10 @@ function renderAddWanProgress(data) {
     const badge = document.getElementById('addWanProgressBadge');
     const summary = document.getElementById('addWanProgressSummary');
     const list = document.getElementById('addWanProgressList');
-    const btnCopy = document.getElementById('btnCopyAddWanFailed');
     if (!box || !badge || !summary || !list) return;
 
     box.style.display = 'block';
     summary.textContent = data.summary || 'Workflow sedang diproses.';
-    addWanLastProgressData = data;
 
     if (data.hasFailure) {
         badge.className = 'text-danger';
@@ -793,7 +723,6 @@ function renderAddWanProgress(data) {
         badge.className = 'text-warning';
         badge.textContent = 'Berjalan';
     }
-    if (btnCopy) btnCopy.style.display = data.hasFailure ? 'inline-block' : 'none';
 
     const tasks = Array.isArray(data.tasks) ? data.tasks : [];
     list.innerHTML = tasks.map(task => {
@@ -810,18 +739,9 @@ function renderAddWanProgress(data) {
             statusClass = 'text-warning';
             statusLabel = 'Diproses';
         }
-        const label = String(task.label || task.name || 'Task ACS');
-        let icon = 'bi-circle';
-        if (/Membuat slot WAN/i.test(label)) icon = 'bi-node-plus';
-        else if (/Membuat koneksi WAN/i.test(label)) icon = 'bi-diagram-2';
-        else if (/VLAN|binding/i.test(label)) icon = 'bi-tags';
-        else if (/Wi-?Fi/i.test(label)) icon = 'bi-wifi';
-        else if (/DHCP/i.test(label)) icon = 'bi-server';
-        else if (/Verifikasi/i.test(label)) icon = 'bi-check2-circle';
-
         return `
             <div style="display:flex; justify-content:space-between; gap:12px; border:1px dashed var(--border); border-radius:12px; padding:10px 12px; background:rgba(15,23,42,0.08);">
-                <span style="font-size:12px; color:var(--text);"><i class="bi ${icon} me-2"></i>${label}</span>
+                <span style="font-size:12px; color:var(--text);">${task.label || task.name || 'Task ACS'}</span>
                 <span class="${statusClass}" style="font-size:12px; font-weight:700;">${statusLabel}</span>
             </div>
         `;
@@ -852,12 +772,10 @@ async function pollAddWanProgress() {
             if (btn) btn.disabled = false;
             if (txt) txt.style.display = 'inline-block';
             if (ldr) ldr.style.display = 'none';
-            if (!data.hasFailure) {
-                setTimeout(() => {
-                    closeModal('addWanModal');
-                    location.reload();
-                }, 1800);
-            }
+            setTimeout(() => {
+                closeModal('addWanModal');
+                location.reload();
+            }, data.hasFailure ? 2500 : 1800);
             return;
         }
 

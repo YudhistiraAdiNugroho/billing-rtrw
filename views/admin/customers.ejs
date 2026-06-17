@@ -86,7 +86,7 @@
             <tr><td colspan="8" class="text-center text-muted" style="padding:32px"><%= t('admin.customers.empty', 'Belum ada pelanggan') %></td></tr>
           <% } %>
           <% customers.forEach((c, i) => { %>
-            <tr data-router-ids="<%= JSON.stringify(c.router_ids) %>">
+            <tr>
               <td class="text-muted"><%= i+1 %></td>
               <td class="fw6"><%= c.name %></td>
               <td>
@@ -191,14 +191,14 @@
         <div class="form-row">
           <div class="fg">
             <label class="fl">Router MikroTik</label>
-            <select class="fs" name="router_ids[]" id="add_router_ids" multiple size="4" onchange="loadRouterListsFromSelect('add', this)">
+            <select class="fs" name="router_id" id="add_router_select" onchange="loadRouterLists('add', this.value)">
+              <option value="">-- Default (Pengaturan) --</option>
               <% if (typeof routers !== 'undefined') { %>
                 <% routers.forEach(r => { %>
                   <option value="<%= r.id %>"><%= r.name %> (<%= r.host %>)</option>
                 <% }) %>
               <% } %>
             </select>
-            <div class="hint" style="font-size:11px">Tahan Ctrl/Cmd untuk memilih beberapa router</div>
           </div>
           <div class="fg">
             <label class="fl">Metode Koneksi</label>
@@ -414,14 +414,14 @@
         <div class="form-row">
           <div class="fg">
             <label class="fl">Router MikroTik</label>
-            <select class="fs" name="router_ids[]" id="e_router_ids" multiple size="4" onchange="loadRouterListsFromSelect('edit', this)">
+            <select class="fs" name="router_id" id="e_router_id" onchange="loadRouterLists('edit', this.value)">
+              <option value="">-- Default (Pengaturan) --</option>
               <% if (typeof routers !== 'undefined') { %>
                 <% routers.forEach(r => { %>
                   <option value="<%= r.id %>"><%= r.name %> (<%= r.host %>)</option>
                 <% }) %>
               <% } %>
             </select>
-            <div class="hint" style="font-size:11px">Tahan Ctrl/Cmd untuk memilih beberapa router</div>
           </div>
           <div class="fg">
             <label class="fl">Metode Koneksi</label>
@@ -805,24 +805,8 @@ function toggleConnectionFields(type) {
   }
 
   if (connType === 'hotspot') {
-    const routerSelect = document.getElementById(type === 'add' ? 'add_router_ids' : 'e_router_ids');
-    const firstSelectedOption = routerSelect.selectedOptions[0];
-    const routerId = firstSelectedOption ? firstSelectedOption.value : '';
+    const routerId = (type === 'add' ? document.getElementById('add_router_select') : document.getElementById('e_router_id'))?.value || '';
     loadHotspotProfiles(type, routerId);
-  }
-}
-
-function loadRouterListsFromSelect(type, selectElement) {
-  const selectedOptions = Array.from(selectElement.selectedOptions);
-  const routerIds = selectedOptions.map(opt => opt.value).filter(id => id);
-  
-  if (routerIds.length === 0) {
-    loadRouterLists(type, '');
-  } else if (routerIds.length === 1) {
-    loadRouterLists(type, routerIds[0]);
-  } else {
-    // Multiple routers selected - load from all
-    loadRouterListsMulti(type, routerIds);
   }
 }
 
@@ -838,13 +822,7 @@ function editCust(idx) {
   document.getElementById('e_email').value=c.email||'';
   document.getElementById('e_address').value=c.address||'';
   document.getElementById('e_package').value=c.package_id||'';
-  
-  // Set selected router IDs
-  const eRouterIds = document.getElementById('e_router_ids');
-  Array.from(eRouterIds.options).forEach(opt => {
-    opt.selected = c.router_ids && c.router_ids.includes(Number(opt.value));
-  });
-  
+  document.getElementById('e_router_id').value=c.router_id||'';
   document.getElementById('e_connection_type').value=c.connection_type||'pppoe';
   document.getElementById('e_pppoe').value=c.pppoe_username||'';
   document.getElementById('e_static_ip').value=c.static_ip||'';
@@ -867,9 +845,7 @@ function editCust(idx) {
   document.getElementById('e_isolate_day').value=(c.isolate_day || 10);
   toggleConnectionFields('edit');
   openModal('editModal');
-  // Load router lists using first router ID if any
-  const firstRouterId = c.router_ids && c.router_ids.length > 0 ? c.router_ids[0] : '';
-  loadRouterLists('edit', firstRouterId, c.id || '');
+  loadRouterLists('edit', c.router_id || '', c.id || '');
 }
 
 function openGenInvoice(idx) {
@@ -1068,18 +1044,6 @@ function loadRouterLists(type, routerId = '', excludeCustomerId = '') {
   }
 }
 
-async function loadRouterListsMulti(type, routerIds = []) {
-  if (type === 'add') {
-    await loadPppoeAddMulti(routerIds);
-    await loadMikrotikProfilesMulti(routerIds);
-    await loadHotspotProfilesMulti('add', routerIds);
-  } else {
-    await loadPppoeEditMulti(routerIds, currentEditCustomerId || '');
-    await loadMikrotikProfilesMulti(routerIds);
-    await loadHotspotProfilesMulti('edit', routerIds);
-  }
-}
-
 async function loadMikrotikProfiles(routerId = '') {
   try {
     const url = routerId ? `/admin/api/mikrotik/profiles/${routerId}` : '/admin/api/mikrotik/profiles';
@@ -1101,202 +1065,6 @@ async function loadMikrotikProfiles(routerId = '') {
     });
   } catch (e) {
     console.error('Failed to load MikroTik profiles', e);
-  }
-}
-
-async function loadPppoeAddMulti(routerIds = []) {
-  try {
-    const allUsers = [];
-    const seenNames = new Set();
-    const routerMap = {}; // Track which router each user comes from
-    
-    for (const routerId of routerIds) {
-      try {
-        const url = `/admin/api/mikrotik/users?routerId=${encodeURIComponent(routerId)}&onlyUnused=1`;
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const users = await res.json();
-        
-        for (const u of users) {
-          if (u && u.name && !seenNames.has(u.name)) {
-            allUsers.push(u);
-            routerMap[u.name] = routerId;
-            seenNames.add(u.name);
-          }
-        }
-      } catch (e) {
-        console.error(`Failed to load PPPoE users from router ${routerId}`, e);
-      }
-    }
-    
-    const datalist = document.getElementById('add_pppoe_list');
-    if (datalist) {
-      datalist.innerHTML = '';
-      allUsers.forEach(u => {
-        datalist.insertAdjacentHTML('beforeend', `<option value="${String(u.name).replace(/"/g, '&quot;')}"></option>`);
-      });
-    }
-    
-    const hint = document.getElementById('add_pppoe_hint');
-    if (hint) {
-      if (allUsers.length > 0) {
-        const routerList = [...new Set(Object.values(routerMap))].join(', ');
-        hint.innerText = `Tersedia ${allUsers.length} user PPPoE dari ${routerIds.length} router (yang belum dipakai).`;
-      } else {
-        hint.innerText = 'Tidak ada user PPPoE yang tersedia di router terpilih.';
-      }
-    }
-  } catch (e) {
-    console.error('Failed to load multiple router PPPoE users', e);
-  }
-}
-
-async function loadPppoeEditMulti(routerIds = [], excludeCustomerId = '') {
-  try {
-    const allUsers = [];
-    const seenNames = new Set();
-    
-    for (const routerId of routerIds) {
-      try {
-        const qs = new URLSearchParams();
-        qs.set('routerId', String(routerId));
-        qs.set('onlyUnused', '1');
-        if (excludeCustomerId) qs.set('excludeCustomerId', String(excludeCustomerId));
-        
-        const res = await fetch(`/admin/api/mikrotik/users?${qs.toString()}`);
-        if (!res.ok) continue;
-        const users = await res.json();
-        
-        for (const u of users) {
-          if (u && u.name && !seenNames.has(u.name)) {
-            allUsers.push(u);
-            seenNames.add(u.name);
-          }
-        }
-      } catch (e) {
-        console.error(`Failed to load PPPoE users from router ${routerId}`, e);
-      }
-    }
-    
-    const datalist = document.getElementById('e_pppoe_list');
-    if (datalist) {
-      datalist.innerHTML = '';
-      allUsers.forEach(u => {
-        datalist.insertAdjacentHTML('beforeend', `<option value="${String(u.name).replace(/"/g, '&quot;')}"></option>`);
-      });
-    }
-    
-    const hint = document.getElementById('e_pppoe_hint');
-    if (hint) {
-      if (allUsers.length > 0) {
-        hint.innerText = `Tersedia ${allUsers.length} user PPPoE dari ${routerIds.length} router (yang belum dipakai).`;
-      } else {
-        hint.innerText = 'Tidak ada user PPPoE yang tersedia di router terpilih.';
-      }
-    }
-  } catch (e) {
-    console.error('Failed to load multiple router PPPoE users for edit', e);
-  }
-}
-
-async function loadHotspotProfilesMulti(type, routerIds = []) {
-  try {
-    const allProfiles = [];
-    const seenNames = new Set();
-    
-    for (const routerId of routerIds) {
-      try {
-        const url = `/admin/api/mikrotik/hotspot-user-profiles?routerId=${encodeURIComponent(routerId)}`;
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const rows = await res.json();
-        
-        for (const p of rows) {
-          const name = p && p.name ? String(p.name).trim() : '';
-          if (name && !seenNames.has(name)) {
-            allProfiles.push(p);
-            seenNames.add(name);
-          }
-        }
-      } catch (e) {
-        console.error(`Failed to load hotspot profiles from router ${routerId}`, e);
-      }
-    }
-    
-    if (type === 'add') {
-      const datalist = document.getElementById('add_hotspot_profile_list');
-      const hint = document.getElementById('add_hotspot_profile_hint');
-      if (datalist) {
-        datalist.innerHTML = '';
-        allProfiles.forEach(p => {
-          const name = p && p.name ? String(p.name).trim() : '';
-          if (name) {
-            datalist.insertAdjacentHTML('beforeend', `<option value="${name.replace(/"/g, '&quot;')}"></option>`);
-          }
-        });
-      }
-      if (hint) {
-        hint.innerText = allProfiles.length ? `Tersedia ${allProfiles.length} profile hotspot dari ${routerIds.length} router.` : 'Tidak ada profile hotspot di router terpilih.';
-      }
-    } else {
-      const datalist = document.getElementById('e_hotspot_profile_list');
-      const hint = document.getElementById('e_hotspot_profile_hint');
-      if (datalist) {
-        datalist.innerHTML = '';
-        allProfiles.forEach(p => {
-          const name = p && p.name ? String(p.name).trim() : '';
-          if (name) {
-            datalist.insertAdjacentHTML('beforeend', `<option value="${name.replace(/"/g, '&quot;')}"></option>`);
-          }
-        });
-      }
-      if (hint) {
-        hint.innerText = allProfiles.length ? `Tersedia ${allProfiles.length} profile hotspot dari ${routerIds.length} router.` : 'Tidak ada profile hotspot di router terpilih.';
-      }
-    }
-  } catch (e) {
-    console.error('Failed to load multiple router hotspot profiles', e);
-  }
-}
-
-async function loadMikrotikProfilesMulti(routerIds = []) {
-  try {
-    const allProfiles = [];
-    const seenNames = new Set();
-    
-    for (const routerId of routerIds) {
-      try {
-        const url = `/admin/api/mikrotik/profiles/${routerId}`;
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const profiles = await res.json();
-        
-        for (const p of profiles) {
-          if (p && p.name && !seenNames.has(p.name)) {
-            allProfiles.push(p);
-            seenNames.add(p.name);
-          }
-        }
-      } catch (e) {
-        console.error(`Failed to load MikroTik profiles from router ${routerId}`, e);
-      }
-    }
-    
-    const selAdd = document.getElementById('add_isolir_select');
-    const selEdit = document.getElementById('e_isolir_profile');
-    
-    const defaultOpt = '<option value="isolir">isolir</option>';
-    if (selAdd) selAdd.innerHTML = defaultOpt;
-    if (selEdit) selEdit.innerHTML = defaultOpt;
-
-    allProfiles.forEach(p => {
-      if(p.name === 'isolir') return;
-      const opt = `<option value="${p.name}">${p.name}</option>`;
-      if (selAdd) selAdd.innerHTML += opt;
-      if (selEdit) selEdit.innerHTML += opt;
-    });
-  } catch (e) {
-    console.error('Failed to load multiple router MikroTik profiles', e);
   }
 }
 loadRouterLists('add');
