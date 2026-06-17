@@ -1523,20 +1523,8 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.hotspot_profile = '';
     }
 
-    // Get router_ids array
-    let routerIds = [];
-    if (req.body.router_ids) {
-      routerIds = Array.isArray(req.body.router_ids)
-        ? req.body.router_ids.map(id => Number(id)).filter(id => id > 0)
-        : [Number(req.body.router_ids)].filter(id => id > 0);
-    }
-    // Fall back to router_id if router_ids not present
-    if (routerIds.length === 0 && req.body.router_id) {
-      routerIds = [Number(req.body.router_id)].filter(id => id > 0);
-    }
-    req.body.router_ids = routerIds;
-
     if (connectionType === 'pppoe') {
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
       const password = String(req.body.pppoe_password || '').trim();
       const remoteAddress = String(req.body.pppoe_remote_address || '').trim();
@@ -1546,27 +1534,19 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.pppoe_remote_address = remoteAddress;
       
       if (!username) throw new Error('PPPoE Username tidak boleh kosong');
-      // Check for existing username in ANY of the selected routers
-      const existing = db.prepare(`
-        SELECT c.id, c.name, r.name as router_name 
-        FROM customers c
-        JOIN customer_routers cr ON c.id = cr.customer_id
-        JOIN routers r ON cr.router_id = r.id
-        WHERE cr.router_id IN (${routerIds.map(() => '?').join(',')}) AND c.pppoe_username = ?
-        LIMIT 1
-      `).get(...routerIds, username);
-      if (existing) throw new Error(`PPPoE Username sudah dipakai pelanggan lain: ${existing.name} di router ${existing.router_name}`);
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? LIMIT 1').get(routerId, username);
+      if (existing) throw new Error(`PPPoE Username sudah dipakai pelanggan lain: ${existing.name}`);
 
       // Only validate against MikroTik if password is not provided (meaning it's from MikroTik list)
-      if (!password && routerIds.length > 0) {
+      if (!password) {
         let conn = null;
         try {
-          conn = await mikrotikService.getConnection(routerIds[0]);
+          conn = await mikrotikService.getConnection(routerId);
           const results = await conn.client.menu('/ppp/secret')
             .where('service', 'pppoe')
             .where('name', username)
             .get();
-          if (!Array.isArray(results) || results.length === 0) throw new Error('PPPoE Username tidak ditemukan di MikroTik (router pertama)');
+          if (!Array.isArray(results) || results.length === 0) throw new Error('PPPoE Username tidak ditemukan di MikroTik');
         } finally {
           if (conn && conn.api) conn.api.close();
         }
@@ -1574,19 +1554,12 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
     }
 
     if (connectionType === 'hotspot') {
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.hotspot_username || '').trim();
       req.body.hotspot_username = username;
       if (!username) throw new Error('Hotspot Username tidak boleh kosong');
-      // Check for existing username in ANY of the selected routers
-      const existing = db.prepare(`
-        SELECT c.id, c.name, r.name as router_name 
-        FROM customers c
-        JOIN customer_routers cr ON c.id = cr.customer_id
-        JOIN routers r ON cr.router_id = r.id
-        WHERE cr.router_id IN (${routerIds.map(() => '?').join(',')}) AND c.hotspot_username = ?
-        LIMIT 1
-      `).get(...routerIds, username);
-      if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name} di router ${existing.router_name}`);
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? LIMIT 1').get(routerId, username);
+      if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name}`);
 
       const password = String(req.body.hotspot_password || '').trim() || username;
       req.body.hotspot_password = password;
@@ -1599,11 +1572,9 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.hotspot_profile = profile;
       if (!profile) throw new Error('Hotspot User Profile tidak boleh kosong');
 
-      if (routerIds.length > 0) {
-        const profs = await mikrotikService.getHotspotUserProfiles(routerIds[0]);
-        const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
-        if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik (router pertama)`);
-      }
+      const profs = await mikrotikService.getHotspotUserProfiles(routerId);
+      const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
+      if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik`);
     }
 
     customerSvc.createCustomer(req.body);
@@ -1623,16 +1594,17 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
           if (pkg) targetProfile = pkg.name;
         }
         
-        if (targetProfile && routerIds.length > 0) {
+        if (targetProfile) {
           try {
-            await mikrotikService.createPppoeSecretMulti({
+            await mikrotikService.createPppoeSecret({
               username: req.body.pppoe_username,
               password: password,
               profile: targetProfile,
-              remoteAddress: remoteAddress
-            }, routerIds);
+              remoteAddress: remoteAddress,
+              routerId: req.body.router_id
+            });
           } catch (mErr) {
-            console.error('Mikrotik create PPPoE secret error (multi):', mErr);
+            console.error('Mikrotik create PPPoE secret error:', mErr);
           }
         }
       } else {
@@ -1644,29 +1616,27 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
           const pkg = customerSvc.getPackageById(req.body.package_id);
           if (pkg) targetProfile = pkg.name;
         }
-        if (targetProfile && routerIds.length > 0) {
+        if (targetProfile) {
           try {
-            await mikrotikService.setPppoeProfileMulti(req.body.pppoe_username, targetProfile, routerIds);
+            await mikrotikService.setPppoeProfile(req.body.pppoe_username, targetProfile, req.body.router_id);
           } catch (mErr) {
-            console.error('Mikrotik sync error (create, multi):', mErr);
+            console.error('Mikrotik sync error (create):', mErr);
           }
         }
       }
     }
     if (connectionType === 'hotspot' && req.body.hotspot_username) {
       const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
-      if (routerIds.length > 0) {
-        try {
-          await mikrotikService.upsertHotspotUserMulti({
-            username: String(req.body.hotspot_username || '').trim(),
-            password: String(req.body.hotspot_password || '').trim(),
-            profile: String(req.body.hotspot_profile || '').trim(),
-            macAddress: String(req.body.mac_address || '').trim(),
-            disabled
-          }, routerIds);
-        } catch (mErr) {
-          console.error('Mikrotik sync error (create hotspot, multi):', mErr);
-        }
+      try {
+        await mikrotikService.upsertHotspotUser({
+          username: String(req.body.hotspot_username || '').trim(),
+          password: String(req.body.hotspot_password || '').trim(),
+          profile: String(req.body.hotspot_profile || '').trim(),
+          macAddress: String(req.body.mac_address || '').trim(),
+          disabled
+        }, req.body.router_id ? Number(req.body.router_id) : null);
+      } catch (mErr) {
+        console.error('Mikrotik sync error (create hotspot):', mErr);
       }
     }
 
@@ -1691,63 +1661,34 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       req.body.hotspot_profile = '';
     }
 
-    // Get router_ids array
-    let routerIds = [];
-    if (req.body.router_ids) {
-      routerIds = Array.isArray(req.body.router_ids)
-        ? req.body.router_ids.map(id => Number(id)).filter(id => id > 0)
-        : [Number(req.body.router_ids)].filter(id => id > 0);
-    }
-    // Fall back to router_id if router_ids not present
-    if (routerIds.length === 0 && req.body.router_id) {
-      routerIds = [Number(req.body.router_id)].filter(id => id > 0);
-    }
-    req.body.router_ids = routerIds;
-
     if (connectionType === 'pppoe') {
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
       req.body.pppoe_username = username;
       if (!username) throw new Error('PPPoE Username tidak boleh kosong');
-      // Check for existing username in ANY of the selected routers, excluding current customer
-      const existing = db.prepare(`
-        SELECT c.id, c.name, r.name as router_name 
-        FROM customers c
-        JOIN customer_routers cr ON c.id = cr.customer_id
-        JOIN routers r ON cr.router_id = r.id
-        WHERE cr.router_id IN (${routerIds.map(() => '?').join(',')}) AND c.pppoe_username = ? AND c.id != ?
-        LIMIT 1
-      `).get(...routerIds, username, customerId);
-      if (existing) throw new Error(`PPPoE Username sudah dipakai pelanggan lain: ${existing.name} di router ${existing.router_name}`);
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? AND id != ? LIMIT 1').get(routerId, username, customerId);
+      if (existing) throw new Error(`PPPoE Username sudah dipakai pelanggan lain: ${existing.name}`);
 
-      if (routerIds.length > 0) {
-        let conn = null;
-        try {
-          conn = await mikrotikService.getConnection(routerIds[0]);
-          const results = await conn.client.menu('/ppp/secret')
-            .where('service', 'pppoe')
-            .where('name', username)
-            .get();
-          if (!Array.isArray(results) || results.length === 0) throw new Error('PPPoE Username tidak ditemukan di MikroTik (router pertama)');
-        } finally {
-          if (conn && conn.api) conn.api.close();
-        }
+      let conn = null;
+      try {
+        conn = await mikrotikService.getConnection(routerId);
+        const results = await conn.client.menu('/ppp/secret')
+          .where('service', 'pppoe')
+          .where('name', username)
+          .get();
+        if (!Array.isArray(results) || results.length === 0) throw new Error('PPPoE Username tidak ditemukan di MikroTik');
+      } finally {
+        if (conn && conn.api) conn.api.close();
       }
     }
 
     if (connectionType === 'hotspot') {
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.hotspot_username || '').trim();
       req.body.hotspot_username = username;
       if (!username) throw new Error('Hotspot Username tidak boleh kosong');
-      // Check for existing username in ANY of the selected routers, excluding current customer
-      const existing = db.prepare(`
-        SELECT c.id, c.name, r.name as router_name 
-        FROM customers c
-        JOIN customer_routers cr ON c.id = cr.customer_id
-        JOIN routers r ON cr.router_id = r.id
-        WHERE cr.router_id IN (${routerIds.map(() => '?').join(',')}) AND c.hotspot_username = ? AND c.id != ?
-        LIMIT 1
-      `).get(...routerIds, username, customerId);
-      if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name} di router ${existing.router_name}`);
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? AND id != ? LIMIT 1').get(routerId, username, customerId);
+      if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name}`);
 
       const password = String(req.body.hotspot_password || '').trim() || username;
       req.body.hotspot_password = password;
@@ -1760,85 +1701,13 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       req.body.hotspot_profile = profile;
       if (!profile) throw new Error('Hotspot User Profile tidak boleh kosong');
 
-      if (routerIds.length > 0) {
-        const profs = await mikrotikService.getHotspotUserProfiles(routerIds[0]);
-        const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
-        if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik (router pertama)`);
-      }
+      const profs = await mikrotikService.getHotspotUserProfiles(routerId);
+      const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
+      if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik`);
     }
 
     customerSvc.updateCustomer(req.params.id, req.body);
     
-    // ─── CLEANUP: Remove credentials from routers that are no longer assigned ───
-    const oldRouters = customerSvc.getCustomerRouters(customerId);
-    const removedRouters = oldRouters.filter(rId => !routerIds.includes(rId));
-    const oldCustomer = customerSvc.getCustomerById(customerId);
-    
-    if (removedRouters.length > 0 && oldCustomer) {
-      // Cleanup PPPoE from removed routers
-      if (oldCustomer.connection_type === 'pppoe' && oldCustomer.pppoe_username) {
-        try {
-          for (const routerId of removedRouters) {
-            try {
-              const secrets = await mikrotikService.getPppoeSecrets(routerId);
-              let secret = secrets.find(s => s.name === oldCustomer.pppoe_username);
-              if (!secret) {
-                const username = String(oldCustomer.pppoe_username || '').toLowerCase();
-                secret = secrets.find(s => String(s.name || '').toLowerCase() === username);
-              }
-              if (secret) {
-                const secretId = secret['.id'] || secret.id;
-                if (secretId) {
-                  await mikrotikService.deletePppoeSecret(secretId, routerId);
-                  console.log(`[CLEANUP] Removed PPPoE user "${oldCustomer.pppoe_username}" from router ${routerId}`);
-                }
-              }
-            } catch (e) {
-              console.error(`[CLEANUP] Error removing PPPoE from router ${routerId}:`, e.message);
-            }
-          }
-        } catch (e) {
-          console.error('[CLEANUP] PPPoE cleanup error:', e);
-        }
-      }
-      
-      // Cleanup Hotspot from removed routers
-      if (oldCustomer.connection_type === 'hotspot' && oldCustomer.hotspot_username) {
-        try {
-          for (const routerId of removedRouters) {
-            try {
-              const hotspotUser = await mikrotikService.getHotspotUserByName(oldCustomer.hotspot_username, routerId);
-              if (hotspotUser && hotspotUser.id) {
-                await mikrotikService.deleteHotspotUser(hotspotUser.id, routerId);
-                console.log(`[CLEANUP] Removed Hotspot user "${oldCustomer.hotspot_username}" from router ${routerId}`);
-              }
-            } catch (e) {
-              console.error(`[CLEANUP] Error removing Hotspot from router ${routerId}:`, e.message);
-            }
-          }
-        } catch (e) {
-          console.error('[CLEANUP] Hotspot cleanup error:', e);
-        }
-      }
-      
-      // Cleanup Static IP from removed routers
-      if (oldCustomer.connection_type === 'static' && oldCustomer.static_ip) {
-        try {
-          for (const routerId of removedRouters) {
-            try {
-              await mikrotikService.removeStaticIp(oldCustomer.static_ip, routerId);
-              console.log(`[CLEANUP] Removed static IP "${oldCustomer.static_ip}" from router ${routerId}`);
-            } catch (e) {
-              console.error(`[CLEANUP] Error removing static IP from router ${routerId}:`, e.message);
-            }
-          }
-        } catch (e) {
-          console.error('[CLEANUP] Static IP cleanup error:', e);
-        }
-      }
-    }
-    
-    // ─── SYNC: Update credentials in new/existing routers ───
     // Sync to MikroTik if username provided
     if (connectionType === 'pppoe' && req.body.pppoe_username) {
       let targetProfile = '';
@@ -1848,28 +1717,26 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
         const pkg = customerSvc.getPackageById(req.body.package_id);
         if (pkg) targetProfile = pkg.name;
       }
-      if (targetProfile && routerIds.length > 0) {
+      if (targetProfile) {
         try {
-          await mikrotikService.setPppoeProfileMulti(req.body.pppoe_username, targetProfile, routerIds);
+          await mikrotikService.setPppoeProfile(req.body.pppoe_username, targetProfile, req.body.router_id);
         } catch (mErr) {
-          console.error('Mikrotik sync error (update, multi):', mErr);
+          console.error('Mikrotik sync error (update):', mErr);
         }
       }
     }
     if (connectionType === 'hotspot' && req.body.hotspot_username) {
       const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
-      if (routerIds.length > 0) {
-        try {
-          await mikrotikService.upsertHotspotUserMulti({
-            username: String(req.body.hotspot_username || '').trim(),
-            password: String(req.body.hotspot_password || '').trim(),
-            profile: String(req.body.hotspot_profile || '').trim(),
-            macAddress: String(req.body.mac_address || '').trim(),
-            disabled
-          }, routerIds);
-        } catch (mErr) {
-          console.error('Mikrotik sync error (update hotspot, multi):', mErr);
-        }
+      try {
+        await mikrotikService.upsertHotspotUser({
+          username: String(req.body.hotspot_username || '').trim(),
+          password: String(req.body.hotspot_password || '').trim(),
+          profile: String(req.body.hotspot_profile || '').trim(),
+          macAddress: String(req.body.mac_address || '').trim(),
+          disabled
+        }, req.body.router_id ? Number(req.body.router_id) : null);
+      } catch (mErr) {
+        console.error('Mikrotik sync error (update hotspot):', mErr);
       }
     }
 
@@ -3832,58 +3699,18 @@ router.get('/api/stats', requireAdmin, async (req, res) => {
   }
 });
 
-router.get('/api/onu/:id/faults', requireAdmin, async (req, res) => {
-  try {
-    const deviceId = req.params.id;
-    const faults = customerDevice.getDeviceFaults(deviceId);
-    res.json({ deviceId, faults, total: faults.length });
-  } catch (e) {
-    res.status(500).json({ error: 'Failed to get device faults', detail: e.message });
-  }
-});
-
-router.post('/api/onu/:id/faults/:faultId/resolve', requireAdmin, async (req, res) => {
-  try {
-    const db = require('../config/database');
-    const faultId = Number(req.params.faultId);
-    db.prepare(`
-      UPDATE acs_device_faults 
-      SET resolved = 1, resolved_at = NOW_LOCAL()
-      WHERE id = ?
-    `).run(faultId);
-    res.json({ ok: true, message: 'Fault marked as resolved' });
-  } catch (e) {
-    res.status(500).json({ error: 'Failed to resolve fault', detail: e.message });
-  }
-});
-
 router.get('/api/devices', requireAdmin, async (req, res) => {
   try {
     const { search, status, limit = 999999, offset = 0 } = req.query;
     const result = await customerDevice.listAllDevices(999999);
     if (!result.ok) return res.json({ error: result.message });
     const mikrotikService = require('../services/mikrotikService');
-    let activeSessionsMap = new Map();
-    try {
-      activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
-    } catch (_) { /* fallback to empty map */ }
-    let activeIpsMap = new Map();
-    try {
-      if (typeof mikrotikService.getActiveStaticIpsMap === 'function') {
-        activeIpsMap = await mikrotikService.getActiveStaticIpsMap().catch(() => new Map());
-      }
-    } catch (_) { /* fallback to empty map */ }
+    const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
 
     let devices = result.devices.map(d => {
       const pppoeUser = customerDevice.extractPppoeUser(d);
-      const staticIp = customerDevice.extractPppoeIp(d);
-      let isActive = false;
-      if (pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-') {
-        isActive = activeSessionsMap.has(pppoeUser.toLowerCase());
-      } else if (staticIp && staticIp !== 'N/A' && staticIp !== '-' && staticIp !== '0.0.0.0') {
-        isActive = activeIpsMap.has(staticIp.toLowerCase());
-      }
-      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id, isActive) || {};
+      const isPppoeActive = pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-' && activeSessionsMap.has(pppoeUser.toLowerCase());
+      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id, isPppoeActive) || {};
       const tagsArr = Array.isArray(d._tags) ? d._tags.filter(Boolean).map(String) : [];
       return {
         id: String(d._id || ''),
@@ -3916,14 +3743,12 @@ router.get('/api/devices', requireAdmin, async (req, res) => {
       const billingCustomers = customerSvc.getAllCustomers(s);
       const matchingTags = new Set(billingCustomers.map(c => c.genieacs_tag?.toLowerCase()).filter(Boolean));
       const matchingPppoes = new Set(billingCustomers.map(c => c.pppoe_username?.toLowerCase()).filter(Boolean));
-      const matchingStaticIps = new Set(billingCustomers.map(c => c.static_ip?.toLowerCase()).filter(Boolean));
 
       devices = devices.filter(d => 
         String(d.id || '').toLowerCase().includes(s) ||
         (Array.isArray(d.tags) && d.tags.some(t => String(t || '').toLowerCase().includes(s) || matchingTags.has(String(t || '').toLowerCase()))) || 
         String(d.serialNumber || '').toLowerCase().includes(s) || 
         String(d.pppoeIP || '').toLowerCase().includes(s) ||
-        matchingStaticIps.has(String(d.pppoeIP || '').toLowerCase()) ||
         (String(d.pppoeUsername || '') !== 'N/A' && String(d.pppoeUsername || '').toLowerCase().includes(s)) ||
         matchingPppoes.has(String(d.pppoeUsername || '').toLowerCase())
       ); 
@@ -4063,32 +3888,24 @@ router.get('/api/mikrotik/users', requireAdmin, async (req, res) => {
 
 // ─── MIKROTIK MONITORING ───────────────────────────────────────────────────
 router.get('/mikrotik', requireAdminSession, requireSidebarMenuAccess('mikrotik'), (req, res) => {
-  // Gunakan router dari database (multi-router)
-  let routers = mikrotikService.getAllRouters();
-
-  // Fallback: Jika belum ada router di DB, tampilkan dari settings.json agar tetap kompatibel
-  if (!routers || routers.length === 0) {
-    const settings = getSettings();
-    if (settings.mikrotik_host) {
-      routers = [{
-        id: null,
-        name: 'Default (settings.json)',
-        host: settings.mikrotik_host,
-        user: settings.mikrotik_user || '',
-        port: settings.mikrotik_port || 8728,
-        is_active: true
-      }];
-    } else {
-      routers = [];
-    }
-  }
-
+  // Hanya gunakan router dari settings.json (tidak dari database)
+  const settings = getSettings();
+  const router = {
+    id: null, // null = router dari settings.json
+    name: 'MikroTik (settings.json)',
+    host: settings.mikrotik_host || '',
+    user: settings.mikrotik_user || '',
+    port: settings.mikrotik_port || 8728,
+    is_active: true
+  };
+  
+  const routers = [router]; // Hanya 1 router
+  
   res.render('admin/mikrotik', {
     title: 'Monitoring MikroTik', company: company(), activePage: 'mikrotik',
     routers, msg: flashMsg(req)
   });
 });
-
 
 router.get('/vouchers', requireAdminSession, (req, res) => {
   const routers = mikrotikService.getAllRouters();

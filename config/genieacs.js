@@ -269,45 +269,39 @@ const GENIEACS_URL = process.env.GENIEACS_URL || 'http://localhost:7557';
 const GENIEACS_USERNAME = process.env.GENIEACS_USERNAME;
 const GENIEACS_PASSWORD = process.env.GENIEACS_PASSWORD;
 
-// Helper: Get all ACS servers from database - MULTI-MODE SUPPORT
+// Helper: Get all ACS servers from database
 function getAllACSServers() {
     try {
-        const servers = [];
-        const useBuiltin = isBuiltinAcsEnabled();
-        
-        // Add built-in ACS if enabled
-        if (useBuiltin) {
-            servers.push({
+        if (isBuiltinAcsEnabled()) {
+            return [{
                 id: 'builtin',
-                name: 'Built-in ACS (TR-069)',
+                name: 'Built-in ACS',
                 url: 'local',
-                status: 'active',
-                type: 'builtin'
-            });
+                status: 'active'
+            }];
         }
+
+        const legacyUrl = getSetting('genieacs_url', GENIEACS_URL);
+        const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
+        const legacyPass = getSetting('genieacs_password', GENIEACS_PASSWORD);
+        
+        const servers = [];
         
         // Add legacy server if configured
-        const legacyUrl = getSetting('genieacs_url', GENIEACS_URL);
         if (legacyUrl) {
-            const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
-            const legacyPass = getSetting('genieacs_password', GENIEACS_PASSWORD);
             servers.push({
                 id: 'legacy',
-                name: 'Default ACS (External)',
+                name: 'Default ACS',
                 url: legacyUrl,
                 username: legacyUser,
                 password: legacyPass,
-                status: 'active',
-                type: 'external'
+                status: 'active'
             });
         }
         
         // Add servers from database
         const dbServers = db.prepare('SELECT * FROM genieacs_servers WHERE status = ?').all('active');
-        servers.push(...dbServers.map(s => ({
-            ...s,
-            type: 'external'
-        })));
+        servers.push(...dbServers);
         
         return servers;
     } catch (error) {
@@ -316,53 +310,39 @@ function getAllACSServers() {
     }
 }
 
-// Helper: Get specific ACS server by ID - MULTI-MODE SUPPORT
+// Helper: Get specific ACS server by ID
 function getACSServer(serverId) {
-    if (!serverId || serverId === 'auto') {
-        // Auto-select: prefer builtin if available, then legacy, then first DB server
+    if (!serverId) {
         if (isBuiltinAcsEnabled()) {
             return {
                 id: 'builtin',
-                name: 'Built-in ACS (TR-069)',
+                name: 'Built-in ACS',
                 url: 'local',
-                status: 'active',
-                type: 'builtin'
+                status: 'active'
             };
         }
-        
         const legacyUrl = getSetting('genieacs_url', GENIEACS_URL);
+        const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
+        const legacyPass = getSetting('genieacs_password', GENIEACS_PASSWORD);
         if (legacyUrl) {
-            const legacyUser = getSetting('genieacs_username', GENIEACS_USERNAME);
-            const legacyPass = getSetting('genieacs_password', GENIEACS_PASSWORD);
             return {
                 id: 'legacy',
-                name: 'Default ACS (External)',
+                name: 'Default ACS',
                 url: legacyUrl,
                 username: legacyUser,
                 password: legacyPass,
-                status: 'active',
-                type: 'external'
+                status: 'active'
             };
         }
-        
-        // Try first DB server
-        try {
-            const first = db.prepare('SELECT * FROM genieacs_servers WHERE status = ? LIMIT 1').get('active');
-            if (first) {
-                return { ...first, type: 'external' };
-            }
-        } catch (e) { /* ignore */ }
-        
         return null;
     }
 
     if (serverId === 'builtin') {
         return {
             id: 'builtin',
-            name: 'Built-in ACS (TR-069)',
+            name: 'Built-in ACS',
             url: 'local',
-            status: 'active',
-            type: 'builtin'
+            status: 'active'
         };
     }
     
@@ -374,26 +354,23 @@ function getACSServer(serverId) {
         if (legacyUrl) {
             return {
                 id: 'legacy',
-                name: 'Default ACS (External)',
+                name: 'Default ACS',
                 url: legacyUrl,
                 username: legacyUser,
                 password: legacyPass,
-                status: 'active',
-                type: 'external'
+                status: 'active'
             };
         }
         return null;
     }
     
-    // Try to find in database
     try {
-        const server = db.prepare('SELECT * FROM genieacs_servers WHERE id = ? OR id = ?').get(serverId, parseInt(serverId));
-        if (server) {
-            return { ...server, type: 'external' };
-        }
-    } catch (e) { /* ignore */ }
-    
-    return null;
+        const server = db.prepare('SELECT * FROM genieacs_servers WHERE id = ?').get(serverId);
+        return server || null;
+    } catch (error) {
+        logger.error(`[GenieACS] Error getting ACS server ${serverId}: ${error.message}`);
+        return null;
+    }
 }
 
 // Helper: Create axios instance for specific server

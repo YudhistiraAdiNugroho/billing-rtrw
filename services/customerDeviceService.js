@@ -11,47 +11,18 @@ const genieacsApi = require('../config/genieacs');
 const mikrotikService = require('./mikrotikService');
 
 // Helper: Search device across all servers (always get full data)
-/**
- * Get preferred ACS server for a customer device
- * Returns: server object or null
- */
-async function getPreferredAcsServer(tag) {
-  try {
-    // First try to find customer by tag
-    const customer = db.prepare(`
-      SELECT preferred_acs_server_id FROM customers 
-      WHERE genieacs_tag = ? OR pppoe_username = ? OR static_ip = ?
-    `).get(tag, tag, tag);
-    
-    if (customer && customer.preferred_acs_server_id && customer.preferred_acs_server_id !== 'auto') {
-      const serverId = customer.preferred_acs_server_id;
-      const server = genieacsApi.getACSServer(serverId);
-      if (server) return server;
-    }
-  } catch (e) {
-    logger.debug(`Failed to get preferred ACS server: ${e.message}`);
-  }
-  return null;
-}
-
-/**
- * Search device across servers - PARALLEL with deduplication
- * Returns: single device object or null
- */
-async function searchDeviceAcrossServersParallel(query, fullData = true) {
+async function searchDeviceAcrossServers(query, fullData = true) {
   try {
     const servers = genieacsApi.getAllACSServers();
-    const deviceMap = new Map(); // Deduplicate by device ID
     
-    // Query all servers in parallel
-    const promises = servers.map(async (server) => {
+    for (const server of servers) {
       try {
         const instance = genieacsApi.createAxiosInstance(server);
         const params = {
-          query: JSON.stringify(query),
-          limit: 100
+          query: JSON.stringify(query)
         };
         
+        // Only add projection if explicitly requesting minimal data
         if (!fullData) {
           params.projection = '_id,_tags';
         }
@@ -60,50 +31,25 @@ async function searchDeviceAcrossServersParallel(query, fullData = true) {
         try {
           response = await instance.get('/devices', {
             params,
-            timeout: 3000
+            timeout: 15000
           });
         } catch (e) {
-          const isTimeout = e.code === 'ECONNABORTED' || e.code === 'ETIMEDOUT' || String(e.message || '').toLowerCase().includes('timeout');
-          if (isTimeout) {
-            throw e;
-          }
           response = await instance.get('/api/devices', {
             params,
-            timeout: 2000
+            timeout: 15000
           });
         }
         
-        if (response.data && Array.isArray(response.data)) {
-          return response.data.map(d => ({
-            ...d,
-            _acs_server_id: server.id,
-            _acs_server_name: server.name
-          }));
+        if (response.data && response.data.length > 0) {
+          const device = response.data[0];
+          device._acs_server_id = server.id;
+          device._acs_server_name = server.name;
+          logger.debug(`[CustomerDevice] Device found on ${server.name}`);
+          return device;
         }
       } catch (error) {
         logger.debug(`[CustomerDevice] Device not found on ${server.name}: ${error.message}`);
       }
-      return [];
-    });
-    
-    const results = await Promise.allSettled(promises);
-    
-    // Collect and deduplicate
-    for (const result of results) {
-      if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-        for (const device of result.value) {
-          if (device._id && !deviceMap.has(device._id)) {
-            deviceMap.set(device._id, device);
-          }
-        }
-      }
-    }
-    
-    // Return first device or null
-    if (deviceMap.size > 0) {
-      const device = deviceMap.values().next().value;
-      logger.debug(`[CustomerDevice] Device found on ${device._acs_server_name}`);
-      return device;
     }
     
     return null;
@@ -112,8 +58,6 @@ async function searchDeviceAcrossServersParallel(query, fullData = true) {
     return null;
   }
 }
-
-const searchDeviceAcrossServers = searchDeviceAcrossServersParallel;
 
 async function findDeviceByTag(tag) {
   try {
@@ -144,40 +88,6 @@ async function findDeviceByPppoe(pppoeUser) {
   }
 }
 
-async function findDeviceByStaticIp(staticIp) {
-  try {
-    const ip = String(staticIp || '').trim();
-    if (!ip) return null;
-    const keys = [
-      'VirtualParameters.staticIp',
-      ...PPPOE_IP_KEYS
-    ];
-    const query = { $or: keys.map(k => ({ [k]: ip })) };
-    return await searchDeviceAcrossServers(query, true);
-  } catch (e) {
-    logger.error(`[CustomerDevice] Error finding device by Static IP: ${e.message}`);
-    return null;
-  }
-}
-
-async function findDeviceBySerialNumber(serialNumber) {
-  try {
-    const sn = String(serialNumber || '').trim();
-    if (!sn) return null;
-    const keys = [
-      'DeviceID.SerialNumber',
-      'InternetGatewayDevice.DeviceInfo.SerialNumber',
-      'Device.DeviceInfo.SerialNumber',
-      'VirtualParameters.serialNumber'
-    ];
-    const query = { $or: keys.map(k => ({ [k]: sn })) };
-    return await searchDeviceAcrossServers(query, true);
-  } catch (e) {
-    logger.error(`[CustomerDevice] Error finding device by Serial Number: ${e.message}`);
-    return null;
-  }
-}
-
 async function fetchFullDevice(tag) {
   try {
     const query = { $or: [{ _id: tag }, { _tags: tag }] };
@@ -193,78 +103,16 @@ async function resolveDeviceToken(input) {
   const token = String(input ?? '').replace(/[\r\n\t]+/g, '').trim();
   if (!token) return null;
 
-  // 1. Combined single parallel query across all keys
-  const keys = [
-    '_id',
-    '_tags',
-    'VirtualParameters.pppoeUsername',
-    'VirtualParameters.pppUsername',
-    ...PPPOE_USER_KEYS,
-    'VirtualParameters.staticIp',
-    ...PPPOE_IP_KEYS,
-    'DeviceID.SerialNumber',
-    'InternetGatewayDevice.DeviceInfo.SerialNumber',
-    'Device.DeviceInfo.SerialNumber',
-    'VirtualParameters.serialNumber'
-  ];
-  const query = { $or: keys.map(k => ({ [k]: token })) };
-  
-  const direct = await searchDeviceAcrossServers(query, true);
+  const direct = await findDeviceByTag(token);
   if (direct && direct._id) return direct;
 
-  // 2. Fallback to tag variants if not found
+  const byPppoe = await findDeviceByPppoe(token);
+  if (byPppoe && byPppoe._id) return byPppoe;
+
   const found = await findDeviceWithTagVariants(token);
   if (found && found.device && found.device._id) return found.device;
 
   return null;
-}
-
-/**
- * Get unresolved faults for a device
- */
-function getDeviceFaults(deviceId) {
-  try {
-    const faults = db.prepare(`
-      SELECT * FROM acs_device_faults 
-      WHERE device_id = ? AND resolved = 0
-      ORDER BY last_seen DESC
-    `).all(deviceId);
-    return faults || [];
-  } catch (e) {
-    logger.error(`[CustomerDevice] Error getting device faults: ${e.message}`);
-    return [];
-  }
-}
-
-/**
- * Record device fault
- */
-function recordDeviceFault(deviceId, faultCode, faultString, taskId = null) {
-  try {
-    const existing = db.prepare(`
-      SELECT id FROM acs_device_faults 
-      WHERE device_id = ? AND fault_code = ? AND resolved = 0
-    `).get(deviceId, faultCode);
-    
-    if (existing) {
-      // Update existing fault
-      db.prepare(`
-        UPDATE acs_device_faults 
-        SET seen_count = seen_count + 1, last_seen = NOW_LOCAL()
-        WHERE id = ?
-      `).run(existing.id);
-    } else {
-      // Create new fault record
-      db.prepare(`
-        INSERT INTO acs_device_faults (device_id, fault_code, fault_string, task_id, seen_count)
-        VALUES (?, ?, ?, ?, 1)
-      `).run(deviceId, faultCode, faultString, taskId);
-    }
-    
-    logger.warn(`[ACS] Device fault recorded: ${deviceId} - Code: ${faultCode}`);
-  } catch (e) {
-    logger.error(`[CustomerDevice] Error recording device fault: ${e.message}`);
-  }
 }
 
 const parameterPaths = {
@@ -926,24 +774,18 @@ async function getCustomerDeviceData(tag) {
   if (!base || !base._id) return null;
   const device = await fetchFullDevice(base._id);
   
-  let isActive = false;
+  let isPppoeActive = false;
   try {
     const pppoeUser = extractPppoeUser(device);
-    const staticIp = extractPppoeIp(device);
     if (pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-') {
       const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
       if (activeSessionsMap.has(pppoeUser.toLowerCase())) {
-        isActive = true;
-      }
-    } else if (staticIp && staticIp !== 'N/A' && staticIp !== '-' && staticIp !== '0.0.0.0') {
-      const activeIpsMap = await mikrotikService.getActiveStaticIpsMap().catch(() => new Map());
-      if (activeIpsMap.has(staticIp.toLowerCase())) {
-        isActive = true;
+        isPppoeActive = true;
       }
     }
   } catch (e) {}
 
-  return mapDeviceData(device, tag, isActive);
+  return mapDeviceData(device, tag, isPppoeActive);
 }
 
 function fallbackCustomer(tag) {
@@ -1371,7 +1213,7 @@ async function listAllDevices(limit = 999999, acsId = null) {
     servers = servers.filter(s => String(s.id) === String(acsId));
   }
   
-  const deviceMap = new Map(); // Deduplicate by device ID
+  let allDevices = [];
   let lastError = null;
 
   // Query servers in parallel using Promise.allSettled
@@ -1401,28 +1243,19 @@ async function listAllDevices(limit = 999999, acsId = null) {
   });
 
   const results = await Promise.allSettled(promises);
-  
-  // Collect and deduplicate devices
   results.forEach((r) => {
     if (r.status === 'fulfilled') {
-      r.value.forEach(d => {
-        if (d._id && !deviceMap.has(d._id)) {
-          // First server wins for duplicates
-          deviceMap.set(d._id, d);
-        }
-      });
+      allDevices.push(...r.value);
     } else {
       lastError = r.reason;
     }
   });
   
-  const allDevices = Array.from(deviceMap.values()).slice(0, limit);
-  
   if (allDevices.length > 0 || !lastError) {
-    return { ok: true, devices: allDevices };
+    return { ok: true, devices: allDevices.slice(0, limit) };
   }
   
-  return { ok: false, devices: [], message: 'Gagal mengambil daftar dari ACS: ' + (lastError ? lastError.message : 'Unknown error') };
+  return { ok: false, devices: [], message: 'Gagal mengambil daftar dari GenieACS: ' + (lastError ? lastError.message : 'Unknown error') };
 }
 
 async function updateCustomerTag(oldTag, newTag) {
@@ -1454,7 +1287,6 @@ module.exports = {
   resolveDeviceToken,
   mapDeviceData,
   extractPppoeUser,
-  extractPppoeIp,
   getCustomerDeviceData,
   fallbackCustomer,
   requestRefresh,
@@ -1466,9 +1298,5 @@ module.exports = {
   listAllDevices,
   expandTagCandidates,
   findDeviceWithTagVariants,
-  phoneFromPnJid,
-  getPreferredAcsServer,
-  searchDeviceAcrossServersParallel,
-  getDeviceFaults,
-  recordDeviceFault
+  phoneFromPnJid
 };
