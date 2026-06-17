@@ -1383,7 +1383,7 @@ function getDistinctIsolirProfilesForRouter(routerId) {
   const rows = db.prepare(`
     SELECT DISTINCT TRIM(COALESCE(isolir_profile, '')) AS n
     FROM customers
-    WHERE router_id = ? AND TRIM(COALESCE(pppoe_username, '')) != ''
+    WHERE router_id IS ? AND TRIM(COALESCE(pppoe_username, '')) != ''
   `).all(rid);
   const names = new Set();
   for (const r of rows || []) {

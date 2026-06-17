@@ -2054,6 +2054,13 @@ router.post('/api/vouchers/packages', requireAdminSession, express.json(), (req,
   try {
     const { router_id, profile_name, price, validity, prefix, code_length, charset, is_active } = req.body;
     
+    // VALIDATION: router_id is REQUIRED for voucher packages
+    if (!router_id || Number(router_id) <= 0) return res.status(400).json({ ok: false, error: 'Router harus dipilih' });
+    
+    // Verify router exists
+    const router = db.prepare('SELECT id FROM routers WHERE id = ? LIMIT 1').get(Number(router_id));
+    if (!router) return res.status(400).json({ ok: false, error: 'Router tidak ditemukan di database' });
+    
     if (!profile_name) return res.status(400).json({ ok: false, error: 'Nama profil wajib diisi' });
     if (!price || Number(price) <= 0) return res.status(400).json({ ok: false, error: 'Harga harus lebih besar dari 0' });
     if (!validity) return res.status(400).json({ ok: false, error: 'Durasi/masa aktif wajib diisi' });

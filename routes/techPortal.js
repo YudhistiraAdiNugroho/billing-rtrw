@@ -375,6 +375,11 @@ router.post('/customers', requireTechSession, express.urlencoded({ extended: tru
       isolate_day: req.body.isolate_day !== undefined ? Number(req.body.isolate_day) : 10
     };
 
+    // VALIDATION: If customer has PPPoE connection, router_id is REQUIRED
+    if (customerData.pppoe_username && !customerData.router_id) {
+      throw new Error('Router harus dipilih jika menggunakan koneksi PPPoE');
+    }
+
     if (customerData.pppoe_username) {
       const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? LIMIT 1').get(customerData.router_id ?? null, customerData.pppoe_username);
       if (existing) throw new Error(`PPPoE Username sudah dipakai pelanggan lain: ${existing.name}`);

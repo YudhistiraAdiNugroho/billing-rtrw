@@ -138,8 +138,19 @@ async function deleteCustomer(id) {
   const customer = getCustomerById(id);
   const mikrotikSvc = require('./mikrotikService');
   
+  // WARNING: Check if customer has MikroTik connections without router_id
+  const hasMikrotikConnection = customer && (
+    customer.connection_type === 'pppoe' && customer.pppoe_username
+    || customer.connection_type === 'static' && customer.static_ip
+    || customer.connection_type === 'hotspot' && customer.hotspot_username
+  );
+  
+  if (hasMikrotikConnection && !customer.router_id) {
+    logger.warn(`[deleteCustomer] Pelanggan "${customer.name}" (ID: ${id}) memiliki koneksi ${customer.connection_type} tapi router_id NULL. Akun tidak akan dihapus dari MikroTik.`);
+  }
+  
   // Remove static IP if connection type is static
-  if (customer && customer.connection_type === 'static' && customer.static_ip) {
+  if (customer && customer.connection_type === 'static' && customer.static_ip && customer.router_id) {
     try {
       await mikrotikSvc.removeStaticIp(customer.static_ip, customer.router_id);
     } catch (e) {
@@ -148,7 +159,7 @@ async function deleteCustomer(id) {
   }
   
   // Remove PPPoE secret if connection type is pppoe and username exists
-  if (customer && customer.connection_type === 'pppoe' && customer.pppoe_username) {
+  if (customer && customer.connection_type === 'pppoe' && customer.pppoe_username && customer.router_id) {
     try {
       console.log(`[DELETE] Attempting to remove PPPoE secret: ${customer.pppoe_username} from router ${customer.router_id}`);
       
@@ -186,7 +197,7 @@ async function deleteCustomer(id) {
   }
   
   // Remove Hotspot user if connection type is hotspot and username exists
-  if (customer && customer.connection_type === 'hotspot' && customer.hotspot_username) {
+  if (customer && customer.connection_type === 'hotspot' && customer.hotspot_username && customer.router_id) {
     try {
       // Get hotspot user to find the ID
       const hotspotUser = await mikrotikSvc.getHotspotUserByName(customer.hotspot_username, customer.router_id);
@@ -359,6 +370,16 @@ async function suspendCustomer(id) {
   updateCustomer(id, { ...customer, status: 'suspended' });
   const mikrotikSvc = require('./mikrotikService');
 
+  // Validate router_id is present if customer has MikroTik connection
+  const hasMikrotikConnection = customer.connection_type === 'pppoe' && customer.pppoe_username
+    || customer.connection_type === 'static' && customer.static_ip
+    || customer.connection_type === 'hotspot' && customer.hotspot_username;
+  
+  if (hasMikrotikConnection && !customer.router_id) {
+    logger.warn(`[suspendCustomer] Pelanggan "${customer.name}" (ID: ${id}) memiliki koneksi ${customer.connection_type} tapi router_id NULL. Isolir lokal hanya, MikroTik tidak diupdate.`);
+    return;
+  }
+
   if (customer.connection_type === 'static' && customer.static_ip) {
     const pkg = getPackageById(customer.package_id);
     let limit = '5M/5M';
@@ -439,6 +460,16 @@ async function activateCustomer(id) {
   
   updateCustomer(id, { ...customer, status: 'active' });
   const mikrotikSvc = require('./mikrotikService');
+
+  // Validate router_id is present if customer has MikroTik connection
+  const hasMikrotikConnection = customer.connection_type === 'pppoe' && customer.pppoe_username
+    || customer.connection_type === 'static' && customer.static_ip
+    || customer.connection_type === 'hotspot' && customer.hotspot_username;
+  
+  if (hasMikrotikConnection && !customer.router_id) {
+    logger.warn(`[activateCustomer] Pelanggan "${customer.name}" (ID: ${id}) memiliki koneksi ${customer.connection_type} tapi router_id NULL. Aktivasi lokal hanya, MikroTik tidak diupdate.`);
+    return;
+  }
 
   if (customer.connection_type === 'static' && customer.static_ip) {
     const pkg = getPackageById(customer.package_id);
