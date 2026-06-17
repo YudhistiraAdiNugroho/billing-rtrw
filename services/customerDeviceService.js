@@ -401,14 +401,26 @@ function collectRefreshObjects(device) {
   const isTr181 = !!device?.Device;
 
   if (isTr181) {
-    objects.push('Device.Hosts.Host');
-    objects.push('Device.WiFi.AccessPoint.1.AssociatedDevice');
+    // TR-181 Device - validate before pushing
+    if (device?.Device?.Hosts?.Host) {
+      objects.push('Device.Hosts.Host');
+    }
+    if (device?.Device?.WiFi?.AccessPoint?.['1']) {
+      objects.push('Device.WiFi.AccessPoint.1.AssociatedDevice');
+    }
     if (device?.Device?.WiFi?.AccessPoint?.['2']) {
       objects.push('Device.WiFi.AccessPoint.2.AssociatedDevice');
     }
   } else {
-    objects.push('InternetGatewayDevice.LANDevice.1.Hosts.Host');
-    objects.push('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice');
+    // TR-098 Device (InternetGatewayDevice) - validate before pushing
+    // FIX for Error 9005: Only query objects that exist in device cache
+    // Some devices (e.g. ZTE GM220-S XPON) don't have LANDevice/WiFi support
+    if (device?.InternetGatewayDevice?.LANDevice?.['1']?.Hosts?.Host) {
+      objects.push('InternetGatewayDevice.LANDevice.1.Hosts.Host');
+    }
+    if (device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.AssociatedDevice) {
+      objects.push('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice');
+    }
     if (device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['5']) {
       objects.push('InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AssociatedDevice');
     }

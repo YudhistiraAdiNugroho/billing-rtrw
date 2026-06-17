@@ -713,15 +713,27 @@ function queueRealtimeMonitoringTasks(deviceId, currentParams) {
 
     const isTr181 = Object.keys(currentParams || {}).some(k => String(k).startsWith('Device.'));
     const now = nowLocal();
-    const refreshObjects = isTr181
-      ? [
-          'Device.Hosts.Host',
-          'Device.WiFi.AccessPoint.1.AssociatedDevice'
-        ]
-      : [
-          'InternetGatewayDevice.LANDevice.1.Hosts.Host',
-          'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice'
-        ];
+    
+    // FIX for Error 9005: Only queue tasks for objects that exist in device params
+    // Some devices (e.g. ZTE GM220-S XPON) don't support LANDevice/WiFi
+    const refreshObjects = [];
+    
+    if (isTr181) {
+      if (currentParams?.['Device.Hosts.Host']) {
+        refreshObjects.push('Device.Hosts.Host');
+      }
+      if (currentParams?.['Device.WiFi.AccessPoint.1.AssociatedDevice']) {
+        refreshObjects.push('Device.WiFi.AccessPoint.1.AssociatedDevice');
+      }
+    } else {
+      if (currentParams?.['InternetGatewayDevice.LANDevice.1.Hosts.Host']) {
+        refreshObjects.push('InternetGatewayDevice.LANDevice.1.Hosts.Host');
+      }
+      if (currentParams?.['InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice']) {
+        refreshObjects.push('InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice');
+      }
+    }
+    
     for (const objectName of refreshObjects) {
       db.prepare(
         `INSERT INTO acs_tasks (device_id, name, payload, status, created_at, updated_at)
