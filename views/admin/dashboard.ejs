@@ -411,10 +411,31 @@
 </style>
 
 <script>
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * DASHBOARD ONU MONITORING - AUTO-REFRESH DISABLED
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * AUTO-REFRESH INTENTIONALLY DISABLED TO PREVENT CONTINUOUS POLLING
+ * 
+ * Previously, this dashboard would refresh automatically:
+ * - Every 30 seconds (setInterval at the bottom)
+ * - Every 5 seconds during sync operations (scheduleFastRefreshIfNeeded)
+ * 
+ * All auto-refresh mechanisms have been disabled. The dashboard will:
+ * - Load data once when the page is first opened
+ * - Only refresh when the user manually clicks the "Refresh" button
+ * - NOT refresh automatically during operations
+ * 
+ * If you need to update the data, click the "Refresh" button in the UI.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
 // ── STATE ──────────────────────────────────────────────────────
 let devicesData = [];
 let donutChart = null;
 let fastRefreshTimer = null;
+let autoRefreshDisabled = true;  // Disable all auto-refresh mechanisms
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -657,7 +678,8 @@ async function loadDevices() {
 
     // Update offline list on dashboard
     renderOfflineList(devicesData.filter(d => d.status === 'offline').slice(0, 5));
-    scheduleFastRefreshIfNeeded();
+    // AUTO-REFRESH DISABLED: scheduleFastRefreshIfNeeded() is intentionally removed
+    // Dashboard will not auto-refresh during sync operations
 
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--danger)"><i class="bi bi-exclamation-circle"></i> ' + I18N.errorLoadData + '</td></tr>';
@@ -882,25 +904,40 @@ function showToast(msg, type = 's') {
 }
 
 // ── REFRESH ALL ────────────────────────────────────────────────
+// DEPRECATED: This function is kept for backward compatibility but is disabled
+// Use manualRefreshAll() for user-initiated refreshes only
 function refreshAll() {
+  // INTENTIONALLY DISABLED - Auto-refresh has been turned off
+  // This function will only be called when user manually clicks "Refresh" button
+  loadStats();
+  loadDevices();
+}
+
+// This is the proper function to call for auto-refresh (which is now disabled)
+function manualRefreshAll() {
   loadStats();
   loadDevices();
 }
 
 function scheduleFastRefreshIfNeeded() {
+  // Auto-refresh during sync disabled to prevent continuous polling
   if (fastRefreshTimer) {
     clearTimeout(fastRefreshTimer);
     fastRefreshTimer = null;
   }
-  if (!Array.isArray(devicesData) || !devicesData.some(d => d.syncInProgress)) return;
-  fastRefreshTimer = setTimeout(() => {
-    refreshAll();
-  }, 5000);
+  // Commented out: Previously would auto-refresh every 5s when devices were syncing
+  // if (!Array.isArray(devicesData) || !devicesData.some(d => d.syncInProgress)) return;
+  // fastRefreshTimer = setTimeout(() => {
+  //   refreshAll();
+  // }, 5000);
 }
 
 loadStats();
 loadDevices();
-setInterval(refreshAll, 30000);
+// Auto-refresh disabled: Dashboard akan hanya refresh saat halaman pertama kali dibuka atau saat admin click tombol Refresh
+// setInterval(refreshAll, 30000);
+// NOTE: AUTO-REFRESH HAS BEEN COMPLETELY DISABLED
+// Users must manually click the "Refresh" button to update device list
 
 // ── CHECK IF SHOULD GO TO MONITORING TAB (from sidebar link) ──
 if (window.location.hash === '#monitoring') showTab('monitoring');
