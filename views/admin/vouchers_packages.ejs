@@ -80,13 +80,14 @@
       <div class="mbody">
         
         <div class="fg">
-          <label class="fl">Pilih Router MikroTik</label>
-          <select class="fc" id="form_router_id" onchange="loadMikrotikProfiles()">
-            <option value="">-- Default Router --</option>
+          <label class="fl">Pilih Router MikroTik <span class="text-danger">*</span></label>
+          <select class="fc" id="form_router_id" required onchange="loadMikrotikProfiles()">
+            <option value="">-- Pilih Router --</option>
             <% routers.forEach(r => { %>
               <option value="<%= r.id %>"><%= r.name %></option>
             <% }) %>
           </select>
+          <small class="text-muted d-block mt-1">Router harus dipilih untuk paket voucher</small>
         </div>
 
         <div class="fg">

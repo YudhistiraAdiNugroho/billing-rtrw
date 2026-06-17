@@ -39,13 +39,14 @@
 
     <div class="row g-2 mt-1">
       <div class="col-6">
-        <label class="form-label text-secondary small">Router (MikroTik)</label>
-        <select id="router_id" name="router_id" class="form-select rounded-4" onchange="loadPppoeUsers(); loadPppoeProfiles()">
-          <option value="">Default Router</option>
+        <label class="form-label text-secondary small">Router (MikroTik) <span class="text-danger">*</span></label>
+        <select id="router_id" name="router_id" class="form-select rounded-4" required onchange="loadPppoeUsers(); loadPppoeProfiles()">
+          <option value="">-- Pilih Router --</option>
           <% (routers || []).forEach(r => { %>
             <option value="<%= r.id %>"><%= r.name %></option>
           <% }) %>
         </select>
+        <small class="text-muted d-block mt-1">Router harus dipilih untuk pelanggan dengan koneksi PPPoE/Hotspot</small>
       </div>
       <div class="col-6">
         <label class="form-label text-secondary small">PPPoE Username</label>
