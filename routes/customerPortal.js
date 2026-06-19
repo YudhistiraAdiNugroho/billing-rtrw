@@ -1921,6 +1921,25 @@ router.get('/dashboard', async (req, res) => {
   });
 });
 
+// ─── API: Get Active Promo Slides for Dashboard ────────────────────────────
+router.get('/api/promo-slides', (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const slides = db.prepare(`
+      SELECT id, title, description, image_path, url, open_in_new_tab
+      FROM promo_slides
+      WHERE is_active = 1
+        AND (start_date IS NULL OR start_date <= ?)
+        AND (end_date IS NULL OR end_date >= ?)
+      ORDER BY sort_order ASC, id ASC
+    `).all(today, today);
+    
+    res.json(slides || []);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
 router.get('/api/pppoe-traffic', async (req, res) => {
   const loginId = req.session && req.session.phone;
   if (!loginId) return res.status(401).json({ ok: false, error: 'unauthorized' });

@@ -22,6 +22,37 @@ const XLSX = require('xlsx');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 const qrisUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
+
+// Promo slides upload storage
+const promoSlidesStorage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    const uploadDir = path.resolve(__dirname, '..', 'public', 'uploads', 'promo_slides');
+    // Ensure directory exists
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function(req, file, cb) {
+    // Generate unique filename
+    const ext = path.extname(file.originalname);
+    const name = 'slide-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9) + ext;
+    cb(null, name);
+  }
+});
+
+const promoUpload = multer({
+  storage: promoSlidesStorage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max
+  fileFilter: function(req, file, cb) {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Hanya file gambar (JPEG, PNG, GIF, WebP) yang diperbolehkan'), false);
+    }
+  }
+});
 const backupSvc = require('../services/backupService');
 const monitoringSvc = require('../services/monitoringService');
 const inventorySvc = require('../services/inventoryService');
@@ -5233,6 +5264,154 @@ router.get('/routers', requireAdminSession, requireSidebarMenuAccess('mikrotik')
     title: 'Manajemen Router', company: company(), activePage: 'mikrotik',
     routers: mikrotikService.getAllRouters(), msg: flashMsg(req)
   });
+});
+
+// ─── PROMO SLIDES ─────────────────────────────────────────────────────────────
+router.get('/promo-slides', requireAdminSession, requireSidebarMenuAccess('settings'), (req, res) => {
+  try {
+    const slides = db.prepare(`
+      SELECT * FROM promo_slides 
+      ORDER BY sort_order ASC, id ASC
+    `).all();
+    
+    res.render('admin/promo_slides', {
+      title: 'Manajemen Promo Slides',
+      company: company(),
+      activePage: 'promo_slides',
+      slides: slides || [],
+      msg: flashMsg(req)
+    });
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+    res.redirect('/admin/settings');
+  }
+});
+
+router.get('/api/promo-slides/:id', requireAdminSession, (req, res) => {
+  try {
+    const slide = db.prepare('SELECT * FROM promo_slides WHERE id = ?').get(Number(req.params.id));
+    if (!slide) return res.status(404).json({ error: 'Slide tidak ditemukan' });
+    res.json(slide);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/promo-slides', requireAdminSession, requireSidebarMenuAccess('settings'), promoUpload.single('image'), (req, res) => {
+  try {
+    const { title, description, url, open_in_new_tab, sort_order, start_date, end_date, is_active } = req.body;
+    
+    if (!req.file) throw new Error('Gambar harus diupload');
+    
+    const imagePath = `/uploads/promo_slides/${req.file.filename}`;
+    
+    db.prepare(`
+      INSERT INTO promo_slides (title, description, image_path, url, open_in_new_tab, sort_order, start_date, end_date, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      String(title || '').trim(),
+      String(description || '').trim(),
+      imagePath,
+      String(url || '').trim(),
+      open_in_new_tab === 'on' ? 1 : 0,
+      Number(sort_order) || 0,
+      start_date || null,
+      end_date || null,
+      is_active === 'on' ? 1 : 0
+    );
+    
+    req.session._msg = { type: 'success', text: 'Promo slide berhasil ditambahkan' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/promo-slides');
+});
+
+router.post('/promo-slides/:id/update', requireAdminSession, requireSidebarMenuAccess('settings'), promoUpload.single('image'), (req, res) => {
+  try {
+    const { title, description, url, open_in_new_tab, sort_order, start_date, end_date, is_active } = req.body;
+    const slideId = Number(req.params.id);
+    
+    const slide = db.prepare('SELECT * FROM promo_slides WHERE id = ?').get(slideId);
+    if (!slide) throw new Error('Slide tidak ditemukan');
+    
+    let imagePath = slide.image_path;
+    let oldImagePath = null;
+    
+    if (req.file) {
+      oldImagePath = slide.image_path;
+      imagePath = `/uploads/promo_slides/${req.file.filename}`;
+    }
+    
+    db.prepare(`
+      UPDATE promo_slides SET 
+        title = ?, description = ?, image_path = ?, url = ?, 
+        open_in_new_tab = ?, sort_order = ?, start_date = ?, end_date = ?, is_active = ?,
+        updated_at = NOW_LOCAL()
+      WHERE id = ?
+    `).run(
+      String(title || '').trim(),
+      String(description || '').trim(),
+      imagePath,
+      String(url || '').trim(),
+      open_in_new_tab === 'on' ? 1 : 0,
+      Number(sort_order) || 0,
+      start_date || null,
+      end_date || null,
+      is_active === 'on' ? 1 : 0,
+      slideId
+    );
+    
+    // Cleanup old image file if new one was uploaded
+    if (oldImagePath && oldImagePath !== imagePath) {
+      const oldFilePath = path.resolve(__dirname, '..', 'public', oldImagePath);
+      try {
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+          logger.info(`[PromoSlides] Deleted old image: ${oldFilePath}`);
+        }
+      } catch (err) {
+        logger.warn(`[PromoSlides] Failed to delete old image: ${err.message}`);
+        // Don't fail the request, just log warning
+      }
+    }
+    
+    req.session._msg = { type: 'success', text: 'Promo slide berhasil diperbarui' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/promo-slides');
+});
+
+router.post('/promo-slides/:id/delete', requireAdminSession, requireSidebarMenuAccess('settings'), (req, res) => {
+  try {
+    const slideId = Number(req.params.id);
+    
+    // Get slide data to retrieve image path for cleanup
+    const slide = db.prepare('SELECT * FROM promo_slides WHERE id = ?').get(slideId);
+    
+    // Delete from database
+    db.prepare('DELETE FROM promo_slides WHERE id = ?').run(slideId);
+    
+    // Cleanup image file
+    if (slide && slide.image_path) {
+      const filePath = path.resolve(__dirname, '..', 'public', slide.image_path);
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          logger.info(`[PromoSlides] Deleted image: ${filePath}`);
+        }
+      } catch (err) {
+        logger.warn(`[PromoSlides] Failed to delete image: ${err.message}`);
+        // Don't fail the request, just log warning
+      }
+    }
+    
+    req.session._msg = { type: 'success', text: 'Promo slide berhasil dihapus' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/promo-slides');
 });
 
 router.post('/routers', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
