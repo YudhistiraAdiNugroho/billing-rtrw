@@ -893,12 +893,24 @@ async function updateSSID(tag, newSSID, actor = null) {
       logger.error(`[updateSSID] Failed to set SSID: ${e.message}`);
     }
 
+    // Refresh objects untuk trigger inform dari ONU
     try {
       await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'InternetGatewayDevice.LANDevice.1.WLANConfiguration' }, { timeout: 15000 });
     } catch (e) {}
-    try {
-      await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'Device.WiFi.SSID' }, { timeout: 15000 });
-    } catch (e) {}
+    // Skip Device.WiFi.SSID refresh karena tidak semua ONU support (CIOT tidak support)
+
+    // Trigger inform untuk force ONU komunikasi dengan ACS
+    if (ok) {
+      try {
+        await instance.post(tasksUrl, { name: 'inform' }, { timeout: 15000 });
+        logger.info(`[updateSSID] Inform task triggered untuk ${tag}`);
+      } catch (e) {
+        logger.warn(`[updateSSID] Failed to trigger inform: ${e.message}`);
+      }
+      
+      // Wait untuk ACS mendapat data terbaru dari ONU (jangan terlalu lama, cukup 3 detik)
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
 
     // Catat audit trail jika berhasil
     if (ok && actor) {
@@ -1010,13 +1022,11 @@ async function updatePassword(tag, newPassword, actor = null) {
       logger.error(`[updatePassword] Failed to set password: ${e.message}`);
     }
 
-    // Refresh object
+    // Refresh object - only refresh InternetGatewayDevice path yang lebih universal
     try {
       await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'InternetGatewayDevice.LANDevice.1.WLANConfiguration' }, { timeout: 15000 });
     } catch (e) {}
-    try {
-      await instance.post(tasksUrl, { name: 'refreshObject', objectName: 'Device.WiFi.AccessPoint' }, { timeout: 15000 });
-    } catch (e) {}
+    // Skip Device.WiFi.AccessPoint refresh karena tidak semua ONU support (CIOT tidak support)
 
     // Catat audit trail jika berhasil
     if (ok && actor) {

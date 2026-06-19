@@ -607,8 +607,9 @@ function queueBootstrapTasksIfNeeded(deviceId, currentParams) {
         groups.push(['InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PreSharedKey.1.KeyPassphrase']);
         groups.push(['InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PreSharedKey.1.PreSharedKey']);
         
-        // WAN / PPPoE (Extended indexes to check all possible interfaces)
-        for (let connIdx = 1; connIdx <= 5; connIdx++) {
+        // WAN / PPPoE (Extended indexes to check common interfaces only)
+        // CIOT ONU hanya support max 3 WAN connections, reduce loop dari 5 ke 3
+        for (let connIdx = 1; connIdx <= 3; connIdx++) {
           for (let pppIdx = 1; pppIdx <= 2; pppIdx++) {
             groups.push([`InternetGatewayDevice.WANDevice.1.WANConnectionDevice.${connIdx}.WANPPPConnection.${pppIdx}.Username`]);
             groups.push([`InternetGatewayDevice.WANDevice.1.WANConnectionDevice.${connIdx}.WANPPPConnection.${pppIdx}.ExternalIPAddress`]);
