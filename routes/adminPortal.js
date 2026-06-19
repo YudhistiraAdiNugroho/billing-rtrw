@@ -3348,8 +3348,10 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
   const branch = getGitDefaultBranch(repoRoot);
   const backupRoot = path.join(os.tmpdir(), `billing-update-backup-${Date.now()}`);
   const backupSettings = path.join(backupRoot, 'settings.json');
+  const backupEnv = path.join(backupRoot, '.env');
   const backupDb = path.join(backupRoot, 'database');
   const settingsPath = path.join(repoRoot, 'settings.json');
+  const envPath = path.join(repoRoot, '.env');
   const dbDir = path.join(repoRoot, 'database');
 
   try {
@@ -3374,6 +3376,7 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
 
     fs.mkdirSync(backupRoot, { recursive: true });
     if (fs.existsSync(settingsPath)) fs.copyFileSync(settingsPath, backupSettings);
+    if (fs.existsSync(envPath)) fs.copyFileSync(envPath, backupEnv);
     if (fs.existsSync(dbDir)) copyDirSync(dbDir, backupDb);
 
     const resetSettings = runCmd('git', ['checkout', '--', 'settings.json'], repoRoot);
@@ -3401,6 +3404,7 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
         'clean',
         '-fd',
         '-e', 'settings.json',
+        '-e', '.env',
         '-e', 'database',
         '-e', 'node_modules',
         '-e', 'package-lock.json',
@@ -3409,9 +3413,10 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
       ],
       repoRoot
     );
-    pushCmd(`git clean -fd -e settings.json -e database -e node_modules -e package-lock.json -e ${authFolder} -e data`, clean);
+    pushCmd(`git clean -fd -e settings.json -e .env -e database -e node_modules -e package-lock.json -e ${authFolder} -e data`, clean);
 
     if (fs.existsSync(backupSettings)) fs.copyFileSync(backupSettings, settingsPath);
+    if (fs.existsSync(backupEnv)) fs.copyFileSync(backupEnv, envPath);
     if (fs.existsSync(backupDb)) {
       fs.mkdirSync(dbDir, { recursive: true });
       copyDirSync(backupDb, dbDir);
