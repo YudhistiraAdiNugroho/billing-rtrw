@@ -264,11 +264,25 @@ async function getConnection(routerId = null) {
     user = router.user;
     password = router.password;
   } else {
-    const settings = getSettingsWithCache();
-    host = settings.mikrotik_host;
-    port = settings.mikrotik_port || 8728;
-    user = settings.mikrotik_user;
-    password = settings.mikrotik_password;
+    // Tidak ada routerId, coba cari router default dari database
+    const defaultRouter = db.prepare('SELECT * FROM routers WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get();
+    
+    if (defaultRouter) {
+      // Ada router aktif di database, gunakan itu
+      host = defaultRouter.host;
+      port = defaultRouter.port || 8728;
+      user = defaultRouter.user;
+      password = defaultRouter.password;
+      logger.info(`[MikroTik] Using default router from database: ${defaultRouter.name} (${defaultRouter.host})`);
+    } else {
+      // Fallback ke settings.json untuk backward compatibility
+      const settings = getSettingsWithCache();
+      host = settings.mikrotik_host;
+      port = settings.mikrotik_port || 8728;
+      user = settings.mikrotik_user;
+      password = settings.mikrotik_password;
+      logger.info('[MikroTik] Using router from settings.json (no routers in database)');
+    }
   }
 
   if (!host || !user) {

@@ -1845,10 +1845,38 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       req.body.router_id = effectiveRouterId;
     }
 
+    // Get old customer data to detect username changes
+    const oldCustomer = customerSvc.getCustomerById(customerId);
+    
     customerSvc.updateCustomer(req.params.id, req.body);
     
     // Sync to MikroTik if username provided
     if (connectionType === 'pppoe' && req.body.pppoe_username) {
+      const oldUsername = oldCustomer ? String(oldCustomer.pppoe_username || '').trim() : '';
+      const newUsername = String(req.body.pppoe_username || '').trim();
+      const oldRouterIdForOldUser = oldCustomer ? oldCustomer.router_id : null;
+      const oldEffectiveRouterId = oldCustomer ? customerSvc.getEffectiveRouterId(oldRouterIdForOldUser) : null;
+      
+      // If username changed, handle old one first
+      if (oldUsername && oldUsername !== newUsername && oldEffectiveRouterId) {
+        try {
+          logger.info(`[Update] PPPoE username changed: "${oldUsername}" → "${newUsername}" for customer ${customerId}`);
+          // Delete old PPPoE user from MikroTik
+          const oldSecrets = await mikrotikService.getPppoeSecrets(oldEffectiveRouterId);
+          const oldSecret = oldSecrets.find(s => String(s.name || '').toLowerCase() === String(oldUsername || '').toLowerCase());
+          if (oldSecret) {
+            const secretId = oldSecret['.id'] || oldSecret.id;
+            if (secretId) {
+              await mikrotikService.deletePppoeSecret(secretId, oldEffectiveRouterId);
+              logger.info(`[Update] Deleted old PPPoE secret: ${oldUsername} from router ${oldEffectiveRouterId}`);
+            }
+          }
+        } catch (err) {
+          logger.warn(`[Update] Failed to delete old PPPoE user ${oldUsername}: ${err.message}`);
+        }
+      }
+      
+      // Now handle new username
       let targetProfile = '';
       if (req.body.status === 'suspended') {
         targetProfile = req.body.isolir_profile || 'isolir';
@@ -1858,24 +1886,46 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       }
       if (targetProfile) {
         try {
-          await mikrotikService.setPppoeProfile(req.body.pppoe_username, targetProfile, req.body.router_id);
+          await mikrotikService.setPppoeProfile(newUsername, targetProfile, req.body.router_id);
         } catch (mErr) {
-          console.error('Mikrotik sync error (update):', mErr);
+          logger.error('Mikrotik sync error (update PPPoE):', mErr.message);
         }
       }
     }
     if (connectionType === 'hotspot' && req.body.hotspot_username) {
+      const oldUsername = oldCustomer ? String(oldCustomer.hotspot_username || '').trim() : '';
+      const newUsername = String(req.body.hotspot_username || '').trim();
+      const oldRouterIdForOldUser = oldCustomer ? oldCustomer.router_id : null;
+      const oldEffectiveRouterId = oldCustomer ? customerSvc.getEffectiveRouterId(oldRouterIdForOldUser) : null;
+      
+      // If username changed, handle old one first
+      if (oldUsername && oldUsername !== newUsername && oldEffectiveRouterId) {
+        try {
+          logger.info(`[Update] Hotspot username changed: "${oldUsername}" → "${newUsername}" for customer ${customerId}`);
+          // Delete old Hotspot user from MikroTik
+          const oldUser = await mikrotikService.getHotspotUserByName(oldUsername, oldEffectiveRouterId);
+          if (oldUser && (oldUser.id || oldUser['.id'])) {
+            const userId = oldUser['.id'] || oldUser.id;
+            await mikrotikService.deleteHotspotUser(userId, oldEffectiveRouterId);
+            logger.info(`[Update] Deleted old Hotspot user: ${oldUsername} from router ${oldEffectiveRouterId}`);
+          }
+        } catch (err) {
+          logger.warn(`[Update] Failed to delete old Hotspot user ${oldUsername}: ${err.message}`);
+        }
+      }
+      
+      // Now handle new username
       const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
       try {
         await mikrotikService.upsertHotspotUser({
-          username: String(req.body.hotspot_username || '').trim(),
+          username: newUsername,
           password: String(req.body.hotspot_password || '').trim(),
           profile: String(req.body.hotspot_profile || '').trim(),
           macAddress: String(req.body.mac_address || '').trim(),
           disabled
         }, req.body.router_id ? Number(req.body.router_id) : null);
       } catch (mErr) {
-        console.error('Mikrotik sync error (update hotspot):', mErr);
+        logger.error('Mikrotik sync error (update hotspot):', mErr.message);
       }
     }
 
