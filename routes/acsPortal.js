@@ -990,7 +990,9 @@ router.get('/', async (req, res) => {
 
         let pppoeProfiles = [];
         try {
-            pppoeProfiles = await mikrotikSvc.getPppoeProfiles();
+            // Get routerId dari query parameter jika ada (untuk multi-router support)
+            const selectedRouterId = req.query.router_id ? Number(req.query.router_id) : null;
+            pppoeProfiles = await mikrotikSvc.getPppoeProfiles(selectedRouterId);
         } catch (e) {
             console.error('Failed to load PPPoE profiles from MikroTik:', e.message);
         }

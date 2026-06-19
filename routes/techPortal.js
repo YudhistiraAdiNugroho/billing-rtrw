@@ -317,7 +317,9 @@ router.get('/monitoring', requireTechSession, async (req, res) => {
   const acsServers = genieacsApi.getAllACSServers();
   let pppoeProfiles = [];
   try {
-      pppoeProfiles = await mikrotikService.getPppoeProfiles();
+      // Support multi-router: get routerId from query parameter if provided
+      const selectedRouterId = req.query.router_id ? Number(req.query.router_id) : null;
+      pppoeProfiles = await mikrotikService.getPppoeProfiles(selectedRouterId);
   } catch (e) {
       console.error('Failed to load PPPoE profiles from MikroTik:', e.message);
   }
