@@ -3487,6 +3487,28 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     if (!newSettings.multi_router_mode) newSettings.multi_router_mode = 'active';
     if (newSettings.default_router_id) newSettings.default_router_id = parseInt(newSettings.default_router_id) || null;
 
+    // ✅ NEW: Jika switching dari disabled ke active, auto-assign default router ke pelanggan NULL
+    const oldMode = getSetting('multi_router_mode', 'active');
+    if (oldMode === 'disabled' && newSettings.multi_router_mode === 'active') {
+      const defaultRouterId = newSettings.default_router_id;
+      if (defaultRouterId && defaultRouterId > 0) {
+        // Auto-assign default router to customers with NULL router_id
+        const result = db.prepare(
+          'UPDATE customers SET router_id = ? WHERE router_id IS NULL AND (pppoe_username != "" OR hotspot_username != "" OR static_ip != "")'
+        ).run(defaultRouterId);
+        logger.info(`[Settings] Auto-assigned router ${defaultRouterId} to ${result.changes} customers with NULL router_id`);
+      } else {
+        // Jika tidak ada default router, cari router pertama yang aktif
+        const router = db.prepare('SELECT id FROM routers WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get();
+        if (router) {
+          const result = db.prepare(
+            'UPDATE customers SET router_id = ? WHERE router_id IS NULL AND (pppoe_username != "" OR hotspot_username != "" OR static_ip != "")'
+          ).run(router.id);
+          logger.info(`[Settings] Auto-assigned router ${router.id} to ${result.changes} customers with NULL router_id`);
+        }
+      }
+    }
+
     const success = saveSettings(newSettings);
     if (success) {
       // Re-init services if needed
