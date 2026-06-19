@@ -276,6 +276,33 @@
             </div>
           </div>
 
+          <!-- Multi-Router Mode Settings -->
+          <div class="form-row" style="margin-top:20px; background:rgba(34,197,94,0.08); padding:12px; border-radius:8px; border:1px dashed rgba(34,197,94,0.3);">
+            <div class="fg" style="flex:1">
+              <label class="fl"><i class="bi bi-shuffle"></i> Mode Multi-Router</label>
+              <select class="fs" name="multi_router_mode" id="multi_router_mode_select" onchange="toggleMultiRouterUI()">
+                <option value="active" <%= (settings.multi_router_mode === 'active' || !settings.multi_router_mode) ? 'selected' : '' %>>Aktif (Multiple Router)</option>
+                <option value="disabled" <%= settings.multi_router_mode === 'disabled' ? 'selected' : '' %>>Nonaktif (Single Router Mode)</option>
+              </select>
+              <div class="hint">Pilih mode operasional MikroTik: Aktif untuk multi-router, Nonaktif untuk single router dengan fallback otomatis</div>
+            </div>
+            <div class="fg" id="default_router_div" style="flex:1; <%= (settings.multi_router_mode === 'disabled') ? '' : 'display:none' %>">
+              <label class="fl">Default Router ID <span style="color:var(--muted); font-weight:normal;">(Opsional)</span></label>
+              <input class="fc" type="number" name="default_router_id" id="default_router_id" value="<%= settings.default_router_id || '' %>" placeholder="Kosongkan untuk auto-detect" min="1">
+              <div class="hint">Opsional. Jika kosong, sistem auto-detect router pertama (ID terkecil). Jika diisi, gunakan nilai ini.</div>
+            </div>
+          </div>
+
+          <script>
+            function toggleMultiRouterUI() {
+              const mode = document.getElementById('multi_router_mode_select')?.value || 'active';
+              const div = document.getElementById('default_router_div');
+              if (div) {
+                div.style.display = (mode === 'disabled') ? 'block' : 'none';
+              }
+            }
+          </script>
+
           <div class="form-row" style="margin-top:20px">
             <div class="fg">
               <label class="fl">MikroTik IP / Host</label>

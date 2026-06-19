@@ -14,31 +14,32 @@
       --primary: #3b82f6;
       --danger: #ef4444;
       --success: #22c55e;
+      --warning: #f59e0b;
     }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 0;
+      padding: 16px;
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
       background-color: var(--bg);
       background-image: 
         radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
         radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
       color: var(--text);
-      display: flex;
-      align-items: center;
-      justify-content: center;
       min-height: 100vh;
     }
     .container {
-      max-width: 480px;
-      width: 90%;
-      text-align: center;
-      padding: 48px 32px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .card {
       background: var(--card);
-      border-radius: 32px;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+      border-radius: 24px;
+      padding: 32px;
       border: 1px solid rgba(255,255,255,0.08);
       backdrop-filter: blur(10px);
+      margin-bottom: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
     }
     .status-badge {
       display: inline-flex;
@@ -52,164 +53,494 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      margin-bottom: 24px;
+      margin-bottom: 16px;
     }
     .status-badge i { font-size: 14px; }
+    .status-badge.success {
+      background: rgba(34, 197, 94, 0.1);
+      color: var(--success);
+    }
+    .status-badge.warning {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning);
+    }
     
     h1 {
-      margin: 0 0 16px;
-      font-size: 28px;
+      margin: 0 0 8px;
+      font-size: 24px;
       font-weight: 800;
       background: linear-gradient(to bottom, #fff, #94a3b8);
       -webkit-background-clip: text;
       background-clip: text;
       -webkit-text-fill-color: transparent;
     }
+    h2 {
+      margin: 20px 0 16px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
     .description {
       color: var(--muted);
       line-height: 1.6;
-      margin-bottom: 32px;
-      font-size: 15px;
+      margin-bottom: 24px;
+      font-size: 14px;
     }
+    
     .info-grid {
       display: grid;
-      gap: 16px;
-      margin-bottom: 32px;
+      gap: 12px;
+      margin-bottom: 24px;
     }
     .info-item {
       background: rgba(15, 23, 42, 0.4);
-      border-radius: 20px;
-      padding: 16px 20px;
+      border-radius: 16px;
+      padding: 14px 16px;
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
       text-align: left;
       border: 1px solid rgba(255,255,255,0.03);
     }
     .info-icon {
-      width: 44px;
-      height: 44px;
+      width: 40px;
+      height: 40px;
       background: rgba(59, 130, 246, 0.1);
       color: var(--primary);
-      border-radius: 14px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
+      font-size: 18px;
+      flex-shrink: 0;
     }
     .info-content { min-width: 0; }
     .info-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: block; margin-bottom: 2px; }
-    .info-value { font-weight: 700; font-size: 15px; color: #f1f5f9; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .info-value { font-weight: 700; font-size: 14px; color: #f1f5f9; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    .btn-wa {
+    .invoice-item {
+      background: rgba(15, 23, 42, 0.4);
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid rgba(255,255,255,0.03);
+      margin-bottom: 12px;
+    }
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .invoice-period {
+      font-weight: 700;
+      font-size: 13px;
+      color: #f1f5f9;
+    }
+    .invoice-amount {
+      font-weight: 800;
+      font-size: 16px;
+      color: var(--success);
+    }
+    .invoice-details {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .payment-methods {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .method-option {
+      padding: 14px 16px;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.4);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text);
+      font-weight: 500;
+    }
+    .method-option:hover {
+      border-color: var(--primary);
+      background: rgba(59, 130, 246, 0.05);
+    }
+    .method-option input[type="radio"] {
+      cursor: pointer;
+    }
+    .method-option input[type="radio"]:checked ~ span {
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .btn {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 12px;
-      background: #25d366;
-      color: #0f172a;
-      text-decoration: none;
-      padding: 18px;
-      border-radius: 20px;
-      font-weight: 800;
-      font-size: 16px;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 10px 20px -10px rgba(37, 211, 102, 0.5);
-    }
-    .btn-wa:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 15px 30px -10px rgba(37, 211, 102, 0.6);
-      filter: brightness(1.1);
-    }
-    .btn-wa i { font-size: 22px; }
-
-    .btn-secondary {
-      display: block;
-      width: 100%;
-      padding: 14px 16px;
-      border-radius: 16px;
+      padding: 16px 20px;
+      border-radius: 14px;
       font-weight: 700;
-      font-size: 14px;
-      text-align: center;
+      font-size: 15px;
       text-decoration: none;
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      background: rgba(15, 23, 42, 0.5);
-      color: var(--text);
+      border: none;
       cursor: pointer;
-      transition: background 0.2s, border-color 0.2s;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .btn-secondary:hover {
+    .btn.primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      width: 100%;
+      box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4);
+    }
+    .btn.primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 35px -5px rgba(59, 130, 246, 0.6);
+    }
+    .btn.primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn.secondary {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: var(--text);
+      width: 100%;
+    }
+    .btn.secondary:hover {
       background: rgba(30, 41, 59, 0.9);
       border-color: rgba(59, 130, 246, 0.45);
     }
+    .btn.wa {
+      background: #25d366;
+      color: #0f172a;
+      width: 100%;
+      font-size: 16px;
+      box-shadow: 0 10px 20px -10px rgba(37, 211, 102, 0.5);
+    }
+    .btn.wa:hover {
+      filter: brightness(1.1);
+      box-shadow: 0 15px 30px -10px rgba(37, 211, 102, 0.6);
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 16px 0;
+      padding: 12px 16px;
+      background: rgba(59, 130, 246, 0.05);
+      border-radius: 12px;
+      border: 1px solid rgba(59, 130, 246, 0.1);
+    }
+    .checkbox-group input[type="checkbox"] {
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+    .checkbox-group label {
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+      flex: 1;
+    }
+
+    .status-message {
+      padding: 16px;
+      border-radius: 14px;
+      margin-bottom: 16px;
+      text-align: center;
+      font-weight: 500;
+    }
+    .status-message.loading {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .status-message.success {
+      background: rgba(34, 197, 94, 0.1);
+      color: var(--success);
+    }
+    .status-message.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(59, 130, 246, 0.3);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
 
     .footer {
-      margin-top: 40px;
+      margin-top: 32px;
       font-size: 12px;
       color: var(--muted);
       font-weight: 500;
+      text-align: center;
     }
     .company-name {
       color: var(--primary);
       font-weight: 700;
     }
+
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .button-group .btn {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 24px 20px;
+      }
+      h1 {
+        font-size: 20px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="status-badge">
-      <i class="bi bi-shield-lock-fill"></i> Terisolir
-    </div>
-    
-    <h1>Akses Terbatas</h1>
-    <p class="description">Layanan internet Anda sementara dinonaktifkan. Silakan selesaikan administrasi tagihan untuk mengaktifkan kembali layanan.</p>
-    
-    <div class="info-grid">
-      <div class="info-item">
-        <div class="info-icon"><i class="bi bi-building"></i></div>
-        <div class="info-content">
-          <span class="info-label">Penyedia Layanan</span>
-          <span class="info-value"><%= company %></span>
-        </div>
-      </div>
+
+    <!-- CASE 1: Customer not identified -->
+    <% if (!customer) { %>
+    <div class="card">
+      <div class="status-badge"><i class="bi bi-shield-lock-fill"></i> Terisolir</div>
+      <h1>Akses Terbatas</h1>
+      <p class="description">Layanan internet Anda sementara dinonaktifkan. Silakan selesaikan administrasi tagihan untuk mengaktifkan kembali layanan.</p>
       
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-icon"><i class="bi bi-building"></i></div>
+          <div class="info-content">
+            <span class="info-label">Penyedia Layanan</span>
+            <span class="info-value"><%= company %></span>
+          </div>
+        </div>
+        
+        <% if (adminPhone) { %>
+        <div class="info-item">
+          <div class="info-icon"><i class="bi bi-person-badge"></i></div>
+          <div class="info-content">
+            <span class="info-label">Pusat Bantuan</span>
+            <span class="info-value"><%= adminPhone %></span>
+          </div>
+        </div>
+        <% } %>
+
+        <% if (address) { %>
+        <div class="info-item">
+          <div class="info-icon"><i class="bi bi-geo-alt"></i></div>
+          <div class="info-content">
+            <span class="info-label">Lokasi Kantor</span>
+            <span class="info-value"><%= address %></span>
+          </div>
+        </div>
+        <% } %>
+      </div>
+
       <% if (adminPhone) { %>
-      <div class="info-item">
-        <div class="info-icon"><i class="bi bi-person-badge"></i></div>
-        <div class="info-content">
-          <span class="info-label">Pusat Bantuan</span>
-          <span class="info-value"><%= adminPhone %></span>
-        </div>
-      </div>
+      <a href="https://wa.me/<%= adminPhone.replace(/\D/g, '') %>?text=Halo%20Admin%20<%= encodeURIComponent(company) %>,%20layanan%20internet%20saya%20terisolir.%20Mohon%20bantuannya." class="btn wa">
+        <i class="bi bi-whatsapp"></i> Hubungi Admin
+      </a>
       <% } %>
 
-      <% if (address) { %>
-      <div class="info-item">
-        <div class="info-icon"><i class="bi bi-geo-alt"></i></div>
-        <div class="info-content">
-          <span class="info-label">Lokasi Kantor</span>
-          <span class="info-value"><%= address %></span>
-        </div>
+      <div class="button-group">
+        <a href="/customer/check-billing" class="btn secondary"><i class="bi bi-receipt"></i> Cek Tagihan</a>
+        <form method="post" action="/customer/logout" style="margin:0; display:contents;">
+          <button type="submit" class="btn secondary"><i class="bi bi-box-arrow-right"></i> Keluar</button>
+        </form>
       </div>
-      <% } %>
     </div>
-
-    <% if (adminPhone) { %>
-    <a href="https://wa.me/<%= adminPhone.replace(/\D/g, '') %>?text=Halo%20Admin%20<%= encodeURIComponent(company) %>,%20layanan%20internet%20saya%20terisolir.%20Mohon%20bantuannya." class="btn-wa">
-      <i class="bi bi-whatsapp"></i> Konfirmasi Pembayaran
-    </a>
     <% } %>
 
-    <div class="info-grid" style="margin-top: 24px;">
-      <a href="/customer/check-billing" class="btn-secondary"><i class="bi bi-receipt"></i> Cek tagihan &amp; bayar</a>
-      <form method="post" action="/customer/logout" style="margin:0;">
-        <button type="submit" class="btn-secondary" style="width:100%;"><i class="bi bi-box-arrow-right"></i> Keluar akun portal</button>
-      </form>
+    <!-- CASE 2: Customer found but no unpaid invoices -->
+    <% if (customer && !hasUnpaidInvoices) { %>
+    <div class="card">
+      <div class="status-badge success"><i class="bi bi-check-circle-fill"></i> Semua Tagihan Lunas</div>
+      <h1>Pembayaran Diterima</h1>
+      <p class="description">Semua tagihan Anda telah dibayarkan. Layanan akan diaktifkan dalam waktu singkat.</p>
+      
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-icon"><i class="bi bi-person"></i></div>
+          <div class="info-content">
+            <span class="info-label">Nama Pelanggan</span>
+            <span class="info-value"><%= customer.name %></span>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="info-icon"><i class="bi bi-telephone"></i></div>
+          <div class="info-content">
+            <span class="info-label">Nomor Telepon</span>
+            <span class="info-value"><%= customer.phone %></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-message loading">
+        <div class="spinner"></div> Mengaktifkan layanan...
+      </div>
+
+      <p class="description" style="text-align: center;">Halaman akan dimuat ulang secara otomatis. Jika tidak berubah dalam 30 detik, silakan refresh halaman atau hubungi admin.</p>
     </div>
+    <script>
+      let checkCount = 0;
+      function checkStatus() {
+        fetch('/isolated/status', { method: 'GET' })
+          .then(r => r.json())
+          .then(d => {
+            if (d.status === 'active' || d.unpaid_count === 0) {
+              setTimeout(() => window.location.href = '/customer/dashboard', 1000);
+            } else if (++checkCount < 10) {
+              setTimeout(checkStatus, 3000);
+            }
+          })
+          .catch(() => {
+            if (++checkCount < 10) setTimeout(checkStatus, 3000);
+          });
+      }
+      setTimeout(checkStatus, 3000);
+    </script>
+    <% } %>
+
+    <!-- CASE 3: Customer has unpaid invoices - payment form -->
+    <% if (customer && hasUnpaidInvoices) { %>
+    <div class="card">
+      <div class="status-badge"><i class="bi bi-lock-fill"></i> LAYANAN TERISOLIR</div>
+      <h1><%= customer.name %></h1>
+      
+      <!-- Alasan Terisolir -->
+      <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+        <p style="margin: 0; color: #fca5a5; font-weight: 600; font-size: 14px;">
+          <i class="bi bi-exclamation-triangle"></i> Layanan Anda terisolir karena ada tagihan yang belum dibayarkan
+        </p>
+      </div>
+
+      <!-- Daftar Tagihan Belum Lunas -->
+      <h2 style="color: #ef4444;"><i class="bi bi-receipt"></i> Tagihan Belum Dibayar</h2>
+      <div style="margin-bottom: 24px;">
+        <% invoices.forEach((inv, idx) => { %>
+        <div class="invoice-item">
+          <div class="invoice-header">
+            <span class="invoice-period">
+              <%= new Date(inv.period_year, inv.period_month - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) %>
+            </span>
+            <span class="invoice-amount">Rp <%= (inv.amount || 0).toLocaleString('id-ID') %></span>
+          </div>
+        </div>
+        <% }); %>
+      </div>
+
+      <!-- CTA: Bayar Sekarang -->
+      <h2 style="margin-top: 32px;"><i class="bi bi-credit-card"></i> Cara Membayar</h2>
+      <p class="description">Pilih metode pembayaran di bawah, kemudian klik tombol "BAYAR SEKARANG" untuk menyelesaikan pembayaran. Layanan akan aktif kembali dalam beberapa detik setelah pembayaran dikonfirmasi.</p>
+
+      <form id="paymentForm">
+        <div class="checkbox-group">
+          <input type="checkbox" id="tosCheckbox" name="accept_tos" value="1" required />
+          <label for="tosCheckbox">Saya setuju dengan syarat & ketentuan pembayaran</label>
+        </div>
+
+        <button type="button" class="btn primary" id="submitBtn" disabled onclick="goToPayment()">
+          <i class="bi bi-arrow-right"></i> BAYAR SEKARANG
+        </button>
+      </form>
+
+      <script>
+        const tosCheckbox = document.getElementById('tosCheckbox');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        tosCheckbox.addEventListener('change', () => {
+          submitBtn.disabled = !tosCheckbox.checked;
+        });
+
+        function goToPayment() {
+          const invoiceId = <%= invoices[0].id %>;
+          const publicToken = '<%= invoices[0].publicToken %>';
+          
+          // Redirect langsung ke halaman payment dengan GET request
+          // Backend akan auto-detect metode pembayaran dari settings (default gateway)
+          window.location.href = `/customer/payment/create/${invoiceId}?t=${encodeURIComponent(publicToken)}`;
+        }
+      </script>
+
+      <!-- Bantuan -->
+      <div style="background: rgba(59, 130, 246, 0.05); padding: 16px; border-radius: 12px; margin-top: 24px; border: 1px solid rgba(59, 130, 246, 0.2);">
+        <p style="margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5;">
+          <strong>Ada masalah?</strong> Hubungi admin kami melalui WhatsApp untuk bantuan.
+        </p>
+      </div>
+
+      <% if (adminPhone) { %>
+      <a href="https://wa.me/<%= adminPhone.replace(/\D/g, '') %>?text=Halo%20Admin%20<%= encodeURIComponent(company) %>,%20saya%20ingin%20bertanya%20tentang%20pembayaran%20tagihan%20saya." class="btn wa" style="margin-top: 16px;">
+        <i class="bi bi-whatsapp"></i> Hubungi Admin via WhatsApp
+      </a>
+      <% } %>
+    </div>
+
+    <script>
+      // Enable/disable submit button based on TOS checkbox
+      const tosCheckbox = document.getElementById('tosCheckbox');
+      const submitBtn = document.getElementById('submitBtn');
+      tosCheckbox.addEventListener('change', () => {
+        submitBtn.disabled = !tosCheckbox.checked;
+      });
+
+      // Polling status (optional - if user submits elsewhere)
+      let pollCount = 0;
+      function pollStatus() {
+        const token = '<%= invoices[0].publicToken %>';
+        const url = `/customer/payment/status/<%= invoices[0].id %>${token ? '?t=' + encodeURIComponent(token) : ''}`;
+        
+        fetch(url, { method: 'GET' })
+          .then(r => r.json())
+          .then(d => {
+            if (d.status === 'paid' || d.paid_at) {
+              document.getElementById('statusMessage').innerHTML = 
+                '<div class="status-message success"><i class="bi bi-check-circle-fill"></i> Pembayaran berhasil! Mengaktifkan akses...</div>';
+              setTimeout(() => window.location.href = '/customer/dashboard', 2000);
+            } else if (++pollCount < 20) {
+              setTimeout(pollStatus, 3000);
+            }
+          })
+          .catch(() => {
+            if (++pollCount < 20) setTimeout(pollStatus, 3000);
+          });
+      }
+      // Start polling after 5 seconds (user might have paid elsewhere)
+      setTimeout(pollStatus, 5000);
+    </script>
+    <% } %>
 
     <div class="footer">
       Sistem Billing <span class="company-name"><%= company %></span> &copy; <%= new Date().getFullYear() %>
     </div>
+
   </div>
 </body>
 </html>

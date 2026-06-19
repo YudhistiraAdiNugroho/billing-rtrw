@@ -861,16 +861,183 @@ app.get('/login', (req, res) => {
   res.redirect('/customer/login');
 });
 
-// Halaman Isolir (Akses langsung dari redirect MikroTik)
+// Halaman Isolir (Akses langsung dari redirect MikroTik) - dengan integrasi pembayaran otomatis
 app.get('/isolated', (req, res) => {
-  const { getSettingsWithCache } = require('./config/settingsManager');
-  const settings = getSettingsWithCache();
-  res.render('isolated', {
-    company: settings.company_header || 'My ISP',
-    adminPhone: settings.company_phone || '',
-    address: settings.company_address || ''
-  });
+  try {
+    const settings = getSettingsWithCache();
+    
+    // 1. Identifikasi pelanggan dari session atau IP
+    let customer = null;
+    let invoices = [];
+    
+    // Try: Session-based detection
+    if (req.session && req.session.phone) {
+      customer = customerSvc.findCustomerByAny(req.session.phone);
+    }
+    
+    // Fallback: IP-based detection
+    if (!customer) {
+      const rawIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() 
+                  || req.ip 
+                  || req.connection.remoteAddress 
+                  || '';
+      
+      // Clean IPv6 prefix (::ffff:192.168.1.1 -> 192.168.1.1)
+      const cleanIp = rawIp.replace(/^::ffff:/, '').trim();
+      
+      if (cleanIp) {
+        const allCustomers = customerSvc.getAllCustomers();
+        customer = allCustomers.find(c => 
+          (c.static_ip && c.static_ip === cleanIp) || 
+          (c.pppoe_remote_address && c.pppoe_remote_address === cleanIp)
+        );
+      }
+    }
+    
+    // 2. If customer found and active, redirect to dashboard
+    if (customer && customer.status === 'active') {
+      return res.redirect('/customer/dashboard');
+    }
+    
+    // 3. If suspended, get unpaid invoices
+    let invoicesWithTokens = [];
+    if (customer && customer.status === 'suspended') {
+      invoices = billingSvc.getUnpaidInvoicesByCustomerId(customer.id);
+      
+      // 4. Generate public tokens for each invoice
+      const tokenUtil = require('./utils/tokenUtil');
+      invoicesWithTokens = invoices.map(inv => ({
+        ...inv,
+        publicToken: tokenUtil.signPublicToken({
+          invoiceId: inv.id,
+          customerId: inv.customer_id,
+          lookup: customer.phone,
+          exp: Date.now() + 15 * 60 * 1000  // 15 minutes
+        }, settings.session_secret)
+      }));
+    }
+    
+    // 5. Get active payment channels
+    const paymentChannels = getActivePaymentChannelsForIsolated(settings);
+    
+    res.render('isolated', {
+      company: settings.company_header || 'My ISP',
+      adminPhone: settings.company_phone || '',
+      address: settings.company_address || '',
+      customer: customer || null,
+      invoices: invoicesWithTokens,
+      paymentChannels: paymentChannels,
+      settings: settings,
+      hasUnpaidInvoices: invoicesWithTokens.length > 0
+    });
+  } catch (err) {
+    logger.error(`[ISOLATED] Error: ${err.message}`);
+    const settings = getSettingsWithCache();
+    res.render('isolated', {
+      company: settings.company_header || 'My ISP',
+      adminPhone: settings.company_phone || '',
+      address: settings.company_address || '',
+      customer: null,
+      invoices: [],
+      paymentChannels: [],
+      settings: settings,
+      hasUnpaidInvoices: false
+    });
+  }
 });
+
+// NEW ENDPOINT: GET /isolated/status - untuk polling status pelanggan
+app.get('/isolated/status', (req, res) => {
+  try {
+    let customer = null;
+    
+    // Detection: Session atau IP
+    if (req.session && req.session.phone) {
+      customer = customerSvc.findCustomerByAny(req.session.phone);
+    } else {
+      const rawIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() 
+                  || req.ip 
+                  || '';
+      const cleanIp = rawIp.replace(/^::ffff:/, '').trim();
+      
+      if (cleanIp) {
+        const allCustomers = customerSvc.getAllCustomers();
+        customer = allCustomers.find(c => 
+          (c.static_ip && c.static_ip === cleanIp) || 
+          (c.pppoe_remote_address && c.pppoe_remote_address === cleanIp)
+        );
+      }
+    }
+    
+    if (!customer) {
+      return res.json({ 
+        status: 'unknown',
+        unpaid_count: 0,
+        message: 'Pelanggan tidak ditemukan'
+      });
+    }
+    
+    const unpaidInvoices = billingSvc.getUnpaidInvoicesByCustomerId(customer.id);
+    
+    res.json({
+      status: customer.status,  // 'active' atau 'suspended'
+      unpaid_count: unpaidInvoices.length,
+      customer_id: customer.id,
+      customer_name: customer.name,
+      message: customer.status === 'active' 
+        ? 'Layanan aktif, silakan login ke dashboard'
+        : `Tersisa ${unpaidInvoices.length} tagihan belum dibayar`
+    });
+  } catch (e) {
+    logger.error(`[ISOLATED-STATUS] Error: ${e.message}`);
+    res.status(500).json({ error: 'Server error', status: 'error' });
+  }
+});
+
+// HELPER FUNCTION: Get active payment channels
+function getActivePaymentChannelsForIsolated(settings) {
+  const channels = [];
+  
+  // QRIS Static
+  if (settings.qris_static_enabled && settings.qris_static_payload) {
+    channels.push({
+      code: 'QRIS_STATIC',
+      name: '🟦 QRIS Statis (Instant)',
+      enabled: true
+    });
+  }
+  
+  // Tripay
+  if (settings.tripay_enabled && settings.tripay_api_key) {
+    channels.push({
+      code: 'TRIPAY',
+      name: '💳 Transfer Bank / E-Wallet (Tripay)',
+      enabled: true
+    });
+  }
+  
+  // Midtrans
+  if (settings.midtrans_enabled && settings.midtrans_server_key) {
+    channels.push({
+      code: 'MIDTRANS',
+      name: '💳 Midtrans Snap',
+      enabled: true
+    });
+  }
+  
+  // Xendit
+  if (settings.xendit_enabled && settings.xendit_api_key) {
+    channels.push({
+      code: 'XENDIT',
+      name: '💳 Xendit',
+      enabled: true
+    });
+  }
+  
+  return channels.length > 0 ? channels : [
+    { code: 'QRIS_STATIC', name: '🟦 QRIS Statis', enabled: false }
+  ];
+}
 
 // Tambahkan view engine dan static
 app.set('view engine', 'ejs');
