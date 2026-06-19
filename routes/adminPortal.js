@@ -1523,6 +1523,9 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.hotspot_profile = '';
     }
 
+    const multiRouterMode = getSetting('multi_router_mode', 'active') === 'active';
+    const defaultRouterId = multiRouterMode ? null : getSetting('default_router_id', null);
+
     if (connectionType === 'pppoe') {
       const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
@@ -1534,14 +1537,25 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.pppoe_remote_address = remoteAddress;
       
       if (!username) throw new Error('PPPoE Username tidak boleh kosong');
-      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? LIMIT 1').get(routerId, username);
+      
+      // Router validation - required only if multi-router mode is active
+      const effectiveRouterId = multiRouterMode ? routerId : (routerId || customerSvc.getEffectiveRouterId(null));
+      if (!effectiveRouterId || effectiveRouterId <= 0) {
+        if (multiRouterMode) {
+          throw new Error('Router MikroTik WAJIB dipilih untuk koneksi PPPoE (fungsi isolir & profile management membutuhkan router)');
+        } else {
+          throw new Error('Router MikroTik tidak tersedia. Pastikan ada minimal 1 router aktif yang di-setting atau set default router di halaman Pengaturan');
+        }
+      }
+      
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? LIMIT 1').get(effectiveRouterId, username);
       if (existing) throw new Error(`PPPoE Username sudah dipakai pelanggan lain: ${existing.name}`);
 
       // Only validate against MikroTik if password is not provided (meaning it's from MikroTik list)
       if (!password) {
         let conn = null;
         try {
-          conn = await mikrotikService.getConnection(routerId);
+          conn = await mikrotikService.getConnection(effectiveRouterId);
           const results = await conn.client.menu('/ppp/secret')
             .where('service', 'pppoe')
             .where('name', username)
@@ -1551,6 +1565,32 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
           if (conn && conn.api) conn.api.close();
         }
       }
+      
+      // Set effective router ID
+      req.body.router_id = effectiveRouterId;
+    }
+
+    if (connectionType === 'static') {
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
+      const staticIp = String(req.body.static_ip || '').trim();
+      req.body.static_ip = staticIp;
+      if (!staticIp) throw new Error('Static IP tidak boleh kosong');
+      
+      // Router validation - required only if multi-router mode is active
+      const effectiveRouterId = multiRouterMode ? routerId : (routerId || customerSvc.getEffectiveRouterId(null));
+      if (!effectiveRouterId || effectiveRouterId <= 0) {
+        if (multiRouterMode) {
+          throw new Error('Router MikroTik WAJIB dipilih untuk koneksi Static IP (untuk management & isolir)');
+        } else {
+          throw new Error('Router MikroTik tidak tersedia. Pastikan ada minimal 1 router aktif yang di-setting atau set default router di halaman Pengaturan');
+        }
+      }
+      
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND static_ip = ? LIMIT 1').get(effectiveRouterId, staticIp);
+      if (existing) throw new Error(`Static IP sudah dipakai pelanggan lain: ${existing.name}`);
+      
+      // Set effective router ID
+      req.body.router_id = effectiveRouterId;
     }
 
     if (connectionType === 'hotspot') {
@@ -1558,7 +1598,18 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       const username = String(req.body.hotspot_username || '').trim();
       req.body.hotspot_username = username;
       if (!username) throw new Error('Hotspot Username tidak boleh kosong');
-      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? LIMIT 1').get(routerId, username);
+      
+      // Router validation - required only if multi-router mode is active
+      const effectiveRouterId = multiRouterMode ? routerId : (routerId || customerSvc.getEffectiveRouterId(null));
+      if (!effectiveRouterId || effectiveRouterId <= 0) {
+        if (multiRouterMode) {
+          throw new Error('Router MikroTik WAJIB dipilih untuk koneksi Hotspot (untuk user management & isolir)');
+        } else {
+          throw new Error('Router MikroTik tidak tersedia. Pastikan ada minimal 1 router aktif yang di-setting atau set default router di halaman Pengaturan');
+        }
+      }
+      
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? LIMIT 1').get(effectiveRouterId, username);
       if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name}`);
 
       const password = String(req.body.hotspot_password || '').trim() || username;
@@ -1572,9 +1623,12 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.hotspot_profile = profile;
       if (!profile) throw new Error('Hotspot User Profile tidak boleh kosong');
 
-      const profs = await mikrotikService.getHotspotUserProfiles(routerId);
+      const profs = await mikrotikService.getHotspotUserProfiles(effectiveRouterId);
       const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
       if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik`);
+      
+      // Set effective router ID
+      req.body.router_id = effectiveRouterId;
     }
 
     customerSvc.createCustomer(req.body);
@@ -1661,17 +1715,31 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       req.body.hotspot_profile = '';
     }
 
+    const multiRouterMode = getSetting('multi_router_mode', 'active') === 'active';
+    const defaultRouterId = multiRouterMode ? null : getSetting('default_router_id', null);
+
     if (connectionType === 'pppoe') {
       const routerId = req.body.router_id ? Number(req.body.router_id) : null;
       const username = String(req.body.pppoe_username || '').trim();
       req.body.pppoe_username = username;
       if (!username) throw new Error('PPPoE Username tidak boleh kosong');
-      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? AND id != ? LIMIT 1').get(routerId, username, customerId);
+      
+      // Router validation - required only if multi-router mode is active
+      const effectiveRouterId = multiRouterMode ? routerId : (routerId || customerSvc.getEffectiveRouterId(null));
+      if (!effectiveRouterId || effectiveRouterId <= 0) {
+        if (multiRouterMode) {
+          throw new Error('Router MikroTik WAJIB dipilih untuk koneksi PPPoE (fungsi isolir & profile management membutuhkan router)');
+        } else {
+          throw new Error('Router MikroTik tidak tersedia. Pastikan ada minimal 1 router aktif yang di-setting atau set default router di halaman Pengaturan');
+        }
+      }
+      
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND pppoe_username = ? AND id != ? LIMIT 1').get(effectiveRouterId, username, customerId);
       if (existing) throw new Error(`PPPoE Username sudah dipakai pelanggan lain: ${existing.name}`);
 
       let conn = null;
       try {
-        conn = await mikrotikService.getConnection(routerId);
+        conn = await mikrotikService.getConnection(effectiveRouterId);
         const results = await conn.client.menu('/ppp/secret')
           .where('service', 'pppoe')
           .where('name', username)
@@ -1680,6 +1748,32 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       } finally {
         if (conn && conn.api) conn.api.close();
       }
+      
+      // Set effective router ID
+      req.body.router_id = effectiveRouterId;
+    }
+
+    if (connectionType === 'static') {
+      const routerId = req.body.router_id ? Number(req.body.router_id) : null;
+      const staticIp = String(req.body.static_ip || '').trim();
+      req.body.static_ip = staticIp;
+      if (!staticIp) throw new Error('Static IP tidak boleh kosong');
+      
+      // Router validation - required only if multi-router mode is active
+      const effectiveRouterId = multiRouterMode ? routerId : (routerId || customerSvc.getEffectiveRouterId(null));
+      if (!effectiveRouterId || effectiveRouterId <= 0) {
+        if (multiRouterMode) {
+          throw new Error('Router MikroTik WAJIB dipilih untuk koneksi Static IP (untuk management & isolir)');
+        } else {
+          throw new Error('Router MikroTik tidak tersedia. Pastikan ada minimal 1 router aktif yang di-setting atau set default router di halaman Pengaturan');
+        }
+      }
+      
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND static_ip = ? AND id != ? LIMIT 1').get(effectiveRouterId, staticIp, customerId);
+      if (existing) throw new Error(`Static IP sudah dipakai pelanggan lain: ${existing.name}`);
+      
+      // Set effective router ID
+      req.body.router_id = effectiveRouterId;
     }
 
     if (connectionType === 'hotspot') {
@@ -1687,7 +1781,18 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       const username = String(req.body.hotspot_username || '').trim();
       req.body.hotspot_username = username;
       if (!username) throw new Error('Hotspot Username tidak boleh kosong');
-      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? AND id != ? LIMIT 1').get(routerId, username, customerId);
+      
+      // Router validation - required only if multi-router mode is active
+      const effectiveRouterId = multiRouterMode ? routerId : (routerId || customerSvc.getEffectiveRouterId(null));
+      if (!effectiveRouterId || effectiveRouterId <= 0) {
+        if (multiRouterMode) {
+          throw new Error('Router MikroTik WAJIB dipilih untuk koneksi Hotspot (untuk user management & isolir)');
+        } else {
+          throw new Error('Router MikroTik tidak tersedia. Pastikan ada minimal 1 router aktif yang di-setting atau set default router di halaman Pengaturan');
+        }
+      }
+      
+      const existing = db.prepare('SELECT id, name FROM customers WHERE router_id IS ? AND hotspot_username = ? AND id != ? LIMIT 1').get(effectiveRouterId, username, customerId);
       if (existing) throw new Error(`Hotspot Username sudah dipakai pelanggan lain: ${existing.name}`);
 
       const password = String(req.body.hotspot_password || '').trim() || username;
@@ -1701,9 +1806,12 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       req.body.hotspot_profile = profile;
       if (!profile) throw new Error('Hotspot User Profile tidak boleh kosong');
 
-      const profs = await mikrotikService.getHotspotUserProfiles(routerId);
+      const profs = await mikrotikService.getHotspotUserProfiles(effectiveRouterId);
       const ok = Array.isArray(profs) && profs.some(p => String(p?.name || '').trim() === profile);
       if (!ok) throw new Error(`Hotspot User Profile "${profile}" tidak ditemukan di MikroTik`);
+      
+      // Set effective router ID
+      req.body.router_id = effectiveRouterId;
     }
 
     customerSvc.updateCustomer(req.params.id, req.body);
@@ -1768,8 +1876,12 @@ router.get('/customers/export', requireAdminSession, (req, res) => {
       'Email': c.email || '',
       'Alamat': c.address,
       'Paket': c.package_name || '-',
+      'Router': c.router_name || '-',
+      'Tipe Koneksi': c.connection_type || 'pppoe',
       'Tag ONU': c.genieacs_tag,
       'PPPoE Username': c.pppoe_username,
+      'Hotspot Username': c.hotspot_username || '',
+      'Static IP': c.static_ip || '',
       'Isolir Profile': c.isolir_profile,
       'Status': c.status,
       'Tanggal Pasang': c.install_date,
@@ -1805,6 +1917,7 @@ router.post('/customers/import', requireAdminSession, upload.single('file'), asy
     
     const packages = customerSvc.getAllPackages();
     const odps = odpSvc.getAllOdps();
+    const routers = mikrotikService.getAllRouters();
     let count = 0;
 
     for (let row of rows) {
@@ -1826,17 +1939,28 @@ router.post('/customers/import', requireAdminSession, upload.single('file'), asy
       const odpName = cleanRow['ODP'] || cleanRow['odp'] || cleanRow['ODP Name'];
       const odp = odps.find(o => o.name === odpName);
       
+      // ✅ Handle Router field
+      const routerName = cleanRow['Router'] || cleanRow['router'] || cleanRow['Router Name'];
+      const router = routers.find(r => r.name === routerName);
+      
+      // ✅ NEW: Handle Connection Type
+      const connType = String(cleanRow['Tipe Koneksi'] || cleanRow['connection_type'] || cleanRow['Connection Type'] || 'pppoe').trim().toLowerCase() || 'pppoe';
+      
       const data = {
         name: name,
         phone: cleanRow['Telepon'] || cleanRow['phone'] || cleanRow['Phone'],
         email: cleanRow['Email'] || cleanRow['email'] || cleanRow['email_address'],
         address: cleanRow['Alamat'] || cleanRow['address'] || cleanRow['Address'],
         package_id: pkg ? pkg.id : null,
+        router_id: router ? router.id : null,
         odp_id: odp ? odp.id : null,
         lat: cleanRow['Latitude'] || cleanRow['latitude'] || cleanRow['Lat'] || '',
         lng: cleanRow['Longitude'] || cleanRow['longitude'] || cleanRow['Lng'] || '',
         genieacs_tag: cleanRow['Tag ONU'] || cleanRow['genieacs_tag'],
-        pppoe_username: cleanRow['PPPoE Username'] || cleanRow['pppoe_username'],
+        pppoe_username: connType === 'pppoe' ? (cleanRow['PPPoE Username'] || cleanRow['pppoe_username'] || '') : '',
+        hotspot_username: connType === 'hotspot' ? (cleanRow['Hotspot Username'] || cleanRow['hotspot_username'] || '') : '',
+        static_ip: connType === 'static' ? (cleanRow['Static IP'] || cleanRow['static_ip'] || '') : '',
+        connection_type: connType,
         isolir_profile: cleanRow['Isolir Profile'] || cleanRow['isolir_profile'] || 'isolir',
         status: (cleanRow['Status'] || cleanRow['status'] || 'active').toLowerCase(),
         install_date: cleanRow['Tanggal Pasang'] || cleanRow['install_date'],
@@ -3358,6 +3482,10 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     newSettings.telegram_enabled = (newSettings.telegram_enabled === 'true');
     newSettings.auto_backup_enabled = (newSettings.auto_backup_enabled === 'true');
     newSettings.use_builtin_acs = (newSettings.use_builtin_acs === 'true' || newSettings.use_builtin_acs === true);
+
+    // Multi-Router Mode settings
+    if (!newSettings.multi_router_mode) newSettings.multi_router_mode = 'active';
+    if (newSettings.default_router_id) newSettings.default_router_id = parseInt(newSettings.default_router_id) || null;
 
     const success = saveSettings(newSettings);
     if (success) {

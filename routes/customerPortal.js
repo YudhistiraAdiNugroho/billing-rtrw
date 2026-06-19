@@ -257,6 +257,7 @@ function resolveConfiguredGateway(settings) {
 function resolveConfiguredGatewayForAmount(settings, amount) {
   const amt = Number(amount || 0) || 0;
   const min = {
+    qris_static: 0,  // QRIS Static: minimal 0
     tripay: 0,
     midtrans: 10000,
     xendit: 1000,
@@ -264,18 +265,34 @@ function resolveConfiguredGatewayForAmount(settings, amount) {
   };
 
   const def = String(settings?.default_gateway || 'tripay').toLowerCase();
-  const fallbackOrder = ['xendit', 'duitku', 'tripay', 'midtrans'];
+  
+  // Priority order: default gateway dulu, kemudian fallback ke gateway lain
+  const fallbackOrder = ['qris_static', 'tripay', 'xendit', 'duitku', 'midtrans'];
 
   const ok = (g) => {
+    // QRIS Static check
+    if (g === 'qris_static') {
+      const enabled = settings?.qris_static_enabled && settings?.qris_static_payload;
+      if (!enabled) return false;
+      const minAmt = min[g] ?? 0;
+      return amt >= minAmt;
+    }
+    
+    // Gateway lainnya
     if (!isGatewayConfigured(settings, g)) return false;
     const minAmt = min[g] ?? 0;
     return amt >= minAmt;
   };
 
+  // Cek default gateway dulu
   if (ok(def)) return def;
+  
+  // Fallback ke gateway lain
   for (const g of fallbackOrder) {
+    if (g === def) continue;  // Skip default, sudah dicek
     if (ok(g)) return g;
   }
+  
   return null;
 }
 
@@ -2581,13 +2598,8 @@ router.post('/tickets/create', uploadCustomer.array('photos', 5), async (req, re
 });
 
 // ─── PAYMENT ROUTES ────────────────────────────────────────────────────────
-// API endpoint untuk cek status invoice/payment (untuk auto-polling di halaman QRIS)
+// API endpoint untuk cek status invoice/payment (untuk auto-polling di halaman QRIS dan /isolated)
 router.get('/payment/status/:invoiceId', async (req, res) => {
-  const loginId = req.session && req.session.phone;
-  if (!loginId) {
-    return res.status(401).json({ error: 'Unauthorized', status: 'error' });
-  }
-
   try {
     const invoiceId = Number(req.params.invoiceId || 0);
     const inv = billingSvc.getInvoiceById(invoiceId);
@@ -2596,16 +2608,37 @@ router.get('/payment/status/:invoiceId', async (req, res) => {
       return res.status(404).json({ error: 'Invoice tidak ditemukan', status: 'error' });
     }
 
-    const profile = findCustomerProfileByLoginId(loginId);
-    if (!profile || Number(inv.customer_id) !== Number(profile.id)) {
-      return res.status(403).json({ error: 'Forbidden', status: 'error' });
+    // CHECK 1: Session-based auth (existing)
+    const loginId = req.session && req.session.phone;
+    if (loginId) {
+      const profile = findCustomerProfileByLoginId(loginId);
+      if (profile && Number(inv.customer_id) === Number(profile.id)) {
+        return res.json({
+          success: true,
+          status: String(inv.status || 'unpaid'),
+          paid_at: inv.paid_at || null
+        });
+      }
+      // If session doesn't match, fall through to token check
     }
 
-    return res.json({
-      success: true,
-      status: String(inv.status || 'unpaid'),
-      paid_at: inv.paid_at || null
-    });
+    // CHECK 2: Public token auth (NEW for /isolated polling)
+    const publicToken = req.query.t;
+    if (publicToken) {
+      const settings = getSettingsWithCache();
+      const tokenUtil = require('../utils/tokenUtil');
+      const payload = tokenUtil.verifyPublicToken(publicToken, settings.session_secret);
+      
+      if (payload && String(payload.invoiceId) === String(invoiceId)) {
+        return res.json({
+          success: true,
+          status: String(inv.status || 'unpaid'),
+          paid_at: inv.paid_at || null
+        });
+      }
+    }
+
+    return res.status(401).json({ error: 'Unauthorized', status: 'error' });
   } catch (e) {
     logger.error(`[PAYMENT-STATUS] Error: ${e && e.message ? e.message : String(e)}`);
     return res.status(500).json({ error: 'Internal error', status: 'error' });
@@ -2614,7 +2647,12 @@ router.get('/payment/status/:invoiceId', async (req, res) => {
 
 router.get('/payment/create/:invoiceId', async (req, res) => {
   const loginId = req.session && req.session.phone;
-  if (!loginId) return res.redirect('/customer/login');
+  const publicToken = req.query.t;
+  
+  // CHECK 1: Session login
+  if (!loginId && !publicToken) {
+    return res.redirect('/customer/login');
+  }
   
   try {
     const settings = getSettingsWithCache();
@@ -2622,34 +2660,25 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
     
     if (!inv) throw new Error('Tagihan tidak ditemukan');
     if (inv.status === 'paid') throw new Error('Tagihan ini sudah lunas.');
-    const profile = findCustomerProfileByLoginId(loginId);
-    if (!profile || Number(inv.customer_id) !== Number(profile.id)) throw new Error('Tagihan tidak valid');
+    
+    // Verify loginId atau publicToken
+    let profile = null;
+    if (loginId) {
+      profile = findCustomerProfileByLoginId(loginId);
+      if (!profile || Number(inv.customer_id) !== Number(profile.id)) throw new Error('Tagihan tidak valid');
+    } else if (publicToken) {
+      // Verify public token
+      const tokenUtil = require('../utils/tokenUtil');
+      const payload = tokenUtil.verifyPublicToken(publicToken, settings.session_secret);
+      if (!payload || String(payload.invoiceId) !== String(inv.id)) throw new Error('Token tidak valid atau expired');
+      // Get customer from invoice
+      profile = customerSvc.getCustomerById(inv.customer_id);
+      if (!profile) throw new Error('Pelanggan tidak ditemukan');
+    } else {
+      throw new Error('Akses tidak diizinkan');
+    }
 
     const methodRaw = String(req.query.method || 'QRIS').toUpperCase();
-    if (methodRaw === 'QRIS_STATIC') {
-      const { uniqueCode, amountUnique } = ensureInvoiceQrisUnique(inv, false);
-      const qrisQrUrl = await getStaticQrisQrUrlForAmount(settings, amountUnique);
-      if (!qrisQrUrl) throw new Error('QRIS statis belum diatur oleh admin');
-      const adminWaDigits = getFirstAdminWaDigits(settings);
-      return res.render('qris_static', {
-        settings,
-        backUrl: '/customer/dashboard#billing-section',
-        error: null,
-        info: null,
-        kind: 'invoice',
-        invoiceId: Number(inv.id),
-        periodText: `${inv.period_month}/${inv.period_year}`,
-        customerName: profile?.name || inv.customer_name || '',
-        amountUnique,
-        uniqueCode,
-        qrisQrUrl,
-        helpText: 'Pastikan nominal dibayar sama persis agar sistem dapat mendeteksi pembayaran.',
-        adminWaDigits,
-        publicToken: '',
-        proofUrl: '',
-        proofActionUrl: '/customer/payment/proof/' + encodeURIComponent(String(inv.id))
-      });
-    }
 
     const force = String(req.query.force || '').toLowerCase() === '1' || String(req.query.force || '').toLowerCase() === 'true';
     if (!force && inv.payment_link) {
@@ -2685,6 +2714,33 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
 
     const gateway = resolveConfiguredGatewayForAmount(settings, inv.amount);
     if (!gateway) throw new Error('Payment gateway belum dikonfigurasi atau nominal terlalu kecil untuk gateway aktif');
+    
+    // Jika gateway adalah QRIS Static, auto-use QRIS_STATIC method
+    if (gateway === 'qris_static') {
+      const { uniqueCode, amountUnique } = ensureInvoiceQrisUnique(inv, false);
+      const qrisQrUrl = await getStaticQrisQrUrlForAmount(settings, amountUnique);
+      if (!qrisQrUrl) throw new Error('QRIS statis belum diatur oleh admin');
+      const adminWaDigits = getFirstAdminWaDigits(settings);
+      return res.render('qris_static', {
+        settings,
+        backUrl: loginId ? '/customer/dashboard#billing-section' : '/isolated',
+        error: null,
+        info: null,
+        kind: 'invoice',
+        invoiceId: Number(inv.id),
+        periodText: `${inv.period_month}/${inv.period_year}`,
+        customerName: profile?.name || inv.customer_name || '',
+        amountUnique,
+        uniqueCode,
+        qrisQrUrl,
+        helpText: 'Pastikan nominal dibayar sama persis agar sistem dapat mendeteksi pembayaran.',
+        adminWaDigits,
+        publicToken: publicToken || '',
+        proofUrl: '',
+        proofActionUrl: '/customer/payment/proof/' + encodeURIComponent(String(inv.id))
+      });
+    }
+    
     let method =
       gateway === 'midtrans' ? (methodRaw === 'SNAP' ? 'snap' : methodRaw) :
       gateway === 'xendit' ? (methodRaw === 'XENDIT' ? 'xendit' : methodRaw) :
@@ -2692,7 +2748,7 @@ router.get('/payment/create/:invoiceId', async (req, res) => {
       methodRaw;
     const cust = customerSvc.getCustomerById(inv.customer_id);
     
-    logger.info(`[Payment] Creating payment for INV-${inv.id}, Gateway: ${gateway}, Method: ${method}`);
+    logger.info(`[Payment] Creating payment for INV-${inv.id}, Gateway: ${gateway}, Method: ${method}, Auth: ${loginId ? 'session' : 'publicToken'}`);
     
     // Tentukan base URL aplikasi untuk callback
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;

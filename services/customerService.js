@@ -3,7 +3,54 @@
  */
 const db = require('../config/database');
 const { logger } = require('../config/logger');
-const { getCurrentDateInTimezone } = require('../config/settingsManager');
+const { getCurrentDateInTimezone, getSetting } = require('../config/settingsManager');
+
+// ─── HELPER FUNCTIONS ─────────────────────────────────────────
+/**
+ * Get effective router_id for a customer
+ * Respects multi-router mode setting:
+ * - If mode is 'active': returns customer's router_id (could be NULL)
+ * - If mode is 'disabled': returns customer's router_id if set, else auto-detect
+ *   - First tries explicit default_router_id setting
+ *   - If not set, auto-detects first (smallest ID) available router
+ */
+function getEffectiveRouterId(customerRouterId) {
+  const mode = getSetting('multi_router_mode', 'active');
+  
+  // Mode: active (multi-router) - return as-is
+  if (mode === 'active') {
+    return customerRouterId || null;
+  }
+  
+  // Mode: disabled (single router with fallback) - use explicit default or auto-detect
+  if (mode === 'disabled') {
+    if (customerRouterId && customerRouterId > 0) {
+      // Customer has explicit router assignment - use it
+      return customerRouterId;
+    }
+    
+    // Try explicit default_router_id setting first
+    const explicitDefault = getSetting('default_router_id', null);
+    if (explicitDefault) {
+      const parsed = parseInt(explicitDefault);
+      if (parsed && parsed > 0) {
+        return parsed;
+      }
+    }
+    
+    // Auto-detect: find first (smallest ID) router that exists
+    try {
+      const routers = db.prepare('SELECT id FROM routers WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get();
+      if (routers && routers.id > 0) {
+        return routers.id;
+      }
+    } catch (e) {
+      // Ignore if routers table doesn't exist or query fails
+    }
+  }
+  
+  return null;
+}
 
 // ─── CUSTOMERS ───────────────────────────────────────────────
 function getAllCustomers(search = '') {
@@ -367,48 +414,60 @@ async function suspendCustomer(id) {
   const customer = getCustomerById(id);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
   
-  updateCustomer(id, { ...customer, status: 'suspended' });
   const mikrotikSvc = require('./mikrotikService');
+
+  // Get effective router_id (respects multi-router mode setting)
+  const effectiveRouterId = getEffectiveRouterId(customer.router_id);
 
   // Validate router_id is present if customer has MikroTik connection
   const hasMikrotikConnection = customer.connection_type === 'pppoe' && customer.pppoe_username
     || customer.connection_type === 'static' && customer.static_ip
     || customer.connection_type === 'hotspot' && customer.hotspot_username;
   
-  if (hasMikrotikConnection && !customer.router_id) {
-    logger.warn(`[suspendCustomer] Pelanggan "${customer.name}" (ID: ${id}) memiliki koneksi ${customer.connection_type} tapi router_id NULL. Isolir lokal hanya, MikroTik tidak diupdate.`);
+  if (hasMikrotikConnection && !effectiveRouterId) {
+    logger.warn(`[suspendCustomer] Pelanggan "${customer.name}" (ID: ${id}) memiliki koneksi ${customer.connection_type} tapi router_id NULL dan tidak ada default router. Isolir lokal hanya, MikroTik tidak diupdate.`);
+    updateCustomer(id, { ...customer, status: 'suspended' });
     return;
   }
 
-  if (customer.connection_type === 'static' && customer.static_ip) {
-    const pkg = getPackageById(customer.package_id);
-    let limit = '5M/5M';
-    if (pkg) {
-      const up = Number(pkg.speed_up || 0) || 0;
-      const down = Number(pkg.speed_down || 0) || 0;
-      const upMbps = up > 0 ? Math.max(1, Math.round(up / 1000)) : 5;
-      const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
-      limit = `${upMbps}M/${downMbps}M`;
-    }
-    await mikrotikSvc.manageStaticIp({
-      ip: customer.static_ip,
-      name: customer.name,
-      limit: limit,
-      isolate: true
-    }, customer.router_id);
-  } else if (customer.pppoe_username) {
-    const isolirProfile = customer.isolir_profile || 'isolir';
-    await mikrotikSvc.setPppoeProfile(customer.pppoe_username, isolirProfile, customer.router_id);
-    if (customer.router_id) {
-      try {
-        await mikrotikSvc.ensurePppProfileIsolirAddressListHook(isolirProfile, customer.router_id);
-      } catch (e) {
-        logger.warn(`[suspendCustomer] Hook profil isolir "${isolirProfile}" di router ${customer.router_id}: ${e.message}`);
+  // UPDATE MIKROTIK DULU sebelum update database status (priority: network change)
+  try {
+    if (customer.connection_type === 'static' && customer.static_ip) {
+      const pkg = getPackageById(customer.package_id);
+      let limit = '5M/5M';
+      if (pkg) {
+        const up = Number(pkg.speed_up || 0) || 0;
+        const down = Number(pkg.speed_down || 0) || 0;
+        const upMbps = up > 0 ? Math.max(1, Math.round(up / 1000)) : 5;
+        const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
+        limit = `${upMbps}M/${downMbps}M`;
       }
+      await mikrotikSvc.manageStaticIp({
+        ip: customer.static_ip,
+        name: customer.name,
+        limit: limit,
+        isolate: true
+      }, effectiveRouterId);
+    } else if (customer.pppoe_username) {
+      const isolirProfile = customer.isolir_profile || 'isolir';
+      await mikrotikSvc.setPppoeProfile(customer.pppoe_username, isolirProfile, effectiveRouterId);
+      if (effectiveRouterId) {
+        try {
+          await mikrotikSvc.ensurePppProfileIsolirAddressListHook(isolirProfile, effectiveRouterId);
+        } catch (e) {
+          logger.warn(`[suspendCustomer] Hook profil isolir "${isolirProfile}" di router ${effectiveRouterId}: ${e.message}`);
+        }
+      }
+    } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
+      await mikrotikSvc.setHotspotUserDisabled(customer.hotspot_username, true, effectiveRouterId);
     }
-  } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
-    await mikrotikSvc.setHotspotUserDisabled(customer.hotspot_username, true, customer.router_id);
+  } catch (mikrotikErr) {
+    logger.error(`[suspendCustomer] GAGAL ubah profil di MikroTik: ${mikrotikErr.message}. Tetap update status ke database.`);
+    // Continue execution - update database status despite MikroTik error (graceful degradation)
   }
+
+  // Update database status SETELAH MikroTik berhasil (atau gagal tapi continue)
+  updateCustomer(id, { ...customer, status: 'suspended' });
 
   // WhatsApp Notification
   if (customer.phone) {
@@ -458,50 +517,68 @@ async function activateCustomer(id) {
   const customer = getCustomerById(id);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
   
-  updateCustomer(id, { ...customer, status: 'active' });
-  const mikrotikSvc = require('./mikrotikService');
+  // Get effective router_id (respects multi-router mode setting)
+  const effectiveRouterId = getEffectiveRouterId(customer.router_id);
 
   // Validate router_id is present if customer has MikroTik connection
   const hasMikrotikConnection = customer.connection_type === 'pppoe' && customer.pppoe_username
     || customer.connection_type === 'static' && customer.static_ip
     || customer.connection_type === 'hotspot' && customer.hotspot_username;
   
-  if (hasMikrotikConnection && !customer.router_id) {
-    logger.warn(`[activateCustomer] Pelanggan "${customer.name}" (ID: ${id}) memiliki koneksi ${customer.connection_type} tapi router_id NULL. Aktivasi lokal hanya, MikroTik tidak diupdate.`);
+  if (hasMikrotikConnection && !effectiveRouterId) {
+    logger.warn(`[activateCustomer] Pelanggan "${customer.name}" (ID: ${id}) memiliki koneksi ${customer.connection_type} tapi router_id NULL dan tidak ada default router. Aktivasi lokal hanya, MikroTik tidak diupdate.`);
+    updateCustomer(id, { ...customer, status: 'active' });
     return;
   }
 
-  if (customer.connection_type === 'static' && customer.static_ip) {
-    const pkg = getPackageById(customer.package_id);
-    let limit = '5M/5M';
-    if (pkg) {
-      const up = Number(pkg.speed_up || 0) || 0;
-      const down = Number(pkg.speed_down || 0) || 0;
-      const upMbps = up > 0 ? Math.max(1, Math.round(up / 1000)) : 5;
-      const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
-      limit = `${upMbps}M/${downMbps}M`;
+  const mikrotikSvc = require('./mikrotikService');
+
+  // UPDATE MIKROTIK DULU sebelum update database status (priority: network change)
+  try {
+    if (customer.connection_type === 'static' && customer.static_ip) {
+      const pkg = getPackageById(customer.package_id);
+      let limit = '5M/5M';
+      if (pkg) {
+        const up = Number(pkg.speed_up || 0) || 0;
+        const down = Number(pkg.speed_down || 0) || 0;
+        const upMbps = up > 0 ? Math.max(1, Math.round(up / 1000)) : 5;
+        const downMbps = down > 0 ? Math.max(1, Math.round(down / 1000)) : 5;
+        limit = `${upMbps}M/${downMbps}M`;
+      }
+      await mikrotikSvc.manageStaticIp({
+        ip: customer.static_ip,
+        name: customer.name,
+        limit: limit,
+        isolate: false
+      }, effectiveRouterId);
+    } else if (customer.pppoe_username) {
+      const pkg = getPackageById(customer.package_id);
+      const targetProfile = pkg ? pkg.name : 'default';
+      
+      // Validasi profile tidak kosong
+      if (!targetProfile || String(targetProfile).trim() === '') {
+        logger.warn(`[activateCustomer] Profile kosong untuk PPPoE user "${customer.pppoe_username}". Gunakan profile 'default'.`);
+      }
+      
+      await mikrotikSvc.setPppoeProfile(customer.pppoe_username, targetProfile, effectiveRouterId);
+    } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
+      const pkg = getPackageById(customer.package_id);
+      const targetProfile = String(customer.hotspot_profile || '').trim() || (pkg ? pkg.name : '');
+      await mikrotikSvc.upsertHotspotUser({
+        username: String(customer.hotspot_username || '').trim(),
+        password: String(customer.hotspot_password || '').trim(),
+        profile: targetProfile,
+        macAddress: String(customer.mac_address || '').trim(),
+        disabled: false
+      }, effectiveRouterId);
     }
-    await mikrotikSvc.manageStaticIp({
-      ip: customer.static_ip,
-      name: customer.name,
-      limit: limit,
-      isolate: false
-    }, customer.router_id);
-  } else if (customer.pppoe_username) {
-    const pkg = getPackageById(customer.package_id);
-    const targetProfile = pkg ? pkg.name : 'default';
-    await mikrotikSvc.setPppoeProfile(customer.pppoe_username, targetProfile, customer.router_id);
-  } else if (customer.connection_type === 'hotspot' && customer.hotspot_username) {
-    const pkg = getPackageById(customer.package_id);
-    const targetProfile = String(customer.hotspot_profile || '').trim() || (pkg ? pkg.name : '');
-    await mikrotikSvc.upsertHotspotUser({
-      username: String(customer.hotspot_username || '').trim(),
-      password: String(customer.hotspot_password || '').trim(),
-      profile: targetProfile,
-      macAddress: String(customer.mac_address || '').trim(),
-      disabled: false
-    }, customer.router_id);
+  } catch (mikrotikErr) {
+    logger.error(`[activateCustomer] GAGAL ubah profil di MikroTik: ${mikrotikErr.message}. Tetap update status ke database.`);
+    // Continue execution - update database status despite MikroTik error (graceful degradation)
   }
+
+  // Update database status SETELAH MikroTik berhasil (atau gagal tapi continue)
+  updateCustomer(id, { ...customer, status: 'active' });
   return true;
 }
 
@@ -509,5 +586,5 @@ module.exports = {
   getAllCustomers, getCustomerById, createCustomer, updateCustomer, deleteCustomer, getCustomerStats,
   getAllPackages, getPackageById, createPackage, updatePackage, deletePackage,
   suspendCustomer, activateCustomer, findCustomerByAny, updateCustomerCablePath,
-  resetPromoCyclesUsed
+  resetPromoCyclesUsed, getEffectiveRouterId
 };
