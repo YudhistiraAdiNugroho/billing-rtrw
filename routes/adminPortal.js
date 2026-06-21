@@ -3428,12 +3428,59 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
   const localBefore = readTextFileSafe(versionPath) || '-';
   const branch = getGitDefaultBranch(repoRoot);
   const backupRoot = path.join(os.tmpdir(), `billing-update-backup-${Date.now()}`);
-  const backupSettings = path.join(backupRoot, 'settings.json');
-  const backupEnv = path.join(backupRoot, '.env');
-  const backupDb = path.join(backupRoot, 'database');
-  const settingsPath = path.join(repoRoot, 'settings.json');
-  const envPath = path.join(repoRoot, '.env');
-  const dbDir = path.join(repoRoot, 'database');
+  const authFolder = String(getSetting('whatsapp_auth_folder', 'auth_info_baileys') || 'auth_info_baileys').trim() || 'auth_info_baileys';
+  const preservedEntries = [
+    { label: 'settings.json', relativePath: 'settings.json', cleanExclude: 'settings.json' },
+    { label: '.env', relativePath: '.env', cleanExclude: '.env' },
+    { label: 'database', relativePath: 'database', cleanExclude: 'database' },
+    { label: 'public/uploads', relativePath: path.join('public', 'uploads'), cleanExclude: 'public/uploads' },
+    { label: authFolder, relativePath: authFolder, cleanExclude: authFolder.replace(/\\/g, '/') },
+    { label: 'data', relativePath: 'data', cleanExclude: 'data' }
+  ];
+  let repoChanged = false;
+
+  const backupPreservedEntries = () => {
+    const backedUp = [];
+    for (const entry of preservedEntries) {
+      const sourcePath = path.resolve(repoRoot, entry.relativePath);
+      const backupPath = path.resolve(backupRoot, entry.relativePath);
+      if (!fs.existsSync(sourcePath)) continue;
+      const stat = fs.statSync(sourcePath);
+      if (stat.isDirectory()) {
+        fs.mkdirSync(backupPath, { recursive: true });
+        copyDirSync(sourcePath, backupPath);
+      } else {
+        fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+        fs.copyFileSync(sourcePath, backupPath);
+      }
+      backedUp.push(entry.label);
+    }
+    if (backedUp.length > 0) {
+      log.push(`$ backup preserved files: ${backedUp.join(', ')}`);
+    }
+  };
+
+  const restorePreservedFiles = (stageLabel) => {
+    const restored = [];
+    for (const entry of preservedEntries) {
+      const targetPath = path.resolve(repoRoot, entry.relativePath);
+      const backupPath = path.resolve(backupRoot, entry.relativePath);
+      if (!fs.existsSync(backupPath)) continue;
+      const stat = fs.statSync(backupPath);
+      if (stat.isDirectory()) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+        fs.mkdirSync(targetPath, { recursive: true });
+        copyDirSync(backupPath, targetPath);
+      } else {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.copyFileSync(backupPath, targetPath);
+      }
+      restored.push(entry.label);
+    }
+    if (restored.length > 0) {
+      log.push(`$ restore preserved files (${stageLabel}): ${restored.join(', ')}`);
+    }
+  };
 
   try {
     const inside = runCmd('git', ['rev-parse', '--is-inside-work-tree'], repoRoot);
@@ -3456,9 +3503,7 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
     }
 
     fs.mkdirSync(backupRoot, { recursive: true });
-    if (fs.existsSync(settingsPath)) fs.copyFileSync(settingsPath, backupSettings);
-    if (fs.existsSync(envPath)) fs.copyFileSync(envPath, backupEnv);
-    if (fs.existsSync(dbDir)) copyDirSync(dbDir, backupDb);
+    backupPreservedEntries();
 
     const resetSettings = runCmd('git', ['checkout', '--', 'settings.json'], repoRoot);
     pushCmd('git checkout -- settings.json', resetSettings);
@@ -3468,6 +3513,7 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
     const resetHard = runCmd('git', ['reset', '--hard', `origin/${branch}`], repoRoot);
     pushCmd(`git reset --hard origin/${branch}`, resetHard);
     if (!resetHard.ok) throw new Error('Gagal reset ke origin/' + branch);
+    repoChanged = true;
 
     if (remoteVersion && remoteVersion !== '-') {
       try {
@@ -3478,30 +3524,19 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
       }
     }
 
-    const authFolder = String(getSetting('whatsapp_auth_folder', 'auth_info_baileys') || 'auth_info_baileys');
+    const cleanExcludes = ['node_modules', 'package-lock.json', ...preservedEntries.map((entry) => entry.cleanExclude)];
+    const cleanArgs = ['clean', '-fd'];
+    for (const exclude of cleanExcludes) {
+      cleanArgs.push('-e', exclude);
+    }
     const clean = runCmd(
       'git',
-      [
-        'clean',
-        '-fd',
-        '-e', 'settings.json',
-        '-e', '.env',
-        '-e', 'database',
-        '-e', 'node_modules',
-        '-e', 'package-lock.json',
-        '-e', authFolder,
-        '-e', 'data'
-      ],
+      cleanArgs,
       repoRoot
     );
-    pushCmd(`git clean -fd -e settings.json -e .env -e database -e node_modules -e package-lock.json -e ${authFolder} -e data`, clean);
+    pushCmd(`git ${cleanArgs.join(' ')}`, clean);
 
-    if (fs.existsSync(backupSettings)) fs.copyFileSync(backupSettings, settingsPath);
-    if (fs.existsSync(backupEnv)) fs.copyFileSync(backupEnv, envPath);
-    if (fs.existsSync(backupDb)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-      copyDirSync(backupDb, dbDir);
-    }
+    restorePreservedFiles('post-update');
 
     const npm = runCmd('npm', ['install'], repoRoot);
     pushCmd('npm install', npm);
@@ -3511,6 +3546,13 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
     req.session._msg = { type: 'success', text: `Update selesai. Versi: ${localBefore} → ${localAfter}. Silakan restart aplikasi.` };
     req.session._updateLog = log.join('\n');
   } catch (e) {
+    if (repoChanged) {
+      try {
+        restorePreservedFiles('error-recovery');
+      } catch (restoreErr) {
+        log.push(`$ restore preserved files failed: ${String(restoreErr?.message || restoreErr)}`);
+      }
+    }
     req.session._msg = { type: 'error', text: 'Gagal update: ' + (e?.message || e) };
     req.session._updateLog = log.join('\n');
   } finally {
