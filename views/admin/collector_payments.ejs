@@ -33,6 +33,20 @@
       <div class="card-hd">
         <h6><i class="bi bi-list-ul"></i> Daftar Request (<%= (rows || []).length %>)</h6>
       </div>
+      <div class="hint" style="padding:12px 16px 0 16px;font-size:12px;color:var(--muted)">
+        Label proses membantu membedakan request yang memang menunggu approval, request yang otomatis langsung lunas oleh kolektor, dan request yang sudah diproses admin atau kasir.
+      </div>
+      <div style="padding:12px 16px 0 16px;display:flex;gap:10px;flex-wrap:wrap">
+        <select id="processFilter" class="fs" style="max-width:220px">
+          <option value="all">Semua Proses</option>
+          <option value="pending">Butuh Approval</option>
+          <option value="auto">Auto Kolektor</option>
+          <option value="admin">Disetujui Admin</option>
+          <option value="cashier">Disetujui Kasir</option>
+          <option value="rejected">Ditolak Manual</option>
+          <option value="manual">Diproses Manual</option>
+        </select>
+      </div>
       <div class="tbl-wrap">
         <table class="dtbl">
           <thead>
@@ -42,16 +56,33 @@
               <th>Pelanggan</th>
               <th>Tagihan</th>
               <th class="num">Nominal</th>
+              <th>Proses</th>
               <th>Status</th>
               <th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             <% if (!rows || rows.length === 0) { %>
-              <tr><td colspan="7" class="text-center text-muted" style="padding:24px">Tidak ada request.</td></tr>
+              <tr><td colspan="8" class="text-center text-muted" style="padding:24px">Tidak ada request.</td></tr>
             <% } else { %>
               <% rows.forEach(r => { %>
-                <tr>
+                <% 
+                  const decidedRole = String(r.decided_by_role || '').toLowerCase();
+                  const processLabel =
+                    r.status === 'pending' ? 'Butuh Approval' :
+                    decidedRole === 'system' ? 'Auto Kolektor' :
+                    decidedRole === 'cashier' ? 'Disetujui Kasir' :
+                    decidedRole === 'admin' ? 'Disetujui Admin' :
+                    r.status === 'rejected' ? 'Ditolak Manual' :
+                    'Diproses Manual';
+                  const processBadge =
+                    r.status === 'pending' ? 'bm' :
+                    decidedRole === 'system' ? 'bs' :
+                    decidedRole === 'cashier' || decidedRole === 'admin' ? 'bp' :
+                    r.status === 'rejected' ? 'bd' :
+                    'bm';
+                %>
+                <tr data-process="<%= r.status === 'pending' ? 'pending' : (decidedRole === 'system' ? 'auto' : (decidedRole === 'admin' ? 'admin' : (decidedRole === 'cashier' ? 'cashier' : (r.status === 'rejected' ? 'rejected' : 'manual')))) %>">
                   <td style="font-size:11px;color:var(--muted)"><%= r.created_at ? new Date(r.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-' %></td>
                   <td class="fw6"><%= r.collector_name %> <span class="text-muted" style="font-size:11px"><%= r.collector_username ? '(@'+r.collector_username+')' : '' %></span></td>
                   <td>
@@ -65,6 +96,16 @@
                     <% if (r.lat && r.lng) { %><div><a target="_blank" href="https://www.google.com/maps?q=<%= encodeURIComponent(r.lat + ',' + r.lng) %>">Map</a></div><% } %>
                   </td>
                   <td class="num fw6">Rp <%= Number(r.amount||0).toLocaleString('id-ID') %></td>
+                  <td>
+                    <span class="badge <%= processBadge %>"><%= processLabel %></span>
+                    <% if (decidedRole === 'system') { %>
+                      <div style="font-size:10px;color:var(--muted)">Kolektor auto-approve aktif</div>
+                    <% } else if (r.status === 'pending') { %>
+                      <div style="font-size:10px;color:var(--muted)">Menunggu admin atau kasir</div>
+                    <% } else if (r.decided_by_name) { %>
+                      <div style="font-size:10px;color:var(--muted)">Oleh: <%= r.decided_by_name %></div>
+                    <% } %>
+                  </td>
                   <td>
                     <span class="badge <%= r.status==='approved'?'bs':(r.status==='rejected'?'bd':'bm') %>"><%= String(r.status||'').toUpperCase() %></span>
                     <% if (r.note) { %><div style="font-size:10px;color:var(--muted)"><%= r.note %></div><% } %>
@@ -96,5 +137,15 @@
     </div>
   </div>
 </div>
+<script>
+function applyProcessFilter() {
+  const val = document.getElementById('processFilter')?.value || 'all';
+  document.querySelectorAll('table.dtbl tbody tr[data-process]').forEach((row) => {
+    const rowVal = row.getAttribute('data-process') || '';
+    row.style.display = (val === 'all' || rowVal === val) ? '' : 'none';
+  });
+}
+document.getElementById('processFilter')?.addEventListener('change', applyProcessFilter);
+</script>
 </body>
 </html>

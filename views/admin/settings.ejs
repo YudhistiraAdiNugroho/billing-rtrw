@@ -221,17 +221,8 @@
               </select>
             </div>
           </div>
-          <div class="fg">
-            <label class="fl">
-              <i class="bi bi-check-circle"></i> <%= t('admin.settings.collector_auto_approve', 'Auto-Approve Pembayaran Kolektor') %>
-            </label>
-            <select class="fs" name="collector_auto_approve">
-              <option value="true" <%= settings.collector_auto_approve === 'true' || settings.collector_auto_approve === true ? 'selected' : '' %>>Aktif (Langsung Lunas)</option>
-              <option value="false" <%= settings.collector_auto_approve === 'false' || settings.collector_auto_approve === false || !settings.collector_auto_approve ? 'selected' : '' %>>Nonaktif (Perlu Approval)</option>
-            </select>
-          </div>
           <div class="hint" style="margin-top:6px;color:var(--warning)">
-            <i class="bi bi-exclamation-triangle"></i> <strong>Auto-Approve:</strong> Jika diaktifkan, pembayaran yang dilaporkan kolektor akan langsung diproses tanpa perlu approval admin/kasir. Nonaktifkan jika ingin verifikasi manual.
+            <i class="bi bi-info-circle"></i> <strong>Pembayaran Kolektor:</strong> Pengaturan approval pembayaran kolektor sekarang diatur per akun kolektor pada menu Manajemen Kolektor, bukan dari pengaturan global.
           </div>
         </div>
 
