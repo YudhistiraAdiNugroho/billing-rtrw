@@ -1554,7 +1554,7 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.hotspot_profile = '';
     }
 
-    const multiRouterMode = getSetting('multi_router_mode', 'active') === 'active';
+    const multiRouterMode = getSetting('multi_router_mode', 'disabled') === 'active';
     const defaultRouterId = multiRouterMode ? null : getSetting('default_router_id', null);
 
     if (connectionType === 'pppoe') {
@@ -1746,7 +1746,7 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       req.body.hotspot_profile = '';
     }
 
-    const multiRouterMode = getSetting('multi_router_mode', 'active') === 'active';
+    const multiRouterMode = getSetting('multi_router_mode', 'disabled') === 'active';
     const defaultRouterId = multiRouterMode ? null : getSetting('default_router_id', null);
 
     if (connectionType === 'pppoe') {
@@ -3433,7 +3433,7 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
     { label: 'settings.json', relativePath: 'settings.json', cleanExclude: 'settings.json' },
     { label: '.env', relativePath: '.env', cleanExclude: '.env' },
     { label: 'database', relativePath: 'database', cleanExclude: 'database' },
-    { label: 'public/uploads', relativePath: path.join('public', 'uploads'), cleanExclude: 'public/uploads' },
+    { label: 'public', relativePath: 'public', cleanExclude: 'public' },
     { label: authFolder, relativePath: authFolder, cleanExclude: authFolder.replace(/\\/g, '/') },
     { label: 'data', relativePath: 'data', cleanExclude: 'data' }
   ];
@@ -3612,11 +3612,11 @@ router.post('/settings', requireAdminSession, express.urlencoded({ extended: tru
     newSettings.use_builtin_acs = (newSettings.use_builtin_acs === 'true' || newSettings.use_builtin_acs === true);
 
     // Multi-Router Mode settings
-    if (!newSettings.multi_router_mode) newSettings.multi_router_mode = 'active';
+    if (!newSettings.multi_router_mode) newSettings.multi_router_mode = 'disabled';
     if (newSettings.default_router_id) newSettings.default_router_id = parseInt(newSettings.default_router_id) || null;
 
     // ✅ NEW: Jika switching dari disabled ke active, auto-assign default router ke pelanggan NULL
-    const oldMode = getSetting('multi_router_mode', 'active');
+    const oldMode = getSetting('multi_router_mode', 'disabled');
     if (oldMode === 'disabled' && newSettings.multi_router_mode === 'active') {
       const defaultRouterId = newSettings.default_router_id;
       if (defaultRouterId && defaultRouterId > 0) {

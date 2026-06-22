@@ -9,46 +9,50 @@ const { getCurrentDateInTimezone, getSetting } = require('../config/settingsMana
 /**
  * Get effective router_id for a customer
  * Respects multi-router mode setting:
- * - If mode is 'active': returns customer's router_id (could be NULL)
+ * - If mode is 'active': returns customer's router_id if set.
+ *   For legacy single-router customers with NULL router_id, it falls back to
+ *   explicit default_router_id or the only active router (if exactly one exists).
  * - If mode is 'disabled': returns customer's router_id if set, else auto-detect
  *   - First tries explicit default_router_id setting
  *   - If not set, auto-detects first (smallest ID) available router
  */
 function getEffectiveRouterId(customerRouterId) {
-  const mode = getSetting('multi_router_mode', 'active');
-  
-  // Mode: active (multi-router) - return as-is
-  if (mode === 'active') {
-    return customerRouterId || null;
+  const mode = getSetting('multi_router_mode', 'disabled');
+
+  if (customerRouterId && customerRouterId > 0) {
+    return customerRouterId;
   }
-  
-  // Mode: disabled (single router with fallback) - use explicit default or auto-detect
-  if (mode === 'disabled') {
-    if (customerRouterId && customerRouterId > 0) {
-      // Customer has explicit router assignment - use it
-      return customerRouterId;
-    }
-    
-    // Try explicit default_router_id setting first
-    const explicitDefault = getSetting('default_router_id', null);
-    if (explicitDefault) {
-      const parsed = parseInt(explicitDefault);
-      if (parsed && parsed > 0) {
-        return parsed;
-      }
-    }
-    
-    // Auto-detect: find first (smallest ID) router that exists
-    try {
-      const routers = db.prepare('SELECT id FROM routers WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get();
-      if (routers && routers.id > 0) {
-        return routers.id;
-      }
-    } catch (e) {
-      // Ignore if routers table doesn't exist or query fails
+
+  const explicitDefault = getSetting('default_router_id', null);
+  if (explicitDefault) {
+    const parsed = parseInt(explicitDefault, 10);
+    if (parsed && parsed > 0) {
+      return parsed;
     }
   }
-  
+
+  try {
+    if (mode === 'active') {
+      // In multi-router mode, only fall back automatically if there is exactly one active router.
+      const routers = db.prepare('SELECT id FROM routers WHERE is_active = 1 ORDER BY id ASC LIMIT 2').all();
+      if (routers.length === 1 && routers[0].id > 0) {
+        logger.warn(`[getEffectiveRouterId] router_id pelanggan kosong saat multi-router aktif. Fallback ke satu-satunya router aktif: ${routers[0].id}`);
+        return routers[0].id;
+      }
+      return null;
+    }
+
+    // Mode: disabled (single router with fallback) - auto-detect first active router
+    const router = db.prepare('SELECT id FROM routers WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get();
+    if (router && router.id > 0) {
+      return router.id;
+    }
+  }
+
+  catch (e) {
+    // Ignore if routers table doesn't exist or query fails
+  }
+
   return null;
 }
 
