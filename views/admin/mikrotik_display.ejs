@@ -315,11 +315,14 @@
       flex-direction: column;
       align-items: center;
       gap: 10px;
+      width: 100%;
+      max-width: 130px;
     }
 
     .gauge-svg {
-      width: 140px;
-      height: 140px;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1 / 1;
       transform: rotate(-90deg);
     }
 
@@ -348,7 +351,7 @@
 
     .gauge-text {
       position: absolute;
-      top: 60px;
+      top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       display: flex;
@@ -582,6 +585,241 @@
     ::-webkit-scrollbar-thumb:hover {
       background: rgba(255,255,255,0.2);
     }
+
+    /* Media Queries for Responsiveness */
+    /* Target Portrait mode on smaller screens (Tablet / Mobile) to collapse to stack/grid */
+    @media (max-width: 1024px) and (orientation: portrait) {
+      .noc-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .noc-container {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+      }
+      .noc-grid > :nth-child(1),
+      .noc-grid > :nth-child(2),
+      .noc-grid > :nth-child(3) {
+        grid-column: span 1;
+      }
+      .chart-container {
+        min-height: 320px;
+        height: 320px;
+      }
+      .table-card {
+        flex: none;
+        height: 350px;
+      }
+      .noc-header {
+        flex-direction: column;
+        gap: 14px;
+        align-items: stretch;
+        text-align: center;
+      }
+      .header-left {
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .header-right {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .router-select {
+        width: 100%;
+      }
+      .digital-clock {
+        text-align: center;
+      }
+      .btn-action {
+        justify-content: center;
+      }
+    }
+
+    /* Media Queries for Responsiveness */
+    /* Prevent horizontal scrollbar globally */
+    html, body, .noc-container {
+      max-width: 100vw;
+      overflow-x: hidden !important;
+    }
+
+    /* Hide Type and Status columns in table on screens under 1024px width */
+    @media (max-width: 1024px) {
+      .noc-table th:nth-child(2),
+      .noc-table td:nth-child(2),
+      .noc-table th:nth-child(3),
+      .noc-table td:nth-child(3) {
+        display: none !important;
+      }
+    }
+
+    /* Target Portrait mode on smaller screens (Tablet / Mobile) to collapse to stack/grid */
+    @media (max-width: 1024px) and (orientation: portrait) {
+      .noc-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .noc-container {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+      }
+      .noc-grid > :nth-child(1),
+      .noc-grid > :nth-child(2),
+      .noc-grid > :nth-child(3) {
+        grid-column: span 1;
+      }
+      .chart-container {
+        min-height: 320px;
+        height: 320px;
+      }
+      .table-card {
+        flex: none;
+        height: 350px;
+      }
+      .system-layout {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 16px;
+        height: auto;
+      }
+      .system-info-list {
+        width: 100%;
+        margin-top: 10px;
+      }
+      .noc-header {
+        flex-direction: column;
+        gap: 14px;
+        align-items: stretch;
+        text-align: center;
+      }
+      .header-left {
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .header-right {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .router-select {
+        width: 100%;
+      }
+      .digital-clock {
+        text-align: center;
+      }
+      .btn-action {
+        justify-content: center;
+      }
+    }
+
+    /* Target Landscape mode on small screens (Phones / Small Tablets) to keep 3 columns but scale down */
+    @media (max-width: 1024px) and (orientation: landscape) {
+      .noc-grid {
+        grid-template-columns: 18% 62% 20%;
+        gap: 8px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .noc-card {
+        padding: 8px;
+      }
+      .chart-layout {
+        padding: 8px 10px;
+      }
+      .chart-container {
+        padding: 4px;
+      }
+      .noc-card-title {
+        font-size: 10px;
+        margin-bottom: 6px;
+      }
+      .system-layout {
+        gap: 4px;
+        height: auto;
+        justify-content: flex-start;
+      }
+      .gauge-wrapper {
+        max-width: 85px;
+      }
+      .gauge-wrapper.cpu .gauge-progress,
+      .gauge-wrapper.mem .gauge-progress {
+        stroke-width: 8;
+      }
+      .gauge-percent {
+        font-size: 13px;
+      }
+      .gauge-label {
+        font-size: 8px;
+        margin-top: 1px;
+      }
+      .sys-info-item {
+        font-size: 9px;
+      }
+      .stat-widget {
+        padding: 6px 8px;
+        gap: 6px;
+      }
+      .stat-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+      }
+      .stat-value {
+        font-size: 14px;
+      }
+      .stat-label {
+        font-size: 8px;
+      }
+      .noc-table th, .noc-table td {
+        padding: 5px 6px;
+        font-size: 11px;
+      }
+      .noc-header {
+        padding: 8px 12px;
+      }
+      .header-title {
+        font-size: 14px;
+      }
+      .router-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+      }
+      .digital-clock {
+        font-size: 12px;
+        padding: 4px 8px;
+      }
+      .router-select {
+        font-size: 11px;
+        padding: 4px 24px 4px 8px;
+      }
+      .btn-action {
+        font-size: 11px;
+        padding: 4px 8px;
+      }
+    }
+
+    /* Target small heights (like phone landscape mode) to allow scrolling */
+    @media (max-height: 700px) {
+      .noc-container {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+      }
+      .noc-grid {
+        height: auto;
+      }
+      .chart-container {
+        min-height: 280px;
+        height: 280px;
+      }
+      .table-card {
+        flex: none;
+        height: 300px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -646,24 +884,28 @@
         <div class="system-layout">
           <!-- CPU Progress Circle -->
           <div class="gauge-wrapper cpu">
-            <svg class="gauge-svg">
-              <circle class="gauge-track" cx="70" cy="70" r="55"></circle>
-              <circle class="gauge-progress" id="cpu-gauge-circle" cx="70" cy="70" r="55" stroke-dasharray="345.5" stroke-dashoffset="345.5"></circle>
-            </svg>
-            <div class="gauge-text">
-              <span class="gauge-percent" id="cpu-percent-text" style="color: var(--warning);">0%</span>
+            <div style="position: relative; width: 100%; display: flex; justify-content: center; align-items: center;">
+              <svg class="gauge-svg" viewBox="0 0 140 140">
+                <circle class="gauge-track" cx="70" cy="70" r="55"></circle>
+                <circle class="gauge-progress" id="cpu-gauge-circle" cx="70" cy="70" r="55" stroke-dasharray="345.5" stroke-dashoffset="345.5"></circle>
+              </svg>
+              <div class="gauge-text">
+                <span class="gauge-percent" id="cpu-percent-text" style="color: var(--warning);">0%</span>
+              </div>
             </div>
             <span class="gauge-label">CPU Load</span>
           </div>
 
           <!-- Memory Progress Circle -->
           <div class="gauge-wrapper mem">
-            <svg class="gauge-svg">
-              <circle class="gauge-track" cx="70" cy="70" r="55"></circle>
-              <circle class="gauge-progress" id="mem-gauge-circle" cx="70" cy="70" r="55" stroke-dasharray="345.5" stroke-dashoffset="345.5"></circle>
-            </svg>
-            <div class="gauge-text">
-              <span class="gauge-percent" id="mem-percent-text" style="color: var(--primary);">0%</span>
+            <div style="position: relative; width: 100%; display: flex; justify-content: center; align-items: center;">
+              <svg class="gauge-svg" viewBox="0 0 140 140">
+                <circle class="gauge-track" cx="70" cy="70" r="55"></circle>
+                <circle class="gauge-progress" id="mem-gauge-circle" cx="70" cy="70" r="55" stroke-dasharray="345.5" stroke-dashoffset="345.5"></circle>
+              </svg>
+              <div class="gauge-text">
+                <span class="gauge-percent" id="mem-percent-text" style="color: var(--primary);">0%</span>
+              </div>
             </div>
             <span class="gauge-label">Memory Used</span>
           </div>
