@@ -256,7 +256,14 @@ class ClientAdapter {
 async function getConnection(routerId = null) {
   let host, port, user, password;
 
-  if (routerId) {
+  if (routerId === 'settings_json' || routerId === 'settings') {
+    const settings = getSettingsWithCache();
+    host = settings.mikrotik_host;
+    port = settings.mikrotik_port || 8728;
+    user = settings.mikrotik_user;
+    password = settings.mikrotik_password;
+    logger.info('[MikroTik] Using router from settings.json (explicitly requested)');
+  } else if (routerId) {
     const router = db.prepare('SELECT * FROM routers WHERE id = ?').get(routerId);
     if (!router) throw new Error(`Router with ID ${routerId} not found`);
     host = router.host;
