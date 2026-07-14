@@ -3224,6 +3224,31 @@ router.post('/settings/qris-upload', requireAdminSession, qrisUpload.single('qri
   res.redirect('/admin/settings');
 });
 
+router.post('/settings/logo-upload', requireAdminSession, qrisUpload.single('logo_file'), async (req, res) => {
+  try {
+    const f = req.file;
+    if (!f || !f.buffer || !f.originalname) throw new Error('File logo tidak ditemukan');
+
+    const ext = String(path.extname(f.originalname || '') || '').toLowerCase();
+    const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+    const allowedMime = new Set(['image/png', 'image/jpeg', 'image/webp']);
+    if (!allowedExt.has(ext) || !allowedMime.has(String(f.mimetype || '').toLowerCase())) {
+      throw new Error('Format file tidak didukung. Gunakan PNG/JPG/WebP');
+    }
+
+    const dir = path.join(__dirname, '../public/img');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const fullPath = path.join(dir, 'logo.png');
+    fs.writeFileSync(fullPath, f.buffer);
+
+    req.session._msg = { type: 'success', text: 'Logo aplikasi berhasil diperbarui!' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal upload logo: ' + (e?.message || e) };
+  }
+  res.redirect('/admin/settings');
+});
+
 router.get('/digiflazz', requireAdminSession, requireSidebarMenuAccess('digiflazz'), restrictToAdmin, async (req, res) => {
   const settings = getSettings();
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;

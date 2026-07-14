@@ -200,6 +200,20 @@
             <label class="fl"><%= t('admin.settings.operational_hours', 'Jam Operasional') %></label>
             <input class="fc" name="operational_hours" value="<%= settings.operational_hours || '' %>" placeholder="Setiap Hari: 08.00 - 22.00 WIB">
           </div>
+          <div class="fg" style="margin-top:15px; border-top: 1px dashed var(--border); padding-top: 15px;">
+            <label class="fl">Ganti Logo Aplikasi (Portal Pelanggan & Login)</label>
+            <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap">
+              <div style="flex: 1 1 200px">
+                <input class="fc" type="file" id="logo_upload_file" name="logo_file" accept="image/png,image/jpeg,image/jpg,image/webp">
+                <div style="font-size:10px; color:var(--muted); margin-top:4px">Format file: PNG/JPG/WebP. Ukuran maks 2MB. Logo akan langsung di-upload dan menimpa yang lama.</div>
+              </div>
+              <button class="btn btn-s" type="button" id="logo_upload_btn" style="height:38px"><i class="bi bi-upload"></i> Upload Logo</button>
+            </div>
+            <div style="margin-top:10px; display:flex; gap:12px; align-items:center;">
+              <div style="font-size:10px; color:var(--muted)">Logo Saat Ini:</div>
+              <img src="/img/logo.png?v=<%= Date.now() %>" alt="Current Logo" style="height:40px; object-fit:contain; background:rgba(255,255,255,0.05); border-radius:6px; padding:4px; border:1px solid var(--border)">
+            </div>
+          </div>
           <div class="form-row">
             <div class="fg">
               <label class="fl"><%= t('admin.settings.server_port', 'Port Server') %></label>
@@ -892,6 +906,36 @@ async function clearEwalletLogs() {
     alert(e.message);
   }
 }
+
+// Logo Upload JavaScript
+(function () {
+  const fileInput = document.getElementById('logo_upload_file');
+  const btn = document.getElementById('logo_upload_btn');
+  if (!fileInput || !btn) return;
+
+  btn.addEventListener('click', async () => {
+    const f = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    if (!f) {
+      alert('Pilih file logo terlebih dahulu');
+      return;
+    }
+    const fd = new FormData();
+    fd.append('logo_file', f);
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+    try {
+      const r = await fetch('/admin/settings/logo-upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+      if (!r.ok) throw new Error('Upload logo gagal');
+      window.location.href = '/admin/settings';
+    } catch (e) {
+      alert(e.message);
+      window.location.href = '/admin/settings';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-upload"></i> Upload Logo';
+    }
+  });
+})();
 
 setTimeout(loadEwalletLogs, 200);
 setTimeout(updateNotifHint, 250);
