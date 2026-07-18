@@ -32,7 +32,7 @@
       <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
         <span style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">Check-in</span>
         <span style="color: white; font-weight: 600; font-size: 13px;">
-          <%= new Date(todayAttendance.check_in_time).toLocaleTimeString('id-ID', {timeZone: settings.timezone, hour: '2-digit', minute: '2-digit'}) %>
+          <%= formatTimeLocal(todayAttendance.check_in_time) %>
         </span>
       </div>
 
@@ -40,7 +40,7 @@
         <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
           <span style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">Check-out</span>
           <span style="color: white; font-weight: 600; font-size: 13px;">
-            <%= new Date(todayAttendance.check_out_time).toLocaleTimeString('id-ID', {timeZone: settings.timezone, hour: '2-digit', minute: '2-digit'}) %>
+            <%= formatTimeLocal(todayAttendance.check_out_time) %>
           </span>
         </div>
         <div style="display: flex; justify-content: space-between; padding: 8px 0;">
@@ -88,15 +88,25 @@
 
     <% if (todayAttendance.status === 'checked_in') { %>
       <textarea id="checkoutNote" class="form-control mt-3" placeholder="Catatan check-out (opsional)" rows="2" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;"></textarea>
-      <div class="mt-3">
-        <label for="checkoutPhoto" style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 6px;">Foto selfie check-out (wajib)</label>
-        <input id="checkoutPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkoutPhoto', 'checkoutPhotoInfo', 'checkoutPhotoPreviewWrap', 'checkoutPhotoPreview')" class="form-control" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;">
+      
+      <div class="mt-3 text-center">
+        <label style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 8px;">Foto selfie check-out (wajib)</label>
+        <input id="checkoutPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkoutPhoto', 'checkoutPhotoInfo', 'checkoutPhotoPreviewWrap', 'checkoutPhotoPreview')" style="display: none;">
+        
+        <div style="margin: 12px 0;">
+          <button type="button" onclick="document.getElementById('checkoutPhoto').click()" class="btn d-inline-flex align-items-center justify-content-center" style="width: 64px; height: 64px; border-radius: 50%; background: #7c3aed; color: white; font-size: 24px; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4); border: none; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.92)'" onmouseup="this.style.transform='scale(1)'">
+            <i class="bi bi-camera-fill"></i>
+          </button>
+          <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); margin-top: 6px;">Ketuk tombol kamera untuk mengambil foto selfie</div>
+        </div>
+
         <div id="checkoutPhotoInfo" style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px;">Belum ada foto selfie dipilih. Foto wajib untuk check-out.</div>
         <div id="checkoutPhotoStatus" style="display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; background: rgba(239, 68, 68, 0.18); color: #fecaca;">Foto wajib</div>
-        <div style="display: flex; gap: 8px; margin-top: 8px;">
-          <button type="button" onclick="document.getElementById('checkoutPhoto').click()" class="btn btn-sm" style="background: rgba(59, 130, 246, 0.18); color: white; border: 1px solid rgba(59, 130, 246, 0.45);">Pilih/Ganti Foto</button>
-          <button type="button" onclick="clearSelectedPhoto('checkoutPhoto')" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.14); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.35);">Hapus Foto</button>
+        
+        <div style="margin-top: 8px;">
+          <button type="button" onclick="clearSelectedPhoto('checkoutPhoto')" class="btn btn-sm btn-outline-danger" id="checkoutPhotoClearBtn" style="display: none; border-radius: 8px; font-size: 11px;">Hapus Foto</button>
         </div>
+        
         <div id="checkoutPhotoPreviewWrap" style="display: none; margin-top: 8px;">
           <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px;">Preview foto final yang akan dikirim:</div>
           <img id="checkoutPhotoPreview" alt="Preview foto check-out" style="width: 100%; max-width: 240px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); object-fit: cover;">
@@ -116,15 +126,25 @@
     </p>
     
     <textarea id="checkinNote" class="form-control mt-3" placeholder="Catatan check-in (opsional)" rows="2" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;"></textarea>
-    <div class="mt-3">
-      <label for="checkinPhoto" style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 6px;">Foto selfie check-in (wajib)</label>
-      <input id="checkinPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkinPhoto', 'checkinPhotoInfo', 'checkinPhotoPreviewWrap', 'checkinPhotoPreview')" class="form-control" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;">
+    
+    <div class="mt-3 text-center">
+      <label style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 8px;">Foto selfie check-in (wajib)</label>
+      <input id="checkinPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkinPhoto', 'checkinPhotoInfo', 'checkinPhotoPreviewWrap', 'checkinPhotoPreview')" style="display: none;">
+      
+      <div style="margin: 12px 0;">
+        <button type="button" onclick="document.getElementById('checkinPhoto').click()" class="btn d-inline-flex align-items-center justify-content-center" style="width: 64px; height: 64px; border-radius: 50%; background: #10b981; color: white; font-size: 24px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); border: none; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.92)'" onmouseup="this.style.transform='scale(1)'">
+          <i class="bi bi-camera-fill"></i>
+        </button>
+        <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); margin-top: 6px;">Ketuk tombol kamera untuk mengambil foto selfie</div>
+      </div>
+
       <div id="checkinPhotoInfo" style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px;">Belum ada foto selfie dipilih. Foto wajib untuk check-in.</div>
       <div id="checkinPhotoStatus" style="display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; background: rgba(239, 68, 68, 0.18); color: #fecaca;">Foto wajib</div>
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button type="button" onclick="document.getElementById('checkinPhoto').click()" class="btn btn-sm" style="background: rgba(59, 130, 246, 0.18); color: white; border: 1px solid rgba(59, 130, 246, 0.45);">Pilih/Ganti Foto</button>
-        <button type="button" onclick="clearSelectedPhoto('checkinPhoto')" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.14); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.35);">Hapus Foto</button>
+      
+      <div style="margin-top: 8px;">
+        <button type="button" onclick="clearSelectedPhoto('checkinPhoto')" class="btn btn-sm btn-outline-danger" id="checkinPhotoClearBtn" style="display: none; border-radius: 8px; font-size: 11px;">Hapus Foto</button>
       </div>
+      
       <div id="checkinPhotoPreviewWrap" style="display: none; margin-top: 8px;">
         <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px;">Preview foto final yang akan dikirim:</div>
         <img id="checkinPhotoPreview" alt="Preview foto check-in" style="width: 100%; max-width: 240px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); object-fit: cover;">
@@ -173,8 +193,7 @@
   <% history.forEach(item => { %>
     <div class="t-card">
       <div class="fw-bold mb-2" style="font-size: 14px; color: #f8fafc;">
-        <%= new Date(item.check_in_time).toLocaleDateString('id-ID', { 
-          timeZone: settings.timezone,
+        <%= parseDateInTimezone(item.check_in_time).toLocaleDateString('id-ID', { 
           weekday: 'long', 
           day: 'numeric',
           month: 'long'
@@ -183,13 +202,13 @@
       
       <div class="text-secondary mb-1" style="font-size: 12px;">
         <i class="bi bi-box-arrow-in-right text-success me-1"></i>
-        Check-in: <%= new Date(item.check_in_time).toLocaleTimeString('id-ID', {timeZone: settings.timezone, hour: '2-digit', minute: '2-digit'}) %>
+        Check-in: <%= formatTimeLocal(item.check_in_time) %>
       </div>
       
       <% if (item.check_out_time) { %>
         <div class="text-secondary mb-1" style="font-size: 12px;">
           <i class="bi bi-box-arrow-right text-danger me-1"></i>
-          Check-out: <%= new Date(item.check_out_time).toLocaleTimeString('id-ID', {timeZone: settings.timezone, hour: '2-digit', minute: '2-digit'}) %>
+          Check-out: <%= formatTimeLocal(item.check_out_time) %>
         </div>
         <div class="text-secondary" style="font-size: 12px;">
           <i class="bi bi-clock text-primary me-1"></i>
@@ -283,12 +302,16 @@
     if (!file) {
       info.textContent = 'Belum ada foto selfie dipilih.';
       resetPhotoPreview(previewWrapId, previewImgId);
-        if (config) setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
-        if (config) setSubmitButtonState(config.submitBtnId, false);
+      if (config) setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
+      if (config) setSubmitButtonState(config.submitBtnId, false);
+      const clearBtn = document.getElementById(inputId + 'ClearBtn');
+      if (clearBtn) clearBtn.style.display = 'none';
       return;
     }
     info.textContent = `Foto dipilih: ${file.name} (${Math.round(file.size / 1024)} KB)`;
     if (config) setPhotoStatus(config.statusId, 'Menyiapkan preview', 'processing');
+    const clearBtn = document.getElementById(inputId + 'ClearBtn');
+    if (clearBtn) clearBtn.style.display = 'inline-block';
     refreshPhotoPreview(inputId).catch((error) => {
       info.textContent = error.message;
       resetPhotoPreview(previewWrapId, previewImgId);
@@ -311,6 +334,8 @@
     resetPhotoPreview(config.previewWrapId, config.previewImgId);
     setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
     setSubmitButtonState(config.submitBtnId, false);
+    const clearBtn = document.getElementById(inputId + 'ClearBtn');
+    if (clearBtn) clearBtn.style.display = 'none';
   }
 
   async function refreshPhotoPreview(inputId, force = false) {
@@ -453,7 +478,8 @@
       second: '2-digit'
     });
     return [
-      'Absensi Karyawan',
+      '<%= settings.companyName %>'.toUpperCase(),
+      'TEKNISI PORTAL - ABSENSI',
       `Waktu: ${timestamp}`,
       `GPS: ${location.lat}, ${location.lng}`
     ];

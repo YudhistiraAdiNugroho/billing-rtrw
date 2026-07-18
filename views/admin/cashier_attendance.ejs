@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="<%= lang || 'id' %>">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title><%= title %> | <%= company %></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="/css/admin.css">
@@ -114,13 +115,13 @@
 
           <div class="info-row">
             <span class="info-label">Check-in</span>
-            <span class="info-value"><%= new Date(todayAttendance.check_in_time).toLocaleString('id-ID') %></span>
+            <span class="info-value"><%= formatDateLocal(todayAttendance.check_in_time) %></span>
           </div>
 
           <% if (todayAttendance.check_out_time) { %>
             <div class="info-row">
               <span class="info-label">Check-out</span>
-              <span class="info-value"><%= new Date(todayAttendance.check_out_time).toLocaleString('id-ID') %></span>
+              <span class="info-value"><%= formatDateLocal(todayAttendance.check_out_time) %></span>
             </div>
             <div class="info-row">
               <span class="info-label">Durasi Kerja</span>
@@ -167,12 +168,22 @@
 
           <% if (todayAttendance.status === 'checked_in') { %>
             <textarea id="checkoutNote" class="note-input" placeholder="Catatan check-out (opsional)"></textarea>
-            <input id="checkoutPhoto" class="note-input" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkoutPhoto', 'checkoutPhotoInfo', 'checkoutPhotoPreviewWrap', 'checkoutPhotoPreview')">
-            <div id="checkoutPhotoInfo" class="photo-help">Belum ada foto dipilih. Foto wajib untuk check-out.</div>
-            <div id="checkoutPhotoStatus" class="photo-help" style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(239,68,68,0.18);color:#fecaca">Foto wajib</div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <button type="button" onclick="document.getElementById('checkoutPhoto').click()" class="btn btn-p btn-sm">Pilih/Ganti Foto</button>
-              <button type="button" onclick="clearSelectedPhoto('checkoutPhoto')" class="btn btn-d btn-sm">Hapus Foto</button>
+            <input id="checkoutPhoto" type="file" accept="image/*" capture="user" style="display: none;" onchange="updatePhotoInfo('checkoutPhoto', 'checkoutPhotoInfo', 'checkoutPhotoPreviewWrap', 'checkoutPhotoPreview')">
+            
+            <div style="text-align: center; margin: 16px 0;">
+              <button type="button" onclick="document.getElementById('checkoutPhoto').click()" class="btn btn-p d-inline-flex align-items-center justify-content-center" style="width: 64px; height: 64px; border-radius: 50%; font-size: 24px; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4); border: none; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.92)'" onmouseup="this.style.transform='scale(1)'">
+                <i class="bi bi-camera-fill"></i>
+              </button>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">Ketuk tombol kamera untuk mengambil foto selfie</div>
+            </div>
+
+            <div id="checkoutPhotoInfo" class="photo-help text-center">Belum ada foto diambil. Foto wajib untuk check-out.</div>
+            <div style="text-align: center; margin-top: 4px;">
+              <div id="checkoutPhotoStatus" class="photo-help" style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(239,68,68,0.18);color:#fecaca">Foto wajib</div>
+            </div>
+            
+            <div style="display:flex;gap:8px;margin-top:8px;justify-content:center">
+              <button type="button" onclick="clearSelectedPhoto('checkoutPhoto')" class="btn btn-d btn-sm" id="checkoutPhotoClearBtn" style="display: none; border-radius: 8px; font-size: 11px;">Hapus Foto</button>
             </div>
             <div id="checkoutPhotoPreviewWrap" style="display:none;margin-top:8px">
               <div class="photo-help" style="margin-bottom:6px">Preview foto final yang akan dikirim:</div>
@@ -188,12 +199,22 @@
           <p style="color: var(--muted); margin: 16px 0;">Silakan lakukan check-in untuk memulai hari kerja Anda.</p>
           
           <textarea id="checkinNote" class="note-input" placeholder="Catatan check-in (opsional)"></textarea>
-          <input id="checkinPhoto" class="note-input" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkinPhoto', 'checkinPhotoInfo', 'checkinPhotoPreviewWrap', 'checkinPhotoPreview')">
-          <div id="checkinPhotoInfo" class="photo-help">Belum ada foto dipilih. Foto wajib untuk check-in.</div>
-          <div id="checkinPhotoStatus" class="photo-help" style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(239,68,68,0.18);color:#fecaca">Foto wajib</div>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button type="button" onclick="document.getElementById('checkinPhoto').click()" class="btn btn-p btn-sm">Pilih/Ganti Foto</button>
-            <button type="button" onclick="clearSelectedPhoto('checkinPhoto')" class="btn btn-d btn-sm">Hapus Foto</button>
+          <input id="checkinPhoto" type="file" accept="image/*" capture="user" style="display: none;" onchange="updatePhotoInfo('checkinPhoto', 'checkinPhotoInfo', 'checkinPhotoPreviewWrap', 'checkinPhotoPreview')">
+          
+          <div style="text-align: center; margin: 16px 0;">
+            <button type="button" onclick="document.getElementById('checkinPhoto').click()" class="btn btn-s d-inline-flex align-items-center justify-content-center" style="width: 64px; height: 64px; border-radius: 50%; font-size: 24px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); border: none; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.92)'" onmouseup="this.style.transform='scale(1)'">
+              <i class="bi bi-camera-fill"></i>
+            </button>
+            <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">Ketuk tombol kamera untuk mengambil foto selfie</div>
+          </div>
+
+          <div id="checkinPhotoInfo" class="photo-help text-center">Belum ada foto diambil. Foto wajib untuk check-in.</div>
+          <div style="text-align: center; margin-top: 4px;">
+            <div id="checkinPhotoStatus" class="photo-help" style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(239,68,68,0.18);color:#fecaca">Foto wajib</div>
+          </div>
+          
+          <div style="display:flex;gap:8px;margin-top:8px;justify-content:center">
+            <button type="button" onclick="clearSelectedPhoto('checkinPhoto')" class="btn btn-d btn-sm" id="checkinPhotoClearBtn" style="display: none; border-radius: 8px; font-size: 11px;">Hapus Foto</button>
           </div>
           <div id="checkinPhotoPreviewWrap" style="display:none;margin-top:8px">
             <div class="photo-help" style="margin-bottom:6px">Preview foto final yang akan dikirim:</div>
@@ -263,20 +284,18 @@
             <% history.forEach(item => { %>
               <tr>
                 <td class="fw6">
-                  <%= new Date(item.check_in_time).toLocaleDateString('id-ID', { 
+                  <%= parseDateInTimezone(item.check_in_time).toLocaleDateString('id-ID', { 
                     weekday: 'short', 
                     year: 'numeric', 
                     month: 'short', 
                     day: 'numeric' 
                   }) %>
                 </td>
-                <td><%= new Date(item.check_in_time).toLocaleTimeString('id-ID') %></td>
                 <td>
-                  <% if (item.check_out_time) { %>
-                    <%= new Date(item.check_out_time).toLocaleTimeString('id-ID') %>
-                  <% } else { %>
-                    <span class="text-muted">-</span>
-                  <% } %>
+                  <%= formatTimeLocal(item.check_in_time) %>
+                </td>
+                <td>
+                  <%= item.check_out_time ? formatTimeLocal(item.check_out_time) : '-' %>
                 </td>
                 <td>
                   <% if (item.work_duration_minutes > 0) { %>
@@ -374,10 +393,14 @@
       resetPhotoPreview(previewWrapId, previewImgId);
       if (config) setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
       if (config) setSubmitButtonState(config.submitBtnId, false);
+      const clearBtn = document.getElementById(inputId + 'ClearBtn');
+      if (clearBtn) clearBtn.style.display = 'none';
       return;
     }
     info.textContent = `Foto dipilih: ${file.name} (${Math.round(file.size / 1024)} KB)`;
     if (config) setPhotoStatus(config.statusId, 'Menyiapkan preview', 'processing');
+    const clearBtn = document.getElementById(inputId + 'ClearBtn');
+    if (clearBtn) clearBtn.style.display = 'inline-block';
     refreshPhotoPreview(inputId).catch((error) => {
       info.textContent = error.message;
       resetPhotoPreview(previewWrapId, previewImgId);
@@ -400,6 +423,8 @@
     resetPhotoPreview(config.previewWrapId, config.previewImgId);
     setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
     setSubmitButtonState(config.submitBtnId, false);
+    const clearBtn = document.getElementById(inputId + 'ClearBtn');
+    if (clearBtn) clearBtn.style.display = 'none';
   }
 
   async function refreshPhotoPreview(inputId, force = false) {
@@ -522,173 +547,195 @@
       minute: '2-digit',
       second: '2-digit'
     });
+
     return [
-      'Absensi Kasir',
-      `Waktu: ${timestamp}`,
-      `GPS: ${location.lat}, ${location.lng}`
+      '<%= settings.companyName %>'.toUpperCase(),
+      'KASIR PORTAL - ABSENSI',
+      `WAKTU: ${timestamp}`,
+      `KOORDINAT: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`
     ];
   }
 
-  async function processAttendancePhotoFile(originalFile, location) {
-    const image = await loadImageFromFile(originalFile);
-    const maxWidth = 1280;
-    const scale = Math.min(1, maxWidth / image.width);
-    const width = Math.max(1, Math.round(image.width * scale));
-    const height = Math.max(1, Math.round(image.height * scale));
-    const watermarkLines = buildWatermarkLines(location);
-    const fontSize = Math.max(20, Math.round(width * 0.028));
-    const lineGap = Math.round(fontSize * 0.35);
-    const padding = Math.round(fontSize * 0.8);
-    const overlayHeight = Math.round((fontSize + lineGap) * watermarkLines.length + padding * 1.6);
-
+  async function processAttendancePhotoFile(file, location) {
+    const img = await loadImageFromFile(file);
     const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Gagal memproses foto absensi (Canvas Context)');
+
+    const maxDim = 1200;
+    let { width, height } = img;
+    if (width > maxDim || height > maxDim) {
+      if (width > height) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+    }
+
     canvas.width = width;
     canvas.height = height;
+    ctx.drawImage(img, 0, 0, width, height);
 
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(image, 0, 0, width, height);
+    const pad = Math.round(width * 0.03);
+    const fontSize = Math.max(12, Math.round(width * 0.024));
+    ctx.font = `bold ${fontSize}px sans-serif`;
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.fillRect(0, height - overlayHeight, width, overlayHeight);
+    const lines = buildWatermarkLines(location);
+    let maxTextWidth = 0;
+    lines.forEach((line) => {
+      const w = ctx.measureText(line).width;
+      if (w > maxTextWidth) maxTextWidth = w;
+    });
+
+    const boxW = maxTextWidth + pad * 2;
+    const boxH = lines.length * fontSize * 1.45 + pad * 1.5;
+    const boxX = pad;
+    const boxY = height - boxH - pad;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, fontSize * 0.5);
+    ctx.fill();
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = `600 ${fontSize}px Arial, sans-serif`;
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
-    let textY = height - overlayHeight + padding;
-    watermarkLines.forEach((line, index) => {
-      if (index > 0) {
-        ctx.font = `500 ${Math.max(16, Math.round(fontSize * 0.88))}px Arial, sans-serif`;
-      } else {
-        ctx.font = `600 ${fontSize}px Arial, sans-serif`;
-      }
-      ctx.fillText(line, padding, textY);
-      textY += (index > 0 ? Math.max(16, Math.round(fontSize * 0.88)) : fontSize) + lineGap;
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, boxX + pad, boxY + pad + idx * fontSize * 1.45);
     });
 
     const blob = await canvasToBlob(canvas, 'image/jpeg', 0.82);
-    const baseName = (originalFile.name || 'attendance-photo').replace(/\.[^.]+$/, '');
-    return new File([blob], `${baseName}-wm.jpg`, { type: 'image/jpeg' });
+    return new File([blob], file.name || 'attendance.jpg', { type: 'image/jpeg', lastModified: Date.now() });
   }
 
-  async function getProcessedAttendancePhoto(photoInputId, location) {
-    currentLocation = location;
-    const processed = await refreshPhotoPreview(photoInputId);
-    if (processed) return processed;
-
+  function getProcessedAttendancePhoto(photoInputId, location) {
     const input = document.getElementById(photoInputId);
-    const originalFile = input && input.files && input.files[0];
-    if (!originalFile) return null;
-    return processAttendancePhotoFile(originalFile, location);
-  }
+    const file = input && input.files && input.files[0];
+    if (!file) return Promise.resolve(null);
 
-  function getLocation() {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocation tidak didukung browser Anda'));
-        return;
-      }
+    const config = getPhotoState(photoInputId);
+    const cached = processedAttendancePhotos[photoInputId];
+    const cacheKey = [file.name, file.size, file.lastModified, location.lat, location.lng].join('|');
 
-      const locationInfo = document.getElementById('locationInfo');
-      locationInfo.style.display = 'block';
-      locationInfo.textContent = '📍 Mengambil lokasi GPS...';
+    if (cached && cached.cacheKey === cacheKey && cached.file) {
+      return Promise.resolve(cached.file);
+    }
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          currentLocation = {
-            lat: position.coords.latitude.toString(),
-            lng: position.coords.longitude.toString()
-          };
-          locationInfo.textContent = `📍 Lokasi: ${currentLocation.lat}, ${currentLocation.lng}`;
-        refreshAllPhotoPreviews();
-          resolve(currentLocation);
-        },
-        (error) => {
-          locationInfo.textContent = '⚠️ Gagal mendapatkan lokasi GPS';
-          locationInfo.style.color = '#ef4444';
-          reject(error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      );
+    return processAttendancePhotoFile(file, location).then((processedFile) => {
+      processedAttendancePhotos[photoInputId] = { cacheKey, file: processedFile };
+      return processedFile;
     });
   }
 
-  async function checkin(evt) {
-    const btn = evt.currentTarget;
-    if (!document.getElementById('checkinPhoto')?.files?.[0]) {
-      alert('Foto check-in wajib diunggah sebelum absensi.');
+  function checkin(event) {
+    event.preventDefault();
+    if (!currentLocation) {
+      alert('Lokasi GPS belum tersedia. Silakan izinkan akses lokasi.');
       return;
     }
-    try {
-      btn.disabled = true;
-      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Memproses...';
 
-      const location = await getLocation();
-      const note = document.getElementById('checkinNote').value.trim();
+    const note = document.getElementById('checkinNote').value;
+    const submitBtn = document.getElementById('checkinSubmitBtn');
+    if (submitBtn) submitBtn.disabled = true;
 
-      const response = await fetch('/admin/cashiers/attendance/checkin', {
-        method: 'POST',
-        body: await buildAttendanceFormData(location, note, 'checkinPhoto')
+    buildAttendanceFormData(currentLocation, note, 'checkinPhoto')
+      .then((formData) => {
+        return fetch('/admin/cashier/attendance/checkin', {
+          method: 'POST',
+          body: formData
+        });
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          window.location.reload();
+        } else {
+          alert(data.message || 'Gagal melakukan check-in');
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      })
+      .catch((err) => {
+        alert('Terjadi kesalahan koneksi saat check-in');
+        console.error(err);
+        if (submitBtn) submitBtn.disabled = false;
       });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        alert('✓ ' + result.message);
-        window.location.reload();
-      } else {
-        alert('✗ ' + result.message);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-check-circle"></i> Check-in Sekarang';
-      }
-    } catch (error) {
-      alert('Gagal check-in: ' + error.message);
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-check-circle"></i> Check-in Sekarang';
-    }
   }
 
-  async function checkout(evt) {
-    const btn = evt.currentTarget;
-    if (!document.getElementById('checkoutPhoto')?.files?.[0]) {
-      alert('Foto check-out wajib diunggah sebelum absensi.');
+  function checkout(event) {
+    event.preventDefault();
+    if (!currentLocation) {
+      alert('Lokasi GPS belum tersedia. Silakan izinkan akses lokasi.');
       return;
     }
-    try {
-      btn.disabled = true;
-      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Memproses...';
 
-      const location = await getLocation();
-      const note = document.getElementById('checkoutNote').value.trim();
+    const note = document.getElementById('checkoutNote').value;
+    const submitBtn = document.getElementById('checkoutSubmitBtn');
+    if (submitBtn) submitBtn.disabled = true;
 
-      const response = await fetch('/admin/cashiers/attendance/checkout', {
-        method: 'POST',
-        body: await buildAttendanceFormData(location, note, 'checkoutPhoto')
+    buildAttendanceFormData(currentLocation, note, 'checkoutPhoto')
+      .then((formData) => {
+        return fetch('/admin/cashier/attendance/checkout', {
+          method: 'POST',
+          body: formData
+        });
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          window.location.reload();
+        } else {
+          alert(data.message || 'Gagal melakukan check-out');
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      })
+      .catch((err) => {
+        alert('Terjadi kesalahan koneksi saat check-out');
+        console.error(err);
+        if (submitBtn) submitBtn.disabled = false;
       });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        alert('✓ ' + result.message);
-        window.location.reload();
-      } else {
-        alert('✗ ' + result.message);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-door-open"></i> Check-out Sekarang';
-      }
-    } catch (error) {
-      alert('Gagal check-out: ' + error.message);
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-door-open"></i> Check-out Sekarang';
-    }
   }
 
-  window.addEventListener('load', () => {
-    getLocation().catch(() => {});
+  // Request GPS Location
+  window.addEventListener('DOMContentLoaded', () => {
+    const locInfo = document.getElementById('locationInfo');
+    if (locInfo) locInfo.style.display = 'block';
+
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(
+        (position) => {
+          currentLocation = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          if (locInfo) {
+            locInfo.className = 'location-info';
+            locInfo.innerHTML = `📍 GPS Aktif: ${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`;
+          }
+          refreshAllPhotoPreviews();
+        },
+        (error) => {
+          let msg = 'Gagal mengakses GPS.';
+          if (error.code === error.PERMISSION_DENIED) {
+            msg = 'Akses GPS ditolak. Silakan izinkan lokasi di pengaturan browser Anda.';
+          }
+          if (locInfo) {
+            locInfo.style.background = 'rgba(239, 68, 68, 0.15)';
+            locInfo.style.color = '#ef4444';
+            locInfo.innerHTML = `⚠️ ${msg}`;
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    } else {
+      if (locInfo) {
+        locInfo.style.background = 'rgba(239, 68, 68, 0.15)';
+        locInfo.style.color = '#ef4444';
+        locInfo.innerHTML = '⚠️ Browser Anda tidak mendukung GPS Geolocation.';
+      }
+    }
   });
 </script>
 </body>

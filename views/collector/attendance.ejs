@@ -1,758 +1,670 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title><%= title %> - <%= company %></title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <style>
-    body {
-      background-color: #0f172a;
-      color: #f8fafc;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      padding-top: 60px;
-      padding-bottom: 80px;
-      -webkit-tap-highlight-color: transparent;
-    }
+<%- include('partials/header') %>
 
-    /* Top Navigation */
-    .top-nav {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 60px;
-      background: rgba(88, 28, 135, 0.9);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(168, 85, 247, 0.3);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 20px;
-      z-index: 1000;
-    }
+<div class="mb-4">
+  <div class="text-secondary small">Absensi Karyawan</div>
+  <div class="fs-5 fw-bold"><i class="bi bi-calendar-check text-primary me-2"></i><%= collectorName %></div>
+</div>
 
-    .top-nav-title {
-      font-weight: 700;
-      font-size: 18px;
-      margin: 0;
-      color: white;
-    }
-
-    .top-nav-btn {
-      background: transparent;
-      border: none;
-      color: white;
-      font-size: 20px;
-      padding: 5px;
-      text-decoration: none;
-    }
-
-    /* Bottom Navigation */
-    .bottom-nav {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 65px;
-      background: rgba(88, 28, 135, 0.95);
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(168, 85, 247, 0.3);
-      display: flex;
-      justify-content: space-around;
-      align-items: center;
-      z-index: 1000;
-      padding-bottom: env(safe-area-inset-bottom);
-    }
-
-    .nav-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      color: #c4b5fd;
-      text-decoration: none;
-      font-size: 11px;
-      font-weight: 500;
-      transition: all 0.2s;
-    }
-
-    .nav-item i {
-      font-size: 22px;
-      margin-bottom: 2px;
-    }
-
-    .nav-item.active {
-      color: white;
-    }
-
-    /* Cards */
-    .t-card {
-      background: #1e293b;
-      border-radius: 16px;
-      padding: 15px;
-      margin-bottom: 15px;
-      border: 1px solid #334155;
-    }
-
-    .badge-status {
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    .btn-action {
-      width: 100%;
-      border-radius: 12px;
-      padding: 10px;
-      font-weight: 600;
-      margin-top: 10px;
-    }
-
-    /* Stats Grid */
-    .stat-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 15px;
-      margin-bottom: 20px;
-    }
-
-    .stat-box {
-      background: #1e293b;
-      border-radius: 16px;
-      padding: 15px;
-      border: 1px solid #334155;
-      text-align: center;
-    }
-
-    .stat-box .val {
-      font-size: 24px;
-      font-weight: 700;
-      margin: 5px 0 0 0;
-    }
-
-    .stat-box .lbl {
-      font-size: 12px;
-      color: #94a3b8;
-    }
-  </style>
-</head>
-<body>
-
-  <div class="top-nav">
-    <h1 class="top-nav-title"><%= title %></h1>
-    <a href="/collector/logout" class="top-nav-btn" onclick="return confirm('Apakah Anda yakin ingin logout?')">
-      <i class="bi bi-box-arrow-right"></i>
-    </a>
+<% if (msg) { %>
+  <div class="alert alert-<%= msg.type === 'error' ? 'danger' : 'success' %> alert-dismissible fade show rounded-4" role="alert" style="font-size: 13px;">
+    <i class="bi bi-<%= msg.type === 'error' ? 'exclamation-circle' : 'check-circle' %>-fill me-2"></i>
+    <%= msg.text %>
+    <button type="button" class="btn-close btn-close-white" style="font-size: 10px;" data-bs-dismiss="alert"></button>
   </div>
+<% } %>
 
-  <div class="container py-3">
-    <div class="mb-4">
-      <div class="text-secondary small">Absensi Kolektor</div>
-      <div class="fs-5 fw-bold"><i class="bi bi-calendar-check text-purple me-2" style="color: #a78bfa;"></i><%= collectorName %></div>
-    </div>
-
-    <% if (msg) { %>
-      <div class="alert alert-<%= msg.type === 'error' ? 'danger' : 'success' %> alert-dismissible fade show rounded-4" role="alert" style="font-size: 13px;">
-        <i class="bi bi-<%= msg.type === 'error' ? 'exclamation-circle' : 'check-circle' %>-fill me-2"></i>
-        <%= msg.text %>
-        <button type="button" class="btn-close btn-close-white" style="font-size: 10px;" data-bs-dismiss="alert"></button>
-      </div>
+<!-- Status Hari Ini -->
+<div class="t-card" style="background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); border: none;">
+  <h6 class="fw-bold mb-3" style="color: white;"><i class="bi bi-clock-history me-2"></i>Status Hari Ini</h6>
+  
+  <% if (todayAttendance) { %>
+    <% if (todayAttendance.status === 'checked_in') { %>
+      <span class="badge-status" style="background: rgba(16, 185, 129, 0.3); color: #10b981; border: 1px solid #10b981;">
+        <i class="bi bi-check-circle-fill"></i> Sudah Check-in
+      </span>
+    <% } else { %>
+      <span class="badge-status" style="background: rgba(100, 116, 139, 0.3); color: #cbd5e1; border: 1px solid #94a3b8;">
+        <i class="bi bi-check-all"></i> Sudah Check-out
+      </span>
     <% } %>
 
-    <!-- Status Hari Ini -->
-    <div class="t-card" style="background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); border: none;">
-      <h6 class="fw-bold mb-3" style="color: white;"><i class="bi bi-clock-history me-2"></i>Status Hari Ini</h6>
-      
-      <% if (todayAttendance) { %>
-        <% if (todayAttendance.status === 'checked_in') { %>
-          <span class="badge-status" style="background: rgba(16, 185, 129, 0.3); color: #10b981; border: 1px solid #10b981;">
-            <i class="bi bi-check-circle-fill"></i> Sudah Check-in
-          </span>
-        <% } else { %>
-          <span class="badge-status" style="background: rgba(100, 116, 139, 0.3); color: #cbd5e1; border: 1px solid #94a3b8;">
-            <i class="bi bi-check-all"></i> Sudah Check-out
-          </span>
-        <% } %>
-
-        <div style="background: rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 15px; margin-top: 15px;">
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
-            <span style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">Check-in</span>
-            <span style="color: white; font-weight: 600; font-size: 13px;">
-              <%= new Date(todayAttendance.check_in_time).toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) %>
-            </span>
-          </div>
-
-          <% if (todayAttendance.check_out_time) { %>
-            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
-              <span style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">Check-out</span>
-              <span style="color: white; font-weight: 600; font-size: 13px;">
-                <%= new Date(todayAttendance.check_out_time).toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) %>
-              </span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
-              <span style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">Durasi Kerja</span>
-              <span style="color: white; font-weight: 600; font-size: 13px;">
-                <%= Math.floor(todayAttendance.work_duration_minutes / 60) %> jam <%= todayAttendance.work_duration_minutes % 60 %> menit
-              </span>
-            </div>
-          <% } %>
-
-          <% if (todayAttendance.check_in_note) { %>
-            <div style="padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 8px;">
-              <span style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Catatan Check-in:</span>
-              <div style="color: white; font-size: 13px; margin-top: 4px;"><%= todayAttendance.check_in_note %></div>
-            </div>
-          <% } %>
-
-          <% if (todayAttendance.check_out_note) { %>
-            <div style="padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 8px;">
-              <span style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Catatan Check-out:</span>
-              <div style="color: white; font-size: 13px; margin-top: 4px;"><%= todayAttendance.check_out_note %></div>
-            </div>
-          <% } %>
-
-          <% if (todayAttendance.check_in_photo || todayAttendance.check_out_photo) { %>
-            <div style="padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 8px;">
-              <span style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Foto Absensi:</span>
-              <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
-                <% if (todayAttendance.check_in_photo) { %>
-                  <a href="<%= todayAttendance.check_in_photo %>" target="_blank" style="color: white; text-decoration: none; font-size: 12px;">
-                    <img src="<%= todayAttendance.check_in_photo %>" alt="Foto check-in" style="width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px;">
-                    Check-in
-                  </a>
-                <% } %>
-                <% if (todayAttendance.check_out_photo) { %>
-                  <a href="<%= todayAttendance.check_out_photo %>" target="_blank" style="color: white; text-decoration: none; font-size: 12px;">
-                    <img src="<%= todayAttendance.check_out_photo %>" alt="Foto check-out" style="width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px;">
-                    Check-out
-                  </a>
-                <% } %>
-              </div>
-            </div>
-          <% } %>
-        </div>
-
-        <% if (todayAttendance.status === 'checked_in') { %>
-          <textarea id="checkoutNote" class="form-control mt-3" placeholder="Catatan check-out (opsional)" rows="2" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;"></textarea>
-          <div class="mt-3">
-            <label for="checkoutPhoto" style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 6px;">Foto selfie check-out (wajib)</label>
-            <input id="checkoutPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkoutPhoto', 'checkoutPhotoInfo', 'checkoutPhotoPreviewWrap', 'checkoutPhotoPreview')" class="form-control" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;">
-            <div id="checkoutPhotoInfo" style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px;">Belum ada foto dipilih. Foto wajib untuk check-out.</div>
-            <div id="checkoutPhotoStatus" style="display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; background: rgba(239, 68, 68, 0.18); color: #fecaca;">Foto wajib</div>
-            <div style="display: flex; gap: 8px; margin-top: 8px;">
-              <button type="button" onclick="document.getElementById('checkoutPhoto').click()" class="btn btn-sm" style="background: rgba(59, 130, 246, 0.18); color: white; border: 1px solid rgba(59, 130, 246, 0.45);">Pilih/Ganti Foto</button>
-              <button type="button" onclick="clearSelectedPhoto('checkoutPhoto')" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.14); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.35);">Hapus Foto</button>
-            </div>
-            <div id="checkoutPhotoPreviewWrap" style="display: none; margin-top: 8px;">
-              <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px;">Preview foto final yang akan dikirim:</div>
-              <img id="checkoutPhotoPreview" alt="Preview foto check-out" style="width: 100%; max-width: 240px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); object-fit: cover;">
-            </div>
-          </div>
-          <button id="checkoutSubmitBtn" class="btn btn-danger btn-action mt-2" onclick="checkout(event)" disabled style="opacity: 0.55; cursor: not-allowed;">
-            <i class="bi bi-box-arrow-right me-2"></i>Check-out Sekarang
-          </button>
-        <% } %>
-
-      <% } else { %>
-        <span class="badge-status" style="background: rgba(239, 68, 68, 0.3); color: #ef4444; border: 1px solid #ef4444;">
-          <i class="bi bi-x-circle-fill"></i> Belum Check-in
+    <div style="background: rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 15px; margin-top: 15px;">
+      <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+        <span style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">Check-in</span>
+        <span style="color: white; font-weight: 600; font-size: 13px;">
+          <%= formatTimeLocal(todayAttendance.check_in_time) %>
         </span>
-        <p style="color: rgba(255, 255, 255, 0.8); margin: 15px 0 0 0; font-size: 13px;">
-          Silakan lakukan check-in untuk memulai hari kerja Anda.
-        </p>
-        
-        <textarea id="checkinNote" class="form-control mt-3" placeholder="Catatan check-in (opsional)" rows="2" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;"></textarea>
-        <div class="mt-3">
-          <label for="checkinPhoto" style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 6px;">Foto selfie check-in (wajib)</label>
-          <input id="checkinPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkinPhoto', 'checkinPhotoInfo', 'checkinPhotoPreviewWrap', 'checkinPhotoPreview')" class="form-control" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;">
-          <div id="checkinPhotoInfo" style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px;">Belum ada foto dipilih. Foto wajib untuk check-in.</div>
-          <div id="checkinPhotoStatus" style="display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; background: rgba(239, 68, 68, 0.18); color: #fecaca;">Foto wajib</div>
-          <div style="display: flex; gap: 8px; margin-top: 8px;">
-            <button type="button" onclick="document.getElementById('checkinPhoto').click()" class="btn btn-sm" style="background: rgba(59, 130, 246, 0.18); color: white; border: 1px solid rgba(59, 130, 246, 0.45);">Pilih/Ganti Foto</button>
-            <button type="button" onclick="clearSelectedPhoto('checkinPhoto')" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.14); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.35);">Hapus Foto</button>
-          </div>
-          <div id="checkinPhotoPreviewWrap" style="display: none; margin-top: 8px;">
-            <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px;">Preview foto final yang akan dikirim:</div>
-            <img id="checkinPhotoPreview" alt="Preview foto check-in" style="width: 100%; max-width: 240px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); object-fit: cover;">
-          </div>
+      </div>
+
+      <% if (todayAttendance.check_out_time) { %>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+          <span style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">Check-out</span>
+          <span style="color: white; font-weight: 600; font-size: 13px;">
+            <%= formatTimeLocal(todayAttendance.check_out_time) %>
+          </span>
         </div>
-        <button id="checkinSubmitBtn" class="btn btn-success btn-action mt-2" onclick="checkin(event)" disabled style="opacity: 0.55; cursor: not-allowed;">
-          <i class="bi bi-box-arrow-in-right me-2"></i>Check-in Sekarang
-        </button>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+          <span style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">Durasi Kerja</span>
+          <span style="color: white; font-weight: 600; font-size: 13px;">
+            <%= Math.floor(todayAttendance.work_duration_minutes / 60) %> jam <%= todayAttendance.work_duration_minutes % 60 %> menit
+          </span>
+        </div>
       <% } %>
 
-      <div id="locationInfo" style="display: none; font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 10px; padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 8px;">
-        <i class="bi bi-geo-alt-fill"></i> Mengambil lokasi GPS...
-      </div>
-    </div>
-
-    <!-- Ringkasan Bulan Ini -->
-    <h6 class="mb-3 text-secondary fw-bold text-uppercase" style="font-size: 13px; letter-spacing: 1px;">
-      <i class="bi bi-calendar3 me-1"></i>Ringkasan Bulan Ini
-    </h6>
-
-    <div class="stat-grid">
-      <div class="stat-box" style="border-left: 3px solid #a78bfa;">
-        <div class="val" style="color: #a78bfa;"><%= summary.total_days || 0 %></div>
-        <div class="lbl">Total Hari</div>
-      </div>
-      <div class="stat-box" style="border-left: 3px solid #10b981;">
-        <div class="val text-success"><%= summary.completed_days || 0 %></div>
-        <div class="lbl">Hari Lengkap</div>
-      </div>
-      <div class="stat-box" style="border-left: 3px solid #f59e0b;">
-        <div class="val text-warning"><%= summary.total_minutes ? Math.floor(summary.total_minutes / 60) : 0 %></div>
-        <div class="lbl">Total Jam</div>
-      </div>
-      <div class="stat-box" style="border-left: 3px solid #3b82f6;">
-        <div class="val text-primary"><%= summary.avg_minutes ? Math.floor(summary.avg_minutes / 60) : 0 %></div>
-        <div class="lbl">Rata-rata Jam</div>
-      </div>
-    </div>
-    
-
-    <!-- Riwayat Terakhir -->
-    <h6 class="mb-3 text-secondary fw-bold text-uppercase" style="font-size: 13px; letter-spacing: 1px;">
-      <i class="bi bi-clock-history me-1"></i>Riwayat Terakhir
-    </h6>
-
-    <% if (history && history.length > 0) { %>
-      <% history.forEach(item => { %>
-        <div class="t-card">
-          <div class="fw-bold mb-2" style="font-size: 14px; color: #f8fafc;">
-            <%= new Date(item.check_in_time).toLocaleDateString('id-ID', { 
-              weekday: 'long', 
-              day: 'numeric',
-              month: 'long'
-            }) %>
-          </div>
-          
-          <div class="text-secondary mb-1" style="font-size: 12px;">
-            <i class="bi bi-box-arrow-in-right text-success me-1"></i>
-            Check-in: <%= new Date(item.check_in_time).toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) %>
-          </div>
-          
-          <% if (item.check_out_time) { %>
-            <div class="text-secondary mb-1" style="font-size: 12px;">
-              <i class="bi bi-box-arrow-right text-danger me-1"></i>
-              Check-out: <%= new Date(item.check_out_time).toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) %>
-            </div>
-            <div class="text-secondary" style="font-size: 12px;">
-              <i class="bi bi-clock" style="color: #a78bfa;" me-1></i>
-              Durasi: <%= Math.floor(item.work_duration_minutes / 60) %> jam <%= item.work_duration_minutes % 60 %> menit
-            </div>
-          <% } else { %>
-            <div class="text-danger" style="font-size: 12px;">
-              <i class="bi bi-exclamation-triangle-fill me-1"></i>
-              Belum check-out
-            </div>
-          <% } %>
+      <% if (todayAttendance.check_in_note) { %>
+        <div style="padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 8px;">
+          <span style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Catatan Check-in:</span>
+          <div style="color: white; font-size: 13px; margin-top: 4px;"><%= todayAttendance.check_in_note %></div>
         </div>
-      <% }) %>
-    <% } else { %>
-      <div class="text-center py-5">
-        <i class="bi bi-inbox text-secondary" style="font-size: 40px;"></i>
-        <p class="text-secondary mt-2 small">Belum ada riwayat absensi</p>
+      <% } %>
+
+      <% if (todayAttendance.check_out_note) { %>
+        <div style="padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 8px;">
+          <span style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Catatan Check-out:</span>
+          <div style="color: white; font-size: 13px; margin-top: 4px;"><%= todayAttendance.check_out_note %></div>
+        </div>
+      <% } %>
+
+      <% if (todayAttendance.check_in_photo || todayAttendance.check_out_photo) { %>
+        <div style="padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 8px;">
+          <span style="color: rgba(255, 255, 255, 0.7); font-size: 12px;">Foto Absensi:</span>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
+            <% if (todayAttendance.check_in_photo) { %>
+              <a href="<%= todayAttendance.check_in_photo %>" target="_blank" style="color: white; text-decoration: none; font-size: 12px;">
+                <img src="<%= todayAttendance.check_in_photo %>" alt="Foto check-in" style="width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px;">
+                Check-in
+              </a>
+            <% } %>
+            <% if (todayAttendance.check_out_photo) { %>
+              <a href="<%= todayAttendance.check_out_photo %>" target="_blank" style="color: white; text-decoration: none; font-size: 12px;">
+                <img src="<%= todayAttendance.check_out_photo %>" alt="Foto check-out" style="width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px;">
+                Check-out
+              </a>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+    </div>
+
+    <% if (todayAttendance.status === 'checked_in') { %>
+      <textarea id="checkoutNote" class="form-control mt-3" placeholder="Catatan check-out (opsional)" rows="2" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;"></textarea>
+      
+      <div class="mt-3 text-center">
+        <label style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 8px;">Foto selfie check-out (wajib)</label>
+        <input id="checkoutPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkoutPhoto', 'checkoutPhotoInfo', 'checkoutPhotoPreviewWrap', 'checkoutPhotoPreview')" style="display: none;">
+        
+        <div style="margin: 12px 0;">
+          <button type="button" onclick="document.getElementById('checkoutPhoto').click()" class="btn d-inline-flex align-items-center justify-content-center" style="width: 64px; height: 64px; border-radius: 50%; background: #7c3aed; color: white; font-size: 24px; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4); border: none; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.92)'" onmouseup="this.style.transform='scale(1)'">
+            <i class="bi bi-camera-fill"></i>
+          </button>
+          <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); margin-top: 6px;">Ketuk tombol kamera untuk mengambil foto selfie</div>
+        </div>
+
+        <div id="checkoutPhotoInfo" style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px;">Belum ada foto selfie dipilih. Foto wajib untuk check-out.</div>
+        <div id="checkoutPhotoStatus" style="display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; background: rgba(239, 68, 68, 0.18); color: #fecaca;">Foto wajib</div>
+        
+        <div style="margin-top: 8px;">
+          <button type="button" onclick="clearSelectedPhoto('checkoutPhoto')" class="btn btn-sm btn-outline-danger" id="checkoutPhotoClearBtn" style="display: none; border-radius: 8px; font-size: 11px;">Hapus Foto</button>
+        </div>
+        
+        <div id="checkoutPhotoPreviewWrap" style="display: none; margin-top: 8px;">
+          <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px;">Preview foto final yang akan dikirim:</div>
+          <img id="checkoutPhotoPreview" alt="Preview foto check-out" style="width: 100%; max-width: 240px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); object-fit: cover;">
+        </div>
       </div>
+      <button id="checkoutSubmitBtn" class="btn btn-danger btn-action mt-2" onclick="checkout(event)" disabled style="opacity: 0.55; cursor: not-allowed;">
+        <i class="bi bi-box-arrow-right me-2"></i>Check-out Sekarang
+      </button>
     <% } %>
-  </div>
 
-  <div class="bottom-nav">
-    <a href="/collector" class="nav-item">
-      <i class="bi bi-house-door-fill"></i>
-      <span>Beranda</span>
-    </a>
-    <a href="/collector/attendance" class="nav-item active">
-      <i class="bi bi-calendar-check-fill"></i>
-      <span>Absensi</span>
-    </a>
-  </div>
+  <% } else { %>
+    <span class="badge-status" style="background: rgba(239, 68, 68, 0.3); color: #ef4444; border: 1px solid #ef4444;">
+      <i class="bi bi-x-circle-fill"></i> Belum Check-in
+    </span>
+    <p style="color: rgba(255, 255, 255, 0.8); margin: 15px 0 0 0; font-size: 13px;">
+      Silakan lakukan check-in untuk memulai hari kerja Anda.
+    </p>
+    
+    <textarea id="checkinNote" class="form-control mt-3" placeholder="Catatan check-in (opsional)" rows="2" style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: white; font-size: 13px;"></textarea>
+    
+    <div class="mt-3 text-center">
+      <label style="display: block; color: rgba(255, 255, 255, 0.8); font-size: 12px; margin-bottom: 8px;">Foto selfie check-in (wajib)</label>
+      <input id="checkinPhoto" type="file" accept="image/*" capture="user" onchange="updatePhotoInfo('checkinPhoto', 'checkinPhotoInfo', 'checkinPhotoPreviewWrap', 'checkinPhotoPreview')" style="display: none;">
+      
+      <div style="margin: 12px 0;">
+        <button type="button" onclick="document.getElementById('checkinPhoto').click()" class="btn d-inline-flex align-items-center justify-content-center" style="width: 64px; height: 64px; border-radius: 50%; background: #10b981; color: white; font-size: 24px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); border: none; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.92)'" onmouseup="this.style.transform='scale(1)'">
+          <i class="bi bi-camera-fill"></i>
+        </button>
+        <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); margin-top: 6px;">Ketuk tombol kamera untuk mengambil foto selfie</div>
+      </div>
 
-  <script>
-    let currentLocation = null;
-    const processedAttendancePhotos = {};
-    const photoFieldConfig = {
-      checkinPhoto: { infoId: 'checkinPhotoInfo', previewWrapId: 'checkinPhotoPreviewWrap', previewImgId: 'checkinPhotoPreview', statusId: 'checkinPhotoStatus', submitBtnId: 'checkinSubmitBtn' },
-      checkoutPhoto: { infoId: 'checkoutPhotoInfo', previewWrapId: 'checkoutPhotoPreviewWrap', previewImgId: 'checkoutPhotoPreview', statusId: 'checkoutPhotoStatus', submitBtnId: 'checkoutSubmitBtn' }
+      <div id="checkinPhotoInfo" style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px;">Belum ada foto selfie dipilih. Foto wajib untuk check-in.</div>
+      <div id="checkinPhotoStatus" style="display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; background: rgba(239, 68, 68, 0.18); color: #fecaca;">Foto wajib</div>
+      
+      <div style="margin-top: 8px;">
+        <button type="button" onclick="clearSelectedPhoto('checkinPhoto')" class="btn btn-sm btn-outline-danger" id="checkinPhotoClearBtn" style="display: none; border-radius: 8px; font-size: 11px;">Hapus Foto</button>
+      </div>
+      
+      <div id="checkinPhotoPreviewWrap" style="display: none; margin-top: 8px;">
+        <div style="font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px;">Preview foto final yang akan dikirim:</div>
+        <img id="checkinPhotoPreview" alt="Preview foto check-in" style="width: 100%; max-width: 240px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); object-fit: cover;">
+      </div>
+    </div>
+    <button id="checkinSubmitBtn" class="btn btn-success btn-action mt-2" onclick="checkin(event)" disabled style="opacity: 0.55; cursor: not-allowed;">
+      <i class="bi bi-box-arrow-in-right me-2"></i>Check-in Sekarang
+    </button>
+  <% } %>
+
+  <div id="locationInfo" style="display: none; font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 10px; padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 8px;">
+    <i class="bi bi-geo-alt-fill"></i> Mengambil lokasi GPS...
+  </div>
+</div>
+
+<!-- Ringkasan Bulan Ini -->
+<h6 class="mb-3 text-secondary fw-bold text-uppercase" style="font-size: 13px; letter-spacing: 1px;">
+  <i class="bi bi-calendar3 me-1"></i>Ringkasan Bulan Ini
+</h6>
+
+<div class="stat-grid">
+  <div class="stat-box" style="border-left: 3px solid #3b82f6;">
+    <div class="val text-primary"><%= summary.total_days || 0 %></div>
+    <div class="lbl">Total Hari</div>
+  </div>
+  <div class="stat-box" style="border-left: 3px solid #10b981;">
+    <div class="val text-success"><%= summary.completed_days || 0 %></div>
+    <div class="lbl">Hari Lengkap</div>
+  </div>
+  <div class="stat-box" style="border-left: 3px solid #f59e0b;">
+    <div class="val text-warning"><%= summary.total_minutes ? Math.floor(summary.total_minutes / 60) : 0 %></div>
+    <div class="lbl">Total Jam</div>
+  </div>
+  <div class="stat-box" style="border-left: 3px solid #8b5cf6;">
+    <div class="val" style="color: #a78bfa;"><%= summary.avg_minutes ? Math.floor(summary.avg_minutes / 60) : 0 %></div>
+    <div class="lbl">Rata-rata Jam</div>
+  </div>
+</div>
+
+<!-- Riwayat Terakhir -->
+<h6 class="mb-3 text-secondary fw-bold text-uppercase" style="font-size: 13px; letter-spacing: 1px;">
+  <i class="bi bi-clock-history me-1"></i>Riwayat Terakhir
+</h6>
+
+<% if (history && history.length > 0) { %>
+  <% history.forEach(item => { %>
+    <div class="t-card">
+      <div class="fw-bold mb-2" style="font-size: 14px; color: #f8fafc;">
+        <%= parseDateInTimezone(item.check_in_time).toLocaleDateString('id-ID', { 
+          weekday: 'long', 
+          day: 'numeric',
+          month: 'long'
+        }) %>
+      </div>
+      
+      <div class="text-secondary mb-1" style="font-size: 12px;">
+        <i class="bi bi-box-arrow-in-right text-success me-1"></i>
+        Check-in: <%= formatTimeLocal(item.check_in_time) %>
+      </div>
+      
+      <% if (item.check_out_time) { %>
+        <div class="text-secondary mb-1" style="font-size: 12px;">
+          <i class="bi bi-box-arrow-right text-danger me-1"></i>
+          Check-out: <%= formatTimeLocal(item.check_out_time) %>
+        </div>
+        <div class="text-secondary" style="font-size: 12px;">
+          <i class="bi bi-clock text-primary me-1"></i>
+          Durasi: <%= Math.floor(item.work_duration_minutes / 60) %> jam <%= item.work_duration_minutes % 60 %> menit
+        </div>
+      <% } else { %>
+        <div class="text-danger" style="font-size: 12px;">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>
+          Belum check-out
+        </div>
+      <% } %>
+    </div>
+  <% }) %>
+<% } else { %>
+  <div class="text-center py-5">
+    <i class="bi bi-inbox text-secondary" style="font-size: 40px;"></i>
+    <p class="text-secondary mt-2 small">Belum ada riwayat absensi</p>
+  </div>
+<% } %>
+
+<%- include('partials/bottom_nav') %>
+
+<script>
+  let currentLocation = null;
+  const processedAttendancePhotos = {};
+  const photoFieldConfig = {
+    checkinPhoto: { infoId: 'checkinPhotoInfo', previewWrapId: 'checkinPhotoPreviewWrap', previewImgId: 'checkinPhotoPreview', statusId: 'checkinPhotoStatus', submitBtnId: 'checkinSubmitBtn' },
+    checkoutPhoto: { infoId: 'checkoutPhotoInfo', previewWrapId: 'checkoutPhotoPreviewWrap', previewImgId: 'checkoutPhotoPreview', statusId: 'checkoutPhotoStatus', submitBtnId: 'checkoutSubmitBtn' }
+  };
+
+  function setPhotoStatus(statusId, text, mode = 'idle') {
+    const el = document.getElementById(statusId);
+    if (!el) return;
+    const palette = {
+      idle: ['rgba(239, 68, 68, 0.18)', '#fecaca'],
+      waiting: ['rgba(245, 158, 11, 0.18)', '#fde68a'],
+      processing: ['rgba(59, 130, 246, 0.18)', '#bfdbfe'],
+      ready: ['rgba(16, 185, 129, 0.18)', '#bbf7d0'],
+      error: ['rgba(239, 68, 68, 0.18)', '#fecaca']
     };
+    const [bg, color] = palette[mode] || palette.idle;
+    el.style.background = bg;
+    el.style.color = color;
+    el.textContent = text;
+  }
 
-    function setPhotoStatus(statusId, text, mode = 'idle') {
-      const el = document.getElementById(statusId);
-      if (!el) return;
-      const palette = {
-        idle: ['rgba(239, 68, 68, 0.18)', '#fecaca'],
-        waiting: ['rgba(245, 158, 11, 0.18)', '#fde68a'],
-        processing: ['rgba(59, 130, 246, 0.18)', '#bfdbfe'],
-        ready: ['rgba(16, 185, 129, 0.18)', '#bbf7d0'],
-        error: ['rgba(239, 68, 68, 0.18)', '#fecaca']
-      };
-      const [bg, color] = palette[mode] || palette.idle;
-      el.style.background = bg;
-      el.style.color = color;
-      el.textContent = text;
+  function setSubmitButtonState(buttonId, enabled) {
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+    button.disabled = !enabled;
+    button.style.opacity = enabled ? '1' : '0.55';
+    button.style.cursor = enabled ? 'pointer' : 'not-allowed';
+  }
+
+  function resetPhotoPreview(previewWrapId, previewImgId) {
+    const previewWrap = document.getElementById(previewWrapId);
+    const previewImg = document.getElementById(previewImgId);
+    if (previewImg && previewImg.dataset.objectUrl) {
+      URL.revokeObjectURL(previewImg.dataset.objectUrl);
+      delete previewImg.dataset.objectUrl;
     }
+    if (previewImg) previewImg.removeAttribute('src');
+    if (previewWrap) previewWrap.style.display = 'none';
+  }
 
-    function setSubmitButtonState(buttonId, enabled) {
-      const button = document.getElementById(buttonId);
-      if (!button) return;
-      button.disabled = !enabled;
-      button.style.opacity = enabled ? '1' : '0.55';
-      button.style.cursor = enabled ? 'pointer' : 'not-allowed';
-    }
+  // Custom back navigation handling for Collector
+  function getCustomBackUrl() {
+    return '/collector';
+  }
 
-    function resetPhotoPreview(previewWrapId, previewImgId) {
-      const previewWrap = document.getElementById(previewWrapId);
-      const previewImg = document.getElementById(previewImgId);
-      if (previewImg && previewImg.dataset.objectUrl) {
-        URL.revokeObjectURL(previewImg.dataset.objectUrl);
-        delete previewImg.dataset.objectUrl;
-      }
-      if (previewImg) previewImg.removeAttribute('src');
-      if (previewWrap) previewWrap.style.display = 'none';
-    }
+  function setPhotoPreview(previewWrapId, previewImgId, file) {
+    const previewWrap = document.getElementById(previewWrapId);
+    const previewImg = document.getElementById(previewImgId);
+    if (!previewWrap || !previewImg) return;
 
-    function setPhotoPreview(previewWrapId, previewImgId, file) {
-      const previewWrap = document.getElementById(previewWrapId);
-      const previewImg = document.getElementById(previewImgId);
-      if (!previewWrap || !previewImg) return;
+    resetPhotoPreview(previewWrapId, previewImgId);
+    const previewSource = file && file.blob ? file.blob : file;
+    const objectUrl = URL.createObjectURL(previewSource);
+    previewImg.src = objectUrl;
+    previewImg.dataset.objectUrl = objectUrl;
+    previewWrap.style.display = 'block';
+  }
 
+  function getOriginalPhotoFile(inputId) {
+    const input = document.getElementById(inputId);
+    return input && input.files && input.files[0] ? input.files[0] : null;
+  }
+
+  function updatePhotoInfo(inputId, infoId, previewWrapId, previewImgId) {
+    const input = document.getElementById(inputId);
+    const info = document.getElementById(infoId);
+    const config = getPhotoState(inputId);
+    if (!input || !info) return;
+    const file = input.files && input.files[0];
+    delete processedAttendancePhotos[inputId];
+    if (!file) {
+      info.textContent = 'Belum ada foto selfie dipilih.';
       resetPhotoPreview(previewWrapId, previewImgId);
-      const objectUrl = URL.createObjectURL(file);
-      previewImg.src = objectUrl;
-      previewImg.dataset.objectUrl = objectUrl;
-      previewWrap.style.display = 'block';
+      if (config) setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
+      if (config) setSubmitButtonState(config.submitBtnId, false);
+      const clearBtn = document.getElementById(inputId + 'ClearBtn');
+      if (clearBtn) clearBtn.style.display = 'none';
+      return;
     }
+    info.textContent = `Foto dipilih: ${file.name} (${Math.round(file.size / 1024)} KB)`;
+    if (config) setPhotoStatus(config.statusId, 'Menyiapkan preview', 'processing');
+    const clearBtn = document.getElementById(inputId + 'ClearBtn');
+    if (clearBtn) clearBtn.style.display = 'inline-block';
+    refreshPhotoPreview(inputId).catch((error) => {
+      info.textContent = error.message;
+      resetPhotoPreview(previewWrapId, previewImgId);
+      if (config) setPhotoStatus(config.statusId, 'Preview gagal', 'error');
+    });
+  }
 
-    function updatePhotoInfo(inputId, infoId, previewWrapId, previewImgId) {
-      const input = document.getElementById(inputId);
-      const info = document.getElementById(infoId);
-      const config = getPhotoState(inputId);
-      if (!input || !info) return;
-      const file = input.files && input.files[0];
-      delete processedAttendancePhotos[inputId];
-      if (!file) {
-        info.textContent = 'Belum ada foto dipilih.';
-        resetPhotoPreview(previewWrapId, previewImgId);
-        if (config) setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
-        if (config) setSubmitButtonState(config.submitBtnId, false);
-        return;
-      }
-      info.textContent = `Foto dipilih: ${file.name} (${Math.round(file.size / 1024)} KB)`;
-      if (config) setPhotoStatus(config.statusId, 'Menyiapkan preview', 'processing');
-      refreshPhotoPreview(inputId).catch((error) => {
-        info.textContent = error.message;
-        resetPhotoPreview(previewWrapId, previewImgId);
-        if (config) setPhotoStatus(config.statusId, 'Preview gagal', 'error');
-      });
+  function getPhotoState(inputId) {
+    return photoFieldConfig[inputId];
+  }
+
+  // Override standard back click
+  document.addEventListener('DOMContentLoaded', () => {
+    const backBtn = document.querySelector('a.nav-link[href="/collector/dashboard"]');
+    if (backBtn) {
+      backBtn.setAttribute('href', '/collector');
     }
+  });
 
-    function getPhotoState(inputId) {
-      return photoFieldConfig[inputId];
-    }
+  function clearSelectedPhoto(inputId) {
+    const config = getPhotoState(inputId);
+    const input = document.getElementById(inputId);
+    if (!config || !input) return;
+    input.value = '';
+    delete processedAttendancePhotos[inputId];
+    const info = document.getElementById(config.infoId);
+    if (info) info.textContent = 'Belum ada foto selfie dipilih. Foto wajib untuk absensi.';
+    resetPhotoPreview(config.previewWrapId, config.previewImgId);
+    setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
+    setSubmitButtonState(config.submitBtnId, false);
+    const clearBtn = document.getElementById(inputId + 'ClearBtn');
+    if (clearBtn) clearBtn.style.display = 'none';
+  }
 
-    function clearSelectedPhoto(inputId) {
-      const config = getPhotoState(inputId);
-      const input = document.getElementById(inputId);
-      if (!config || !input) return;
-      input.value = '';
-      delete processedAttendancePhotos[inputId];
-      const info = document.getElementById(config.infoId);
-      if (info) info.textContent = 'Belum ada foto dipilih. Foto wajib untuk absensi.';
+  async function refreshPhotoPreview(inputId, force = false) {
+    const config = getPhotoState(inputId);
+    const input = document.getElementById(inputId);
+    const info = config ? document.getElementById(config.infoId) : null;
+    const file = input && input.files && input.files[0];
+    if (!config || !info) return null;
+
+    if (!file) {
+      info.textContent = 'Belum ada foto selfie dipilih. Foto wajib untuk absensi.';
       resetPhotoPreview(config.previewWrapId, config.previewImgId);
+      delete processedAttendancePhotos[inputId];
       setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
       setSubmitButtonState(config.submitBtnId, false);
+      return null;
     }
 
-    async function refreshPhotoPreview(inputId, force = false) {
-      const config = getPhotoState(inputId);
-      const input = document.getElementById(inputId);
-      const info = config ? document.getElementById(config.infoId) : null;
-      const file = input && input.files && input.files[0];
-      if (!config || !info) return null;
-
-      if (!file) {
-        info.textContent = 'Belum ada foto dipilih. Foto wajib untuk absensi.';
-        resetPhotoPreview(config.previewWrapId, config.previewImgId);
-        delete processedAttendancePhotos[inputId];
-        setPhotoStatus(config.statusId, 'Foto wajib', 'idle');
-        setSubmitButtonState(config.submitBtnId, false);
-        return null;
-      }
-
-      if (!currentLocation) {
-        info.textContent = `Foto dipilih: ${file.name} (${Math.round(file.size / 1024)} KB). Preview menunggu lokasi GPS.`;
-        resetPhotoPreview(config.previewWrapId, config.previewImgId);
-        setPhotoStatus(config.statusId, 'Menunggu GPS', 'waiting');
-        setSubmitButtonState(config.submitBtnId, false);
-        return null;
-      }
-
-      const cacheKey = [file.name, file.size, file.lastModified, currentLocation.lat, currentLocation.lng].join('|');
-      const cached = processedAttendancePhotos[inputId];
-      if (!force && cached && cached.cacheKey === cacheKey && cached.file) {
-        setPhotoPreview(config.previewWrapId, config.previewImgId, cached.file);
-        info.textContent = `Preview siap: ${cached.file.name} (${Math.round(cached.file.size / 1024)} KB).`;
-        setPhotoStatus(config.statusId, 'Preview siap dikirim', 'ready');
-        setSubmitButtonState(config.submitBtnId, true);
-        return cached.file;
-      }
-
-      info.textContent = 'Memproses foto untuk preview...';
-      setPhotoStatus(config.statusId, 'Memproses foto', 'processing');
+    if (!currentLocation) {
+      info.textContent = `Foto dipilih: ${file.name} (${Math.round(file.size / 1024)} KB). Preview menunggu lokasi GPS.`;
+      resetPhotoPreview(config.previewWrapId, config.previewImgId);
+      setPhotoStatus(config.statusId, 'Menunggu GPS', 'waiting');
       setSubmitButtonState(config.submitBtnId, false);
-      const processedFile = await processAttendancePhotoFile(file, currentLocation);
-      processedAttendancePhotos[inputId] = { cacheKey, file: processedFile };
-      setPhotoPreview(config.previewWrapId, config.previewImgId, processedFile);
-      info.textContent = `Preview siap: ${processedFile.name} (${Math.round(processedFile.size / 1024)} KB).`;
+      return null;
+    }
+
+    const cacheKey = [file.name, file.size, file.lastModified, currentLocation.lat, currentLocation.lng].join('|');
+    const cached = processedAttendancePhotos[inputId];
+    if (!force && cached && cached.cacheKey === cacheKey && cached.file) {
+      setPhotoPreview(config.previewWrapId, config.previewImgId, cached.file);
+      info.textContent = `Preview siap: ${(cached.file.filename || cached.file.name)} (${Math.round(cached.file.size / 1024)} KB).`;
       setPhotoStatus(config.statusId, 'Preview siap dikirim', 'ready');
       setSubmitButtonState(config.submitBtnId, true);
-      return processedFile;
+      return cached.file;
     }
 
-    function refreshAllPhotoPreviews() {
-      Object.keys(photoFieldConfig).forEach((inputId) => {
-        refreshPhotoPreview(inputId, true).catch(() => {});
-      });
+    info.textContent = 'Memproses foto untuk preview...';
+    setPhotoStatus(config.statusId, 'Memproses foto', 'processing');
+    setSubmitButtonState(config.submitBtnId, false);
+    let processedFile;
+    try {
+      processedFile = await processAttendancePhotoFile(file, currentLocation);
+    } catch (error) {
+      processedFile = file;
+      info.textContent = `Foto asli siap dikirim: ${file.name} (${Math.round(file.size / 1024)} KB).`;
+      setPhotoStatus(config.statusId, 'Foto asli siap dikirim', 'ready');
     }
+    processedAttendancePhotos[inputId] = { cacheKey, file: processedFile };
+    setPhotoPreview(config.previewWrapId, config.previewImgId, processedFile);
+    if (processedFile === file) {
+      info.textContent = `Foto asli siap dikirim: ${file.name} (${Math.round(file.size / 1024)} KB).`;
+      setPhotoStatus(config.statusId, 'Foto asli siap dikirim', 'ready');
+    } else {
+      info.textContent = `Preview siap: ${processedFile.filename} (${Math.round(processedFile.size / 1024)} KB).`;
+      setPhotoStatus(config.statusId, 'Preview siap dikirim', 'ready');
+    }
+    setSubmitButtonState(config.submitBtnId, true);
+    return processedFile;
+  }
 
-    function buildAttendanceFormData(location, note, photoInputId) {
-      const formData = new FormData();
-      formData.append('lat', location.lat);
-      formData.append('lng', location.lng);
-      formData.append('note', note);
+  function refreshAllPhotoPreviews() {
+    Object.keys(photoFieldConfig).forEach((inputId) => {
+      refreshPhotoPreview(inputId, true).catch(() => {});
+    });
+  }
 
-      return getProcessedAttendancePhoto(photoInputId, location).then((processedPhoto) => {
-        if (processedPhoto) {
-          formData.append('photo', processedPhoto);
+  function buildAttendanceFormData(location, note, photoInputId) {
+    const formData = new FormData();
+    formData.append('lat', location.lat);
+    formData.append('lng', location.lng);
+    formData.append('note', note);
+
+    return getProcessedAttendancePhoto(photoInputId, location).then((processedPhoto) => {
+      if (processedPhoto && processedPhoto.blob) {
+        formData.append('photo', processedPhoto.blob, processedPhoto.filename);
+      } else if (processedPhoto) {
+        formData.append('photo', processedPhoto, processedPhoto.name || 'attendance-selfie.jpg');
+      } else {
+        const originalFile = getOriginalPhotoFile(photoInputId);
+        if (originalFile) {
+          formData.append('photo', originalFile, originalFile.name);
         }
-        return formData;
-      });
-    }
+      }
+      return formData;
+    });
+  }
 
-    function loadImageFromFile(file) {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        const objectUrl = URL.createObjectURL(file);
-        img.onload = () => {
-          URL.revokeObjectURL(objectUrl);
-          resolve(img);
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(objectUrl);
-          reject(new Error('Gagal membaca foto yang dipilih'));
-        };
-        img.src = objectUrl;
-      });
-    }
+  function loadImageFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Gagal membaca foto yang dipilih'));
+      };
+      img.src = objectUrl;
+    });
+  }
 
-    function canvasToBlob(canvas, type, quality) {
-      return new Promise((resolve, reject) => {
-        const fallback = () => {
-          try {
-            const dataUrl = canvas.toDataURL(type, quality);
-            const parts = dataUrl.split(',');
-            if (parts.length < 2) throw new Error('Gagal memproses foto absensi');
-            const mime = (parts[0].match(/data:(.*?);base64/) || [])[1] || type || 'image/jpeg';
-            const binary = atob(parts[1]);
-            const len = binary.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-            resolve(new Blob([bytes], { type: mime }));
-          } catch (e) {
-            reject(new Error('Gagal memproses foto absensi'));
-          }
-        };
-
-        if (typeof canvas.toBlob !== 'function') return fallback();
-
-        canvas.toBlob((blob) => {
-          if (blob) return resolve(blob);
-          fallback();
-        }, type, quality);
-      });
-    }
-
-    function buildWatermarkLines(location) {
-      const timestamp = new Date().toLocaleString('id-ID', {
-        timeZone: '<%= settings.timezone %>',
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      return [
-        'Absensi Kolektor',
-        `Waktu: ${timestamp}`,
-        `GPS: ${location.lat}, ${location.lng}`
-      ];
-    }
-
-    async function processAttendancePhotoFile(originalFile, location) {
-      const image = await loadImageFromFile(originalFile);
-      const maxWidth = 1280;
-      const scale = Math.min(1, maxWidth / image.width);
-      const width = Math.max(1, Math.round(image.width * scale));
-      const height = Math.max(1, Math.round(image.height * scale));
-      const watermarkLines = buildWatermarkLines(location);
-      const fontSize = Math.max(20, Math.round(width * 0.028));
-      const lineGap = Math.round(fontSize * 0.35);
-      const padding = Math.round(fontSize * 0.8);
-      const overlayHeight = Math.round((fontSize + lineGap) * watermarkLines.length + padding * 1.6);
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(image, 0, 0, width, height);
-
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-      ctx.fillRect(0, height - overlayHeight, width, overlayHeight);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `600 ${fontSize}px Arial, sans-serif`;
-      ctx.textBaseline = 'top';
-
-      let textY = height - overlayHeight + padding;
-      watermarkLines.forEach((line, index) => {
-        if (index > 0) {
-          ctx.font = `500 ${Math.max(16, Math.round(fontSize * 0.88))}px Arial, sans-serif`;
-        } else {
-          ctx.font = `600 ${fontSize}px Arial, sans-serif`;
+  function canvasToBlob(canvas, type, quality) {
+    return new Promise((resolve, reject) => {
+      const fallback = () => {
+        try {
+          const dataUrl = canvas.toDataURL(type, quality);
+          const parts = dataUrl.split(',');
+          if (parts.length < 2) throw new Error('Gagal memproses foto absensi');
+          const mime = (parts[0].match(/data:(.*?);base64/) || [])[1] || type || 'image/jpeg';
+          const binary = atob(parts[1]);
+          const len = binary.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+          resolve(new Blob([bytes], { type: mime }));
+        } catch (e) {
+          reject(new Error('Gagal memproses foto absensi'));
         }
-        ctx.fillText(line, padding, textY);
-        textY += (index > 0 ? Math.max(16, Math.round(fontSize * 0.88)) : fontSize) + lineGap;
-      });
+      };
 
-      const blob = await canvasToBlob(canvas, 'image/jpeg', 0.82);
-      const baseName = (originalFile.name || 'attendance-photo').replace(/\.[^.]+$/, '');
-      return new File([blob], `${baseName}-wm.jpg`, { type: 'image/jpeg' });
-    }
+      if (typeof canvas.toBlob !== 'function') return fallback();
 
-    async function getProcessedAttendancePhoto(photoInputId, location) {
-      currentLocation = location;
+      canvas.toBlob((blob) => {
+        if (blob) return resolve(blob);
+        fallback();
+      }, type, quality);
+    });
+  }
+
+  function buildWatermarkLines(location) {
+    const timestamp = new Date().toLocaleString('id-ID', {
+      timeZone: '<%= settings.timezone %>',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    return [
+      '<%= settings.companyName %>'.toUpperCase(),
+      'KOLEKTOR PORTAL - ABSENSI',
+      `Waktu: ${timestamp}`,
+      `GPS: ${location.lat}, ${location.lng}`
+    ];
+  }
+
+  async function processAttendancePhotoFile(originalFile, location) {
+    const image = await loadImageFromFile(originalFile);
+    const maxWidth = 1280;
+    const scale = Math.min(1, maxWidth / image.width);
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const watermarkLines = buildWatermarkLines(location);
+    const fontSize = Math.max(20, Math.round(width * 0.028));
+    const lineGap = Math.round(fontSize * 0.35);
+    const padding = Math.round(fontSize * 0.8);
+    const overlayHeight = Math.round((fontSize + lineGap) * watermarkLines.length + padding * 1.6);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0, width, height);
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillRect(0, height - overlayHeight, width, overlayHeight);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `600 ${fontSize}px Arial, sans-serif`;
+    ctx.textBaseline = 'top';
+
+    let textY = height - overlayHeight + padding;
+    watermarkLines.forEach((line, index) => {
+      if (index > 0) {
+        ctx.font = `500 ${Math.max(16, Math.round(fontSize * 0.88))}px Arial, sans-serif`;
+      } else {
+        ctx.font = `600 ${fontSize}px Arial, sans-serif`;
+      }
+      ctx.fillText(line, padding, textY);
+      textY += (index > 0 ? Math.max(16, Math.round(fontSize * 0.88)) : fontSize) + lineGap;
+    });
+
+    const blob = await canvasToBlob(canvas, 'image/jpeg', 0.82);
+    const baseName = (originalFile.name || 'attendance-photo').replace(/\.[^.]+$/, '');
+    return {
+      blob,
+      filename: `${baseName}-wm.jpg`,
+      size: blob.size
+    };
+  }
+
+  async function getProcessedAttendancePhoto(photoInputId, location) {
+    currentLocation = location;
+    try {
       const processed = await refreshPhotoPreview(photoInputId);
       if (processed) return processed;
 
-      const input = document.getElementById(photoInputId);
-      const originalFile = input && input.files && input.files[0];
+      const originalFile = getOriginalPhotoFile(photoInputId);
       if (!originalFile) return null;
-      return processAttendancePhotoFile(originalFile, location);
+      return await processAttendancePhotoFile(originalFile, location);
+    } catch (error) {
+      return getOriginalPhotoFile(photoInputId);
     }
+  }
 
-    function getLocation() {
-      return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error('Geolocation tidak didukung browser Anda'));
-          return;
-        }
-
-        const locationInfo = document.getElementById('locationInfo');
-        locationInfo.style.display = 'block';
-        locationInfo.innerHTML = '<i class="bi bi-geo-alt-fill"></i> Mengambil lokasi GPS...';
-
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            currentLocation = {
-              lat: position.coords.latitude.toString(),
-              lng: position.coords.longitude.toString()
-            };
-            locationInfo.innerHTML = `<i class="bi bi-geo-alt-fill text-success"></i> Lokasi berhasil didapat`;
-          refreshAllPhotoPreviews();
-            resolve(currentLocation);
-          },
-          (error) => {
-            locationInfo.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-danger"></i> Gagal mendapatkan lokasi GPS';
-            reject(error);
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-          }
-        );
-      });
-    }
-
-    async function checkin(evt) {
-      const btn = evt.currentTarget;
-      if (!document.getElementById('checkinPhoto')?.files?.[0]) {
-        alert('Foto check-in wajib diunggah sebelum absensi.');
+  // Get current location
+  function getLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation tidak didukung browser Anda'));
         return;
       }
-      try {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Memproses...';
 
-        const location = await getLocation();
-        const note = document.getElementById('checkinNote').value.trim();
+      const locationInfo = document.getElementById('locationInfo');
+      locationInfo.style.display = 'block';
+      locationInfo.innerHTML = '<i class="bi bi-geo-alt-fill"></i> Mengambil lokasi GPS...';
 
-        const response = await fetch('/collector/attendance/checkin', {
-          method: 'POST',
-          body: await buildAttendanceFormData(location, note, 'checkinPhoto')
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-          alert('✓ ' + result.message);
-          window.location.reload();
-        } else {
-          alert('✗ ' + result.message);
-          btn.disabled = false;
-          btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Check-in Sekarang';
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          currentLocation = {
+            lat: position.coords.latitude.toString(),
+            lng: position.coords.longitude.toString()
+          };
+          locationInfo.innerHTML = `<i class="bi bi-geo-alt-fill text-success"></i> Lokasi berhasil didapat`;
+          refreshAllPhotoPreviews();
+          resolve(currentLocation);
+        },
+        (error) => {
+          locationInfo.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-danger"></i> Gagal mendapatkan lokasi GPS';
+          reject(error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
         }
-      } catch (error) {
-        alert('Gagal check-in: ' + error.message);
+      );
+    });
+  }
+
+  async function checkin(evt) {
+    const btn = evt.currentTarget;
+    if (!document.getElementById('checkinPhoto')?.files?.[0]) {
+      alert('Foto check-in wajib diunggah sebelum absensi.');
+      return;
+    }
+    try {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Memproses...';
+
+      const location = await getLocation();
+      const note = document.getElementById('checkinNote').value.trim();
+
+      const response = await fetch('/collector/attendance/checkin', {
+        method: 'POST',
+        body: await buildAttendanceFormData(location, note, 'checkinPhoto')
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert('✓ ' + result.message);
+        window.location.reload();
+      } else {
+        alert('✗ ' + result.message);
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Check-in Sekarang';
       }
+    } catch (error) {
+      alert('Gagal check-in: ' + error.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Check-in Sekarang';
     }
+  }
 
-    async function checkout(evt) {
-      const btn = evt.currentTarget;
-      if (!document.getElementById('checkoutPhoto')?.files?.[0]) {
-        alert('Foto check-out wajib diunggah sebelum absensi.');
-        return;
-      }
-      try {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Memproses...';
+  async function checkout(evt) {
+    const btn = evt.currentTarget;
+    if (!document.getElementById('checkoutPhoto')?.files?.[0]) {
+      alert('Foto check-out wajib diunggah sebelum absensi.');
+      return;
+    }
+    try {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Memproses...';
 
-        const location = await getLocation();
-        const note = document.getElementById('checkoutNote').value.trim();
+      const location = await getLocation();
+      const note = document.getElementById('checkoutNote').value.trim();
 
-        const response = await fetch('/collector/attendance/checkout', {
-          method: 'POST',
-          body: await buildAttendanceFormData(location, note, 'checkoutPhoto')
-        });
+      const response = await fetch('/collector/attendance/checkout', {
+        method: 'POST',
+        body: await buildAttendanceFormData(location, note, 'checkoutPhoto')
+      });
 
-        const result = await response.json();
-        
-        if (result.success) {
-          alert('✓ ' + result.message);
-          window.location.reload();
-        } else {
-          alert('✗ ' + result.message);
-          btn.disabled = false;
-          btn.innerHTML = '<i class="bi bi-box-arrow-right me-2"></i>Check-out Sekarang';
-        }
-      } catch (error) {
-        alert('Gagal check-out: ' + error.message);
+      const result = await response.json();
+      
+      if (result.success) {
+        alert('✓ ' + result.message);
+        window.location.reload();
+      } else {
+        alert('✗ ' + result.message);
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-box-arrow-right me-2"></i>Check-out Sekarang';
       }
+    } catch (error) {
+      alert('Gagal check-out: ' + error.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-box-arrow-right me-2"></i>Check-out Sekarang';
     }
+  }
 
-    window.addEventListener('load', () => {
-      getLocation().catch(() => {});
-    });
-  </script>
-</body>
-</html>
+  // Auto-get location on page load
+  window.addEventListener('load', () => {
+    getLocation().catch(() => {});
+  });
+</script>

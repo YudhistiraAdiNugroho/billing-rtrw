@@ -209,7 +209,7 @@
           </thead>
           <tbody>
             <% lateCheckIns.forEach(att => { 
-              const checkInTime = new Date(att.check_in_time);
+              const checkInTime = parseDateInTimezone(att.check_in_time);
               const targetTime = new Date(checkInTime);
               targetTime.setHours(8, 30, 0, 0);
               const lateMinutes = Math.floor((checkInTime - targetTime) / 1000 / 60);
@@ -217,7 +217,7 @@
             <tr>
               <td class="fw6"><%= att.employee_name %></td>
               <td><span class="type-badge type-<%= att.employee_type %>"><%= att.employee_type %></span></td>
-              <td><%= checkInTime.toLocaleTimeString('id-ID') %></td>
+              <td><%= formatTimeLocal(att.check_in_time) %></td>
               <td><span class="late-badge"><%= lateMinutes %> menit</span></td>
             </tr>
             <% }) %>
@@ -245,7 +245,7 @@
           </thead>
           <tbody>
             <% notCheckedOut.forEach(att => { 
-              const checkInTime = new Date(att.check_in_time);
+              const checkInTime = parseDateInTimezone(att.check_in_time);
               const now = new Date();
               const durationMinutes = Math.floor((now - checkInTime) / 1000 / 60);
               const hours = Math.floor(durationMinutes / 60);
@@ -254,7 +254,7 @@
             <tr>
               <td class="fw6"><%= att.employee_name %></td>
               <td><span class="type-badge type-<%= att.employee_type %>"><%= att.employee_type %></span></td>
-              <td><%= checkInTime.toLocaleTimeString('id-ID') %></td>
+              <td><%= formatTimeLocal(att.check_in_time) %></td>
               <td><%= hours %> jam <%= minutes %> menit</td>
             </tr>
             <% }) %>
@@ -267,7 +267,7 @@
     <!-- All Attendance Records -->
     <div class="card" style="margin-top:20px">
       <div class="card-hd">
-        <h6><i class="bi bi-calendar-check"></i> Semua Absensi - <%= new Date(selectedDate).toLocaleDateString('id-ID', { timeZone: settings.timezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></h6>
+        <h6><i class="bi bi-calendar-check"></i> Semua Absensi - <%= parseDateInTimezone(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></h6>
       </div>
       
       <% if (attendances.length > 0) { %>
@@ -292,14 +292,14 @@
               <td class="fw6"><%= att.employee_name %></td>
               <td><span class="type-badge type-<%= att.employee_type %>"><%= att.employee_type %></span></td>
               <td>
-                <%= new Date(att.check_in_time).toLocaleTimeString('id-ID', { timeZone: settings.timezone }) %>
+                <%= formatTimeLocal(att.check_in_time) %>
                 <% if (att.check_in_note) { %>
                   <div class="time-info">💬 <%= att.check_in_note %></div>
                 <% } %>
               </td>
               <td>
                 <% if (att.check_out_time) { %>
-                  <%= new Date(att.check_out_time).toLocaleTimeString('id-ID', { timeZone: settings.timezone }) %>
+                  <%= formatTimeLocal(att.check_out_time) %>
                   <% if (att.check_out_note) { %>
                     <div class="time-info">💬 <%= att.check_out_note %></div>
                   <% } %>
