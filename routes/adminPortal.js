@@ -3,7 +3,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { getSetting, getSettings, saveSettings, getNowLocal, getCurrentDateInTimezone, getCurrentTimeInfo, getNowLocalISO, formatDateLocal } = require('../config/settingsManager');
+const { getSetting, getSettings, saveSettings, getNowLocal, getCurrentDateInTimezone, getCurrentTimeInfo, getNowLocalISO, formatDateLocal, formatTimeLocal, parseDateInTimezone } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 const customerDevice = require('../services/customerDeviceService');
@@ -575,6 +575,8 @@ router.use((req, res, next) => {
   res.locals.settings = getSettings();
   res.locals.company = company();
   res.locals.formatDateLocal = formatDateLocal;
+  res.locals.formatTimeLocal = formatTimeLocal;
+  res.locals.parseDateInTimezone = parseDateInTimezone;
   res.locals.getNowLocal = getNowLocal;
   res.locals.getCurrentTimeInfo = getCurrentTimeInfo;
   next();

@@ -3,7 +3,7 @@ const router = express.Router();
 const techSvc = require('../services/techService');
 const customerSvc = require('../services/customerService');
 const odpSvc = require('../services/odpService');
-const { getSetting, getNowLocal, getCurrentDateInTimezone, getNowLocalISO, formatDateLocal, getSettings } = require('../config/settingsManager');
+const { getSetting, getNowLocal, getCurrentDateInTimezone, getNowLocalISO, formatDateLocal, getSettings, formatTimeLocal, parseDateInTimezone } = require('../config/settingsManager');
 const mikrotikService = require('../services/mikrotikService');
 const db = require('../config/database');
 const oltSvc = require('../services/oltService');
@@ -120,6 +120,8 @@ router.use((req, res, next) => {
   res.locals.session = req.session;
   res.locals.settings = getSettings();
   res.locals.formatDateLocal = formatDateLocal;
+  res.locals.formatTimeLocal = formatTimeLocal;
+  res.locals.parseDateInTimezone = parseDateInTimezone;
   res.locals.getNowLocal = getNowLocal;
   next();
 });

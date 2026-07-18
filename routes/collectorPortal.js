@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getSetting, getCurrentDateInTimezone, getSettings, formatDateLocal, getNowLocal } = require('../config/settingsManager');
+const { getSetting, getCurrentDateInTimezone, getSettings, formatDateLocal, getNowLocal, formatTimeLocal, parseDateInTimezone } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const db = require('../config/database');
 const billingSvc = require('../services/billingService');
@@ -28,6 +28,8 @@ router.use((req, res, next) => {
   res.locals.session = req.session;
   res.locals.settings = getSettings();
   res.locals.formatDateLocal = formatDateLocal;
+  res.locals.formatTimeLocal = formatTimeLocal;
+  res.locals.parseDateInTimezone = parseDateInTimezone;
   res.locals.getNowLocal = getNowLocal;
   next();
 });

@@ -235,15 +235,33 @@ function parseDateInTimezone(dateStr) {
   return new Date(date.getTime() - diff);
 }
 
-/**
- * Helper untuk memformat objek Date menjadi string waktu lokal
- */
 function formatDateLocal(date) {
   if (!date) return '-';
   const tz = getSetting('timezone', 'Asia/Jakarta');
-  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
-  if (isNaN(d.getTime())) return '-';
+  let d;
+  if (typeof date === 'string') {
+    d = parseDateInTimezone(date);
+  } else {
+    d = typeof date === 'number' ? new Date(date) : date;
+  }
+  if (!d || isNaN(d.getTime())) return '-';
   return d.toLocaleString('id-ID', { timeZone: tz });
+}
+
+/**
+ * Helper untuk memformat objek Date menjadi string waktu lokal (hanya Jam:Menit)
+ */
+function formatTimeLocal(date) {
+  if (!date) return '-';
+  const tz = getSetting('timezone', 'Asia/Jakarta');
+  let d;
+  if (typeof date === 'string') {
+    d = parseDateInTimezone(date);
+  } else {
+    d = typeof date === 'number' ? new Date(date) : date;
+  }
+  if (!d || isNaN(d.getTime())) return '-';
+  return d.toLocaleTimeString('id-ID', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
 }
 
 module.exports = {
@@ -254,9 +272,10 @@ module.exports = {
   saveSettings,
   getNowLocal,
   formatDateLocal,
+  formatTimeLocal,
   getCurrentDateInTimezone,
   getCurrentTimeInfo,
   getNowLocalISO,
   parseDateInTimezone,
   startSettingsWatcher
-}; 
+};
