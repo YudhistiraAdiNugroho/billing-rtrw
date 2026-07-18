@@ -35,7 +35,12 @@
         <div style="font-weight:900;letter-spacing:-.02em">Kolektor</div>
         <div class="muted" style="font-size:12px"><%= company %></div>
       </div>
-      <a class="btn btn-outline-light btn-sm" href="/collector/logout"><i class="bi bi-box-arrow-left"></i></a>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" href="/collector/attendance">
+          <i class="bi bi-calendar-check"></i> Absensi
+        </a>
+        <a class="btn btn-outline-light btn-sm" href="/collector/logout"><i class="bi bi-box-arrow-left"></i></a>
+      </div>
     </div>
 
     <% if (msg) { %>
@@ -249,6 +254,9 @@
       </a>
       <a class="bni <%= activeScope === 'multi' ? 'active' : '' %>" href="/collector?<%= qsMulti %>#data-tagihan">
         <i class="bi bi-layers"></i><span>&gt;1 Bln</span>
+      </a>
+      <a class="bni" href="/collector/attendance">
+        <i class="bi bi-calendar-check-fill"></i><span>Absensi</span>
       </a>
     </div>
   </div>
