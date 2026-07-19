@@ -643,7 +643,7 @@
 
     buildAttendanceFormData(currentLocation, note, 'checkinPhoto')
       .then((formData) => {
-        return fetch('/admin/cashier/attendance/checkin', {
+        return fetch('/admin/cashiers/attendance/checkin', {
           method: 'POST',
           body: formData
         });
@@ -677,7 +677,7 @@
 
     buildAttendanceFormData(currentLocation, note, 'checkoutPhoto')
       .then((formData) => {
-        return fetch('/admin/cashier/attendance/checkout', {
+        return fetch('/admin/cashiers/attendance/checkout', {
           method: 'POST',
           body: formData
         });
