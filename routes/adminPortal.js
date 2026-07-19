@@ -5826,9 +5826,11 @@ router.post('/attendance/:id/update', requireAdminSession, express.json(), (req,
     // Calculate duration if both times provided
     let duration = 0;
     if (check_in_time && check_out_time) {
-      const checkIn = new Date(check_in_time);
-      const checkOut = new Date(check_out_time);
-      duration = Math.floor((checkOut - checkIn) / 1000 / 60);
+      const checkIn = parseDateInTimezone(check_in_time);
+      const checkOut = parseDateInTimezone(check_out_time);
+      if (checkIn && checkOut) {
+        duration = Math.floor((checkOut - checkIn) / 1000 / 60);
+      }
     }
     
     attendanceSvc.updateAttendance(parseInt(id), {

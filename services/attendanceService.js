@@ -101,7 +101,7 @@ function checkOut(attendanceId, data) {
   
   // Calculate work duration in minutes
   const checkInTime = parseDateInTimezone(attendance.check_in_time);
-  const checkOutTime = getCurrentDateInTimezone();
+  const checkOutTime = new Date();
   const durationMinutes = Math.floor((checkOutTime - checkInTime) / 1000 / 60);
   
   const stmt = db.prepare(`
