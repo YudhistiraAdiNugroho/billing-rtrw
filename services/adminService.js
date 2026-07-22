@@ -12,9 +12,16 @@ function createTechnician(data) {
   return stmt.run(data.username, data.password, data.name, data.phone || '', data.area || '');
 }
 
+function parseBoolInt(val, defaultVal = 0) {
+  if (val === undefined || val === null || val === '') return defaultVal;
+  if (val === true || val === 1 || val === '1' || val === 'true' || val === 'on' || val === 'yes') return 1;
+  if (val === false || val === 0 || val === '0' || val === 'false' || val === 'off' || val === 'no') return 0;
+  return Boolean(val) ? 1 : 0;
+}
+
 function updateTechnician(id, data) {
   const stmt = db.prepare('UPDATE technicians SET username = ?, password = ?, name = ?, phone = ?, area = ?, is_active = ? WHERE id = ?');
-  return stmt.run(data.username, data.password, data.name, data.phone || '', data.area || '', data.is_active ? 1 : 0, id);
+  return stmt.run(data.username, data.password, data.name, data.phone || '', data.area || '', parseBoolInt(data.is_active, 1), id);
 }
 
 function deleteTechnician(id) {
@@ -35,7 +42,7 @@ function createCashier(data) {
 
 function updateCashier(id, data) {
   const stmt = db.prepare('UPDATE cashiers SET username = ?, password = ?, name = ?, phone = ?, is_active = ? WHERE id = ?');
-  return stmt.run(data.username, data.password, data.name, data.phone || '', data.is_active ? 1 : 0, id);
+  return stmt.run(data.username, data.password, data.name, data.phone || '', parseBoolInt(data.is_active, 1), id);
 }
 
 function deleteCashier(id) {
@@ -60,13 +67,21 @@ function createCollector(data) {
       String(data.password || ''),
       String(data.name || '').trim(),
       String(data.phone || '').trim(),
-      data.auto_approve ? 1 : 0
+      parseBoolInt(data.auto_approve, 0)
     );
 }
 
 function updateCollector(id, data) {
   const stmt = db.prepare('UPDATE collectors SET username = ?, password = ?, name = ?, phone = ?, is_active = ?, auto_approve = ? WHERE id = ?');
-  return stmt.run(data.username, data.password, data.name, data.phone || '', data.is_active ? 1 : 0, data.auto_approve ? 1 : 0, id);
+  return stmt.run(
+    String(data.username || '').trim(),
+    String(data.password || ''),
+    String(data.name || '').trim(),
+    String(data.phone || '').trim(),
+    parseBoolInt(data.is_active, 1),
+    parseBoolInt(data.auto_approve, 0),
+    id
+  );
 }
 
 function deleteCollector(id) {
