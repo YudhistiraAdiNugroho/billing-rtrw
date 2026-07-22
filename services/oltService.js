@@ -1540,6 +1540,15 @@ async function getOltStatsInternal(id, full = false) {
         }
 
         const detectedBrandKey = activeProfile.__brandKey || brandKey;
+        stats.activeProfile = activeProfile;
+        stats.systemOids = SYSTEM_OIDS[detectedBrandKey] || null;
+        stats.cardOids = CARD_OIDS[detectedBrandKey] || null;
+        stats.snmpConfig = {
+          host: olt.host,
+          port: olt.snmp_port || 161,
+          community: olt.snmp_community || 'public',
+          brand: olt.brand
+        };
         const onlineVals = getOnlineValues(detectedBrandKey, activeProfile);
 
         // Start system metrics concurrently
@@ -2174,6 +2183,7 @@ async function configureWanViaAcs(sn, data) {
     cmds.push('exit');
     cmds.push('end');
     cmds.push('write');
+    return await telnetLoginAndRun(olt.host, olt.web_user, olt.web_password, cmds, telnetOptsFromOlt(olt));
   } else if (brand === 'huawei') {
      cmds.push('enable');
      cmds.push('config');
@@ -2191,7 +2201,88 @@ async function configureWanViaAcs(sn, data) {
    return await telnetLoginAndRun(olt.host, olt.web_user, olt.web_password, cmds, telnetOptsFromOlt(olt));
  }
  
+ async function getAllOltsStats(full = false) {
+   const olts = getActiveOlts();
+   if (!olts || olts.length === 0) {
+     return {
+       is_all: true,
+       onus_total: 0,
+       onus_online: 0,
+       onus_offline: 0,
+       onus_weak: 0,
+       onus: [],
+       unauth_onus: [],
+       olts_summary: [],
+       error: 'Tidak ada OLT aktif'
+     };
+   }
+
+   const results = await Promise.all(olts.map(o => getOltStats(o.id, full)));
+
+   let onus_total = 0;
+   let onus_online = 0;
+   let onus_offline = 0;
+   let onus_weak = 0;
+   const allOnus = [];
+   const allUnauth = [];
+   const olts_summary = [];
+
+   for (let i = 0; i < results.length; i++) {
+     const s = results[i];
+     const oltInfo = olts[i];
+     if (s) {
+       onus_total += (s.onus_total || 0);
+       onus_online += (s.onus_online || 0);
+       onus_offline += (s.onus_offline || 0);
+       onus_weak += (s.onus_weak || 0);
+
+       olts_summary.push({
+         id: oltInfo.id,
+         name: oltInfo.name,
+         host: oltInfo.host,
+         brand: oltInfo.brand,
+         status: s.status,
+         onus_total: s.onus_total,
+         onus_online: s.onus_online,
+         onus_offline: s.onus_offline,
+         onus_weak: s.onus_weak,
+         temp: s.temp,
+         cpu: s.cpu,
+         ram: s.ram,
+         uptime: s.uptime,
+         error: s.error,
+         activeProfile: s.activeProfile || null,
+         systemOids: s.systemOids || null,
+         snmpConfig: s.snmpConfig || null
+       });
+
+       if (Array.isArray(s.onus)) {
+         s.onus.forEach(onu => {
+           allOnus.push({ ...onu, olt_id: oltInfo.id, olt_name: oltInfo.name });
+         });
+       }
+
+       if (Array.isArray(s.unauth_onus)) {
+         s.unauth_onus.forEach(u => {
+           allUnauth.push({ ...u, olt_id: oltInfo.id, olt_name: oltInfo.name });
+         });
+       }
+     }
+   }
+
+   return {
+     is_all: true,
+     onus_total,
+     onus_online,
+     onus_offline,
+     onus_weak,
+     onus: allOnus,
+     unauth_onus: allUnauth,
+     olts_summary
+   };
+ }
+
  module.exports = {
-  getAllOlts, getActiveOlts, getOltById, createOlt, updateOlt, deleteOlt, getOltStats, rebootOnu, renameOnu, authorizeOnu,
+  getAllOlts, getActiveOlts, getOltById, createOlt, updateOlt, deleteOlt, getOltStats, getAllOltsStats, rebootOnu, renameOnu, authorizeOnu,
   configureOnuWan, configureZteWanViaGoApi, configureWanViaAcs
 };
