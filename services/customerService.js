@@ -57,7 +57,7 @@ function getEffectiveRouterId(customerRouterId) {
 }
 
 // ─── CUSTOMERS ───────────────────────────────────────────────
-function getAllCustomers(search = '') {
+function getAllCustomers(search = '', routerId = null, filterStatus = '') {
   const now = getCurrentDateInTimezone();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -79,11 +79,29 @@ function getAllCustomers(search = '') {
     LEFT JOIN odps odp ON c.odp_id = odp.id
     LEFT JOIN customer_usage u ON u.customer_id = c.id AND u.period_month = ${month} AND u.period_year = ${year}
   `;
+
+  const whereClauses = [];
+  const params = [];
+
   if (search) {
     const s = `%${search}%`;
-    return db.prepare(base + ` WHERE c.name LIKE ? OR c.phone LIKE ? OR c.genieacs_tag LIKE ? OR c.address LIKE ? ORDER BY c.name ASC`).all(s, s, s, s);
+    whereClauses.push(`(c.name LIKE ? OR c.phone LIKE ? OR c.genieacs_tag LIKE ? OR c.address LIKE ? OR c.pppoe_username LIKE ? OR c.static_ip LIKE ? OR c.hotspot_username LIKE ?)`);
+    params.push(s, s, s, s, s, s, s);
   }
-  return db.prepare(base + ` ORDER BY c.name ASC`).all();
+
+  const rId = routerId ? Number(routerId) : null;
+  if (rId && rId > 0) {
+    whereClauses.push(`c.router_id = ?`);
+    params.push(rId);
+  }
+
+  if (filterStatus) {
+    whereClauses.push(`c.status = ?`);
+    params.push(filterStatus);
+  }
+
+  const whereSql = whereClauses.length > 0 ? ` WHERE ` + whereClauses.join(' AND ') : '';
+  return db.prepare(base + whereSql + ` ORDER BY c.name ASC`).all(...params);
 }
 
 function resetPromoCyclesUsed(customerId) {
@@ -277,10 +295,23 @@ function getCustomerStats() {
 }
 
 // ─── PACKAGES ────────────────────────────────────────────────
-function getAllPackages() {
+function getAllPackages(routerId = null) {
+  const rId = routerId ? Number(routerId) : null;
+  if (rId && rId > 0) {
+    return db.prepare(`
+      SELECT p.*, r.name as router_name, COUNT(c.id) as customer_count
+      FROM packages p 
+      LEFT JOIN customers c ON c.package_id = p.id
+      LEFT JOIN routers r ON p.router_id = r.id
+      WHERE p.router_id IS NULL OR p.router_id = ?
+      GROUP BY p.id ORDER BY p.price ASC
+    `).all(rId);
+  }
   return db.prepare(`
-    SELECT p.*, COUNT(c.id) as customer_count
-    FROM packages p LEFT JOIN customers c ON c.package_id = p.id
+    SELECT p.*, r.name as router_name, COUNT(c.id) as customer_count
+    FROM packages p 
+    LEFT JOIN customers c ON c.package_id = p.id
+    LEFT JOIN routers r ON p.router_id = r.id
     GROUP BY p.id ORDER BY p.price ASC
   `).all();
 }
@@ -304,6 +335,7 @@ function createPackage(data) {
   const ppnPercentage = parseFloat(data.ppn_percentage || 11.0);
   const useUso = data.use_uso ? 1 : 0;
   const usoPercentage = parseFloat(data.uso_percentage || 1.75);
+  const routerId = data.router_id ? parseInt(data.router_id, 10) : null;
 
   return db.prepare(`
     INSERT INTO packages (
@@ -312,16 +344,16 @@ function createPackage(data) {
       use_night_speed, night_profile_name, night_speed_down, night_speed_up, 
       use_fup, fup_profile_name, fup_limit_gb, fup_speed_down, 
       description,
-      use_ppn, ppn_percentage, use_uso, uso_percentage
+      use_ppn, ppn_percentage, use_uso, uso_percentage, router_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
     down, up,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || '',
-    usePpn, ppnPercentage, useUso, usoPercentage
+    usePpn, ppnPercentage, useUso, usoPercentage, routerId
   );
 }
 
@@ -345,6 +377,7 @@ function updatePackage(id, data) {
   const ppnPercentage = parseFloat(data.ppn_percentage || 11.0);
   const useUso = data.use_uso ? 1 : 0;
   const usoPercentage = parseFloat(data.uso_percentage || 1.75);
+  const routerId = data.router_id ? parseInt(data.router_id, 10) : null;
 
   return db.prepare(`
     UPDATE packages 
@@ -353,7 +386,7 @@ function updatePackage(id, data) {
         use_night_speed=?, night_profile_name=?, night_speed_down=?, night_speed_up=?, 
         use_fup=?, fup_profile_name=?, fup_limit_gb=?, fup_speed_down=?, 
         description=?, is_active=?,
-        use_ppn=?, ppn_percentage=?, use_uso=?, uso_percentage=?
+        use_ppn=?, ppn_percentage=?, use_uso=?, uso_percentage=?, router_id=?
     WHERE id=?
   `).run(
     data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
@@ -361,7 +394,7 @@ function updatePackage(id, data) {
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || '', data.is_active == '1' ? 1 : 0,
-    usePpn, ppnPercentage, useUso, usoPercentage,
+    usePpn, ppnPercentage, useUso, usoPercentage, routerId,
     id
   );
 }
