@@ -217,6 +217,7 @@
             <% if (olts.length === 0) { %>
               <option value=""><%= t('admin.olts.no_data', 'Tidak ada data OLT') %></option>
             <% } else { %>
+              <option value="all">🌐 Semua OLT (Ringkasan Total)</option>
               <% olts.forEach(olt => { %>
                 <option value="<%= olt.id %>" <%= olt.is_active ? '' : 'disabled' %>><%= olt.name %> (<%= olt.host %>)</option>
               <% }) %>
@@ -272,6 +273,45 @@
           <div class="traffic-v2">
             <span class="traffic-in-v2" title="<%= t('admin.olts.system.traffic_in', 'Traffic In') %>"><i class="bi bi-arrow-down"></i> <span id="stat-traffic-in">0 B</span></span>
             <span class="traffic-out-v2" title="<%= t('admin.olts.system.traffic_out', 'Traffic Out') %>"><i class="bi bi-arrow-up"></i> <span id="stat-traffic-out">0 B</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- OID & SNMP Info Section -->
+      <div id="oid-info-container" class="onu-main-card" style="margin-top: 15px; display: none;">
+        <div class="card-header d-flex justify-content-between align-items-center" style="background:#0f172a; color:white;">
+          <h4 class="fw-bold m-0 small text-uppercase" style="color:#60a5fa;"><i class="bi bi-diagram-3"></i> Informasi OID & Profil SNMP Perangkat</h4>
+          <span id="oid-brand-badge" class="brand-badge brand-hioso">-</span>
+        </div>
+        <div class="p-3" style="background:#1e293b; color:#f8fafc; font-size:12px;">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div style="background:#0f172a; padding:12px; border-radius:8px; border:1px solid #334155;">
+                <div class="text-muted fw-bold mb-2" style="font-size:11px; text-transform:uppercase; color:#94a3b8;"><i class="bi bi-hdd-rack"></i> Profil & Parameter Connection</div>
+                <div class="mb-1">Profil SNMP: <strong id="oid-profile-name" style="color:#38bdf8;">-</strong></div>
+                <div class="mb-1">Host OLT: <strong id="oid-host">-</strong></div>
+                <div class="mb-1">Port SNMP: <strong id="oid-port">161</strong></div>
+                <div>Community: <strong id="oid-community" style="color:#4ade80;">public</strong></div>
+              </div>
+            </div>
+            <div class="col-md-8">
+              <div style="background:#0f172a; padding:12px; border-radius:8px; border:1px solid #334155;">
+                <div class="text-muted fw-bold mb-2" style="font-size:11px; text-transform:uppercase; color:#94a3b8;"><i class="bi bi-card-checklist"></i> Daftar OID Utama (SNMP Walk & Get)</div>
+                <div class="table-responsive">
+                  <table class="table table-dark table-sm mb-0" style="font-family:monospace; font-size:11px; border-color:#334155;">
+                    <thead>
+                      <tr>
+                        <th style="color:#94a3b8">Deskripsi Metrik</th>
+                        <th style="color:#94a3b8">OID Object Identifier</th>
+                      </tr>
+                    </thead>
+                    <tbody id="oid-table-body">
+                      <!-- OID rows rendered via JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -667,24 +707,95 @@ async function loadOltDashboard(id) {
   overlay.style.display = 'flex';
   
   try {
-    const res = await fetch(`/admin/olts/${id}/stats?full=true`);
+    const url = (id === 'all') ? `/admin/olts/all/stats?full=true` : `/admin/olts/${id}/stats?full=true`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error(I18N.serverConnectFailed);
     const stats = await res.json();
     
     // Update Stats Cards
-    document.getElementById('stat-total-onu').innerText = stats.onus_total;
-    document.getElementById('stat-online-onu').innerText = stats.onus_online;
-    document.getElementById('stat-offline-onu').innerText = stats.onus_offline;
-    document.getElementById('stat-weak-onu').innerText = stats.onus_weak;
+    document.getElementById('stat-total-onu').innerText = stats.onus_total || 0;
+    document.getElementById('stat-online-onu').innerText = stats.onus_online || 0;
+    document.getElementById('stat-offline-onu').innerText = stats.onus_offline || 0;
+    document.getElementById('stat-weak-onu').innerText = stats.onus_weak || 0;
     
     // Update System Info
-    document.getElementById('stat-temp').innerText = stats.temp || 'N/A';
-    document.getElementById('stat-cpu').innerText = stats.cpu || 'N/A';
-    document.getElementById('stat-ram').innerText = stats.ram || 'N/A';
-    document.getElementById('stat-uptime').innerText = stats.uptime || 'N/A';
-    document.getElementById('stat-traffic-in').innerText = formatBytes(stats.uplink_rx) + '/s';
-    document.getElementById('stat-traffic-out').innerText = formatBytes(stats.uplink_tx) + '/s';
-    document.getElementById('last-update').innerText = new Date().toLocaleTimeString(I18N.lang === 'en' ? 'en-US' : 'id-ID', { timeZone: '<%= settings.timezone %>' });
+    if (stats.is_all) {
+      document.getElementById('stat-temp').innerText = 'Agregasi ' + (stats.olts_summary?.length || 0) + ' OLT';
+      document.getElementById('stat-cpu').innerText = '-';
+      document.getElementById('stat-ram').innerText = '-';
+      document.getElementById('stat-uptime').innerText = 'Multi-OLT Active';
+      document.getElementById('stat-traffic-in').innerText = '-';
+      document.getElementById('stat-traffic-out').innerText = '-';
+    } else {
+      document.getElementById('stat-temp').innerText = stats.temp || 'N/A';
+      document.getElementById('stat-cpu').innerText = stats.cpu || 'N/A';
+      document.getElementById('stat-ram').innerText = stats.ram || 'N/A';
+      document.getElementById('stat-uptime').innerText = stats.uptime || 'N/A';
+      document.getElementById('stat-traffic-in').innerText = formatBytes(stats.uplink_rx) + '/s';
+      document.getElementById('stat-traffic-out').innerText = formatBytes(stats.uplink_tx) + '/s';
+    }
+
+    // Render OID Info Box
+    const oidInfoBox = document.getElementById('oid-info-container');
+    const oidTableBody = document.getElementById('oid-table-body');
+    const oidBrandBadge = document.getElementById('oid-brand-badge');
+    const oidProfileName = document.getElementById('oid-profile-name');
+    const oidHost = document.getElementById('oid-host');
+    const oidPort = document.getElementById('oid-port');
+    const oidCommunity = document.getElementById('oid-community');
+
+    if (stats.is_all && stats.olts_summary && stats.olts_summary.length > 0) {
+      oidInfoBox.style.display = 'block';
+      oidBrandBadge.innerText = 'MULTI OLT';
+      oidProfileName.innerText = 'Semua OLT (' + stats.olts_summary.length + ' Perangkat)';
+      oidHost.innerText = 'Multi-Host';
+      oidPort.innerText = '161';
+      oidCommunity.innerText = 'Various';
+
+      let rowsHtml = '';
+      stats.olts_summary.forEach((oSummary, idx) => {
+        const prof = oSummary.activeProfile;
+        const brand = (oSummary.brand || 'N/A').toUpperCase();
+        rowsHtml += `
+          <tr style="border-top:2px solid #334155; background:rgba(255,255,255,0.03);">
+            <td colspan="2" style="color:#38bdf8; font-weight:bold; padding-top:8px;">OLT #${idx+1}: ${oSummary.name} (${oSummary.host}) - Brand: ${brand} [${oSummary.status}]</td>
+          </tr>
+          <tr><td>Profil SNMP Aktif</td><td><code>${prof ? prof.name : (oSummary.error || 'Pending/No Match')}</code></td></tr>
+          <tr><td>OID Status Table</td><td><code>${prof ? prof.status_table : '-'}</code></td></tr>
+          <tr><td>OID Name Table</td><td><code>${prof ? prof.name_table : '-'}</code></td></tr>
+          <tr><td>OID Serial Table</td><td><code>${prof ? prof.sn_table : '-'}</code></td></tr>
+          <tr><td>OID RX Power Table</td><td><code>${prof ? (prof.rx_power_table || '-') : '-'}</code></td></tr>
+        `;
+      });
+      oidTableBody.innerHTML = rowsHtml;
+
+    } else if (stats.activeProfile) {
+      oidInfoBox.style.display = 'block';
+      const prof = stats.activeProfile;
+      const sysOids = stats.systemOids || {};
+      const cfg = stats.snmpConfig || {};
+
+      oidBrandBadge.innerText = (cfg.brand || stats.brand || 'HIOSO').toUpperCase();
+      oidProfileName.innerText = prof.name || 'Custom SNMP';
+      oidHost.innerText = cfg.host || stats.host || '-';
+      oidPort.innerText = cfg.port || '161';
+      oidCommunity.innerText = cfg.community || 'public';
+
+      oidTableBody.innerHTML = `
+        <tr><td style="color:#94a3b8">OID Probe Autodeteksi</td><td><code style="color:#4ade80">${prof.probe_oid || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Tabel Status ONU</td><td><code>${prof.status_table || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Tabel Nama ONU</td><td><code>${prof.name_table || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Tabel Serial Number (SN)</td><td><code>${prof.sn_table || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Tabel Redaman RX Power</td><td><code>${prof.rx_power_table || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Tabel Redaman TX Power</td><td><code>${prof.tx_power_table || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Tabel Jarak ONU (Distance)</td><td><code>${prof.distance_table || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Tabel Alasan Offline</td><td><code>${prof.offline_reason_table || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Suhu / CPU / RAM System</td><td><code>${sysOids.temp || '-' } / ${sysOids.cpu || '-'} / ${sysOids.ram || '-'}</code></td></tr>
+        <tr><td style="color:#94a3b8">OID Traffic Uplink In / Out</td><td><code>${sysOids.uplink_rx || '-'} / ${sysOids.uplink_tx || '-'}</code></td></tr>
+      `;
+    } else {
+      oidInfoBox.style.display = 'none';
+    }
     
     // Render Card List
     const cardContainer = document.getElementById('card-list-container');
@@ -713,12 +824,13 @@ async function loadOltDashboard(id) {
     if (stats.unauth_onus && stats.unauth_onus.length > 0) {
       unauthContainer.style.display = 'block';
       unauthBody.innerHTML = stats.unauth_onus.map(onu => {
+        const targetOltId = onu.olt_id || id;
         return `<tr>
           <td><code class="sn-mac">${onu.id || onu.index}</code></td>
-          <td><code class="sn-mac">${onu.sn}</code></td>
+          <td><code class="sn-mac">${onu.sn}</code> ${onu.olt_name ? `<span class="badge bg-secondary ms-1">${onu.olt_name}</span>` : ''}</td>
           <td><span class="badge-v2">${onu.type}</span></td>
           <td>
-            <button class="btn btn-sm btn-p" onclick="authorizeOnuPrompt('${id}', '${onu.index}', '${onu.sn}')">
+            <button class="btn btn-sm btn-p" onclick="authorizeOnuPrompt('${targetOltId}', '${onu.index}', '${onu.sn}')">
               <i class="bi bi-check-circle"></i> Otorisasi
             </button>
           </td>
@@ -741,10 +853,12 @@ async function loadOltDashboard(id) {
         if (!Number.isFinite(rxVal)) rxClass = '';
         else if (rxVal < -27) rxClass = 'power-danger';
         else if (rxVal < -24) rxClass = 'power-warning';
+        const targetOltId = onu.olt_id || id;
+        const oltBadge = onu.olt_name ? `<span class="badge bg-dark border border-secondary text-info me-1" style="font-size:10px">${onu.olt_name}</span>` : '';
         
         return `<tr>
           <td>${index + 1}</td>
-          <td><code class="sn-mac">${onu.id || '-'}</code></td>
+          <td>${oltBadge}<code class="sn-mac">${onu.id || '-'}</code></td>
           <td><code class="sn-mac">${onu.sn || '-'}</code></td>
           <td>
             <span class="status-pill-v2 ${statusClass}"><i class="bi bi-circle-fill" style="font-size:6px;"></i> ${formatStatus(statusVal) || '-'}</span>
@@ -755,11 +869,11 @@ async function loadOltDashboard(id) {
           <td><span class="small text-muted">${onu.distance != null ? onu.distance : '-'}</span></td>
           <td style="text-align:right">
             <div class="d-flex justify-content-end gap-1">
-              <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="configureWanPrompt('${id}', '${onu.index}', '${onu.name}', '${onu.sn}')" style="font-size: 11px;">
+              <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="configureWanPrompt('${targetOltId}', '${onu.index}', '${onu.name}', '${onu.sn}')" style="font-size: 11px;">
                 <i class="bi bi-gear-fill"></i> WAN
               </button>
-              <button class="btn-action-v2 btn-rename-v2" onclick="renameOnuPrompt('${id}', '${onu.index}', '${onu.name}')" title="${I18N.renameTitle}"><i class="bi bi-pencil-square"></i></button>
-              <button class="btn-action-v2 btn-reboot-v2" onclick="rebootOnu('${id}', '${onu.index}')" title="${I18N.rebootTitle}"><i class="bi bi-arrow-clockwise"></i></button>
+              <button class="btn-action-v2 btn-rename-v2" onclick="renameOnuPrompt('${targetOltId}', '${onu.index}', '${onu.name}')" title="${I18N.renameTitle}"><i class="bi bi-pencil-square"></i></button>
+              <button class="btn-action-v2 btn-reboot-v2" onclick="rebootOnu('${targetOltId}', '${onu.index}')" title="${I18N.rebootTitle}"><i class="bi bi-arrow-clockwise"></i></button>
             </div>
           </td>
         </tr>`;
