@@ -27,7 +27,17 @@
     <div class="card">
       <div class="card-hd">
         <h6><i class="bi bi-box-seam"></i> <%= t('admin.packages.list', 'Daftar Paket') %> (<%= packages.length %>)</h6>
-        <button class="btn btn-p btn-sm" onclick="openModal('addModal')"><i class="bi bi-plus-lg"></i> <%= t('admin.packages.add', 'Tambah Paket') %></button>
+        <div style="display:flex;align-items:center;gap:10px">
+          <% if (typeof routers !== 'undefined' && routers && routers.length > 0) { %>
+          <select class="fs" style="width:160px" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
+            <option value="all" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router</option>
+            <% routers.forEach(r => { %>
+              <option value="<%= r.id %>" <%= (selectedRouterId === r.id) ? 'selected' : '' %>>🔌 <%= r.name %></option>
+            <% }) %>
+          </select>
+          <% } %>
+          <button class="btn btn-p btn-sm" onclick="openModal('addModal')"><i class="bi bi-plus-lg"></i> <%= t('admin.packages.add', 'Tambah Paket') %></button>
+        </div>
       </div>
       <div class="tbl-wrap">
         <table class="dtbl">
@@ -375,7 +385,8 @@ setTimeout(()=>document.querySelectorAll('.alert').forEach(a=>a.style.display='n
 // Load MikroTik profiles into select dropdowns
 async function loadProfiles() {
   try {
-    const res = await fetch('/admin/api/mikrotik/profiles');
+    const routerParam = '<%= (typeof selectedRouterId !== "undefined" && selectedRouterId) ? selectedRouterId : "" %>';
+    const res = await fetch('/admin/api/mikrotik/profiles' + (routerParam ? '?routerId=' + routerParam : ''));
     if (!res.ok) return;
     const profiles = await res.json();
     const selAdd = document.getElementById('add_profile_select');

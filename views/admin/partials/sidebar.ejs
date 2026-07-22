@@ -12,6 +12,21 @@
         <a href="/lang/id" class="btn btn-g btn-sm" style="padding:4px 8px">ID</a>
         <a href="/lang/en" class="btn btn-g btn-sm" style="padding:4px 8px">EN</a>
       </div>
+      <% if (typeof multiRouterMode !== 'undefined' && multiRouterMode && allActiveRouters && allActiveRouters.length > 0) { %>
+        <div style="margin-top:10px;padding:8px;background:rgba(255,255,255,0.06);border-radius:10px;border:1px solid rgba(255,255,255,0.1)">
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;font-weight:600;display:flex;align-items:center;gap:4px">
+            <i class="bi bi-router"></i> Router Filter
+          </div>
+          <select class="form-select form-select-sm" style="background:#0f172a;color:#f8fafc;border-color:#334155;font-size:12px;cursor:pointer" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
+            <option value="all" style="background:#0f172a;color:#f8fafc;" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router (<%= allActiveRouters.length %>)</option>
+            <% allActiveRouters.forEach(r => { %>
+              <option value="<%= r.id %>" style="background:#0f172a;color:#f8fafc;" <%= (selectedRouterId === r.id) ? 'selected' : '' %>>
+                🔌 <%= r.name %> (<%= r.host %>)
+              </option>
+            <% }) %>
+          </select>
+        </div>
+      <% } %>
     </div>
     <button class="sb-close btn-g btn-sm" onclick="toggleSidebar()"><i class="bi bi-x-lg"></i></button>
   </div>

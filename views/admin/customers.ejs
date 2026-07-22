@@ -62,8 +62,16 @@
             <option value="suspended" <%= filterStatus==='suspended' ? 'selected':'' %>><%= t('admin.customers.filter.suspended', 'Suspend') %></option>
             <option value="inactive" <%= filterStatus==='inactive' ? 'selected':'' %>><%= t('admin.customers.filter.inactive', 'Nonaktif') %></option>
           </select>
+          <% if (typeof routers !== 'undefined' && routers && routers.length > 0) { %>
+          <select class="fs" style="width:160px;background:#0f172a;color:#f8fafc;border-color:#334155;" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
+            <option value="all" style="background:#0f172a;color:#f8fafc;" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router</option>
+            <% routers.forEach(r => { %>
+              <option value="<%= r.id %>" style="background:#0f172a;color:#f8fafc;" <%= (selectedRouterId === r.id) ? 'selected' : '' %>>🔌 <%= r.name %></option>
+            <% }) %>
+          </select>
+          <% } %>
           <button class="btn btn-g btn-sm" type="submit"><i class="bi bi-search"></i> <%= t('common.search', 'Cari') %></button>
-          <% if (search || filterStatus) { %><a href="/admin/customers" class="btn btn-g btn-sm"><i class="bi bi-x"></i> <%= t('common.reset', 'Reset') %></a><% } %>
+          <% if (search || filterStatus || selectedRouterId) { %><a href="/admin/set-active-router?router_id=all" class="btn btn-g btn-sm"><i class="bi bi-x"></i> <%= t('common.reset', 'Reset') %></a><% } %>
         </form>
       </div>
       <div class="tbl-wrap">

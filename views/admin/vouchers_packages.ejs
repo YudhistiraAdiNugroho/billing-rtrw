@@ -42,7 +42,17 @@
     <div class="card">
       <div class="card-hd">
         <h6><i class="bi bi-list-stars"></i> Daftar Paket Hotspot Real-Time</h6>
-        <button class="btn btn-p btn-sm" onclick="openAddModal()"><i class="bi bi-plus-lg"></i> Tambah Konfigurasi Paket</button>
+        <div style="display:flex;align-items:center;gap:10px">
+          <% if (typeof routers !== 'undefined' && routers && routers.length > 0) { %>
+          <select class="fs" style="width:160px" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
+            <option value="all" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router</option>
+            <% routers.forEach(r => { %>
+              <option value="<%= r.id %>" <%= (selectedRouterId === r.id) ? 'selected' : '' %>>🔌 <%= r.name %></option>
+            <% }) %>
+          </select>
+          <% } %>
+          <button class="btn btn-p btn-sm" onclick="openAddModal()"><i class="bi bi-plus-lg"></i> Tambah Konfigurasi Paket</button>
+        </div>
       </div>
       <div class="tbl-wrap">
         <table class="dtbl">
