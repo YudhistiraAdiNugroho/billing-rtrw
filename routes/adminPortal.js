@@ -270,6 +270,53 @@ function resolvePaidByName(req, fallback) {
   return fb || 'Admin';
 }
 
+function routerContextMiddleware(req, res, next) {
+  try {
+    const multiRouterMode = getSetting('multi_router_mode', 'disabled') === 'active';
+    const activeRouters = mikrotikService.getAllRouters() || [];
+
+    if (req.query.router_id !== undefined) {
+      if (req.query.router_id === 'all' || req.query.router_id === '0' || req.query.router_id === '') {
+        req.session.selected_router_id = null;
+      } else {
+        const rid = parseInt(req.query.router_id, 10);
+        req.session.selected_router_id = isNaN(rid) ? null : rid;
+      }
+    }
+
+    let selectedRouterId = req.session.selected_router_id ?? null;
+    if (selectedRouterId && !activeRouters.some(r => r.id === selectedRouterId)) {
+      selectedRouterId = null;
+      req.session.selected_router_id = null;
+    }
+
+    res.locals.multiRouterMode = multiRouterMode;
+    res.locals.allActiveRouters = activeRouters;
+    res.locals.selectedRouterId = selectedRouterId;
+    req.selectedRouterId = selectedRouterId;
+  } catch (e) {
+    res.locals.multiRouterMode = false;
+    res.locals.allActiveRouters = [];
+    res.locals.selectedRouterId = null;
+    req.selectedRouterId = null;
+  }
+  next();
+}
+
+router.use(routerContextMiddleware);
+
+router.get('/set-active-router', requireAdminSession, (req, res) => {
+  const routerId = req.query.router_id;
+  if (routerId === 'all' || routerId === '0' || !routerId) {
+    req.session.selected_router_id = null;
+  } else {
+    const parsed = parseInt(routerId, 10);
+    req.session.selected_router_id = isNaN(parsed) ? null : parsed;
+  }
+  const referer = req.headers.referer || '/admin';
+  return res.redirect(referer);
+});
+
 async function trySendWhatsappPayment(customerPhone, message) {
   try {
     if (!getSetting('whatsapp_enabled', false)) return false;
@@ -1523,22 +1570,18 @@ router.get('/bulk', requireAdminSession, (req, res) => {
 // ─── CUSTOMERS ─────────────────────────────────────────────────────────────
 router.get('/customers', requireAdminSession, requireSidebarMenuAccess('customers'), (req, res) => {
   const { search = '', status: filterStatus = '' } = req.query;
-  const customers = customerSvc.getAllCustomers(search);
+  const selectedRouterId = req.selectedRouterId || (req.query.router_id ? Number(req.query.router_id) : null);
+  const customers = customerSvc.getAllCustomers(search, selectedRouterId, filterStatus);
   const stats = customerSvc.getCustomerStats();
-  const packages = customerSvc.getAllPackages();
+  const packages = customerSvc.getAllPackages(selectedRouterId);
   const routers = mikrotikService.getAllRouters();
   const olts = oltSvc.getAllOlts();
   const odps = odpSvc.getAllOdps();
   const collectors = adminSvc.getAllCollectors();
 
-  // Apply status filter in JS if provided
-  const filteredCustomers = filterStatus
-    ? customers.filter(c => c.status === filterStatus)
-    : customers;
-
   res.render('admin/customers', {
     title: 'Data Pelanggan', company: company(), activePage: 'customers',
-    customers: filteredCustomers, stats, packages, routers, olts, odps, collectors, search, filterStatus, msg: flashMsg(req),
+    customers, stats, packages, routers, olts, odps, collectors, search, filterStatus, selectedRouterId, msg: flashMsg(req),
     settings: getSettings()
   });
 });
@@ -2198,9 +2241,12 @@ router.post('/customers/:id/billing/pay', requireAdminSession, express.urlencode
 
 // ─── PACKAGES ──────────────────────────────────────────────────────────────
 router.get('/packages', requireAdminSession, requireSidebarMenuAccess('packages'), (req, res) => {
+  const selectedRouterId = req.selectedRouterId || (req.query.router_id ? Number(req.query.router_id) : null);
+  const routers = mikrotikService.getAllRouters();
+  const packages = customerSvc.getAllPackages(selectedRouterId);
   res.render('admin/packages', {
     title: 'Paket Internet', company: company(), activePage: 'packages',
-    packages: customerSvc.getAllPackages(), msg: flashMsg(req)
+    packages, routers, selectedRouterId, msg: flashMsg(req)
   });
 });
 
@@ -2236,21 +2282,34 @@ router.post('/packages/:id/delete', requireAdminSession, (req, res) => {
 
 // ─── VOUCHER PACKAGES (ON-DEMAND REAL-TIME CONFIGURATION) ────────────────────
 router.get('/vouchers/packages', requireAdminSession, requireSidebarMenuAccess('voucher_packages'), (req, res) => {
+  const selectedRouterId = req.selectedRouterId || (req.query.router_id ? Number(req.query.router_id) : null);
   const routers = db.prepare('SELECT id, name FROM routers WHERE is_active = 1').all();
   res.render('admin/vouchers_packages', {
     title: 'Paket Voucher Hotspot', company: company(), activePage: 'voucher_packages',
-    routers, msg: flashMsg(req)
+    routers, selectedRouterId, msg: flashMsg(req)
   });
 });
 
 router.get('/api/vouchers/packages', requireAdminSession, (req, res) => {
   try {
-    const rows = db.prepare(`
-      SELECT vp.*, r.name AS router_name
-      FROM voucher_packages vp
-      LEFT JOIN routers r ON r.id = vp.router_id
-      ORDER BY vp.price ASC
-    `).all();
+    const selectedRouterId = req.selectedRouterId || (req.query.router_id ? Number(req.query.router_id) : null);
+    let rows;
+    if (selectedRouterId && selectedRouterId > 0) {
+      rows = db.prepare(`
+        SELECT vp.*, r.name AS router_name
+        FROM voucher_packages vp
+        LEFT JOIN routers r ON r.id = vp.router_id
+        WHERE vp.router_id = ?
+        ORDER BY vp.price ASC
+      `).all(selectedRouterId);
+    } else {
+      rows = db.prepare(`
+        SELECT vp.*, r.name AS router_name
+        FROM voucher_packages vp
+        LEFT JOIN routers r ON r.id = vp.router_id
+        ORDER BY vp.price ASC
+      `).all();
+    }
     res.json({ ok: true, rows });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -4200,22 +4259,23 @@ router.get('/api/mikrotik/users', requireAdmin, async (req, res) => {
 
 // ─── MIKROTIK MONITORING ───────────────────────────────────────────────────
 router.get('/mikrotik', requireAdminSession, requireSidebarMenuAccess('mikrotik'), (req, res) => {
-  // Hanya gunakan router dari settings.json (tidak dari database)
+  const dbRouters = mikrotikService.getAllRouters();
   const settings = getSettings();
-  const router = {
-    id: null, // null = router dari settings.json
-    name: 'MikroTik (settings.json)',
+  const settingsRouter = {
+    id: '',
+    name: settings.mikrotik_host ? `MikroTik (settings.json - ${settings.mikrotik_host})` : 'MikroTik (settings.json)',
     host: settings.mikrotik_host || '',
     user: settings.mikrotik_user || '',
     port: settings.mikrotik_port || 8728,
     is_active: true
   };
   
-  const routers = [router]; // Hanya 1 router
-  
+  const routers = dbRouters.length > 0 ? dbRouters : [settingsRouter];
+  const activeRouterId = req.selectedRouterId || (routers[0] ? routers[0].id : '');
+
   res.render('admin/mikrotik', {
     title: 'Monitoring MikroTik', company: company(), activePage: 'mikrotik',
-    routers, msg: flashMsg(req)
+    routers, activeRouterId, selectedRouterId: req.selectedRouterId, msg: flashMsg(req)
   });
 });
 
@@ -4244,9 +4304,10 @@ router.get('/mikrotik/display', requireAdminSession, (req, res) => {
 
 router.get('/vouchers', requireAdminSession, (req, res) => {
   const routers = mikrotikService.getAllRouters();
+  const selectedRouterId = req.selectedRouterId || (req.query.router_id ? Number(req.query.router_id) : null);
   res.render('admin/vouchers', {
     title: 'Manajemen Voucher', company: company(), activePage: 'mikrotik',
-    routers, msg: flashMsg(req), settings: getSettings()
+    routers, selectedRouterId, msg: flashMsg(req), settings: getSettings()
   });
 });
 
@@ -5460,15 +5521,26 @@ router.post('/whatsapp/test-notification', requireAdminSession, async (req, res)
     if (whatsappStatus.connection !== 'open') {
       throw new Error('Bot WhatsApp belum terhubung. Silakan scan QR hingga status Terhubung.');
     }
-    const adminPhone = '087820851413';
+    const adminNumbers = getSetting('whatsapp_admin_numbers', []);
+    const legacyNumbers = getSetting('admins', []);
+    let adminPhone = '087820851413'; // fallback
+    if (Array.isArray(adminNumbers) && adminNumbers.length > 0) {
+      adminPhone = adminNumbers[0];
+    } else if (Array.isArray(legacyNumbers) && legacyNumbers.length > 0) {
+      adminPhone = legacyNumbers[0];
+    }
+
+    logger.info(`[WA Test] Mengirim test notifikasi ke nomor admin: ${adminPhone}`);
     const msg =
       `🧪 *TEST NOTIFIKASI WHATSAPP*\n\n` +
       `✅ Jika pesan ini masuk, berarti notifikasi WhatsApp dari Billing Alijaya System sudah berfungsi.\n` +
       `📅 Waktu: ${getNowLocal()}`;
     const ok = await sendWA(adminPhone, msg);
     if (!ok) throw new Error('Gagal mengirim pesan test (sendWA=false).');
-    req.session._msg = { type: 'success', text: 'Test notifikasi WhatsApp berhasil dikirim.' };
+    logger.info(`[WA Test] Test notifikasi sukses terkirim ke ${adminPhone}`);
+    req.session._msg = { type: 'success', text: 'Test notifikasi WhatsApp berhasil dikirim ke ' + adminPhone };
   } catch (e) {
+    logger.error(`[WA Test] Gagal mengirim test notifikasi: ${e.message}`);
     req.session._msg = { type: 'error', text: 'Gagal kirim test WhatsApp: ' + e.message };
   }
   res.redirect('/admin/whatsapp');
