@@ -4,16 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= t('customer.login_title', 'Login Pelanggan') %> | <%= settings.company_header || 'Portal ISP' %></title>
+  <title><%= settings.company_header || 'Portal ISP' %> | <%= t('customer.login_title', 'Internet Fiber Optic & Portal Pelanggan') %></title>
+
   <!-- Preconnect to CDN for faster loading -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <!-- Defer non-critical CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" media="print" onload="this.media='all'">
-  <noscript>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  </noscript>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  
   <link rel="stylesheet" href="/css/style.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#0f172a">
@@ -22,329 +19,1075 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="/img/logo.png">
   <link rel="icon" href="/img/logo.png">
+
   <style>
+    :root {
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --secondary: #3b82f6;
+      --accent: #06b6d4;
+      --bg-dark: #0f172a;
+      --bg-card: rgba(30, 41, 59, 0.88);
+      --bg-card-hover: rgba(30, 41, 59, 0.98);
+      --border-color: rgba(148, 163, 184, 0.22);
+      --text-light: #ffffff;
+      --text-muted-custom: #cbd5e1;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
     body {
-      background: radial-gradient(1200px 600px at 10% 0%, rgba(99, 102, 241, 0.22) 0%, rgba(15, 23, 42, 0) 60%),
-        radial-gradient(900px 450px at 100% 0%, rgba(59, 130, 246, 0.18) 0%, rgba(15, 23, 42, 0) 55%),
-        #0f172a;
-      color: #e2e8f0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(1200px 600px at 15% 10%, rgba(99, 102, 241, 0.22) 0%, rgba(15, 23, 42, 0) 60%),
+        radial-gradient(900px 500px at 85% 40%, rgba(59, 130, 246, 0.18) 0%, rgba(15, 23, 42, 0) 55%),
+        radial-gradient(800px 400px at 50% 85%, rgba(6, 182, 212, 0.15) 0%, rgba(15, 23, 42, 0) 50%);
+      color: var(--text-light);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
     }
 
-    .login-container {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
+    /* Force high contrast text muted on dark backgrounds */
+    .text-muted {
+      color: #cbd5e1 !important;
+    }
+    
+    .text-secondary {
+      color: #94a3b8 !important;
     }
 
-    .login-card {
-      background: rgba(30, 41, 59, 0.92);
-      backdrop-filter: blur(10px);
-      border: 1px solid #334155;
+    /* Glassmorphism Classes */
+    .glass-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
       border-radius: 20px;
-      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
-      overflow: hidden;
-      max-width: 400px;
-      width: 100%;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
     }
 
-    .login-header {
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.28) 0%, rgba(59, 130, 246, 0.2) 100%);
-      color: #f8fafc;
-      padding: 30px 20px;
-      text-align: center;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    .glass-card:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(99, 102, 241, 0.45);
     }
 
-    .logo-container {
-      width: 80px;
-      height: 80px;
-      background: rgba(15, 23, 42, 0.45);
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 15px;
+    /* Navbar */
+    .custom-navbar {
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 0;
+      transition: all 0.3s ease;
     }
 
-    .logo-container img {
-      width: 50px;
-      height: 50px;
+    .navbar-brand img {
+      height: 42px;
+      width: auto;
       object-fit: contain;
     }
 
-    .form-container {
-      padding: 30px 25px;
+    .nav-link {
+      color: #e2e8f0 !important;
+      font-weight: 500;
+      font-size: 0.95rem;
+      padding: 6px 14px !important;
+      border-radius: 8px;
+      transition: all 0.2s ease;
     }
 
-    .form-floating {
+    .nav-link:hover, .nav-link.active {
+      color: #ffffff !important;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn-portal-access {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: #fff;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      padding: 8px 18px;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+      transition: all 0.3s ease;
+    }
+
+    .btn-portal-access:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(99, 102, 241, 0.5);
+      color: #fff;
+    }
+
+    /* Hero Section */
+    .hero-section {
+      padding: 50px 0 80px;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(99, 102, 241, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      color: #c7d2fe;
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 0.88rem;
+      font-weight: 600;
       margin-bottom: 20px;
     }
 
-    .form-control {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid #334155;
-      color: #e2e8f0;
-      border-radius: 12px;
-      padding: 15px 20px;
-      font-size: 16px;
-      transition: all 0.3s ease;
+    .hero-title {
+      font-size: 2.8rem;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 20px;
+      color: #ffffff;
     }
 
-    .form-control::placeholder {
-      color: rgba(148, 163, 184, 0.85);
+    .hero-subtitle {
+      font-size: 1.1rem;
+      color: #cbd5e1 !important;
+      line-height: 1.7;
+      margin-bottom: 30px;
+    }
+
+    /* Stats / Highlights */
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 15px;
+      margin-top: 30px;
+    }
+
+    .stat-item {
+      background: rgba(30, 41, 59, 0.65);
+      border: 1px solid var(--border-color);
+      padding: 12px 16px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .stat-number {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #c7d2fe;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: #e2e8f0;
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
+    /* Login Box Container */
+    .login-card-header {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.3) 0%, rgba(59, 130, 246, 0.2) 100%);
+      padding: 24px;
+      border-bottom: 1px solid var(--border-color);
+      text-align: center;
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+    }
+
+    .login-card-body {
+      padding: 28px 24px;
+    }
+
+    .form-floating {
+      margin-bottom: 18px;
+    }
+
+    .form-control {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid #475569;
+      color: #ffffff;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 1rem;
+      transition: all 0.3s ease;
     }
 
     .form-control:focus {
-      background: rgba(15, 23, 42, 0.75);
-      border-color: rgba(99, 102, 241, 0.85);
-      box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
-      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.95);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 0.25rem rgba(99, 102, 241, 0.3);
+      color: #ffffff;
     }
 
-    .btn-login {
-      background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+    .form-floating > label {
+      color: #cbd5e1;
+    }
+
+    .form-floating > .form-control:focus ~ label,
+    .form-floating > .form-control:not(:placeholder-shown) ~ label {
+      color: #c7d2fe;
+    }
+
+    .btn-submit-login {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
       border: none;
       border-radius: 12px;
-      padding: 15px;
-      font-size: 16px;
+      padding: 14px;
+      font-size: 1rem;
       font-weight: 600;
+      color: #ffffff;
+      width: 100%;
       transition: all 0.3s ease;
+      box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
     }
 
-    .btn-login:hover {
+    .btn-submit-login:hover {
       transform: translateY(-2px);
-      box-shadow: 0 14px 28px rgba(99, 102, 241, 0.25);
+      box-shadow: 0 12px 28px rgba(99, 102, 241, 0.5);
+      color: #ffffff;
     }
 
-    .footer-text {
-      color: rgba(148, 163, 184, 0.9);
-      font-size: 12px;
-      margin-top: 20px;
-    }
-
-    .form-floating>label {
-      color: rgba(148, 163, 184, 0.95);
-    }
-
-    .form-floating>.form-control:focus~label,
-    .form-floating>.form-control:not(:placeholder-shown)~label {
-      color: rgba(148, 163, 184, 0.95);
-    }
-
-    .alert {
-      border: 1px solid rgba(148, 163, 184, 0.15);
-    }
-
-    .quick-actions {
+    .quick-tools-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 10px;
+      gap: 12px;
+      margin-top: 18px;
     }
 
-    .btn-ghost {
+    .btn-quick-tool {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: #f1f5f9;
+      padding: 12px;
       border-radius: 12px;
-      padding: 14px 12px;
-      font-size: 15px;
-      font-weight: 700;
-      border: 1px solid rgba(148, 163, 184, 0.24);
-      background: rgba(15, 23, 42, 0.35);
-      color: #e2e8f0;
+      font-size: 0.92rem;
+      font-weight: 600;
       text-decoration: none;
-      display: inline-flex;
+      display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       transition: all 0.2s ease;
     }
 
-    .btn-ghost:hover {
-      transform: translateY(-1px);
-      border-color: rgba(99, 102, 241, 0.65);
-      box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25);
-      color: #e2e8f0;
+    .btn-quick-tool:hover {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: rgba(99, 102, 241, 0.6);
+      color: #ffffff;
+      transform: translateY(-2px);
     }
 
-    .info-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-      margin-top: 16px;
+    /* Section Styling */
+    .section-padding {
+      padding: 70px 0;
     }
 
-    .info-box {
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      background: rgba(15, 23, 42, 0.28);
-      border-radius: 14px;
-      padding: 12px 14px;
+    .section-title-badge {
+      display: inline-block;
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      color: #93c5fd;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
     }
 
-    .info-title {
+    .section-title {
+      font-size: 2.2rem;
       font-weight: 800;
-      font-size: 13px;
+      color: #ffffff;
+      margin-bottom: 15px;
+    }
+
+    .section-subtitle {
+      color: #cbd5e1 !important;
+      font-size: 1.05rem;
+      max-width: 650px;
+      margin: 0 auto 45px;
+    }
+
+    /* Package Cards */
+    .pkg-card {
+      padding: 30px 24px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .pkg-badge-popular {
+      position: absolute;
+      top: -14px;
+      right: 20px;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+    }
+
+    .pkg-speed-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(99, 102, 241, 0.2);
+      color: #c7d2fe;
+      padding: 4px 14px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      margin-bottom: 15px;
+      width: fit-content;
+    }
+
+    .pkg-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .pkg-price {
+      font-size: 1.9rem;
+      font-weight: 800;
+      color: #ffffff;
       margin-bottom: 4px;
+    }
+
+    .pkg-period {
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      margin-bottom: 20px;
+    }
+
+    .pkg-features {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 25px 0;
+      flex-grow: 1;
+    }
+
+    .pkg-features li {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+      font-size: 0.95rem;
+      color: #e2e8f0;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
-    .info-text {
-      color: rgba(148, 163, 184, 0.95);
-      font-size: 12px;
-      line-height: 1.4;
+    .pkg-features li i {
+      color: #10b981;
+      font-size: 1.1rem;
+    }
+
+    .btn-pkg-action {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      border-radius: 12px;
+      padding: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .btn-pkg-action:hover {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      border-color: transparent;
+      color: #ffffff;
+      box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    }
+
+    /* Features Highlight Cards */
+    .feature-box {
+      padding: 28px 22px;
+      height: 100%;
+      border-radius: 18px;
+    }
+
+    .feature-icon-wrapper {
+      width: 54px;
+      height: 54px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.3) 0%, rgba(6, 182, 212, 0.2) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      color: #c7d2fe;
+      margin-bottom: 20px;
+    }
+
+    .feature-title {
+      font-size: 1.18rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 10px;
+    }
+
+    .feature-desc {
+      color: #cbd5e1 !important;
+      font-size: 0.94rem;
+      line-height: 1.6;
       margin: 0;
     }
 
-    @media (max-width: 576px) {
-      .login-container {
-        padding: 10px;
-      }
+    /* Contact & Quick Service Info Cards */
+    .info-card {
+      padding: 24px;
+      border-radius: 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      height: 100%;
+      transition: all 0.3s ease;
+    }
 
-      .login-card {
-        border-radius: 15px;
-      }
+    .info-card h5 {
+      color: #ffffff !important;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
 
-      .form-container {
-        padding: 25px 20px;
-      }
+    .info-card p, .info-card .card-text-desc {
+      color: #cbd5e1 !important;
+      font-size: 0.9rem;
+      line-height: 1.55;
+    }
 
-      .quick-actions {
+    .info-card-link:hover .info-card {
+      transform: translateY(-4px);
+      background: rgba(30, 41, 59, 0.98);
+      border-color: rgba(99, 102, 241, 0.5);
+      box-shadow: 0 12px 30px rgba(99, 102, 241, 0.25);
+    }
+
+    .info-icon {
+      font-size: 1.8rem;
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      width: 50px;
+      height: 50px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Footer */
+    .site-footer {
+      background: #070a12;
+      border-top: 1px solid var(--border-color);
+      padding: 60px 0 30px;
+      margin-top: 60px;
+    }
+
+    .footer-brand img {
+      height: 40px;
+      margin-bottom: 15px;
+    }
+
+    .footer-links {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .footer-links li {
+      margin-bottom: 10px;
+    }
+
+    .footer-links a {
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 0.94rem;
+      transition: color 0.2s ease;
+    }
+
+    .footer-links a:hover {
+      color: #c7d2fe;
+    }
+
+    .footer-bottom {
+      border-top: 1px solid rgba(148, 163, 184, 0.15);
+      margin-top: 40px;
+      padding-top: 25px;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+    }
+
+    /* Responsive Improvements */
+    @media (max-width: 991.98px) {
+      .hero-title {
+        font-size: 2.2rem;
+      }
+      .hero-section {
+        padding: 30px 0 50px;
+      }
+      .login-card-container {
+        margin-top: 40px;
+      }
+      .section-title {
+        font-size: 1.8rem;
+      }
+    }
+
+    @media (max-width: 575.98px) {
+      .hero-title {
+        font-size: 1.8rem;
+      }
+      .login-card-body {
+        padding: 20px 16px;
+      }
+      .quick-tools-grid {
         grid-template-columns: 1fr;
+      }
+      .hero-stats {
+        grid-template-columns: 1fr 1fr;
       }
     }
   </style>
 </head>
 
 <body>
-  <div class="login-container">
-    <div class="login-card">
-      <div class="login-header">
-        <div class="logo-container">
-          <img src="/img/logo.png" alt="Logo">
-        </div>
-        <h4 class="mb-1 fw-bold"><%= t('customer.portal_title', 'Portal Pelanggan') %></h4>
-        <p class="mb-0 opacity-75">
-          <%= settings.company_header %>
-        </p>
-      </div>
-      <div class="form-container">
-        <form method="POST" action="/customer/login">
-          <div class="form-floating">
-            <input type="text" class="form-control" id="phone" name="phone" placeholder="<%= t('customer.id_tag_placeholder', 'Masukkan ID/Tag Pelanggan') %>"
-              required autofocus>
-            <label for="phone">
-              <i class="bi bi-person-badge me-2"></i><%= t('customer.id_tag', 'ID/Tag Pelanggan') %>
-            </label>
-          </div>
-          <div class="text-center mb-3 small" style="color: rgba(148, 163, 184, 0.95);">
-            <i class="bi bi-info-circle me-1"></i>
-            Masukkan ID pelanggan / Nomor HP yang terdaftar
-          </div>
-          <% if (settings.login_otp_enabled) { %>
-            <div class="text-center mb-3 small" style="color: rgba(148, 163, 184, 0.95);">
-              <i class="bi bi-whatsapp text-success me-1"></i> <%= t('customer.otp_sent_via_wa', 'Kode OTP akan dikirim via WhatsApp') %>
-            </div>
-          <% } %>
-          <button type="submit" class="btn btn-primary btn-login w-100">
-            <i class="bi bi-box-arrow-in-right me-2"></i><%= t('customer.sign_in', 'Masuk') %>
-          </button>
-          <div class="quick-actions" style="grid-template-columns:1fr 1fr">
-            <a href="/customer/check-billing" class="btn-ghost">
-              <i class="bi bi-receipt"></i>Cek Tagihan
-            </a>
-            <a href="/customer/voucher" class="btn-ghost">
-              <i class="bi bi-ticket-perforated"></i>Voucher
-            </a>
-          </div>
-        </form>
-        <% if (error) { %>
-          <div class="alert alert-danger mt-3 text-center">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            <%= error==='Nomor HP tidak valid atau belum terdaftar.' ? 'ID/Tag tidak valid atau belum terdaftar.' :
-              error %>
-          </div>
-        <% } %>
 
-        <div class="info-grid">
-          <div class="info-box">
-            <div class="info-title"><i class="bi bi-lightning-charge"></i> Akses Cepat</div>
-            <p class="info-text">Cek tagihan dan beli voucher bisa dilakukan tanpa login.</p>
-          </div>
-          <div class="info-box">
-            <div class="info-title"><i class="bi bi-clock"></i> Jam Operasional</div>
-            <p class="info-text"><%= settings.operational_hours || 'Setiap Hari' %></p>
-          </div>
-          <% if (settings.company_phone) { %>
-            <div class="info-box">
-              <div class="info-title"><i class="bi bi-headset"></i> Bantuan</div>
-              <p class="info-text">
-                WhatsApp: <a href="https://wa.me/<%= String(settings.company_phone).replace(/\\D/g,'') %>" target="_blank" rel="noopener" style="color:#a5b4fc;text-decoration:none;font-weight:700"><%= settings.company_phone %></a>
-                <% if (settings.company_email) { %>
-                  <br>Email: <a href="mailto:<%= settings.company_email %>" style="color:#a5b4fc;text-decoration:none;font-weight:700"><%= settings.company_email %></a>
-                <% } %>
-              </p>
-            </div>
-          <% } %>
-          <div class="info-box">
-            <div class="info-title"><i class="bi bi-wifi"></i> Paket & Harga</div>
-            <% const pkgs = (typeof packages !== 'undefined' && Array.isArray(packages)) ? packages : []; %>
-            <% if (pkgs.length === 0) { %>
-              <p class="info-text">Belum ada paket yang aktif.</p>
-            <% } else { %>
-              <% const list = pkgs.slice().sort((a,b) => Number(a.price||0) - Number(b.price||0)); %>
-              <div style="max-height:160px;overflow:auto;padding-right:4px">
-                <% list.forEach(p => { %>
-                  <div style="padding:8px 0;border-top:1px solid rgba(148,163,184,.12)">
-                    <div style="font-weight:900;font-size:12px">
-                      <%= p.name %> — Rp <%= Number(p.price||0).toLocaleString('id-ID') %>/bulan
-                    </div>
-                    <div class="info-text" style="margin-top:2px">
-                      <% if (Number(p.speed_down||0) > 0 || Number(p.speed_up||0) > 0) { %>
-                        <span><%= Number(p.speed_down||0) > 0 ? (Math.round(Number(p.speed_down||0)/1000) + ' Mbps') : '-' %> / <%= Number(p.speed_up||0) > 0 ? (Math.round(Number(p.speed_up||0)/1000) + ' Mbps') : '-' %></span>
-                        <span> • </span>
-                      <% } %>
-                      <span><%= p.description ? String(p.description) : '-' %></span>
-                    </div>
-                  </div>
-                <% }) %>
-              </div>
-            <% } %>
-          </div>
-        </div>
+  <!-- Header / Navbar Section -->
+  <nav class="navbar navbar-expand-lg sticky-top custom-navbar">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <img src="/img/logo.png" alt="Logo" onerror="this.style.display='none'">
+        <span class="fw-bold fs-5 text-white"><%= settings.company_header || 'Portal ISP' %></span>
+      </a>
 
-        <div class="text-center footer-text mt-4">
-          <p class="mb-3"><%= t('customer.not_subscribed', 'Belum berlangganan?') %> <a href="/customer/register"
-              style="color: #6366f1; text-decoration: none; font-weight: 700;"><%= t('customer.register_new', 'Daftar Pemasangan Baru') %></a></p>
-          
-          <div class="d-flex flex-wrap justify-content-center gap-3 mb-3" style="font-size: 13px;">
-            <a href="/customer/about" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.about', 'Tentang Kami') %></a>
-            <a href="/customer/contact" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.contact', 'Kontak') %></a>
-            <a href="/customer/tos" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.tos', 'Syarat & Ketentuan') %></a>
-            <a href="/customer/privacy" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.privacy', 'Kebijakan Privasi') %></a>
-            <a href="/customer/tos#refund" class="text-decoration-none" style="color: rgba(148, 163, 184, 0.95);"><%= t('customer.footer.refund', 'Kebijakan Refund') %></a>
-          </div>
+      <button class="navbar-toggler border-0 text-white" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent"
+        aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+        <i class="bi bi-list fs-2"></i>
+      </button>
 
-          &copy; <%= new Date().getFullYear() %> <%= settings.company_header %>
+      <div class="collapse navbar-collapse" id="navbarContent">
+        <ul class="navbar-nav mx-auto mb-2 mb-lg-0 gap-1">
+          <li class="nav-item">
+            <a class="nav-link active" href="#hero"><i class="bi bi-house-door me-1"></i> Beranda</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#packages"><i class="bi bi-wifi me-1"></i> Paket & Tarif</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#features"><i class="bi bi-shield-check me-1"></i> Keunggulan</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#services"><i class="bi bi-grid me-1"></i> Layanan Cepat</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#contact-info"><i class="bi bi-headset me-1"></i> Informasi</a>
+          </li>
+        </ul>
+
+        <div class="d-flex align-items-center gap-2 mt-3 mt-lg-0">
+          <a href="/customer/check-billing" class="btn btn-outline-light btn-sm rounded-3 px-3 py-2">
+            <i class="bi bi-receipt me-1"></i> Cek Tagihan
+          </a>
+          <a href="#login-section" class="btn btn-portal-access btn-sm">
+            <i class="bi bi-box-arrow-in-right me-1"></i> Masuk Portal
+          </a>
         </div>
       </div>
     </div>
-  </div>
+  </nav>
+
+  <!-- Hero & Login Section -->
+  <section class="hero-section" id="hero">
+    <div class="container">
+      <div class="row align-items-center">
+
+        <!-- Left Column: Company Value Proposition -->
+        <div class="col-lg-7 mb-5 mb-lg-0">
+          <div class="hero-badge">
+            <i class="bi bi-lightning-charge-fill text-warning"></i>
+            <span>Internet Fiber Optic Super Cepat & Unlimited</span>
+          </div>
+
+          <h1 class="hero-title">
+            Nikmati Koneksi Internet Terbaik Tanpa Batas Kuota
+          </h1>
+
+          <p class="hero-subtitle">
+            Selamat datang di portal resmi <strong><%= settings.company_header %></strong>. Kami menyediakan jaringan internet ultra cepat, stabil, dan terjangkau untuk kebutuhan rumah tangga, bisnis, gaming, hingga hiburan keluarga Anda.
+          </p>
+
+          <div class="d-flex flex-wrap gap-3 mb-4">
+            <a href="/customer/register" class="btn btn-primary btn-lg rounded-3 fw-bold px-4 py-3 shadow-lg" style="background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%); border: none;">
+              <i class="bi bi-person-plus-fill me-2"></i> Daftar Pasang Baru
+            </a>
+            <a href="/customer/check-billing" class="btn btn-outline-light btn-lg rounded-3 fw-bold px-4 py-3">
+              <i class="bi bi-receipt me-2"></i> Cek Tagihan Saya
+            </a>
+          </div>
+
+          <!-- Highlight Badges -->
+          <div class="hero-stats">
+            <div class="stat-item">
+              <div class="stat-number"><i class="bi bi-speedometer2 text-info me-1"></i> 100%</div>
+              <div class="stat-label">Fiber Optic</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-number"><i class="bi bi-infinity text-success me-1"></i> No FUP</div>
+              <div class="stat-label">Bebas Kuota</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-number"><i class="bi bi-shield-lock-fill text-warning me-1"></i> 99.9%</div>
+              <div class="stat-label">Uptime SLA</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-number"><i class="bi bi-headset text-primary me-1"></i> 24/7</div>
+              <div class="stat-label">Bantuan CS</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Portal Pelanggan Login Box -->
+        <div class="col-lg-5 login-card-container" id="login-section">
+          <div class="glass-card shadow-2xl">
+            <div class="login-card-header">
+              <div class="d-inline-flex align-items-center justify-content-center bg-dark bg-opacity-50 border border-secondary border-opacity-25 rounded-circle p-3 mb-2" style="width:70px; height:70px;">
+                <img src="/img/logo.png" alt="Logo" style="width:40px; height:40px; object-fit:contain;" onerror="this.src='/favicon.ico'; this.onerror=null;">
+              </div>
+              <h4 class="fw-bold mb-1 text-white"><%= t('customer.portal_title', 'Portal Pelanggan') %></h4>
+              <p class="small text-white opacity-75 mb-0"><%= settings.company_header %></p>
+            </div>
+
+            <div class="login-card-body">
+              <form method="POST" action="/customer/login">
+                <div class="form-floating">
+                  <input type="text" class="form-control" id="phone" name="phone" placeholder="<%= t('customer.id_tag_placeholder', 'Masukkan ID/Tag Pelanggan') %>" required autofocus>
+                  <label for="phone">
+                    <i class="bi bi-person-badge me-2"></i><%= t('customer.id_tag', 'ID/Tag Pelanggan / No. HP') %>
+                  </label>
+                </div>
+
+                <div class="text-center mb-3 small" style="color: #cbd5e1;">
+                  <i class="bi bi-info-circle me-1"></i>
+                  Masukkan ID pelanggan / Nomor WhatsApp terdaftar
+                </div>
+
+                <% if (settings.login_otp_enabled) { %>
+                  <div class="alert alert-info py-2 px-3 mb-3 small border-0 bg-info bg-opacity-15 text-info rounded-3 text-center fw-semibold">
+                    <i class="bi bi-whatsapp me-1"></i> <%= t('customer.otp_sent_via_wa', 'Kode OTP akan dikirim via WhatsApp') %>
+                  </div>
+                <% } %>
+
+                <button type="submit" class="btn btn-submit-login">
+                  <i class="bi bi-box-arrow-in-right me-2"></i><%= t('customer.sign_in', 'Masuk Ke Portal') %>
+                </button>
+              </form>
+
+              <% if (error) { %>
+                <div class="alert alert-danger mt-3 py-2 px-3 text-center small rounded-3 border-danger border-opacity-25 fw-semibold">
+                  <i class="bi bi-exclamation-triangle me-2"></i>
+                  <%= error === 'Nomor HP tidak valid atau belum terdaftar.' ? 'ID/Tag tidak valid atau belum terdaftar.' : error %>
+                </div>
+              <% } %>
+
+              <!-- Fast Tool Shortcuts -->
+              <div class="quick-tools-grid">
+                <a href="/customer/check-billing" class="btn-quick-tool">
+                  <i class="bi bi-receipt text-info fs-5"></i> Cek Tagihan
+                </a>
+                <a href="/customer/voucher" class="btn-quick-tool">
+                  <i class="bi bi-ticket-perforated text-warning fs-5"></i> Beli Voucher
+                </a>
+              </div>
+
+              <div class="text-center mt-4 pt-2 border-top border-secondary border-opacity-20">
+                <p class="mb-0 small" style="color: #cbd5e1;">
+                  <%= t('customer.not_subscribed', 'Belum berlangganan?') %>
+                  <a href="/customer/register" class="fw-bold text-decoration-none ms-1" style="color: #a5b4fc;">
+                    <%= t('customer.register_new', 'Daftar Pemasangan Baru') %> <i class="bi bi-arrow-right"></i>
+                  </a>
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Internet Packages Section -->
+  <section class="section-padding" id="packages">
+    <div class="container">
+      <div class="text-center">
+        <span class="section-title-badge"><i class="bi bi-wifi me-1"></i> Pilihan Paket Internet</span>
+        <h2 class="section-title">Paket & Tarif Layanan Kami</h2>
+        <p class="section-subtitle">
+          Pilih kecepatan koneksi yang sesuai dengan kebutuhan aktivitas digital Anda, dari penggunaan rumah hingga kantor.
+        </p>
+      </div>
+
+      <% const pkgs = (typeof packages !== 'undefined' && Array.isArray(packages)) ? packages : []; %>
+      <% if (pkgs.length === 0) { %>
+        <div class="glass-card text-center p-5 max-w-lg mx-auto">
+          <i class="bi bi-info-circle fs-1 text-info mb-3 d-block"></i>
+          <h5 class="fw-bold text-white">Belum Ada Paket Dipublikasikan</h5>
+          <p class="text-muted mb-0">Silakan hubungi customer service kami untuk informasi ketersediaan paket terkini.</p>
+        </div>
+      <% } else { %>
+        <% const list = pkgs.slice().sort((a,b) => Number(a.price||0) - Number(b.price||0)); %>
+        <div class="row g-4 justify-content-center">
+          <% list.forEach((p, index) => { %>
+            <div class="col-md-6 col-lg-4">
+              <div class="glass-card pkg-card">
+                <% if (index === Math.floor(list.length / 2)) { %>
+                  <div class="pkg-badge-popular"><i class="bi bi-star-fill me-1"></i> Terpopuler</div>
+                <% } %>
+
+                <div class="pkg-speed-tag">
+                  <i class="bi bi-speedometer2 me-1"></i>
+                  <% if (Number(p.speed_down||0) > 0) { %>
+                    <%= (Math.round(Number(p.speed_down||0)/1000) >= 1) ? Math.round(Number(p.speed_down||0)/1000) + ' Mbps' : Number(p.speed_down||0) + ' Kbps' %>
+                  <% } else { %>
+                    Speed High-Speed
+                  <% } %>
+                </div>
+
+                <h3 class="pkg-name"><%= p.name %></h3>
+
+                <div class="pkg-price">
+                  Rp <%= Number(p.price||0).toLocaleString('id-ID') %>
+                </div>
+                <div class="pkg-period">per bulan (sudah termasuk PPN)</div>
+
+                <ul class="pkg-features">
+                  <li><i class="bi bi-check-circle-fill"></i> Unlimited Bandwidth tanpa FUP</li>
+                  <li><i class="bi bi-check-circle-fill"></i> Koneksi Fiber Optic Dedicated</li>
+                  <li><i class="bi bi-check-circle-fill"></i> Latency Rendah & Stabil</li>
+                  <li><i class="bi bi-check-circle-fill"></i> Gratis Sewa Modem Router Wi-Fi</li>
+                  <li><i class="bi bi-check-circle-fill"></i> Dukungan Teknisi 24/7</li>
+                  <% if (p.description) { %>
+                    <li style="border:none;"><i class="bi bi-info-circle-fill text-info"></i> <%= p.description %></li>
+                  <% } %>
+                </ul>
+
+                <a href="/customer/register?package=<%= encodeURIComponent(p.name) %>" class="btn-pkg-action">
+                  <i class="bi bi-cart-plus me-1"></i> Pilih Paket Ini
+                </a>
+              </div>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
+    </div>
+  </section>
+
+  <!-- Features Highlight Section -->
+  <section class="section-padding" id="features" style="background: rgba(15, 23, 42, 0.5); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">
+    <div class="container">
+      <div class="text-center">
+        <span class="section-title-badge"><i class="bi bi-star me-1"></i> Keunggulan Layanan</span>
+        <h2 class="section-title">Mengapa Memilih <%= settings.company_header %>?</h2>
+        <p class="section-subtitle">
+          Kami berkomitmen menghadirkan pengalaman berinternet terbaik tanpa hambatan dengan teknologi mutakhir dan pelayanan profesional.
+        </p>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-md-6 col-lg-3">
+          <div class="glass-card feature-box">
+            <div class="feature-icon-wrapper">
+              <i class="bi bi-lightning-charge-fill text-warning"></i>
+            </div>
+            <h4 class="feature-title">Ultra Fast Fiber</h4>
+            <p class="feature-desc">
+              Jaringan 100% Fiber Optic murni menjamin kecepatan transmisi data tinggi dan respon cepat (ping rendah).
+            </p>
+          </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+          <div class="glass-card feature-box">
+            <div class="feature-icon-wrapper">
+              <i class="bi bi-infinity text-success"></i>
+            </div>
+            <h4 class="feature-title">True Unlimited</h4>
+            <p class="feature-desc">
+              Bebas akses internet sepuasnya tanpa batasan kuota (FUP) atau penurunan kecepatan di pertengahan bulan.
+            </p>
+          </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+          <div class="glass-card feature-box">
+            <div class="feature-icon-wrapper">
+              <i class="bi bi-credit-card-2-front-fill text-info"></i>
+            </div>
+            <h4 class="feature-title">Pembayaran Instan</h4>
+            <p class="feature-desc">
+              Kemudahan cek dan bayar tagihan otomatis via QRIS Statis, Virtual Account Bank, dan E-Wallet tanpa repot.
+            </p>
+          </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+          <div class="glass-card feature-box">
+            <div class="feature-icon-wrapper">
+              <i class="bi bi-headset text-primary"></i>
+            </div>
+            <h4 class="feature-title">Customer Care 24/7</h4>
+            <p class="feature-desc">
+              Tim support teknis dan layanan pelanggan kami siap membantu kendala koneksi Anda kapan saja.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Services Section -->
+  <section class="section-padding" id="services">
+    <div class="container">
+      <div class="text-center">
+        <span class="section-title-badge"><i class="bi bi-grid me-1"></i> Fitur Portal</span>
+        <h2 class="section-title">Layanan Mandiri Pelanggan</h2>
+        <p class="section-subtitle">
+          Nikmati kemudahan transaksi dan pengelolaan akun internet Anda secara langsung dari portal web.
+        </p>
+      </div>
+
+      <div class="row g-4 justify-content-center">
+        <div class="col-md-6 col-lg-3">
+          <a href="/customer/check-billing" class="text-decoration-none info-card-link">
+            <div class="glass-card info-card">
+              <div class="info-icon">
+                <i class="bi bi-receipt text-info fs-3"></i>
+              </div>
+              <div>
+                <h5 class="fw-bold text-white mb-1">Cek Tagihan</h5>
+                <p class="card-text-desc mb-0">Periksa status pembayaran & rincian tagihan bulanan Anda.</p>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+          <a href="/customer/voucher" class="text-decoration-none info-card-link">
+            <div class="glass-card info-card">
+              <div class="info-icon">
+                <i class="bi bi-ticket-perforated text-warning fs-3"></i>
+              </div>
+              <div>
+                <h5 class="fw-bold text-white mb-1">Beli Voucher</h5>
+                <p class="card-text-desc mb-0">Beli voucher hotspot Wi-Fi harian / mingguan secara otomatis.</p>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+          <a href="/customer/register" class="text-decoration-none info-card-link">
+            <div class="glass-card info-card">
+              <div class="info-icon">
+                <i class="bi bi-person-plus text-success fs-3"></i>
+              </div>
+              <div>
+                <h5 class="fw-bold text-white mb-1">Pasang Baru</h5>
+                <p class="card-text-desc mb-0">Daftar jaringan internet baru untuk lokasi rumah atau usaha.</p>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <% if (settings.company_phone) { %>
+          <div class="col-md-6 col-lg-3">
+            <a href="https://wa.me/<%= String(settings.company_phone).replace(/\D/g,'') %>" target="_blank" rel="noopener" class="text-decoration-none info-card-link">
+              <div class="glass-card info-card">
+                <div class="info-icon">
+                  <i class="bi bi-whatsapp text-primary fs-3"></i>
+                </div>
+                <div>
+                  <h5 class="fw-bold text-white mb-1">Bantuan WA</h5>
+                  <p class="card-text-desc mb-0">Konsultasi dan bantuan teknis via WhatsApp resmi.</p>
+                </div>
+              </div>
+            </a>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </section>
+
+  <!-- Company Info Section -->
+  <section class="section-padding" id="contact-info" style="background: rgba(15, 23, 42, 0.7); border-top: 1px solid var(--border-color);">
+    <div class="container">
+      <div class="row g-4 align-items-center">
+        <div class="col-lg-5">
+          <span class="section-title-badge"><i class="bi bi-building me-1"></i> Informasi Perusahaan</span>
+          <h2 class="section-title mb-3"><%= settings.company_header %></h2>
+          <p class="leading-relaxed" style="color: #cbd5e1;">
+            Kami siap memberikan pelayanan internet terbaik dengan kemudahan akses dan fleksibilitas tinggi. Jangan ragu untuk menghubungi layanan pelanggan kami jika memerlukan bantuan.
+          </p>
+
+          <% if (settings.company_address) { %>
+            <div class="d-flex align-items-start gap-3 mt-4">
+              <i class="bi bi-geo-alt fs-4" style="color: #a5b4fc;"></i>
+              <div>
+                <h6 class="fw-bold mb-1 text-white">Alamat Kantor</h6>
+                <p class="small mb-0" style="color: #cbd5e1;"><%= settings.company_address %></p>
+              </div>
+            </div>
+          <% } %>
+        </div>
+
+        <div class="col-lg-7">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <div class="glass-card p-4 h-100">
+                <i class="bi bi-clock-history fs-3 text-warning mb-2 d-block"></i>
+                <h5 class="fw-bold text-white fs-6 mb-1">Jam Operasional</h5>
+                <p class="small mb-0" style="color: #cbd5e1;"><%= settings.operational_hours || 'Setiap Hari (24 Jam Online)' %></p>
+              </div>
+            </div>
+
+            <% if (settings.company_phone) { %>
+              <div class="col-sm-6">
+                <div class="glass-card p-4 h-100">
+                  <i class="bi bi-whatsapp fs-3 text-success mb-2 d-block"></i>
+                  <h5 class="fw-bold text-white fs-6 mb-1">WhatsApp Customer Service</h5>
+                  <a href="https://wa.me/<%= String(settings.company_phone).replace(/\D/g,'') %>" target="_blank" rel="noopener" class="text-decoration-none fw-bold" style="color: #a5b4fc;">
+                    <%= settings.company_phone %>
+                  </a>
+                </div>
+              </div>
+            <% } %>
+
+            <% if (settings.company_email) { %>
+              <div class="col-sm-6">
+                <div class="glass-card p-4 h-100">
+                  <i class="bi bi-envelope-at fs-3 text-info mb-2 d-block"></i>
+                  <h5 class="fw-bold text-white fs-6 mb-1">Email Resmi</h5>
+                  <a href="mailto:<%= settings.company_email %>" class="text-decoration-none fw-bold" style="color: #a5b4fc;">
+                    <%= settings.company_email %>
+                  </a>
+                </div>
+              </div>
+            <% } %>
+
+            <div class="col-sm-6">
+              <div class="glass-card p-4 h-100">
+                <i class="bi bi-shield-check fs-3 text-primary mb-2 d-block"></i>
+                <h5 class="fw-bold text-white fs-6 mb-1">Jaminan Layanan</h5>
+                <p class="small mb-0" style="color: #cbd5e1;">SLA 99.9% Uptime Redundant Server Connection</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-lg-4">
+          <div class="footer-brand d-flex align-items-center gap-2 mb-3">
+            <img src="/img/logo.png" alt="Logo" onerror="this.style.display='none'">
+            <span class="fw-bold fs-5 text-white"><%= settings.company_header %></span>
+          </div>
+          <p class="small mb-3" style="color: #cbd5e1; max-width: 320px;">
+            Penyedia layanan internet fiber optic handal dan terpercaya untuk memenuhi kebutuhan konektivitas digital Anda.
+          </p>
+        </div>
+
+        <div class="col-6 col-lg-4">
+          <h6 class="fw-bold text-white mb-3">Tautan Portal</h6>
+          <ul class="footer-links">
+            <li><a href="#hero"><i class="bi bi-chevron-right me-1 small"></i> Beranda</a></li>
+            <li><a href="#packages"><i class="bi bi-chevron-right me-1 small"></i> Paket Internet</a></li>
+            <li><a href="/customer/check-billing"><i class="bi bi-chevron-right me-1 small"></i> Cek & Bayar Tagihan</a></li>
+            <li><a href="/customer/voucher"><i class="bi bi-chevron-right me-1 small"></i> Beli Voucher Wi-Fi</a></li>
+            <li><a href="/customer/register"><i class="bi bi-chevron-right me-1 small"></i> Pasang Baru</a></li>
+          </ul>
+        </div>
+
+        <div class="col-6 col-lg-4">
+          <h6 class="fw-bold text-white mb-3">Informasi Legal</h6>
+          <ul class="footer-links">
+            <li><a href="/customer/about"><%= t('customer.footer.about', 'Tentang Kami') %></a></li>
+            <li><a href="/customer/contact"><%= t('customer.footer.contact', 'Kontak Kami') %></a></li>
+            <li><a href="/customer/tos"><%= t('customer.footer.tos', 'Syarat & Ketentuan') %></a></li>
+            <li><a href="/customer/privacy"><%= t('customer.footer.privacy', 'Kebijakan Privasi') %></a></li>
+            <li><a href="/customer/tos#refund"><%= t('customer.footer.refund', 'Kebijakan Refund') %></a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+          &copy; <%= new Date().getFullYear() %> <strong><%= settings.company_header %></strong>. All rights reserved.
+        </div>
+        <div class="small">
+          Portal Pelanggan Internet v2.0
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // Defer service worker registration to not block page load
+    // Defer service worker registration
     if ('serviceWorker' in navigator) {
       setTimeout(() => {
         navigator.serviceWorker.register('/sw.js', { scope: '/customer/' }).catch(() => {});
       }, 2000);
     }
-    
-    // Auto-focus input after page load
+
+    // Auto-focus input on page load if user is near top
     window.addEventListener('load', () => {
-      document.getElementById('phone')?.focus();
+      if (window.scrollY < 400) {
+        const phoneInput = document.getElementById('phone');
+        if (phoneInput && !('ontouchstart' in window)) {
+          phoneInput.focus();
+        }
+      }
+    });
+
+    // Highlight active nav item on scroll
+    const sections = document.querySelectorAll('section[id], header[id]');
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(section => {
+        const sectionTop = section.offsetTop - 100;
+        if (pageYOffset >= sectionTop) {
+          current = section.getAttribute('id');
+        }
+      });
+
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === `#${current}`) {
+          link.classList.add('active');
+        }
+      });
     });
   </script>
 </body>
