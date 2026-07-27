@@ -126,13 +126,15 @@ router.use((req, res, next) => {
   next();
 });
 
+const { loginRateLimiter } = require('../middleware/rateLimiter');
+
 // --- AUTH ---
 router.get('/login', (req, res) => {
   if (req.session && req.session.isTechnician) return res.redirect('/tech');
   res.render('tech/login', { title: 'Teknisi Login', company: company(), error: null });
 });
 
-router.post('/login', express.urlencoded({ extended: true }), (req, res) => {
+router.post('/login', loginRateLimiter, express.urlencoded({ extended: true }), (req, res) => {
   const { username, password } = req.body;
   const tech = techSvc.authenticate(username, password);
   if (tech) {

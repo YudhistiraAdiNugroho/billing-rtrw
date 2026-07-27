@@ -34,12 +34,14 @@ router.use((req, res, next) => {
   next();
 });
 
+const { loginRateLimiter } = require('../middleware/rateLimiter');
+
 router.get('/login', (req, res) => {
   if (req.session && req.session.isCollector) return res.redirect('/collector');
   res.render('collector/login', { title: 'Login Kolektor', company: company(), error: null });
 });
 
-router.post('/login', express.urlencoded({ extended: true }), (req, res) => {
+router.post('/login', loginRateLimiter, express.urlencoded({ extended: true }), (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
   const collector = adminSvc.authenticateCollector(username, password);

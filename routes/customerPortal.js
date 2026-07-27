@@ -18,6 +18,7 @@ const fs = require('fs');
 const QRCode = require('qrcode');
 const Jimp = require('jimp');
 const { BinaryBitmap, HybridBinarizer, RGBLuminanceSource, MultiFormatReader, BarcodeFormat, DecodeHintType } = require('@zxing/library');
+const { loginRateLimiter } = require('../middleware/rateLimiter');
 
 // Configure multer for customer photo uploads
 const storage = multer.diskStorage({
@@ -1637,7 +1638,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginRateLimiter, async (req, res) => {
   const { phone } = req.body;
   const settings = getSettingsWithCache();
   const startTime = Date.now();
@@ -1773,7 +1774,7 @@ router.get('/login-otp', (req, res) => {
   res.render('login_otp', { error: null, settings, phone: req.session.pending_login.phone });
 });
 
-router.post('/login-otp', (req, res) => {
+router.post('/login-otp', loginRateLimiter, (req, res) => {
   const { otp } = req.body;
   const settings = getSettingsWithCache();
   const pending = req.session.pending_login;
