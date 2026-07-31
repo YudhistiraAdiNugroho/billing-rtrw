@@ -330,6 +330,20 @@ function genRandomCode(len = 6) {
   return out;
 }
 
+function genCustomCode(len, charset) {
+  const n = Math.max(4, Math.min(16, Number(len) || 6));
+  let chars = '0123456789';
+  if (charset === 'letters') chars = 'abcdefghjkmnpqrstuvwxyz';
+  else if (charset === 'mixed') chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    out += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  if (charset === 'numbers' && out[0] === '0') out = '1' + out.slice(1);
+  return out;
+}
+
+
 function normalizeQrisPayload(raw) {
   let s = String(raw || '').replace(/[\r\n\t]+/g, '').trim();
   const idx = s.indexOf('000201');
@@ -473,13 +487,28 @@ async function fulfillVoucherOrder(settings, orderId) {
   if (String(ord.status) === 'fulfilled' && ord.voucher_code) return { ok: true, already: true };
   if (String(ord.status) !== 'paid') return { ok: false, reason: 'not_paid' };
 
+  let prefix = '';
+  let codeLength = 6;
+  let charset = 'mixed';
+  try {
+    const pkg = db.prepare('SELECT * FROM voucher_packages WHERE router_id IS ? AND profile_name = ?').get(ord.router_id ?? null, ord.profile_name);
+    if (pkg) {
+      prefix = String(pkg.prefix || '').trim();
+      codeLength = Math.max(4, Math.min(16, Number(pkg.code_length) || 6));
+      charset = String(pkg.charset || 'mixed');
+    }
+  } catch (e) {
+    logger.error('[Fulfillment] Gagal query voucher_packages: ' + e.message);
+  }
+
   let created = null;
   let attempt = 0;
   while (attempt < 10) {
     attempt++;
-    const code = genRandomCode(6);
+    const coreLen = Math.max(4, codeLength - prefix.length);
+    const code = prefix + genCustomCode(coreLen, charset);
     const pass = code;
-    const comment = `vc-online-${orderId}-${code}-${ord.profile_name}`;
+    const comment = `vc-${code}-${ord.profile_name}`;
     const userData = {
       server: 'all',
       name: code,
