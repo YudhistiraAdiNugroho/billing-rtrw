@@ -63,8 +63,10 @@ const payrollSvc = require('../services/payrollService');
 const sidebarMenuSvc = require('../services/sidebarMenuService');
 const axios = require('axios');
 const crypto = require('crypto');
-const Jimp = require('jimp');
+const _jimpMod = require('jimp');
+const Jimp = _jimpMod.Jimp || _jimpMod;
 const jsQR = require('jsqr');
+const qrisUtil = require('../utils/qrisUtil');
 const { MultiFormatReader, BarcodeFormat, DecodeHintType, BinaryBitmap, HybridBinarizer, RGBLuminanceSource } = require('@zxing/library');
 const QRCode = require('qrcode');
 const acsPortal = require('./acsPortal');
@@ -97,90 +99,7 @@ function digiflazzSign(refId) {
 async function extractQrTextFromImageBuffer(buffer) {
   const buf = buffer && Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || []);
   if (!buf.length) return '';
-  const baseImg = await Jimp.read(buf);
-
-  const decodeFrom = (img) => {
-    const width = Number(img.bitmap?.width || 0);
-    const height = Number(img.bitmap?.height || 0);
-    const data = img.bitmap?.data;
-    if (!width || !height || !data) return '';
-    try {
-      const hints = new Map();
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
-      hints.set(DecodeHintType.TRY_HARDER, true);
-      const reader = new MultiFormatReader();
-      const luminanceSource = new RGBLuminanceSource(new Uint8ClampedArray(data), width, height);
-      const binaryBitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource));
-      const res = reader.decode(binaryBitmap, hints);
-      const txt = res && typeof res.getText === 'function' ? res.getText() : '';
-      if (txt) return String(txt);
-    } catch {}
-    const decoded = jsQR(new Uint8ClampedArray(data), width, height, { inversionAttempts: 'attemptBoth' });
-    return decoded && decoded.data ? String(decoded.data) : '';
-  };
-
-  const makeCrops = (img) => {
-    const w = Number(img.bitmap?.width || 0);
-    const h = Number(img.bitmap?.height || 0);
-    const side = Math.floor(Math.min(w, h) * 0.78);
-    if (!w || !h || side < 120) return [];
-    const xMid = Math.max(0, Math.floor((w - side) / 2));
-    const yTop = Math.max(0, Math.floor((h - side) * 0.20));
-    const yMid = Math.max(0, Math.floor((h - side) * 0.40));
-    const yBot = Math.max(0, Math.floor((h - side) * 0.55));
-    const xs = [xMid];
-    const ys = [yMid, yBot, yTop];
-    const out = [];
-    for (const x of xs) {
-      for (const y of ys) {
-        try {
-          out.push(img.clone().crop(x, y, side, side));
-        } catch {}
-      }
-    }
-    return out;
-  };
-
-  const candidates = [];
-  candidates.push(baseImg);
-  candidates.push(baseImg.clone().greyscale());
-  candidates.push(baseImg.clone().greyscale().contrast(0.25));
-  candidates.push(baseImg.clone().greyscale().contrast(0.45));
-  candidates.push(baseImg.clone().greyscale().invert());
-  for (const img of [...candidates]) {
-    candidates.push(...makeCrops(img));
-  }
-
-  try {
-    const w = Number(baseImg.bitmap?.width || 0);
-    const h = Number(baseImg.bitmap?.height || 0);
-    const maxSide = Math.max(w, h);
-    if (maxSide > 0 && maxSide < 720) {
-      candidates.push(baseImg.clone().resize(w * 2, h * 2));
-      candidates.push(baseImg.clone().resize(w * 3, h * 3).greyscale().contrast(0.25));
-      try {
-        candidates.push(...makeCrops(baseImg.clone().resize(w * 2, h * 2)));
-        candidates.push(...makeCrops(baseImg.clone().resize(w * 3, h * 3).greyscale().contrast(0.25)));
-      } catch {}
-    }
-  } catch {}
-
-  let text = '';
-  for (const img of candidates) {
-    try {
-      text = decodeFrom(img);
-      if (text) break;
-    } catch {}
-  }
-
-  let s = String(text || '').replace(/[\r\n\t]+/g, '').trim();
-  const idx = s.indexOf('000201');
-  if (idx > 0) s = s.slice(idx);
-  const lastCrc = s.lastIndexOf('6304');
-  if (lastCrc >= 0 && s.length >= lastCrc + 8) {
-    s = s.slice(0, lastCrc + 8);
-  }
-  return s;
+  return await qrisUtil.decodeQrisPayloadFromBuffer(buf);
 }
 
 async function digiflazzCekSaldo() {
@@ -629,7 +548,13 @@ router.use((req, res, next) => {
   next();
 });
 
-const { loginRateLimiter } = require('../middleware/rateLimiter');
+let loginRateLimiter = (req, res, next) => next();
+try {
+  const rlMod = require('../middleware/rateLimiter');
+  if (rlMod && typeof rlMod.loginRateLimiter === 'function') {
+    loginRateLimiter = rlMod.loginRateLimiter;
+  }
+} catch (e) {}
 
 // ─── AUTH ROUTES ───────────────────────────────────────────────────────────
 router.get('/login', (req, res) => {

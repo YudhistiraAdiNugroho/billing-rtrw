@@ -10,6 +10,7 @@ const mikrotikService = require('./mikrotikService');
 const usageSvc = require('./usageService');
 const { getSetting } = require('../config/settingsManager');
 const db = require('../config/database');
+const qrisUtil = require('../utils/qrisUtil');
 
 // Helper: Random delay generator untuk smart rate limiting
 function getRandomDelay(baseDelayMs, varianceMs = 3000) {
@@ -109,10 +110,11 @@ function startCronJobs() {
     const billingEnabled = getSetting('whatsapp_billing_to_customer_enabled', true);
     if (!enabled || !waEnabled || !billingEnabled) return;
 
-    let sendWA, whatsappStatus;
+    let sendWA, sendWAImage, whatsappStatus;
     try {
       const mod = await import('./whatsappBot.mjs');
       sendWA = mod.sendWA;
+      sendWAImage = mod.sendWAImage;
       whatsappStatus = mod.whatsappStatus;
     } catch (e) {
       logger.error(`[CRON] Gagal load WhatsApp bot: ${e.message || e}`);
@@ -207,10 +209,51 @@ function startCronJobs() {
           const totalTagihan = unpaidInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
           const rincianBulan = unpaidInvoices.map(inv => `${inv.period_month}/${inv.period_year}`).join(', ');
 
+          // Process Dynamic QRIS if enabled & available
+          let qrisImageBuffer = null;
+          let finalTagihanStr = totalTagihan.toLocaleString('id-ID');
+
+          if (unpaidInvoices.length > 0) {
+            try {
+              const inv = unpaidInvoices[0];
+              let code = Number(inv.qris_unique_code || 0) || 0;
+              let amt = Number(inv.qris_amount_unique || 0) || 0;
+              const invId = Number(inv.id);
+              const baseAmount = Number(inv.amount || 0);
+
+              if ((!code || !amt) && invId > 0 && baseAmount > 0) {
+                const exists = db.prepare('SELECT id FROM invoices WHERE status=? AND qris_amount_unique=? AND id!=? LIMIT 1');
+                for (let k = 0; k < 50; k++) {
+                  const randCode = 1 + Math.floor(Math.random() * 999);
+                  const tryAmt = baseAmount + randCode;
+                  if (!exists.get('unpaid', tryAmt, invId)) {
+                    code = randCode;
+                    amt = tryAmt;
+                    db.prepare('UPDATE invoices SET qris_unique_code=?, qris_amount_unique=?, qris_assigned_at=CURRENT_TIMESTAMP WHERE id=?').run(code, amt, invId);
+                    break;
+                  }
+                }
+              }
+
+              if (amt > 0) {
+                finalTagihanStr = amt.toLocaleString('id-ID');
+                const qrisPayload = String(getSetting('qris_static_payload', '') || '').trim();
+                const qrisEnabledRaw = getSetting('qris_static_enabled', true);
+                const qrisEnabled = !(qrisEnabledRaw === false || qrisEnabledRaw === 'false' || qrisEnabledRaw === 0 || qrisEnabledRaw === '0');
+
+                if (qrisEnabled && qrisPayload && typeof qrisUtil.buildDynamicQrisJpgBuffer === 'function') {
+                  qrisImageBuffer = await qrisUtil.buildDynamicQrisJpgBuffer(qrisPayload, amt);
+                }
+              }
+            } catch (qrisErr) {
+              logger.warn(`[CRON] Gagal generate QRIS dinamis untuk ${c.name}: ${qrisErr.message}`);
+            }
+          }
+
           // Format pesan dengan variation untuk anti-spam
           let formattedMsg = template
             .replace(/{{nama}}/gi, c.name || 'Pelanggan')
-            .replace(/{{tagihan}}/gi, totalTagihan.toLocaleString('id-ID'))
+            .replace(/{{tagihan}}/gi, finalTagihanStr)
             .replace(/{{rincian}}/gi, rincianBulan || '-')
             .replace(/{{paket}}/gi, c.package_name || '-')
             .replace(/{{link}}/gi, loginLink);
@@ -218,7 +261,13 @@ function startCronJobs() {
           // Add subtle variation untuk menghindari spam detection
           formattedMsg = addMessageVariation(formattedMsg, i);
 
-          const ok = await sendWA(c.phone, formattedMsg);
+          let ok = false;
+          if (qrisImageBuffer && typeof sendWAImage === 'function') {
+            ok = await sendWAImage(c.phone, qrisImageBuffer, formattedMsg);
+          }
+          if (!ok) {
+            ok = await sendWA(c.phone, formattedMsg);
+          }
           if (ok) {
             sent++;
             targetCount++;

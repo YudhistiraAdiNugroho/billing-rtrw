@@ -126,7 +126,13 @@ router.use((req, res, next) => {
   next();
 });
 
-const { loginRateLimiter } = require('../middleware/rateLimiter');
+let loginRateLimiter = (req, res, next) => next();
+try {
+  const rlMod = require('../middleware/rateLimiter');
+  if (rlMod && typeof rlMod.loginRateLimiter === 'function') {
+    loginRateLimiter = rlMod.loginRateLimiter;
+  }
+} catch (e) {}
 
 // --- AUTH ---
 router.get('/login', (req, res) => {

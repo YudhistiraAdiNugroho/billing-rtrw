@@ -16,9 +16,17 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const QRCode = require('qrcode');
-const Jimp = require('jimp');
+const _jimpMod = require('jimp');
+const Jimp = _jimpMod.Jimp || _jimpMod;
+const qrisUtil = require('../utils/qrisUtil');
 const { BinaryBitmap, HybridBinarizer, RGBLuminanceSource, MultiFormatReader, BarcodeFormat, DecodeHintType } = require('@zxing/library');
-const { loginRateLimiter } = require('../middleware/rateLimiter');
+let loginRateLimiter = (req, res, next) => next();
+try {
+  const rlMod = require('../middleware/rateLimiter');
+  if (rlMod && typeof rlMod.loginRateLimiter === 'function') {
+    loginRateLimiter = rlMod.loginRateLimiter;
+  }
+} catch (e) {}
 
 // Configure multer for customer photo uploads
 const storage = multer.diskStorage({
@@ -451,17 +459,7 @@ async function tryDecodeQrisPayloadFromUploadedQr(settings) {
   }
   try {
     const buf = await fs.promises.readFile(filePath);
-    const img = await Jimp.read(buf);
-    const rgba = new Uint8ClampedArray(img.bitmap.data.buffer, img.bitmap.data.byteOffset, img.bitmap.data.byteLength);
-    const source = new RGBLuminanceSource(rgba, img.bitmap.width, img.bitmap.height);
-    const bitmap = new BinaryBitmap(new HybridBinarizer(source));
-    const reader = new MultiFormatReader();
-    const hints = new Map();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
-    reader.setHints(hints);
-    const decoded = reader.decode(bitmap);
-    const text = typeof decoded?.getText === 'function' ? decoded.getText() : String(decoded?.text || '');
-    const payload = normalizeQrisPayloadRaw(text);
+    const payload = await qrisUtil.decodeQrisPayloadFromBuffer(buf);
     if (!payload) return '';
     qrisDecodedCache = { file: safeName, mtimeMs: st.mtimeMs, payload };
     return payload;

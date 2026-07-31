@@ -4,6 +4,8 @@ const { logger } = require('../config/logger');
 const customerSvc = require('./customerService');
 const billingSvc = require('./billingService');
 const mikrotikSvc = require('./mikrotikService');
+const agentSvc = require('./agentService');
+const customerDevice = require('./customerDeviceService');
 
 let bot = null;
 
@@ -574,6 +576,29 @@ function initTelegram() {
     }
   });
 
+  bot.onText(/\/vcr\s+(\S+)\s+(\S+)/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const code = match[1];
+    const profile = match[2];
+    try {
+      const now = new Date();
+      const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+      const comment = `vc ${code} ${dateStr}`;
+
+      await mikrotikSvc.addHotspotUser({
+        name: code,
+        password: code,
+        profile: profile,
+        comment: comment
+      });
+
+      bot.sendMessage(chatId, `✅ Voucher Hotspot *${code}* berhasil dibuat.\n\n👤 User: \`${code}\`\n🔑 Pass: \`${code}\`\n📦 Profile: *${profile}*\n📝 Comment: *${comment}*`, { parse_mode: 'Markdown' });
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal buat voucher: ' + e.message);
+    }
+  });
+
   bot.onText(/\/kick (\S+)/, async (msg, match) => {
     if (!isAdmin(msg)) return;
     try {
@@ -623,6 +648,362 @@ function initTelegram() {
     });
     if (customers.length > 10) res += `_...dan ${customers.length - 10} lainnya._`;
     bot.sendMessage(msg.chat.id, res, { parse_mode: 'Markdown' });
+  });
+
+  bot.onText(/\/ringkasan/i, async (msg) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    try {
+      const stats = billingSvc.getDashboardStats();
+      const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 });
+      let res = `💰 *RINGKASAN BILLING*\n\n` +
+        `📈 *Total Pendapatan:* ${formatter.format(stats.totalRevenue)}\n` +
+        `📅 *Bulan Ini:* ${formatter.format(stats.thisMonth)}\n` +
+        `⏳ *Piutang (Pending):* ${formatter.format(stats.pendingAmount)}\n` +
+        `🧾 *Tagihan Belum Lunas:* ${stats.unpaidCount} invoice\n\n` +
+        `💡 _Gunakan perintah lain untuk detail._`;
+      bot.sendMessage(chatId, res, { parse_mode: 'Markdown' });
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal mengambil ringkasan billing: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/lunas(?:\s+(.+))?/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const keyRaw = String(match[1] || '').trim();
+    if (!keyRaw) return bot.sendMessage(chatId, '❌ Format: `/lunas IDTAGIHAN` atau `/lunas nama/nohp/pppoe/tag`', { parse_mode: 'Markdown' });
+
+    try {
+      let targetInvId = null;
+      let targetInv = null;
+      const isNumeric = /^\d+$/.test(keyRaw);
+      if (isNumeric) {
+        targetInvId = Number(keyRaw);
+        targetInv = billingSvc.getInvoiceById(targetInvId);
+      }
+
+      if (!targetInv) {
+        let cust =
+          (isNumeric ? customerSvc.getCustomerById(Number(keyRaw)) : null) ||
+          customerSvc.findCustomerByAny(keyRaw);
+
+        if (!cust) {
+          const candidates = customerSvc.getAllCustomers(keyRaw) || [];
+          const unique = Array.from(new Map(candidates.map(c => [c.id, c])).values());
+          if (unique.length === 1) {
+            cust = customerSvc.getCustomerById(unique[0].id);
+          } else if (unique.length > 1) {
+            const top = unique.slice(0, 5).map(c =>
+              `- ID:${c.id} • ${c.name || '-'} • ${c.phone || '-'} • PPPoE:${c.pppoe_username || '-'}`
+            ).join('\n');
+            return bot.sendMessage(chatId, `⚠️ Nama/ID tidak spesifik. Ditemukan ${unique.length} pelanggan:\n\n${top}\n\nKirim ulang: \`/lunas IDPELANGGAN\``);
+          }
+        }
+
+        if (cust) {
+          const unpaid = billingSvc.getUnpaidInvoicesByCustomerId(cust.id);
+          if (unpaid && unpaid.length > 0) {
+            targetInv = unpaid[0];
+            targetInvId = targetInv.id;
+          } else {
+            return bot.sendMessage(chatId, `✅ Pelanggan *${cust.name}* tidak memiliki tagihan menunggak.`, { parse_mode: 'Markdown' });
+          }
+        }
+      }
+
+      if (!targetInv) return bot.sendMessage(chatId, `❌ Tagihan atau Pelanggan *${keyRaw}* tidak ditemukan.`, { parse_mode: 'Markdown' });
+      if (targetInvId != null) {
+        const enriched = billingSvc.getInvoiceById(targetInvId);
+        if (enriched) targetInv = enriched;
+      }
+      if (targetInv && targetInv.status === 'paid') {
+        return bot.sendMessage(chatId, `✅ Invoice *#${targetInv.id}* sudah berstatus LUNAS.`, { parse_mode: 'Markdown' });
+      }
+
+      billingSvc.markAsPaid(targetInvId, 'Telegram Bot Admin', 'Paid via Telegram Command');
+
+      const customer = customerSvc.getCustomerById(targetInv.customer_id);
+      const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 });
+      const customerName = String(targetInv.customer_name || customer?.name || targetInv.customer_name || '-');
+      const notifyTag = customer?.genieacs_tag || customer?.pppoe_username || customer?.phone || targetInv.customer_phone || targetInv.genieacs_tag || '';
+      
+      // Dynamic import of whatsappBot
+      const waBot = await import('./whatsappBot.mjs').catch(() => null);
+      let waNotifStatus = 'tidak dikirim (WA offline)';
+      
+      const waMessage = `✅ *PEMBAYARAN BERHASIL*\n\n` +
+        `Invoice *#${targetInvId}* sudah *LUNAS*.\n` +
+        `👤 *Nama:* ${customerName}\n` +
+        `📅 *Periode:* ${targetInv.period_month}/${targetInv.period_year}\n` +
+        `💰 *Total:* ${formatter.format(Number(targetInv.amount || 0))}\n\n` +
+        `Terima kasih.`;
+
+      if (customer && customer.status === 'suspended') {
+        const freshCustomer = customerSvc.getAllCustomers().find(c => c.id === targetInv.customer_id);
+        const unpaidCount = freshCustomer && Number.isFinite(Number(freshCustomer.unpaid_count)) ? Number(freshCustomer.unpaid_count) : 1;
+        if (unpaidCount === 0) {
+          await customerSvc.activateCustomer(targetInv.customer_id);
+          if (waBot && waBot.currentSock) {
+            const ok = await waBot.notifyCustomer(waBot.currentSock, null, notifyTag, waMessage + `\n\n🟢 Layanan internet Anda sudah aktif kembali.`);
+            waNotifStatus = ok ? 'terkirim' : 'gagal';
+          }
+          await bot.sendMessage(chatId, `✅ Invoice *#${targetInvId}* LUNAS. Pelanggan *${customerName}* otomatis diaktifkan kembali.\n📩 Notif WA pelanggan: ${waNotifStatus}`);
+        } else {
+          if (waBot && waBot.currentSock) {
+            const ok = await waBot.notifyCustomer(waBot.currentSock, null, notifyTag, waMessage + `\n\n⚠️ Masih ada ${unpaidCount} tagihan lain yang belum dibayar.`);
+            waNotifStatus = ok ? 'terkirim' : 'gagal';
+          }
+          await bot.sendMessage(chatId, `✅ Invoice *#${targetInvId}* LUNAS. (Masih ada ${unpaidCount} tagihan lain, isolir tetap aktif)\n📩 Notif WA pelanggan: ${waNotifStatus}`);
+        }
+      } else {
+        if (waBot && waBot.currentSock) {
+          const ok = await waBot.notifyCustomer(waBot.currentSock, null, notifyTag, waMessage);
+          waNotifStatus = ok ? 'terkirim' : 'gagal';
+        }
+        await bot.sendMessage(chatId, `✅ Invoice *#${targetInvId}* (a.n ${customerName}) berhasil ditandai LUNAS.\n📩 Notif WA pelanggan: ${waNotifStatus}`);
+      }
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal update status: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/generate\s+(\d+)\s+(\d+)/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const month = Number(match[1]);
+    const year = Number(match[2]);
+    try {
+      const res = billingSvc.generateMonthlyInvoices(month, year);
+      bot.sendMessage(chatId, `✅ Berhasil generate tagihan untuk periode *${month}/${year}*.\n🧾 Jumlah: ${res.generatedCount} tagihan baru.`, { parse_mode: 'Markdown' });
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal generate tagihan: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/isolir(?:\s+(.+))?/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const targetId = String(match[1] || '').trim();
+    if (!targetId) return bot.sendMessage(chatId, '❌ Format: `/isolir ID/Nama/PPPoE/NoHP`');
+    try {
+      const cust = customerSvc.findCustomerByAny(targetId);
+      if (!cust) return bot.sendMessage(chatId, `❌ Pelanggan *${targetId}* tidak ditemukan.`, { parse_mode: 'Markdown' });
+      await customerSvc.suspendCustomer(cust.id);
+      bot.sendMessage(chatId, `✅ Pelanggan *${cust.name}* (ID: ${cust.id}) berhasil di-isolir.`, { parse_mode: 'Markdown' });
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal isolir: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/buka(?:\s+(.+))?/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const targetId = String(match[1] || '').trim();
+    if (!targetId) return bot.sendMessage(chatId, '❌ Format: `/buka ID/Nama/PPPoE/NoHP`');
+    try {
+      const cust = customerSvc.findCustomerByAny(targetId);
+      if (!cust) return bot.sendMessage(chatId, `❌ Pelanggan *${targetId}* tidak ditemukan.`, { parse_mode: 'Markdown' });
+      await customerSvc.activateCustomer(cust.id);
+      bot.sendMessage(chatId, `✅ Pelanggan *${cust.name}* (ID: ${cust.id}) berhasil diaktifkan kembali.`, { parse_mode: 'Markdown' });
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal mengaktifkan pelanggan: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/saldodigi/i, async (msg) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    try {
+      const r = await agentSvc.digiflazzCheckBalance();
+      bot.sendMessage(chatId, `💳 *SALDO DIGIFLAZZ*\n\n💰 Deposit: Rp ${Number(r?.deposit || 0).toLocaleString('id-ID')}`, { parse_mode: 'Markdown' });
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal cek saldo Digiflazz: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/topup\s+(\S+)\s+(\d+)(?:\s+(.+))?/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const agentKeyRaw = String(match[1] || '').trim();
+    const amount = Number(match[2]) || 0;
+    const note = String(match[3] || 'Topup via Telegram').trim();
+
+    try {
+      if (!agentKeyRaw) throw new Error('Agent username/id tidak valid');
+      if (!amount) throw new Error('Nominal tidak valid');
+
+      const normalizeDigits = (v) => {
+        let d = String(v || '').replace(/\D/g, '');
+        if (!d) return '';
+        if (d.startsWith('0')) d = '62' + d.slice(1);
+        return d;
+      };
+
+      const agentKey = agentKeyRaw.startsWith('@') ? agentKeyRaw.slice(1) : agentKeyRaw;
+      const agentKeyLc = agentKey.toLowerCase();
+      const agentDigits = normalizeDigits(agentKey);
+
+      const agent = agentSvc.getAllAgents().find(a => 
+        String(a.id) === agentKey ||
+        String(a.username || '').toLowerCase() === agentKeyLc ||
+        (a.phone && normalizeDigits(a.phone) === agentDigits) ||
+        String(a.name || '').toLowerCase() === agentKeyLc
+      );
+
+      if (!agent) throw new Error(`Agent "${agentKeyRaw}" tidak ditemukan`);
+
+      const actorName = msg.from.first_name || 'Telegram Admin';
+      const r = agentSvc.topupAgent(agent.id, amount, note, actorName);
+      
+      bot.sendMessage(chatId, 
+        `💸 *TOPUP AGENT BERHASIL*\n\n` +
+        `👤 Agent: *${agent.name}* (@${agent.username || '-'})\n` +
+        `💰 Nominal: Rp ${Number(amount || 0).toLocaleString('id-ID')}\n` +
+        `📈 Saldo: Rp ${Number(r.before || 0).toLocaleString('id-ID')} ➜ Rp ${Number(r.after || 0).toLocaleString('id-ID')}\n` +
+        `📝 Catatan: ${note}`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal topup agent: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/listonu/i, async (msg) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    try {
+      let res = await customerDevice.listDevicesWithTags(50);
+      if (!res.ok || res.devices.length === 0) {
+        res = await customerDevice.listAllDevices(50);
+      }
+      if (!res.ok || res.devices.length === 0) {
+        return bot.sendMessage(chatId, '📭 Tidak ada perangkat ONU terdeteksi di GenieACS.');
+      }
+      let txt = `*📡 DAFTAR ONU (GenieACS)*\n\n`;
+      res.devices.forEach(d => {
+        const id = d._id || 'Unknown ID';
+        const tags = Array.isArray(d._tags) ? d._tags.join(', ') : (d._tags || '-');
+        txt += `• \`${id}\`\n  └ Tag: ${tags}\n`;
+      });
+      bot.sendMessage(chatId, txt, { parse_mode: 'Markdown' });
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal list ONU: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/(?:info|cekstatus)\s+(\S+)/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const inputTag = match[1];
+    try {
+      const cust = customerSvc.findCustomerByAny(inputTag);
+      const targetTag = cust ? (cust.genieacs_tag || cust.pppoe_username || cust.phone || inputTag) : inputTag;
+      
+      const targetDevice = await customerDevice.resolveDeviceToken(targetTag);
+      if (!targetDevice) {
+        return bot.sendMessage(chatId, `❌ Target *${inputTag}* tidak ditemukan di GenieACS.`);
+      }
+      
+      const data = await customerDevice.getCustomerDeviceData(targetTag);
+      let t = `*📡 DETAIL ONU: ${data.lokasi || targetTag}*\n\n`;
+      t += `🟢 Status: ${data.status || '-'}\n`;
+      t += `📶 SSID: ${data.ssid || '-'}\n`;
+      t += `⏱️ Last Inform: ${data.lastInform || '-'}\n`;
+      t += `📡 RX Power: ${data.rxPower || '-'}\n`;
+      t += `🌐 PPPoE IP: ${data.pppoeIP || '-'}\n`;
+      t += `👤 PPPoE User: ${data.pppoeUsername || '-'}\n`;
+      t += `⏳ Uptime: ${data.uptime || '-'}\n`;
+      t += `⏳ PPPoE Uptime: ${data.pppoeUptime || '-'}\n`;
+      t += `📱 User WiFi: ${data.totalAssociations || '0'}\n`;
+      t += `🔧 Model: ${data.model || '-'}\n`;
+      t += `🏷️ Serial Number: ${data.serialNumber || '-'}\n`;
+      t += `💾 Firmware: ${data.softwareVersion || '-'}`;
+      bot.sendMessage(chatId, t, { parse_mode: 'Markdown' });
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal cek status ONU: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/reboot\s+(\S+)/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const inputTag = match[1];
+    try {
+      const cust = customerSvc.findCustomerByAny(inputTag);
+      const targetTag = cust ? (cust.genieacs_tag || cust.pppoe_username || cust.phone || inputTag) : inputTag;
+
+      const targetDevice = await customerDevice.resolveDeviceToken(targetTag);
+      if (!targetDevice) {
+        return bot.sendMessage(chatId, `❌ Target *${inputTag}* tidak ditemukan di GenieACS.`);
+      }
+
+      await bot.sendMessage(chatId, `⏳ Mencoba me-reboot ONU *${targetTag}*...`, { parse_mode: 'Markdown' });
+      const ok = await customerDevice.rebootDevice(targetTag);
+      if (ok) {
+        bot.sendMessage(chatId, `✅ ONU *${targetTag}* berhasil diperintahkan untuk reboot.`, { parse_mode: 'Markdown' });
+      } else {
+        bot.sendMessage(chatId, `❌ Gagal reboot ONU *${targetTag}*.`, { parse_mode: 'Markdown' });
+      }
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal reboot ONU: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/gantissid\s+(\S+)\s+(.+)/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const inputTag = match[1];
+    const newSSID = match[2];
+    try {
+      const cust = customerSvc.findCustomerByAny(inputTag);
+      const targetTag = cust ? (cust.genieacs_tag || cust.pppoe_username || cust.phone || inputTag) : inputTag;
+
+      const targetDevice = await customerDevice.resolveDeviceToken(targetTag);
+      if (!targetDevice) {
+        return bot.sendMessage(chatId, `❌ Target *${inputTag}* tidak ditemukan di GenieACS.`);
+      }
+
+      await bot.sendMessage(chatId, `⏳ Mengubah SSID untuk *${targetTag}* menjadi *${newSSID}*...`, { parse_mode: 'Markdown' });
+      const ok = await customerDevice.updateSSID(targetTag, newSSID);
+      if (ok) {
+        bot.sendMessage(chatId, `✅ SSID untuk *${targetTag}* berhasil diubah menjadi *${newSSID}*.`, { parse_mode: 'Markdown' });
+      } else {
+        bot.sendMessage(chatId, `❌ Gagal mengubah SSID untuk *${targetTag}*.`, { parse_mode: 'Markdown' });
+      }
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal ganti SSID: ' + e.message);
+    }
+  });
+
+  bot.onText(/\/gantisandi\s+(\S+)\s+(.+)/i, async (msg, match) => {
+    if (!isAdmin(msg)) return;
+    const chatId = msg.chat.id;
+    const inputTag = match[1];
+    const newPass = match[2];
+    try {
+      const cust = customerSvc.findCustomerByAny(inputTag);
+      const targetTag = cust ? (cust.genieacs_tag || cust.pppoe_username || cust.phone || inputTag) : inputTag;
+
+      const targetDevice = await customerDevice.resolveDeviceToken(targetTag);
+      if (!targetDevice) {
+        return bot.sendMessage(chatId, `❌ Target *${inputTag}* tidak ditemukan di GenieACS.`);
+      }
+
+      if (newPass.length < 8) {
+        return bot.sendMessage(chatId, `⚠️ Password WiFi minimal harus 8 karakter.`);
+      }
+
+      await bot.sendMessage(chatId, `⏳ Mengubah sandi WiFi untuk *${targetTag}*...`);
+      const ok = await customerDevice.updatePassword(targetTag, newPass);
+      if (ok) {
+        bot.sendMessage(chatId, `✅ Sandi WiFi untuk *${targetTag}* berhasil diubah menjadi: \`${newPass}\``, { parse_mode: 'Markdown' });
+      } else {
+        bot.sendMessage(chatId, `❌ Gagal mengubah sandi WiFi untuk *${targetTag}*.`);
+      }
+    } catch (e) {
+      bot.sendMessage(chatId, '❌ Gagal ganti sandi WiFi: ' + e.message);
+    }
   });
 
   bot.on('polling_error', (error) => {

@@ -3,11 +3,12 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers } from '@whiskeysockets/baileys';
 
 const require = createRequire(import.meta.url);
 const { logger } = require('../config/logger.js');
 const { getSetting, getNowLocal, formatDateLocal, getCurrentDateInTimezone } = require('../config/settingsManager.js');
+const db = require('../config/database.js');
 const customerDevice = require('./customerDeviceService.js');
 const { WaLidStore } = require('./waLidStore.js');
 const billingSvc = require('./billingService.js');
@@ -290,15 +291,29 @@ function formatActiveMikrotik(pppoe, hotspot) {
   return waWrap('🌐 *MIKROTIK ACTIVE*', p + h);
 }
 
-function getWhatsappAdminNumbers() {
-  const primary = getSetting('whatsapp_admin_numbers', []);
-  if (Array.isArray(primary) && primary.length > 0) return primary;
-  const legacy = getSetting('admins', []);
-  if (Array.isArray(legacy) && legacy.length > 0) return legacy;
+function parseNumbers(input) {
+  if (Array.isArray(input)) return input.map(x => String(x).trim()).filter(Boolean);
+  if (typeof input === 'string' && input.trim()) {
+    return input.split(',').map(x => x.trim()).filter(Boolean);
+  }
   return [];
 }
 
-function loadWhatsappAdminSet() {
+function getWhatsappAdminNumbers() {
+  const primary = parseNumbers(getSetting('whatsapp_admin_numbers', []));
+  const legacy = parseNumbers(getSetting('admins', []));
+  const companyPhone = parseNumbers(getSetting('company_phone', ''));
+  let dbAdmin = [];
+  try {
+    const raw = db.getAppSetting('whatsapp_admin_numbers', null) || db.getAppSetting('admins', null);
+    if (raw) dbAdmin = parseNumbers(raw);
+  } catch (e) {}
+
+  const combined = Array.from(new Set([...primary, ...legacy, ...companyPhone, ...dbAdmin]));
+  return combined;
+}
+
+function loadWhatsappAdminSet(lidStore) {
   const list = getWhatsappAdminNumbers();
   const set = new Set();
   for (const n of list) {
@@ -312,21 +327,65 @@ function loadWhatsappAdminSet() {
       set.add(s);
     }
   }
+  if (lidStore && typeof lidStore.getAll === 'function') {
+    const storeMap = lidStore.getAll() || {};
+    for (const [key, val] of Object.entries(storeMap)) {
+      const valDigits = String(val || '').replace(/\D/g, '');
+      if (valDigits) {
+        for (const c of customerDevice.expandTagCandidates(valDigits)) {
+          if (set.has(c)) {
+            set.add(key);
+            set.add(key.split('@')[0]);
+          }
+        }
+      }
+    }
+  }
   return set;
 }
 
-/** Admin dikenali dari nomor WA (bukan @lid saja). Pakai senderPn atau remoteJid @s.whatsapp.net */
-function isWhatsappAdminKey(key, adminSet) {
+/** Admin dikenali dari nomor WA (bukan @lid saja). Pakai senderPn atau remoteJid @s.whatsapp.net / @lid */
+function isWhatsappAdminKey(key, adminSet, sock, lidStore) {
+  if (sock && sock.user && sock.user.id) {
+    const selfJid = sock.user.id.split(':')[0];
+    const selfLid = sock.user.lid ? sock.user.lid.split('@')[0] : null;
+    const nk = normalizeKey(key);
+    const sender = nk.senderPn || nk.remoteJid;
+    if (sender) {
+      const senderUser = sender.split('@')[0];
+      if (senderUser === selfJid || (selfLid && senderUser === selfLid)) {
+        return true; // Pesan dari nomor bot sendiri (self-chat) selalu dianggap admin
+      }
+    }
+  }
   if (!adminSet || adminSet.size === 0) return false;
   const nk = normalizeKey(key);
+  
+  // 1. Cek JID nomor HP langsung
   const pnJid =
     nk.senderPn && nk.senderPn.endsWith('@s.whatsapp.net')
       ? nk.senderPn
       : nk.remoteJid && nk.remoteJid.endsWith('@s.whatsapp.net')
         ? nk.remoteJid
         : null;
-  if (!pnJid) return false;
-  const digits = customerDevice.phoneFromPnJid(pnJid);
+
+  let digits = null;
+  if (pnJid) {
+    digits = customerDevice.phoneFromPnJid(pnJid);
+  }
+
+  // 2. Cek jika LID JID
+  if (nk.remoteJid && nk.remoteJid.endsWith('@lid')) {
+    const lidUser = nk.remoteJid.split('@')[0];
+    if (adminSet.has(nk.remoteJid) || adminSet.has(lidUser)) return true;
+    if (lidStore) {
+      const cachedTag = lidStore.get(nk.remoteJid) || lidStore.get(lidUser);
+      if (cachedTag) {
+        digits = String(cachedTag).replace(/\D/g, '');
+      }
+    }
+  }
+
   if (!digits) return false;
   for (const c of customerDevice.expandTagCandidates(digits)) {
     if (adminSet.has(c)) return true;
@@ -508,6 +567,7 @@ function splitWaChunks(text, maxLen = 3500) {
 
 /** Kirim notifikasi ke pelanggan saat admin mengubah SSID/Password */
 async function notifyCustomer(sock, lidStore, tag, message) {
+  logger.info(`[WA notifyCustomer] Memulai pengiriman untuk tag: "${tag}"`);
   try {
     const text = waAutoWrap(message);
     const normalizeDigitsTo62 = (raw) => {
@@ -517,26 +577,68 @@ async function notifyCustomer(sock, lidStore, tag, message) {
       else if (!digits.startsWith('62')) digits = '62' + digits;
       return digits;
     };
-    // Cari JID pelanggan berdasarkan tag
-    const customerJid = lidStore.getByTag(tag);
-    if (customerJid) {
-      await sock.sendMessage(customerJid, { text });
-      return true;
+
+    // 1. Coba cari data pelanggan dari database dulu untuk mendapatkan nomor HP aslinya
+    const cust = customerSvc.findCustomerByAny(tag);
+    let phoneNumber = '';
+    if (cust && cust.phone) {
+      phoneNumber = normalizeDigitsTo62(cust.phone);
     }
-    // Jika tidak ditemukan di lidStore, coba kirim ke nomor tag langsung
-    let phoneNumber = normalizeDigitsTo62(tag);
-    if (phoneNumber.length < 10) {
-      const cust = customerSvc.findCustomerByAny(tag);
-      if (cust && cust.phone) phoneNumber = normalizeDigitsTo62(cust.phone);
+    logger.info(`[WA notifyCustomer] Resolusi database tag "${tag}" -> Phone: "${phoneNumber}"`);
+    
+    // Jika tag itu sendiri adalah nomor HP, gunakan sebagai fallback
+    if (!phoneNumber) {
+      const parsedTag = normalizeDigitsTo62(tag);
+      if (parsedTag.length >= 10) {
+        phoneNumber = parsedTag;
+      }
     }
+
+    let targetJid = null;
+
+    // 2. Jika ada nomor HP, tanyakan ke WhatsApp server untuk JID yang benar (LID atau PN JID)
     if (phoneNumber.length >= 10) {
       const directJid = `${phoneNumber}@s.whatsapp.net`;
-      await sock.sendMessage(directJid, { text });
+      logger.info(`[WA notifyCustomer] Mengecek JID terdaftar untuk ${directJid} via onWhatsApp...`);
+      try {
+        const [waCheck] = await sock.onWhatsApp(directJid);
+        if (waCheck && waCheck.exists) {
+          targetJid = waCheck.lid || waCheck.jid || directJid;
+          logger.info(`[WA notifyCustomer] JID terverifikasi dari WhatsApp server (menggunakan LID jika ada) untuk nomor ${phoneNumber}: ${targetJid}`);
+        } else {
+          logger.info(`[WA notifyCustomer] Nomor ${phoneNumber} tidak terdaftar menurut onWhatsApp`);
+        }
+      } catch (err) {
+        logger.error(`[WA notifyCustomer] Gagal onWhatsApp check untuk nomor ${phoneNumber}: ${err.message}`);
+      }
+      
+      // Jika onWhatsApp gagal/error, fallback ke directJid asli
+      if (!targetJid) {
+        logger.info(`[WA notifyCustomer] Menggunakan fallback JID langsung: ${directJid}`);
+        targetJid = directJid;
+      }
+    }
+
+    // 3. Fallback: Cari JID pelanggan berdasarkan tag di lidStore jika targetJid belum terisi
+    if (!targetJid) {
+      const customerJid = lidStore ? lidStore.getByTag(tag) : null;
+      if (customerJid) {
+        logger.info(`[WA notifyCustomer] Menemukan JID dari lidStore untuk tag "${tag}": ${customerJid}`);
+        targetJid = customerJid;
+      }
+    }
+
+    if (targetJid) {
+      logger.info(`[WA notifyCustomer] Mengirim pesan ke JID target: ${targetJid}`);
+      await sock.sendMessage(targetJid, { text });
+      logger.info(`[WA notifyCustomer] Pesan berhasil dikirim ke JID target: ${targetJid}`);
       return true;
     }
+
+    logger.warn(`[WA notifyCustomer] Tidak ada tujuan valid untuk mengirim notifikasi pelanggan tag: ${tag}`);
     return false;
   } catch (e) {
-    logger.error('Gagal mengirim notifikasi ke pelanggan:', e.message || e);
+    logger.error('[WA notifyCustomer] Gagal mengirim notifikasi ke pelanggan: ' + (e.message || e));
     return false;
   }
 }
@@ -726,11 +828,29 @@ export async function sendWA(to, text) {
     if (digits.startsWith('0')) {
       digits = '62' + digits.slice(1);
     }
-    const jid = to.includes('@') ? to : `${digits}@s.whatsapp.net`;
-    await currentSock.sendMessage(jid, { text });
+    let jid = to.includes('@') ? to : `${digits}@s.whatsapp.net`;
+    logger.info(`[WA sendWA] Mengirim ke: ${to} -> JID Awal: ${jid}`);
+    if (jid.endsWith('@s.whatsapp.net')) {
+      try {
+        logger.info(`[WA sendWA] Memeriksa JID terdaftar via onWhatsApp untuk: ${jid}`);
+        const waCheck = await currentSock.onWhatsApp(jid);
+        logger.info(`[WA sendWA] Hasil onWhatsApp: ${JSON.stringify(waCheck)}`);
+        if (waCheck && waCheck.length > 0 && waCheck[0].exists) {
+          jid = waCheck[0].lid || waCheck[0].jid || jid;
+          logger.info(`[WA sendWA] JID terverifikasi (menggunakan LID jika ada): ${jid}`);
+        } else {
+          logger.info(`[WA sendWA] JID tidak ditemukan di server WA, menggunakan fallback JID`);
+        }
+      } catch (err) {
+        logger.error(`[WA sendWA] Gagal check onWhatsApp untuk ${jid}: ${err.message}`);
+      }
+    }
+    logger.info(`[WA sendWA] Mengeksekusi sendMessage ke JID: ${jid}`);
+    const result = await currentSock.sendMessage(jid, { text });
+    logger.info(`[WA sendWA] sendMessage selesai! Result JID: ${result?.key?.remoteJid || 'null'}, ID: ${result?.key?.id || 'null'}`);
     return true;
   } catch (e) {
-    logger.error('Gagal kirim WA:', e.message);
+    logger.error('[WA sendWA] Gagal kirim WA:', e.message);
     return false;
   }
 }
@@ -745,7 +865,17 @@ export async function sendWAImage(to, imageBuffer, caption = '') {
     if (digits.startsWith('0')) {
       digits = '62' + digits.slice(1);
     }
-    const jid = String(to || '').includes('@') ? String(to) : `${digits}@s.whatsapp.net`;
+    let jid = String(to || '').includes('@') ? String(to) : `${digits}@s.whatsapp.net`;
+    if (jid.endsWith('@s.whatsapp.net')) {
+      try {
+        const [waCheck] = await currentSock.onWhatsApp(jid);
+        if (waCheck && waCheck.exists && waCheck.jid) {
+          jid = waCheck.jid;
+        }
+      } catch (err) {
+        logger.debug(`[WA] sendWAImage JID resolution failed for ${jid}: ${err.message}`);
+      }
+    }
     const img = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer || []);
     if (!img.length) return false;
     await currentSock.sendMessage(jid, { image: img, caption: String(caption || '') });
@@ -772,22 +902,44 @@ export async function restartWhatsAppBot() {
 }
 
 export async function startWhatsAppBot() {
+  if (currentSock) {
+    try {
+      logger.info('WhatsApp: Menutup koneksi socket lama yang masih aktif sebelum reconnect...');
+      currentSock.ev.removeAllListeners();
+      currentSock.end();
+    } catch (e) {
+      logger.error('WhatsApp: Gagal menutup socket lama:', e.message);
+    }
+    currentSock = null;
+  }
+
   const authFolder = path.resolve(projectRoot, getSetting('whatsapp_auth_folder', 'auth_info_baileys'));
   const lidMapPath = path.resolve(projectRoot, getSetting('whatsapp_lid_map_file', 'data/wa-lid-map.json'));
   const lidStore = new WaLidStore(lidMapPath);
 
   const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-  const { version } = await fetchLatestBaileysVersion();
+  let version = [2, 3000, 1017531287]; // Fallback version
+  try {
+    const latest = await fetchLatestBaileysVersion();
+    if (latest && latest.version) {
+      version = latest.version;
+    }
+  } catch (err) {
+    logger.warn(`WhatsApp: Gagal mengambil versi terbaru Baileys: ${err.message}. Menggunakan fallback.`);
+  }
 
   const sock = makeWASocket({
     version,
     auth: state,
     printQRInTerminal: false,
-    browser: ['ALIJAYA BILLING', 'Chrome', '1.0.0'],
+    browser: Browsers.ubuntu('Chrome'),
     syncFullHistory: false,
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
     getMessage: true,
+    keepAliveIntervalMs: 30000,
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 60000,
     logger: pino({ level: 'silent' })
   });
 
@@ -832,7 +984,31 @@ export async function startWhatsAppBot() {
       whatsappStatus.qr = null;
       whatsappStatus.connection = 'open';
       whatsappStatus.user = sock.user;
-      logger.info('WhatsApp bot terhubung');
+      logger.info('WhatsApp bot terhubung. Akun Bot JID: ' + (sock.user?.id || 'unknown') + ', Name: ' + (sock.user?.name || 'unknown'));
+
+      // Pre-resolve admin LIDs
+      (async () => {
+        try {
+          const adminList = getWhatsappAdminNumbers();
+          for (const n of adminList) {
+            const digits = String(n).replace(/\D/g, '');
+            if (digits.length >= 8) {
+              const formatted = digits.startsWith('0') ? '62' + digits.slice(1) : digits.startsWith('62') ? digits : '62' + digits;
+              const jid = `${formatted}@s.whatsapp.net`;
+              const waCheck = await sock.onWhatsApp(jid).catch(() => []);
+              if (waCheck && waCheck.length > 0 && waCheck[0].exists && waCheck[0].lid) {
+                const lidJid = waCheck[0].lid;
+                const lidUser = lidJid.split('@')[0];
+                lidStore.set(lidJid, formatted);
+                lidStore.set(lidUser, formatted);
+                logger.info(`[WA Admin Pre-resolve] Nomor admin ${formatted} terpetakan ke LID: ${lidJid}`);
+              }
+            }
+          }
+        } catch (e) {
+          logger.warn(`[WA Admin Pre-resolve] Pre-resolve error: ${e.message}`);
+        }
+      })();
 
       if (qrShownSinceStart && !notifiedAdminForQr) {
         notifiedAdminForQr = true;
@@ -861,16 +1037,43 @@ export async function startWhatsAppBot() {
     if (type !== 'notify') return;
     for (const m of messages) {
       try {
-        if (m.key.fromMe) continue;
+        const selfPn = sock.user && sock.user.id ? sock.user.id.split(':')[0].split('@')[0] : null;
+        const selfLid = sock.user && sock.user.lid ? sock.user.lid.split('@')[0] : null;
+        const remoteUser = m.key.remoteJid ? m.key.remoteJid.split('@')[0] : null;
+        const isSelf = m.key.fromMe && (remoteUser === selfPn || (selfLid && remoteUser === selfLid));
+        if (m.key.fromMe && !isSelf) continue;
         const text = getMessageText(m);
         if (!text) continue;
 
         const remote = m.key.remoteJid;
         if (!remote || remote.endsWith('@g.us')) continue;
 
-        const adminSet = loadWhatsappAdminSet();
-        const isAdmin = isWhatsappAdminKey(m.key, adminSet);
+        const reply = async (msg) => {
+          logger.info(`[WA reply] Menyiapkan balasan ke ${remote}: "${msg.substring(0, 60)}..."`);
+          try {
+            const targetJid = (m.key.senderPn && m.key.senderPn.endsWith('@s.whatsapp.net')) 
+              ? m.key.senderPn 
+              : remote;
+
+            logger.info(`[WA reply] Mengirim balasan ke JID target: ${targetJid}`);
+            if (targetJid.endsWith('@lid')) {
+              await sock.sendMessage(targetJid, { text: waAutoWrap(msg) });
+            } else {
+              await sock.sendMessage(targetJid, { text: waAutoWrap(msg) }, { quoted: m });
+            }
+            logger.info(`[WA reply] Balasan berhasil dikirim ke JID target: ${targetJid}`);
+          } catch (sendErr) {
+            logger.error('[WA reply] Gagal mengirim balasan: ' + sendErr.message);
+          }
+        };
+
+        logger.info(`[WA] Pesan masuk dari ${remote}: "${text}"`);
+        logger.info(`[WA] Full message object: ${JSON.stringify(m)}`);
+        const adminSet = loadWhatsappAdminSet(lidStore);
+        const isAdmin = isWhatsappAdminKey(m.key, adminSet, sock, lidStore);
+        logger.info(`[WA] Sender details: JID=${remote}, isAdmin=${isAdmin}, adminSet=${JSON.stringify([...adminSet])}`);
         const parsed = parseCommand(text, isAdmin);
+        logger.info(`[WA] Parsed command: ${JSON.stringify(parsed)}`);
         if (!parsed) continue;
 
         // Rate Limiting Check
@@ -897,10 +1100,6 @@ export async function startWhatsAppBot() {
             logger.info(`[WhatsApp Bot] Rate limit warning for ${phone}: ${rateLimitCheck.remaining} commands remaining`);
           }
         }
-
-        const reply = async (msg) => {
-          await sock.sendMessage(remote, { text: waAutoWrap(msg) }, { quoted: m });
-        };
 
         if (parsed.cmd === 'menu') {
           let body = getMenuText();
@@ -1064,9 +1263,13 @@ export async function startWhatsAppBot() {
         }
 
         if (parsed.admin && parsed.cmd === 'lunas') {
+          logger.info(`[WA lunas] Memulai pemrosesan lunas untuk target: "${parsed.targetId}"`);
           try {
             const keyRaw = String(parsed.targetId || '').trim();
-            if (!keyRaw) return await reply('❌ Format: `lunas IDTAGIHAN` atau `lunas nama/nohp/pppoe/tag`');
+            if (!keyRaw) {
+              logger.warn(`[WA lunas] Target kosong!`);
+              return await reply('❌ Format: `lunas IDTAGIHAN` atau `lunas nama/nohp/pppoe/tag`');
+            }
 
             let targetInvId = null;
             let targetInv = null;
@@ -1074,6 +1277,7 @@ export async function startWhatsAppBot() {
             if (isNumeric) {
               targetInvId = Number(keyRaw);
               targetInv = billingSvc.getInvoiceById(targetInvId);
+              logger.info(`[WA lunas] Pencarian numerik ID Invoice: ${targetInvId} -> Found: ${!!targetInv}`);
             }
 
             // If not found by ID, try find customer and their oldest unpaid invoice
@@ -1081,12 +1285,15 @@ export async function startWhatsAppBot() {
               let cust =
                 (isNumeric ? customerSvc.getCustomerById(Number(keyRaw)) : null) ||
                 customerSvc.findCustomerByAny(keyRaw);
+              logger.info(`[WA lunas] Pencarian customer untuk key: "${keyRaw}" -> Found: ${cust ? cust.name + " (ID:" + cust.id + ")" : 'null'}`);
 
               if (!cust) {
                 const candidates = customerSvc.getAllCustomers(keyRaw) || [];
                 const unique = Array.from(new Map(candidates.map(c => [c.id, c])).values());
+                logger.info(`[WA lunas] Ditemukan ${unique.length} kandidat unik`);
                 if (unique.length === 1) {
                   cust = customerSvc.getCustomerById(unique[0].id);
+                  logger.info(`[WA lunas] Menggunakan kandidat tunggal: ${cust.name}`);
                 } else if (unique.length > 1) {
                   const top = unique.slice(0, 5).map(c =>
                     `- ID:${c.id} • ${c.name || '-'} • ${c.phone || '-'} • PPPoE:${c.pppoe_username || '-'}`
@@ -1097,6 +1304,7 @@ export async function startWhatsAppBot() {
 
               if (cust) {
                 const unpaid = billingSvc.getUnpaidInvoicesByCustomerId(cust.id);
+                logger.info(`[WA lunas] Tagihan belum dibayar untuk customer ${cust.name}: ${unpaid ? unpaid.length : 0}`);
                 if (unpaid && unpaid.length > 0) {
                   targetInv = unpaid[0];
                   targetInvId = targetInv.id;
@@ -1106,26 +1314,36 @@ export async function startWhatsAppBot() {
               }
             }
 
-            if (!targetInv) return await reply(`❌ Tagihan atau Pelanggan *${keyRaw}* tidak ditemukan.`);
+            if (!targetInv) {
+              logger.warn(`[WA lunas] Invoice/Customer tidak ditemukan untuk: "${keyRaw}"`);
+              return await reply(`❌ Tagihan atau Pelanggan *${keyRaw}* tidak ditemukan.`);
+            }
             if (targetInvId != null) {
               const enriched = billingSvc.getInvoiceById(targetInvId);
               if (enriched) targetInv = enriched;
             }
             if (targetInv && targetInv.status === 'paid') {
+              logger.info(`[WA lunas] Invoice #${targetInv.id} sudah paid`);
               return await reply(`✅ Invoice *#${targetInv.id}* sudah berstatus LUNAS.`);
             }
 
+            logger.info(`[WA lunas] Menandai lunas invoice #${targetInvId}...`);
             billingSvc.markAsPaid(targetInvId, 'WA Bot Admin', 'Paid via WhatsApp Command');
 
             const customer = customerSvc.getCustomerById(targetInv.customer_id);
             const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 });
             const customerName = String(targetInv.customer_name || customer?.name || targetInv.customer_name || '-');
             const notifyTag = customer?.genieacs_tag || customer?.pppoe_username || customer?.phone || targetInv.customer_phone || targetInv.genieacs_tag || '';
+            logger.info(`[WA lunas] Detail: customerName="${customerName}", notifyTag="${notifyTag}", status="${customer?.status}"`);
+
             if (customer && customer.status === 'suspended') {
               const freshCustomer = customerSvc.getAllCustomers().find(c => c.id === targetInv.customer_id);
               const unpaidCount = freshCustomer && Number.isFinite(Number(freshCustomer.unpaid_count)) ? Number(freshCustomer.unpaid_count) : 1;
+              logger.info(`[WA lunas] Customer status suspended, sisa unpaidCount: ${unpaidCount}`);
               if (unpaidCount === 0) {
+                logger.info(`[WA lunas] Mengaktifkan customer ID ${targetInv.customer_id}...`);
                 await customerSvc.activateCustomer(targetInv.customer_id);
+                logger.info(`[WA lunas] Customer berhasil diaktifkan. Mengirim notifikasi lunas...`);
                 const ok = await notifyCustomer(
                   sock,
                   lidStore,
@@ -1142,6 +1360,7 @@ export async function startWhatsAppBot() {
                 );
                 await reply(`✅ Invoice *#${targetInvId}* LUNAS. Pelanggan *${customerName}* otomatis diaktifkan kembali.\n📩 Notif pelanggan: ${ok ? 'terkirim' : 'gagal'}`);
               } else {
+                logger.info(`[WA lunas] Customer masih memiliki ${unpaidCount} invoice unpaid, notif dikirim...`);
                 const ok = await notifyCustomer(
                   sock,
                   lidStore,
@@ -1159,6 +1378,7 @@ export async function startWhatsAppBot() {
                 await reply(`✅ Invoice *#${targetInvId}* LUNAS. (Masih ada ${unpaidCount} tagihan lain, isolir tetap aktif)\n📩 Notif pelanggan: ${ok ? 'terkirim' : 'gagal'}`);
               }
             } else {
+              logger.info(`[WA lunas] Customer tidak suspended atau null, mengirim notifikasi lunas...`);
               const ok = await notifyCustomer(
                 sock,
                 lidStore,
@@ -1175,6 +1395,7 @@ export async function startWhatsAppBot() {
               await reply(`✅ Invoice *#${targetInvId}* (a.n ${customerName}) berhasil ditandai LUNAS.\n📩 Notif pelanggan: ${ok ? 'terkirim' : 'gagal'}`);
             }
           } catch (e) {
+            logger.error('[WA lunas] Gagal update status: ' + e.message);
             await reply('❌ Gagal update status: ' + e.message);
           }
           continue;
