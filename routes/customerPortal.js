@@ -536,9 +536,7 @@ router.get('/qris/static.jpg', async (req, res) => {
     if (!payload) payload = await tryDecodeQrisPayloadFromUploadedQr(settings);
     if (payload) {
       try {
-        const dynamic = convertStaticQrisToDynamic(payload, amount);
-        const png = await QRCode.toBuffer(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });
-        const jpg = await Jimp.read(png).then(img => img.quality(90).background(0xffffffff).getBufferAsync(Jimp.MIME_JPEG));
+        const jpg = await qrisUtil.buildDynamicQrisJpgBuffer(payload, amount);
         res.set('Content-Type', 'image/jpeg');
         res.set('Cache-Control', 'no-store');
         return res.status(200).send(jpg);

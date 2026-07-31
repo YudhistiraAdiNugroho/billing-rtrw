@@ -747,6 +747,7 @@ try { db.exec("ALTER TABLE packages ADD COLUMN promo_price INTEGER"); } catch (e
 try { db.exec("ALTER TABLE packages ADD COLUMN promo_cycles INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN prorate_first_invoice INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN router_id INTEGER REFERENCES routers(id) ON DELETE SET NULL"); } catch (e) {}
+try { db.exec("ALTER TABLE packages ADD COLUMN router_id INTEGER"); } catch (e) {}
 try { db.exec("ALTER TABLE customers ADD COLUMN promo_cycles_used INTEGER DEFAULT 0"); } catch (e) {}
 
 // Tabel untuk Tracking Pemakaian (Usage) Pelanggan

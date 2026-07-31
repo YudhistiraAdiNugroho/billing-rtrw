@@ -2796,7 +2796,6 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
 
     const isQrisCase = (qrisAmountUnique > 0 && qrisCode > 0);
     const qrisJpgLink = `${baseUrl}/customer/qris/static.jpg?amount=${encodeURIComponent(String(qrisAmountUnique))}`;
-    const qrisPortalLink = `${baseUrl}/customer/payment/create/${encodeURIComponent(String(inv.id))}?method=QRIS_STATIC`;
     const qrisJpgCaption = isQrisCase
       ? templateQris
           .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
@@ -2804,7 +2803,7 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
           .replace(/{{paket}}/gi, inv.package_name || '-')
           .replace(/{{qris_nominal}}/gi, Number(qrisAmountUnique).toLocaleString('id-ID'))
           .replace(/{{qris_kode}}/gi, String(qrisCode).padStart(3, '0'))
-          .replace(/{{qris_qr}}/gi, `QRIS terlampir (gambar).\n🔗 QRIS JPG: ${qrisJpgLink}\n🔐 Portal (Download): ${qrisPortalLink}`)
+          .replace(/{{qris_qr}}/gi, `QRIS terlampir (gambar).\n🌐 Portal Pelanggan: ${loginLink}`)
       : '';
 
     const formattedMsg = isQrisCase
@@ -2814,7 +2813,7 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
           .replace(/{{paket}}/gi, inv.package_name || '-')
           .replace(/{{qris_nominal}}/gi, Number(qrisAmountUnique).toLocaleString('id-ID'))
           .replace(/{{qris_kode}}/gi, String(qrisCode).padStart(3, '0'))
-          .replace(/{{qris_qr}}/gi, `🔗 QRIS JPG: ${qrisJpgLink}\n🔐 Portal (Download): ${qrisPortalLink}`)
+          .replace(/{{qris_qr}}/gi, `🔗 Link QRIS JPG: ${qrisJpgLink}\n🌐 Portal Pelanggan: ${loginLink}`)
       : template
           .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
           .replace(/{{tagihan}}/gi, totalTagihan.toLocaleString('id-ID'))
@@ -2827,9 +2826,7 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
       try {
         const payloadNorm = await resolveQrisStaticPayload();
         if (payloadNorm) {
-          const dynamic = convertStaticQrisToDynamic(payloadNorm, qrisAmountUnique);
-          const png = await QRCode.toBuffer(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });
-          const jpg = await Jimp.read(png).then(img => img.quality(90).background(0xffffffff).getBufferAsync(Jimp.MIME_JPEG));
+          const jpg = await qrisUtil.buildDynamicQrisJpgBuffer(payloadNorm, qrisAmountUnique);
           sent = await sendWAImage(customer.phone, jpg, qrisJpgCaption);
         }
       } catch (e) {

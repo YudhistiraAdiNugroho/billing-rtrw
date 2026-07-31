@@ -6,7 +6,9 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const crypto = require('crypto');
 const multer = require('multer');
 const QRCode = require('qrcode');
-const Jimp = require('jimp');
+const _jimpMod = require('jimp');
+const Jimp = _jimpMod.Jimp || _jimpMod;
+const qrisUtil = require('./utils/qrisUtil');
 const { logger } = require('./config/logger');
 const db = require('./config/database');
 const customerSvc = require('./services/customerService');
@@ -1118,7 +1120,8 @@ app.get('/uploads/qris/:filename', async (req, res) => {
     const payload = normalizeQrisPayload(String(settings?.qris_static_payload || ''));
     if (payload) {
       const png = await QRCode.toBuffer(payload, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });
-      const jpg = await Jimp.read(png).then(img => img.quality(90).background(0xffffffff).getBufferAsync(Jimp.MIME_JPEG));
+      const img = await Jimp.read(png);
+      const jpg = await img.getBuffer('image/jpeg');
       res.set('Content-Type', 'image/jpeg');
       res.set('Cache-Control', 'no-store');
       return res.status(200).send(jpg);

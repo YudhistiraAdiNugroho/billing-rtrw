@@ -141,8 +141,8 @@ async function decodeQrisPayloadFromBuffer(buf) {
 async function buildDynamicQrisJpgBuffer(staticPayload, amount) {
   const dynamic = convertStaticQrisToDynamic(staticPayload, amount);
   const png = await QRCode.toBuffer(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });
-  const jpg = await Jimp.read(png).then(img => img.quality(90).background(0xffffffff).getBufferAsync(Jimp.MIME_JPEG));
-  return jpg;
+  const img = await Jimp.read(png);
+  return await img.getBuffer('image/jpeg');
 }
 
 module.exports = {

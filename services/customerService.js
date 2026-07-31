@@ -297,23 +297,35 @@ function getCustomerStats() {
 // ─── PACKAGES ────────────────────────────────────────────────
 function getAllPackages(routerId = null) {
   const rId = routerId ? Number(routerId) : null;
-  if (rId && rId > 0) {
+  try {
+    if (rId && rId > 0) {
+      return db.prepare(`
+        SELECT p.*, r.name as router_name, COUNT(c.id) as customer_count
+        FROM packages p 
+        LEFT JOIN customers c ON c.package_id = p.id
+        LEFT JOIN routers r ON p.router_id = r.id
+        WHERE p.router_id IS NULL OR p.router_id = ?
+        GROUP BY p.id ORDER BY p.price ASC
+      `).all(rId);
+    }
     return db.prepare(`
       SELECT p.*, r.name as router_name, COUNT(c.id) as customer_count
       FROM packages p 
       LEFT JOIN customers c ON c.package_id = p.id
       LEFT JOIN routers r ON p.router_id = r.id
-      WHERE p.router_id IS NULL OR p.router_id = ?
       GROUP BY p.id ORDER BY p.price ASC
-    `).all(rId);
+    `).all();
+  } catch (e) {
+    if (String(e?.message || '').includes('no such column')) {
+      return db.prepare(`
+        SELECT p.*, NULL as router_name, COUNT(c.id) as customer_count
+        FROM packages p 
+        LEFT JOIN customers c ON c.package_id = p.id
+        GROUP BY p.id ORDER BY p.price ASC
+      `).all();
+    }
+    throw e;
   }
-  return db.prepare(`
-    SELECT p.*, r.name as router_name, COUNT(c.id) as customer_count
-    FROM packages p 
-    LEFT JOIN customers c ON c.package_id = p.id
-    LEFT JOIN routers r ON p.router_id = r.id
-    GROUP BY p.id ORDER BY p.price ASC
-  `).all();
 }
 
 function getPackageById(id) {
