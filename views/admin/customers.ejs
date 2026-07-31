@@ -37,7 +37,7 @@
       <div class="sc p"><i class="bi bi-people sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.total', 'Total') %></div><div class="sc-val"><%= stats.total %></div></div>
       <div class="sc s"><i class="bi bi-check-circle sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.active', 'Aktif') %></div><div class="sc-val"><%= stats.active %></div></div>
       <div class="sc w"><i class="bi bi-pause-circle sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.suspended', 'Disuspend') %></div><div class="sc-val"><%= stats.suspended %></div></div>
-      <div class="sc d"><i class="bi bi-x-circle sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.inactive', 'Nonaktif') %></div><div class="sc-val"><%= stats.inactive %></div></div>
+      <div class="sc d"><i class="bi bi-person-plus sc-icon"></i><div class="sc-label"><%= t('admin.customers.stats.inactive', 'Pendaftar Baru (Nonaktif)') %></div><div class="sc-val"><%= stats.inactive %></div></div>
     </div>
 
     <!-- Search & Add -->
@@ -60,7 +60,7 @@
             <option value=""><%= t('admin.customers.filter.all_status', 'Semua Status') %></option>
             <option value="active" <%= filterStatus==='active' ? 'selected':'' %>><%= t('admin.customers.filter.active', 'Aktif') %></option>
             <option value="suspended" <%= filterStatus==='suspended' ? 'selected':'' %>><%= t('admin.customers.filter.suspended', 'Suspend') %></option>
-            <option value="inactive" <%= filterStatus==='inactive' ? 'selected':'' %>><%= t('admin.customers.filter.inactive', 'Nonaktif') %></option>
+            <option value="inactive" <%= filterStatus==='inactive' ? 'selected':'' %>><%= t('admin.customers.filter.inactive', 'Pendaftar Baru / Nonaktif') %></option>
           </select>
           <% if (typeof routers !== 'undefined' && routers && routers.length > 0) { %>
           <select class="fs" style="width:160px;background:#0f172a;color:#f8fafc;border-color:#334155;" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
