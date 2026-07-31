@@ -538,13 +538,13 @@
         "total": "Total",
         "active": "Aktif",
         "suspended": "Disuspend",
-        "inactive": "Nonaktif"
+        "inactive": "Pendaftar Baru (Nonaktif)"
       },
       "filter": {
         "all_status": "Semua Status",
         "active": "Aktif",
         "suspended": "Suspend",
-        "inactive": "Nonaktif"
+        "inactive": "Pendaftar Baru / Nonaktif"
       },
       "table": {
         "name": "Nama",
