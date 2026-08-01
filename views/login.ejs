@@ -633,15 +633,15 @@
             Selamat datang di portal resmi <strong><%= settings.company_header %></strong>. Kami menyediakan jaringan internet ultra cepat, stabil, dan terjangkau untuk kebutuhan rumah tangga, bisnis, gaming, hingga hiburan keluarga Anda.
           </p>
 
-          <div class="d-flex flex-wrap gap-3 mb-4">
-            <a href="/customer/register" class="btn btn-primary btn-lg rounded-3 fw-bold px-4 py-3 shadow-lg" style="background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%); border: none;">
-              <i class="bi bi-person-plus-fill me-2"></i> Daftar Pasang Baru
+          <div class="d-flex flex-wrap gap-3 mb-4" style="max-width: 620px;">
+            <a href="/customer/register" class="btn btn-primary btn-lg rounded-3 fw-bold px-4 py-3 shadow-lg flex-fill d-inline-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%); border: none; min-width: 260px;">
+              <i class="bi bi-person-plus-fill me-2 fs-5"></i> Daftar Pasang Baru
             </a>
-            <button type="button" id="btn-install-pwa-hero" class="btn btn-warning btn-lg rounded-3 fw-bold px-4 py-3 shadow-lg text-dark d-inline-flex align-items-center" onclick="triggerPwaInstall()">
+            <button type="button" id="btn-install-pwa-hero" class="btn btn-warning btn-lg rounded-3 fw-bold px-4 py-3 shadow-lg text-dark flex-fill d-inline-flex align-items-center justify-content-center" style="min-width: 260px;" onclick="triggerPwaInstall()">
               <i class="bi bi-download me-2 fs-5"></i> Install Aplikasi Pelanggan
             </button>
-            <a href="/customer/check-billing" class="btn btn-outline-light btn-lg rounded-3 fw-bold px-4 py-3">
-              <i class="bi bi-receipt me-2"></i> Cek Tagihan Saya
+            <a href="/customer/check-billing" class="btn btn-outline-light btn-lg rounded-3 fw-bold px-4 py-3 w-100 d-inline-flex align-items-center justify-content-center mt-1" style="border-color: rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.05);">
+              <i class="bi bi-receipt me-2 fs-5"></i> Cek Tagihan Saya
             </a>
           </div>
 
