@@ -4,7 +4,7 @@ const { getSetting } = require('../config/settingsManager');
 
 function sanitizeCliInput(val) {
   if (val === undefined || val === null) return '';
-  return String(val).replace(/[\r\n]+/g, ' ').trim();
+  return String(val).replace(/[\r\n;|&`$()<>!{}\\]+/g, '').trim();
 }
 
 function sanitizeParams(params) {
@@ -12,7 +12,7 @@ function sanitizeParams(params) {
   if (!params || typeof params !== 'object') return clean;
   for (const k of Object.keys(params)) {
     clean[k] = typeof params[k] === 'string'
-      ? params[k].replace(/[\r\n]+/g, ' ').trim()
+      ? params[k].replace(/[\r\n;|&`$()<>!{}\\]+/g, '').trim()
       : params[k];
   }
   return clean;
