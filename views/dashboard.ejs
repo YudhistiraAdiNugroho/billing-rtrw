@@ -891,6 +891,9 @@
         <img src="/img/logo.png" alt="Logo"> <%= t('customer.dashboard.portal', 'Portal Pelanggan') %>
       </span>
       <div class="d-flex align-items-center gap-2">
+        <button type="button" id="btn-install-pwa-dash" class="btn btn-warning btn-sm btn-nav d-inline-flex align-items-center fw-bold text-dark shadow-sm" onclick="triggerPwaInstall()">
+          <i class="bi bi-download me-1"></i> Install App
+        </button>
         <% if (customer.status==='Online' ) { %>
           <span class="status-badge bg-success"><%= t('customer.devices.online', 'Online') %></span>
           <% } else { %>
@@ -2347,7 +2350,96 @@
     </div>
   </div>
 
+  <!-- PWA Install Modal -->
+  <div class="modal fade" id="pwaInstallModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content text-white border border-secondary border-opacity-25 shadow-2xl" style="background: #1e293b; border-radius: 16px;">
+        <div class="modal-header border-secondary border-opacity-25">
+          <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2">
+            <i class="bi bi-download"></i> Install Aplikasi Pelanggan
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-4">
+          <p class="text-slate-300 small mb-3">
+            Nikmati akses instan ke <strong>Portal Pelanggan</strong> langsung dari layar utama HP / Komputer Anda tanpa perlu membuka browser tiap kali ingin cek tagihan/bayar!
+          </p>
+
+          <!-- Android / Chrome / Edge Instructions -->
+          <div class="p-3 mb-3 rounded-3 border border-secondary border-opacity-25 bg-dark bg-opacity-50">
+            <h6 class="fw-bold text-info mb-2"><i class="bi bi-android2 me-1"></i> Android / Chrome / Laptop (Windows/Mac)</h6>
+            <ol class="small text-slate-300 mb-0 ps-3">
+              <li class="mb-1">Klik tombol <strong>"Install Sekarang"</strong> di bawah ini.</li>
+              <li class="mb-1">Tekan tombol <strong>Install / Tambahkan</strong> pada jendela konfirmasi browser.</li>
+              <li>Icon aplikasi <strong>Pelanggan</strong> akan otomatis muncul di Home Screen Anda!</li>
+            </ol>
+          </div>
+
+          <!-- iOS Safari Instructions -->
+          <div class="p-3 rounded-3 border border-secondary border-opacity-25 bg-dark bg-opacity-50">
+            <h6 class="fw-bold text-warning mb-2"><i class="bi bi-apple me-1"></i> iPhone / iPad (Safari)</h6>
+            <ol class="small text-slate-300 mb-0 ps-3">
+              <li class="mb-1">Tekan tombol <strong>Share (Bagikan)</strong> <i class="bi bi-share text-primary"></i> di menu bawah Safari.</li>
+              <li class="mb-1">Geser ke bawah dan pilih <strong>"Add to Home Screen" (Tambah ke Layar Utama)</strong> <i class="bi bi-plus-square text-primary"></i>.</li>
+              <li>Tekan <strong>Add (Tambah)</strong> di pojok kanan atas.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary border-opacity-25">
+          <button type="button" id="modal-btn-install-direct" class="btn btn-warning fw-bold px-4 py-2" onclick="triggerPwaInstallDirect()">
+            <i class="bi bi-download me-1"></i> Install Sekarang
+          </button>
+          <button type="button" class="btn btn-outline-light px-4 py-2" data-bs-dismiss="modal">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
+    let deferredPwaPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPwaPrompt = e;
+      const dashBtn = document.getElementById('btn-install-pwa-dash');
+      if (dashBtn) dashBtn.classList.add('shadow-lg');
+    });
+
+    function triggerPwaInstall() {
+      if (deferredPwaPrompt) {
+        deferredPwaPrompt.prompt();
+        deferredPwaPrompt.userChoice.then((choiceResult) => {
+          deferredPwaPrompt = null;
+        });
+      } else {
+        const modalEl = document.getElementById('pwaInstallModal');
+        if (modalEl) {
+          const bsModal = new bootstrap.Modal(modalEl);
+          bsModal.show();
+        }
+      }
+    }
+
+    function triggerPwaInstallDirect() {
+      if (deferredPwaPrompt) {
+        deferredPwaPrompt.prompt();
+        deferredPwaPrompt.userChoice.then((choiceResult) => {
+          if (choiceResult.outcome === 'accepted') {
+            const modalEl = document.getElementById('pwaInstallModal');
+            if (modalEl) {
+              const instance = bootstrap.Modal.getInstance(modalEl);
+              if (instance) instance.hide();
+            }
+          }
+          deferredPwaPrompt = null;
+        });
+      }
+    }
+
+    window.addEventListener('appinstalled', () => {
+      deferredPwaPrompt = null;
+    });
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js', { scope: '/customer/' }).catch(() => {});
