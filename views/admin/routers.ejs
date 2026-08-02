@@ -20,13 +20,13 @@
     }
 
     .rc-card {
-      background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
-      border: 1px solid rgba(99, 102, 241, 0.2);
-      border-radius: 16px;
-      padding: 20px;
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.22);
+      border-radius: 18px;
+      padding: 22px;
       position: relative;
       overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
       transition: all 0.3s ease;
       display: flex;
       flex-direction: column;
@@ -35,15 +35,15 @@
 
     .rc-card:hover {
       transform: translateY(-4px);
-      border-color: rgba(99, 102, 241, 0.5);
-      box-shadow: 0 16px 40px rgba(99, 102, 241, 0.2);
+      border-color: rgba(99, 102, 241, 0.55);
+      box-shadow: 0 18px 45px rgba(99, 102, 241, 0.25);
     }
 
     .rc-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
     }
 
     .rc-title-box {
@@ -53,20 +53,21 @@
     }
 
     .rc-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      background: rgba(99, 102, 241, 0.15);
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(59, 130, 246, 0.15) 100%);
       color: #818cf8;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 22px;
-      border: 1px solid rgba(99, 102, 241, 0.3);
+      font-size: 24px;
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
 
     .rc-name {
-      font-size: 17px;
+      font-size: 18px;
       font-weight: 800;
       color: #f8fafc;
       margin: 0;
@@ -77,37 +78,38 @@
       font-size: 12px;
       color: #94a3b8;
       font-family: ui-monospace, monospace;
-      margin-top: 2px;
+      margin-top: 3px;
     }
 
     .rc-status-pill {
-      padding: 4px 10px;
+      padding: 5px 12px;
       border-radius: 20px;
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 800;
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      letter-spacing: 0.3px;
     }
     .rc-status-pill.online {
-      background: rgba(34, 197, 94, 0.15);
+      background: rgba(34, 197, 94, 0.18);
       color: #4ade80;
-      border: 1px solid rgba(34, 197, 94, 0.3);
+      border: 1px solid rgba(34, 197, 94, 0.4);
     }
     .rc-status-pill.offline {
-      background: rgba(239, 68, 68, 0.15);
+      background: rgba(239, 68, 68, 0.18);
       color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.3);
+      border: 1px solid rgba(239, 68, 68, 0.4);
     }
     .rc-status-dot {
-      width: 7px;
-      height: 7px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       display: inline-block;
     }
     .rc-status-pill.online .rc-status-dot {
       background: #4ade80;
-      box-shadow: 0 0 8px #4ade80;
+      box-shadow: 0 0 10px #4ade80;
     }
     .rc-status-pill.offline .rc-status-dot {
       background: #f87171;
@@ -117,18 +119,18 @@
     .rc-metrics {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      background: rgba(15, 23, 42, 0.5);
-      border-radius: 12px;
-      padding: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      margin-bottom: 14px;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 14px;
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 16px;
     }
 
     .rc-metric-item {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 5px;
     }
 
     .rc-metric-head {
@@ -136,11 +138,11 @@
       justify-content: space-between;
       font-size: 11px;
       color: #cbd5e1;
-      font-weight: 600;
+      font-weight: 700;
     }
 
     .rc-progress {
-      height: 6px;
+      height: 7px;
       background: rgba(255, 255, 255, 0.1);
       border-radius: 10px;
       overflow: hidden;
@@ -149,7 +151,7 @@
     .rc-progress-bar {
       height: 100%;
       border-radius: 10px;
-      transition: width 0.5s ease;
+      transition: width 0.6s ease;
     }
     .bg-green { background: linear-gradient(90deg, #10b981, #34d399); }
     .bg-yellow { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
@@ -159,41 +161,62 @@
     .rc-specs {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 16px;
+      gap: 10px;
+      margin-bottom: 18px;
       text-align: center;
     }
 
     .rc-spec-box {
-      background: rgba(30, 41, 59, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 10px;
-      padding: 8px 4px;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 10px 4px;
     }
     .rc-spec-val {
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 800;
       color: #f1f5f9;
     }
     .rc-spec-lbl {
       font-size: 10px;
       color: #94a3b8;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      margin-top: 2px;
     }
 
     .rc-actions {
       display: flex;
-      gap: 6px;
+      gap: 8px;
       flex-wrap: wrap;
       margin-top: auto;
-      padding-top: 12px;
+      padding-top: 14px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
     }
 
+    .btn-detail-live {
+      background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+      color: white !important;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+      transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-detail-live:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+      filter: brightness(1.1);
+    }
+
     .view-toggle-btn {
-      padding: 6px 12px;
+      padding: 6px 14px;
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.08);
       color: var(--text);
@@ -206,6 +229,29 @@
       background: var(--primary);
       color: white;
       border-color: var(--primary);
+    }
+
+    /* Modal Styling Improvements */
+    .modal-tab-btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(15, 23, 42, 0.6);
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .modal-tab-btn:hover {
+      background: rgba(30, 41, 59, 0.8);
+      color: #f1f5f9;
+    }
+    .modal-tab-btn.active {
+      background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+      color: white;
+      border-color: #6366f1;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
     }
   </style>
 </head>
@@ -325,16 +371,16 @@
           </div>
 
           <div class="rc-actions">
-            <button class="btn btn-g btn-sm flex-fill" title="Detail Live Status" onclick="openLiveDetailModal(<%= r.id %>)">
-              <i class="bi bi-info-circle me-1"></i> Detail Live
+            <button type="button" class="btn-detail-live flex-fill" title="Detail Live Status" onclick="openLiveDetailModal(<%= r.id %>)">
+              <i class="bi bi-cpu-fill me-1"></i> Detail Live
             </button>
-            <button class="btn btn-g btn-sm" title="<%= t('admin.routers.actions.test', 'Test Koneksi') %>" onclick="testConn(<%= r.id %>)">
+            <button type="button" class="btn btn-g btn-sm" title="<%= t('admin.routers.actions.test', 'Test Koneksi') %>" onclick="testConn(<%= r.id %>)">
               <i class="bi bi-plug"></i>
             </button>
-            <button class="btn btn-g btn-sm" title="Setup Firewall Isolir" onclick="setupFirewall(<%= r.id %>)">
+            <button type="button" class="btn btn-g btn-sm" title="Setup Firewall Isolir" onclick="setupFirewall(<%= r.id %>)">
               <i class="bi bi-shield-lock"></i>
             </button>
-            <button class="btn btn-g btn-sm" title="<%= t('common.edit', 'Edit') %>" onclick="editRouter(<%= i %>)">
+            <button type="button" class="btn btn-g btn-sm" title="<%= t('common.edit', 'Edit') %>" onclick="editRouter(<%= i %>)">
               <i class="bi bi-pencil"></i>
             </button>
             <form method="POST" action="/admin/routers/<%= r.id %>/delete" style="display:inline" onsubmit="return confirm('<%= t('admin.routers.confirm.delete', 'Hapus router ini?') %>')">
@@ -375,7 +421,7 @@
                 <% if (r.is_active) { %><span class="badge bs"><%= t('common.active', 'Aktif') %></span><% } else { %><span class="badge bm"><%= t('common.inactive', 'Nonaktif') %></span><% } %>
               </td>
               <td>
-                <button class="btn btn-g btn-icon btn-sm" title="Detail Live Status" onclick="openLiveDetailModal(<%= r.id %>)"><i class="bi bi-info-circle"></i></button>
+                <button class="btn btn-g btn-icon btn-sm" title="Detail Live Status" onclick="openLiveDetailModal(<%= r.id %>)"><i class="bi bi-cpu-fill text-primary"></i></button>
                 <button class="btn btn-g btn-icon btn-sm" title="<%= t('admin.routers.actions.test', 'Test Koneksi') %>" onclick="testConn(<%= r.id %>)"><i class="bi bi-plug"></i></button>
                 <button class="btn btn-g btn-icon btn-sm" title="Setup Firewall Isolir" onclick="setupFirewall(<%= r.id %>)"><i class="bi bi-shield-lock"></i></button>
                 <button class="btn btn-g btn-icon btn-sm" title="<%= t('common.edit', 'Edit') %>" onclick="editRouter(<%= i %>)"><i class="bi bi-pencil"></i></button>
@@ -394,20 +440,20 @@
 
 <!-- Modal Live Detail Router -->
 <div class="mo" id="routerLiveModal">
-  <div class="mb" style="max-width: 680px;">
+  <div class="mb" style="max-width: 740px;">
     <div class="mh">
-      <span class="mt"><i class="bi bi-cpu-fill text-primary"></i> <span id="modal-router-name">Detail Live Router</span></span>
+      <span class="mt"><i class="bi bi-cpu-fill text-primary me-2"></i> <span id="modal-router-name">Detail Live Router</span></span>
       <button class="mc" onclick="closeModal('routerLiveModal')">&times;</button>
     </div>
-    <div class="mbody" id="modal-router-body">
-      <div class="text-center py-4 text-muted">
+    <div class="mbody" id="modal-router-body" style="min-height:360px;">
+      <div class="text-center py-5 text-muted">
         <i class="bi bi-arrow-repeat spin fs-2 mb-2 d-block text-primary"></i>
-        <span>Memuat data sistem & metrik router...</span>
+        <span>Memuat metrik sistem & data live router...</span>
       </div>
     </div>
     <div class="mf">
       <button type="button" class="btn btn-g" onclick="closeModal('routerLiveModal')">Tutup</button>
-      <button type="button" id="modal-btn-refresh" class="btn btn-p" onclick="refreshCurrentModal()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh</button>
+      <button type="button" id="modal-btn-refresh" class="btn btn-p" onclick="refreshCurrentModal()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh Data</button>
     </div>
   </div>
 </div>
@@ -500,6 +546,7 @@
 <script>
 const routersData = JSON.parse(document.getElementById('routers-data').textContent);
 let currentModalRouterId = null;
+let currentModalData = null;
 
 const I18N = {
   testConfirm: "<%= t('admin.routers.confirm.test', 'Test koneksi ke router ini?') %>",
@@ -585,6 +632,16 @@ async function loadRouterLiveSummary(r) {
   } catch (e) {}
 }
 
+function switchModalTab(tabName) {
+  const tabs = ['sys', 'pppoe', 'hs'];
+  tabs.forEach(t => {
+    const btn = document.getElementById('mtab-btn-' + t);
+    const content = document.getElementById('mtab-content-' + t);
+    if (btn) btn.classList.toggle('active', t === tabName);
+    if (content) content.style.display = (t === tabName) ? 'block' : 'none';
+  });
+}
+
 async function openLiveDetailModal(id) {
   currentModalRouterId = id;
   const router = routersData.find(r => r.id === id);
@@ -593,9 +650,9 @@ async function openLiveDetailModal(id) {
 
   if (nameEl) nameEl.textContent = 'Detail Router: ' + (router ? router.name : '#' + id);
   bodyEl.innerHTML = `
-    <div class="text-center py-4 text-muted">
+    <div class="text-center py-5 text-muted">
       <i class="bi bi-arrow-repeat spin fs-2 mb-2 d-block text-primary"></i>
-      <span>Mengambil informasi metrik dari MikroTik API...</span>
+      <span>Mengambil metrik sistem & sesi live dari MikroTik...</span>
     </div>
   `;
   openModal('routerLiveModal');
@@ -605,6 +662,7 @@ async function openLiveDetailModal(id) {
     const data = await res.json();
 
     if (!data.success) throw new Error(data.error || 'Gagal mengambil data router');
+    currentModalData = data;
     const l = data.live;
     const r = data.router;
 
@@ -613,92 +671,168 @@ async function openLiveDetailModal(id) {
     const usedHdd = l.totalHdd - l.freeHdd;
     const hddPercent = l.totalHdd > 0 ? Math.round((usedHdd / l.totalHdd) * 100) : 0;
 
+    const pppoeRows = (l.activePppoeList || []).map((p, idx) => `
+      <tr>
+        <td class="text-muted">${idx + 1}</td>
+        <td class="fw-bold text-white">${p.name}</td>
+        <td class="text-info font-monospace">${p.address}</td>
+        <td class="text-warning">${p.uptime}</td>
+        <td class="text-muted font-monospace">${p.callerId}</td>
+      </tr>
+    `).join('');
+
+    const hsRows = (l.activeHotspotList || []).map((h, idx) => `
+      <tr>
+        <td class="text-muted">${idx + 1}</td>
+        <td class="fw-bold text-white">${h.user}</td>
+        <td class="text-info font-monospace">${h.address}</td>
+        <td class="text-muted font-monospace">${h.mac}</td>
+        <td class="text-warning">${h.uptime}</td>
+      </tr>
+    `).join('');
+
     bodyEl.innerHTML = `
-      <div class="d-flex justify-content-between align-items-center mb-3 p-3 rounded-3" style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08);">
+      <!-- Top Overview Header -->
+      <div class="d-flex justify-content-between align-items-center mb-3 p-3 rounded-3" style="background:linear-gradient(135deg, rgba(30,41,59,0.8) 0%, rgba(15,23,42,0.9) 100%); border:1px solid rgba(99,102,241,0.25); shadow: 0 8px 20px rgba(0,0,0,0.3);">
         <div>
-          <h5 class="fw-bold text-white mb-1"><i class="bi bi-hdd-network text-info me-2"></i>${r.name}</h5>
+          <h5 class="fw-bold text-white mb-1 d-flex align-items-center gap-2">
+            <i class="bi bi-hdd-network text-info"></i> ${r.name}
+          </h5>
           <span class="small text-muted font-monospace">${r.host}:${r.port} | User: ${r.user}</span>
         </div>
         <div>
           ${l.connected 
-            ? '<span class="badge bg-success px-3 py-2"><i class="bi bi-check-circle-fill me-1"></i> Connected (Online)</span>' 
-            : '<span class="badge bg-danger px-3 py-2"><i class="bi bi-x-circle-fill me-1"></i> Disconnected</span>'}
+            ? '<span class="rc-status-pill online"><span class="rc-status-dot"></span> Online / Connected</span>' 
+            : '<span class="rc-status-pill offline"><span class="rc-status-dot"></span> Disconnected</span>'}
         </div>
       </div>
 
-      ${l.error ? `<div class="alert alert-d mb-3"><i class="bi bi-exclamation-triangle"></i> Status Koneksi: ${l.error}</div>` : ''}
+      ${l.error ? `<div class="alert alert-d mb-3"><i class="bi bi-exclamation-triangle"></i> Error: ${l.error}</div>` : ''}
 
-      <!-- System Gauges -->
-      <div class="row g-2 mb-3">
-        <div class="col-4">
-          <div class="p-3 text-center rounded-3 border border-secondary border-opacity-25" style="background:rgba(30,41,59,0.5)">
-            <small class="text-muted d-block uppercase fw-bold mb-1" style="font-size:10px;">CPU Load</small>
-            <h4 class="fw-extrabold mb-0 ${l.cpuLoad > 80 ? 'text-danger' : (l.cpuLoad > 50 ? 'text-warning' : 'text-success')}">${l.cpuLoad}%</h4>
+      <!-- Modal Internal Tabs Navigation -->
+      <div class="d-flex gap-2 mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+        <button type="button" class="modal-tab-btn active" id="mtab-btn-sys" onclick="switchModalTab('sys')">
+          <i class="bi bi-cpu me-1"></i> Sistem & Metrik
+        </button>
+        <button type="button" class="modal-tab-btn" id="mtab-btn-pppoe" onclick="switchModalTab('pppoe')">
+          <i class="bi bi-plug me-1"></i> PPPoE Aktif (${l.activePppoe})
+        </button>
+        <button type="button" class="modal-tab-btn" id="mtab-btn-hs" onclick="switchModalTab('hs')">
+          <i class="bi bi-wifi me-1"></i> Hotspot Aktif (${l.activeHotspot})
+        </button>
+      </div>
+
+      <!-- Tab 1: System Metrics & Specs -->
+      <div id="mtab-content-sys">
+        <div class="row g-2 mb-3">
+          <div class="col-4">
+            <div class="p-3 text-center rounded-3 border border-secondary border-opacity-25" style="background:rgba(30,41,59,0.5)">
+              <small class="text-muted d-block uppercase fw-bold mb-1" style="font-size:10px;">CPU Load</small>
+              <h4 class="fw-extrabold mb-0 ${l.cpuLoad > 80 ? 'text-danger' : (l.cpuLoad > 50 ? 'text-warning' : 'text-success')}">${l.cpuLoad}%</h4>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-3 text-center rounded-3 border border-secondary border-opacity-25" style="background:rgba(30,41,59,0.5)">
+              <small class="text-muted d-block uppercase fw-bold mb-1" style="font-size:10px;">RAM Used</small>
+              <h4 class="fw-extrabold mb-0 text-info">${memPercent}%</h4>
+              <small class="text-muted" style="font-size:10px;">${formatBytes(usedMem)} / ${formatBytes(l.totalMemory)}</small>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-3 text-center rounded-3 border border-secondary border-opacity-25" style="background:rgba(30,41,59,0.5)">
+              <small class="text-muted d-block uppercase fw-bold mb-1" style="font-size:10px;">Disk Storage</small>
+              <h4 class="fw-extrabold mb-0 text-warning">${hddPercent}%</h4>
+              <small class="text-muted" style="font-size:10px;">${formatBytes(usedHdd)} / ${formatBytes(l.totalHdd)}</small>
+            </div>
           </div>
         </div>
-        <div class="col-4">
-          <div class="p-3 text-center rounded-3 border border-secondary border-opacity-25" style="background:rgba(30,41,59,0.5)">
-            <small class="text-muted d-block uppercase fw-bold mb-1" style="font-size:10px;">RAM Used</small>
-            <h4 class="fw-extrabold mb-0 text-info">${memPercent}%</h4>
-            <small class="text-muted" style="font-size:10px;">${formatBytes(usedMem)} / ${formatBytes(l.totalMemory)}</small>
-          </div>
+
+        <div class="table-responsive border border-secondary border-opacity-25 rounded-3 mb-3">
+          <table class="table table-dark table-sm table-borderless mb-0 small">
+            <tbody>
+              <tr>
+                <td class="text-muted ps-3 py-2" style="width:35%;">Identity RouterOS:</td>
+                <td class="fw-bold text-white py-2">${l.identity}</td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-3 py-2">Board / Tipe Model:</td>
+                <td class="fw-bold text-info py-2">${l.boardName}</td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-3 py-2">RouterOS Version:</td>
+                <td class="fw-bold text-success py-2">${l.version}</td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-3 py-2">Spesifikasi CPU:</td>
+                <td class="text-white py-2">${l.architecture} (${l.cpuCount} Core @ ${l.cpuFrequency} MHz)</td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-3 py-2">Router Uptime:</td>
+                <td class="fw-bold text-warning py-2">${l.uptime}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div class="col-4">
-          <div class="p-3 text-center rounded-3 border border-secondary border-opacity-25" style="background:rgba(30,41,59,0.5)">
-            <small class="text-muted d-block uppercase fw-bold mb-1" style="font-size:10px;">Disk Storage</small>
-            <h4 class="fw-extrabold mb-0 text-warning">${hddPercent}%</h4>
-            <small class="text-muted" style="font-size:10px;">${formatBytes(usedHdd)} / ${formatBytes(l.totalHdd)}</small>
+
+        <div class="row g-2">
+          <div class="col-4">
+            <div class="p-2 border border-secondary border-opacity-25 rounded-3 text-center bg-dark bg-opacity-50">
+              <span class="d-block text-muted" style="font-size:11px;">Pelanggan DB</span>
+              <span class="fw-bold fs-5 text-white">${l.customersCount}</span>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 border border-secondary border-opacity-25 rounded-3 text-center bg-dark bg-opacity-50">
+              <span class="d-block text-muted" style="font-size:11px;">PPPoE Sesi Aktif</span>
+              <span class="fw-bold fs-5 text-success">${l.activePppoe}</span>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 border border-secondary border-opacity-25 rounded-3 text-center bg-dark bg-opacity-50">
+              <span class="d-block text-muted" style="font-size:11px;">Hotspot User Aktif</span>
+              <span class="fw-bold fs-5 text-warning">${l.activeHotspot}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Detail System Spec Table -->
-      <div class="table-responsive border border-secondary border-opacity-25 rounded-3 mb-3">
-        <table class="table table-dark table-sm table-borderless mb-0 small">
-          <tbody>
-            <tr>
-              <td class="text-muted ps-3 py-2" style="width:35%;">Identity System:</td>
-              <td class="fw-bold text-white py-2">${l.identity}</td>
-            </tr>
-            <tr>
-              <td class="text-muted ps-3 py-2">Board / Tipe Model:</td>
-              <td class="fw-bold text-info py-2">${l.boardName}</td>
-            </tr>
-            <tr>
-              <td class="text-muted ps-3 py-2">RouterOS Version:</td>
-              <td class="fw-bold text-success py-2">${l.version}</td>
-            </tr>
-            <tr>
-              <td class="text-muted ps-3 py-2">Spesifikasi CPU:</td>
-              <td class="text-white py-2">${l.architecture} (${l.cpuCount} Core @ ${l.cpuFrequency} MHz)</td>
-            </tr>
-            <tr>
-              <td class="text-muted ps-3 py-2">Router Uptime:</td>
-              <td class="fw-bold text-warning py-2">${l.uptime}</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Tab 2: PPPoE Active Sessions List -->
+      <div id="mtab-content-pppoe" style="display:none;">
+        <div class="table-responsive border border-secondary border-opacity-25 rounded-3" style="max-height: 280px; overflow-y: auto;">
+          <table class="table table-dark table-hover table-sm mb-0 small">
+            <thead class="sticky-top bg-dark">
+              <tr>
+                <th>#</th>
+                <th>Username</th>
+                <th>IP Address</th>
+                <th>Uptime</th>
+                <th>Caller ID / MAC</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pppoeRows || '<tr><td colspan="5" class="text-center text-muted py-4">Tidak ada sesi PPPoE aktif di router ini</td></tr>'}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <!-- Session Counters -->
-      <div class="row g-2">
-        <div class="col-4">
-          <div class="p-2 border border-secondary border-opacity-25 rounded-3 text-center bg-dark bg-opacity-50">
-            <span class="d-block text-muted" style="font-size:11px;">Pelanggan DB</span>
-            <span class="fw-bold fs-5 text-white">${l.customersCount}</span>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="p-2 border border-secondary border-opacity-25 rounded-3 text-center bg-dark bg-opacity-50">
-            <span class="d-block text-muted" style="font-size:11px;">PPPoE Sesi Aktif</span>
-            <span class="fw-bold fs-5 text-success">${l.activePppoe}</span>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="p-2 border border-secondary border-opacity-25 rounded-3 text-center bg-dark bg-opacity-50">
-            <span class="d-block text-muted" style="font-size:11px;">Hotspot User Aktif</span>
-            <span class="fw-bold fs-5 text-warning">${l.activeHotspot}</span>
-          </div>
+      <!-- Tab 3: Hotspot Active Sessions List -->
+      <div id="mtab-content-hs" style="display:none;">
+        <div class="table-responsive border border-secondary border-opacity-25 rounded-3" style="max-height: 280px; overflow-y: auto;">
+          <table class="table table-dark table-hover table-sm mb-0 small">
+            <thead class="sticky-top bg-dark">
+              <tr>
+                <th>#</th>
+                <th>User / Voucher</th>
+                <th>IP Address</th>
+                <th>MAC Address</th>
+                <th>Uptime</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${hsRows || '<tr><td colspan="5" class="text-center text-muted py-4">Tidak ada pengguna Hotspot aktif di router ini</td></tr>'}
+            </tbody>
+          </table>
         </div>
       </div>
     `;

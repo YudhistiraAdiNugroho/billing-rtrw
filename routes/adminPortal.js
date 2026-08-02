@@ -5769,12 +5769,28 @@ router.get('/api/routers/:id/details', requireAdmin, async (req, res) => {
       try {
         const activePpp = await mikrotikService.getPppoeActive(routerId);
         liveData.activePppoe = activePpp ? activePpp.length : 0;
-      } catch (e) {}
+        liveData.activePppoeList = Array.isArray(activePpp) ? activePpp.slice(0, 50).map(s => ({
+          name: s.name || s['name'] || '-',
+          address: s.address || s['address'] || '-',
+          uptime: s.uptime || s['uptime'] || '-',
+          callerId: s['caller-id'] || s.callerId || '-'
+        })) : [];
+      } catch (e) {
+        liveData.activePppoeList = [];
+      }
 
       try {
         const activeHs = await mikrotikService.getHotspotActive(routerId);
         liveData.activeHotspot = activeHs ? activeHs.length : 0;
-      } catch (e) {}
+        liveData.activeHotspotList = Array.isArray(activeHs) ? activeHs.slice(0, 50).map(h => ({
+          user: h.user || h['user'] || '-',
+          address: h.address || h['address'] || '-',
+          mac: h['mac-address'] || h.mac || '-',
+          uptime: h.uptime || h['uptime'] || '-'
+        })) : [];
+      } catch (e) {
+        liveData.activeHotspotList = [];
+      }
 
     } catch (e) {
       liveData.connected = false;
