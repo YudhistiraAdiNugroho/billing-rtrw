@@ -403,6 +403,19 @@ async function checkConnection(routerId = null) {
   }
 }
 
+async function getSystemIdentity(routerId = null) {
+  let conn = null;
+  try {
+    conn = await getConnection(routerId);
+    const identity = await conn.client.menu('/system/identity').getOnly();
+    return identity ? (identity.name || identity['name'] || 'MikroTik') : 'MikroTik';
+  } catch (e) {
+    return null;
+  } finally {
+    if (conn && conn.api) conn.api.close();
+  }
+}
+
 async function getPppoeProfiles(routerId = null) {
   const ck = cacheKey(routerId, 'pppoeProfiles');
   const cached = getCachedList(ck, 15000);
@@ -1700,6 +1713,7 @@ module.exports = {
   getBackup,
   kickPppoeUser,
   kickHotspotUser,
+  getSystemIdentity,
   getSystemResource,
   getSystemScripts,
   getAllRouters,

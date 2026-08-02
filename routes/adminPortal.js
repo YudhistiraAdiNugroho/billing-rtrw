@@ -5704,6 +5704,89 @@ router.get('/api/routers/:id/test', requireAdmin, async (req, res) => {
   }
 });
 
+router.get('/api/routers/:id/details', requireAdmin, async (req, res) => {
+  try {
+    const routerId = req.params.id;
+    const routerConfig = mikrotikService.getRouterById(routerId);
+    if (!routerConfig) return res.status(404).json({ success: false, error: 'Router tidak ditemukan' });
+
+    let liveData = {
+      connected: false,
+      identity: routerConfig.name || 'MikroTik',
+      version: '-',
+      boardName: '-',
+      cpuLoad: 0,
+      freeMemory: 0,
+      totalMemory: 0,
+      freeHdd: 0,
+      totalHdd: 0,
+      uptime: '-',
+      architecture: '-',
+      cpuCount: 1,
+      cpuFrequency: 0,
+      activePppoe: 0,
+      activeHotspot: 0,
+      customersCount: 0,
+      error: null
+    };
+
+    try {
+      const allRouters = mikrotikService.getAllRouters();
+      const firstRouter = allRouters && allRouters.length > 0 ? allRouters[0] : null;
+      let countRes;
+      if (firstRouter && Number(firstRouter.id) === Number(routerId)) {
+        countRes = db.prepare('SELECT COUNT(*) as total FROM customers WHERE router_id = ? OR router_id IS NULL OR router_id = 0').get(routerId);
+      } else {
+        countRes = db.prepare('SELECT COUNT(*) as total FROM customers WHERE router_id = ?').get(routerId);
+      }
+      liveData.customersCount = countRes ? countRes.total : 0;
+    } catch (e) {
+      liveData.customersCount = 0;
+    }
+
+    try {
+      const resource = await mikrotikService.getSystemResource(routerId);
+      if (resource) {
+        liveData.connected = true;
+        liveData.cpuLoad = parseInt(resource['cpu-load'] || resource.cpuLoad || 0);
+        liveData.freeMemory = parseInt(resource['free-memory'] || resource.freeMemory || 0);
+        liveData.totalMemory = parseInt(resource['total-memory'] || resource.totalMemory || 0);
+        liveData.freeHdd = parseInt(resource['free-hdd-space'] || resource.freeHddSpace || 0);
+        liveData.totalHdd = parseInt(resource['total-hdd-space'] || resource.totalHddSpace || 0);
+        liveData.version = resource.version || '-';
+        liveData.boardName = resource['board-name'] || resource.boardName || '-';
+        liveData.uptime = resource.uptime || '-';
+        liveData.architecture = resource['architecture-name'] || resource.architectureName || '-';
+        liveData.cpuCount = resource['cpu-count'] || resource.cpuCount || 1;
+        liveData.cpuFrequency = resource['cpu-frequency'] || resource.cpuFrequency || 0;
+      }
+
+      try {
+        const identity = await mikrotikService.getSystemIdentity(routerId);
+        if (identity) liveData.identity = identity;
+      } catch (e) {}
+
+      try {
+        const activePpp = await mikrotikService.getPppoeActive(routerId);
+        liveData.activePppoe = activePpp ? activePpp.length : 0;
+      } catch (e) {}
+
+      try {
+        const activeHs = await mikrotikService.getHotspotActive(routerId);
+        liveData.activeHotspot = activeHs ? activeHs.length : 0;
+      } catch (e) {}
+
+    } catch (e) {
+      liveData.connected = false;
+      liveData.error = e.message;
+    }
+
+    res.json({ success: true, router: routerConfig, live: liveData });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 router.post('/api/routers/:id/setup-firewall', requireAdmin, async (req, res) => {
   try {
     const result = await mikrotikService.setupIsolirFirewall(req.params.id);
