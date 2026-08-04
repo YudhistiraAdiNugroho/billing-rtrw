@@ -3555,7 +3555,8 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
     { label: 'settings.json', relativePath: 'settings.json', cleanExclude: 'settings.json' },
     { label: '.env', relativePath: '.env', cleanExclude: '.env' },
     { label: 'database', relativePath: 'database', cleanExclude: 'database' },
-    { label: 'public', relativePath: 'public', cleanExclude: 'public' },
+    { label: 'public/uploads', relativePath: 'public/uploads', cleanExclude: 'public/uploads' },
+    { label: 'public/img', relativePath: 'public/img', cleanExclude: 'public/img' },
     { label: authFolder, relativePath: authFolder, cleanExclude: authFolder.replace(/\\/g, '/') },
     { label: 'data', relativePath: 'data', cleanExclude: 'data' }
   ];
