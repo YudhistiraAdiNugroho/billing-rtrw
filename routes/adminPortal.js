@@ -61,6 +61,7 @@ const diagnosticsSvc = require('../services/diagnosticsService');
 const attendanceSvc = require('../services/attendanceService');
 const payrollSvc = require('../services/payrollService');
 const sidebarMenuSvc = require('../services/sidebarMenuService');
+const areaSvc = require('../services/areaService');
 const axios = require('axios');
 const crypto = require('crypto');
 const _jimpMod = require('jimp');
@@ -968,7 +969,8 @@ router.post('/cashiers/:id/delete', requireAdminSession, restrictToAdmin, (req, 
 // --- COLLECTOR MANAGEMENT ---
 router.get('/collectors', requireAdminSession, requireSidebarMenuAccess('collectors'), restrictToAdmin, (req, res) => {
   const collectors = adminSvc.getAllCollectors();
-  res.render('admin/collectors', { title: 'Manajemen Kolektor', company: company(), activePage: 'collectors', collectors, msg: flashMsg(req) });
+  const masterAreas = areaSvc.getAllAreas();
+  res.render('admin/collectors', { title: 'Manajemen Kolektor', company: company(), activePage: 'collectors', collectors, masterAreas, msg: flashMsg(req) });
 });
 
 router.post('/collectors', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
@@ -995,6 +997,42 @@ router.post('/collectors/:id/delete', requireAdminSession, restrictToAdmin, (req
   adminSvc.deleteCollector(req.params.id);
   req.session._msg = { type: 'success', text: 'Kolektor berhasil dihapus.' };
   res.redirect('/admin/collectors');
+});
+
+// --- AREA MANAGEMENT ---
+router.get('/areas', requireAdminSession, requireSidebarMenuAccess('areas'), (req, res) => {
+  const areas = areaSvc.getAllAreas();
+  res.render('admin/areas', { title: 'Manajemen Area', company: company(), activePage: 'areas', areas, msg: flashMsg(req) });
+});
+
+router.post('/areas', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    areaSvc.createArea(req.body);
+    req.session._msg = { type: 'success', text: 'Area berhasil ditambahkan.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/areas');
+});
+
+router.post('/areas/:id/update', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    areaSvc.updateArea(req.params.id, req.body);
+    req.session._msg = { type: 'success', text: 'Data area berhasil diperbarui.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/areas');
+});
+
+router.post('/areas/:id/delete', requireAdminSession, (req, res) => {
+  try {
+    areaSvc.deleteArea(req.params.id);
+    req.session._msg = { type: 'success', text: 'Area berhasil dihapus.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/areas');
 });
 
 router.get('/collector-payments', requireAdminSession, requireSidebarMenuAccess('collector_payments'), (req, res) => {
@@ -1504,20 +1542,29 @@ router.get('/bulk', requireAdminSession, (req, res) => {
 });
 
 // ─── CUSTOMERS ─────────────────────────────────────────────────────────────
-router.get('/customers', requireAdminSession, requireSidebarMenuAccess('customers'), (req, res) => {
-  const { search = '', status: filterStatus = '' } = req.query;
+router.get('/customers', requireAdminSession, requireSidebarMenuAccess('customers'), async (req, res) => {
+  const { search = '', status: filterStatus = '', area: filterArea = '' } = req.query;
   const selectedRouterId = req.selectedRouterId || (req.query.router_id ? Number(req.query.router_id) : null);
-  const customers = customerSvc.getAllCustomers(search, selectedRouterId, filterStatus);
+  const customers = customerSvc.getAllCustomers(search, selectedRouterId, filterStatus, filterArea);
   const stats = customerSvc.getCustomerStats();
   const packages = customerSvc.getAllPackages(selectedRouterId);
   const routers = mikrotikService.getAllRouters();
   const olts = oltSvc.getAllOlts();
   const odps = odpSvc.getAllOdps();
   const collectors = adminSvc.getAllCollectors();
+  const areas = customerSvc.getAllCustomerAreas();
+  const masterAreas = areaSvc.getAllAreas();
+
+  let activeSessionsMap = new Map();
+  try {
+    activeSessionsMap = await mikrotikService.getAllActiveSessionsMap();
+  } catch (e) {
+    logger.warn('[Customers] Failed to fetch active sessions map:', e.message);
+  }
 
   res.render('admin/customers', {
     title: 'Data Pelanggan', company: company(), activePage: 'customers',
-    customers, stats, packages, routers, olts, odps, collectors, search, filterStatus, selectedRouterId, msg: flashMsg(req),
+    customers, stats, packages, routers, olts, odps, collectors, areas, masterAreas, activeSessionsMap, search, filterStatus, filterArea, selectedRouterId, msg: flashMsg(req),
     settings: getSettings()
   });
 });
@@ -1927,6 +1974,36 @@ router.post('/customers/:id/delete', requireAdminSession, async (req, res) => {
   res.redirect('/admin/customers');
 });
 
+router.post('/customers/:id/disconnect', requireAdminSession, async (req, res) => {
+  try {
+    const custId = Number(req.params.id);
+    const customer = customerSvc.getCustomerById(custId);
+    if (!customer) throw new Error('Pelanggan tidak ditemukan');
+
+    const pppoeUser = String(customer.pppoe_username || '').trim();
+    const hotspotUser = String(customer.hotspot_username || '').trim();
+    const username = pppoeUser || hotspotUser || String(customer.name || '').trim();
+
+    let kicked = false;
+    if (pppoeUser) {
+      kicked = await mikrotikService.kickPppoeUser(pppoeUser, customer.router_id);
+    } else if (hotspotUser) {
+      kicked = await mikrotikService.kickHotspotUser(hotspotUser, customer.router_id);
+    } else if (username) {
+      kicked = await mikrotikService.kickPppoeUser(username, customer.router_id) || await mikrotikService.kickHotspotUser(username, customer.router_id);
+    }
+
+    if (kicked) {
+      req.session._msg = { type: 'success', text: `Sesi koneksi aktif untuk "${customer.name}" berhasil diputus dari MikroTik.` };
+    } else {
+      req.session._msg = { type: 'error', text: `Sesi aktif untuk "${customer.name}" tidak ditemukan di MikroTik atau gagal diputus.` };
+    }
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal memutus koneksi: ' + (e.message || String(e)) };
+  }
+  res.redirect('/admin/customers');
+});
+
 // ─── EXPORT/IMPORT CUSTOMERS ──────────────────────────────────────
 router.get('/customers/export', requireAdminSession, (req, res) => {
   try {
@@ -1937,6 +2014,7 @@ router.get('/customers/export', requireAdminSession, (req, res) => {
       'Telepon': c.phone,
       'Email': c.email || '',
       'Alamat': c.address,
+      'Area': c.area || '',
       'Paket': c.package_name || '-',
       'Router': c.router_name || '-',
       'Tipe Koneksi': c.connection_type || 'pppoe',
@@ -2013,6 +2091,7 @@ router.post('/customers/import', requireAdminSession, upload.single('file'), asy
         phone: cleanRow['Telepon'] || cleanRow['phone'] || cleanRow['Phone'],
         email: cleanRow['Email'] || cleanRow['email'] || cleanRow['email_address'],
         address: cleanRow['Alamat'] || cleanRow['address'] || cleanRow['Address'],
+        area: cleanRow['Area'] || cleanRow['area'] || cleanRow['Wilayah'] || '',
         package_id: pkg ? pkg.id : null,
         router_id: router ? router.id : null,
         odp_id: odp ? odp.id : null,

@@ -707,7 +707,7 @@ async function getPppoeActive(routerId = null) {
       rows = await withTimeout(
         conn.api.send([
           '/ppp/active/print',
-          '=.proplist=.id,name,address,uptime,caller-id,service'
+          '=.proplist=.id,name,address,uptime,caller-id,service,bytes-in,bytes-out'
         ]),
         15000, // Increased timeout to 15s
         'getPppoeActive'
@@ -764,6 +764,48 @@ async function getActivePppoeSessionsMap() {
     } catch (err) {
       logger.error(`[MikroTik] Failed to get active PPPoE sessions from router ${r.name}: ${err.message}`);
     }
+  }
+  return sessionsMap;
+}
+
+async function getAllActiveSessionsMap() {
+  const routers = getAllRouters().filter(r => r.is_active === 1 || r.is_active === '1' || r.is_active === true);
+  const sessionsMap = new Map();
+  for (const r of routers) {
+    try {
+      const pppoeActives = await getPppoeActive(r.id).catch(() => []);
+      for (const s of pppoeActives) {
+        if (s.name) {
+          sessionsMap.set(s.name.toLowerCase(), {
+            ip: s.address,
+            uptime: s.uptime || '-',
+            callerId: s['caller-id'] || '',
+            bytesIn: Number(s['bytes-in'] || s['bytes_in'] || 0),
+            bytesOut: Number(s['bytes-out'] || s['bytes_out'] || 0),
+            type: 'pppoe',
+            routerId: r.id,
+            routerName: r.name
+          });
+        }
+      }
+    } catch (err) {}
+    try {
+      const hsActives = await getHotspotActive(r.id).catch(() => []);
+      for (const s of hsActives) {
+        if (s.user) {
+          sessionsMap.set(s.user.toLowerCase(), {
+            ip: s.address,
+            uptime: s.uptime || '-',
+            callerId: s['mac-address'] || '',
+            bytesIn: Number(s['bytes-in'] || s['bytes_in'] || 0),
+            bytesOut: Number(s['bytes-out'] || s['bytes_out'] || 0),
+            type: 'hotspot',
+            routerId: r.id,
+            routerName: r.name
+          });
+        }
+      }
+    } catch (err) {}
   }
   return sessionsMap;
 }
@@ -1700,6 +1742,7 @@ module.exports = {
   getHotspotProfiles,
   getPppoeActive,
   getActivePppoeSessionsMap,
+  getAllActiveSessionsMap,
   getHotspotActive,
   getIpPools,
   addPppoeProfile,

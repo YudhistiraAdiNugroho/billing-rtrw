@@ -57,7 +57,7 @@ function getEffectiveRouterId(customerRouterId) {
 }
 
 // ─── CUSTOMERS ───────────────────────────────────────────────
-function getAllCustomers(search = '', routerId = null, filterStatus = '') {
+function getAllCustomers(search = '', routerId = null, filterStatus = '', filterArea = '') {
   const now = getCurrentDateInTimezone();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -85,8 +85,8 @@ function getAllCustomers(search = '', routerId = null, filterStatus = '') {
 
   if (search) {
     const s = `%${search}%`;
-    whereClauses.push(`(c.name LIKE ? OR c.phone LIKE ? OR c.genieacs_tag LIKE ? OR c.address LIKE ? OR c.pppoe_username LIKE ? OR c.static_ip LIKE ? OR c.hotspot_username LIKE ?)`);
-    params.push(s, s, s, s, s, s, s);
+    whereClauses.push(`(c.name LIKE ? OR c.phone LIKE ? OR c.genieacs_tag LIKE ? OR c.address LIKE ? OR c.area LIKE ? OR c.pppoe_username LIKE ? OR c.static_ip LIKE ? OR c.hotspot_username LIKE ?)`);
+    params.push(s, s, s, s, s, s, s, s);
   }
 
   const rId = routerId ? Number(routerId) : null;
@@ -100,8 +100,26 @@ function getAllCustomers(search = '', routerId = null, filterStatus = '') {
     params.push(filterStatus);
   }
 
+  if (filterArea) {
+    whereClauses.push(`LOWER(TRIM(c.area)) = LOWER(TRIM(?))`);
+    params.push(filterArea);
+  }
+
   const whereSql = whereClauses.length > 0 ? ` WHERE ` + whereClauses.join(' AND ') : '';
   return db.prepare(base + whereSql + ` ORDER BY c.name ASC`).all(...params);
+}
+
+function getAllCustomerAreas() {
+  const rows = db.prepare(`
+    SELECT DISTINCT TRIM(area) as area FROM (
+      SELECT area FROM customers WHERE area IS NOT NULL AND TRIM(area) != ''
+      UNION
+      SELECT area FROM collectors WHERE area IS NOT NULL AND TRIM(area) != ''
+      UNION
+      SELECT area FROM technicians WHERE area IS NOT NULL AND TRIM(area) != ''
+    ) ORDER BY area ASC
+  `).all();
+  return rows.map(r => r.area).filter(Boolean);
 }
 
 function resetPromoCyclesUsed(customerId) {
@@ -127,10 +145,11 @@ function getCustomerById(id) {
 
 function createCustomer(data) {
   return db.prepare(`
-    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (name, phone, email, address, area, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
+    data.area ? String(data.area).trim() : '',
     data.package_id ? parseInt(data.package_id) : null,
     data.router_id ? parseInt(data.router_id) : null,
     data.olt_id ? parseInt(data.olt_id) : null,
@@ -162,10 +181,11 @@ function updateCustomer(id, data) {
   const pkgChanged = prev && Number(prev.package_id || 0) !== Number(newPkgId || 0);
 
   const result = db.prepare(`
-    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?
+    UPDATE customers SET name=?, phone=?, email=?, address=?, area=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?
     WHERE id=?
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
+    data.area ? String(data.area).trim() : '',
     data.package_id ? parseInt(data.package_id) : null,
     data.router_id ? parseInt(data.router_id) : null,
     data.olt_id ? parseInt(data.olt_id) : null,
@@ -632,7 +652,7 @@ async function activateCustomer(id) {
 }
 
 module.exports = {
-  getAllCustomers, getCustomerById, createCustomer, updateCustomer, deleteCustomer, getCustomerStats,
+  getAllCustomers, getAllCustomerAreas, getCustomerById, createCustomer, updateCustomer, deleteCustomer, getCustomerStats,
   getAllPackages, getPackageById, createPackage, updatePackage, deletePackage,
   suspendCustomer, activateCustomer, findCustomerByAny, updateCustomerCablePath,
   resetPromoCyclesUsed, getEffectiveRouterId

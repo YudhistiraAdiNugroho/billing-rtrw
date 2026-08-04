@@ -47,6 +47,13 @@ try {
 }
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS areas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    created_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
   CREATE TABLE IF NOT EXISTS expense_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -104,6 +111,7 @@ db.exec(`
     name TEXT NOT NULL,
     phone TEXT DEFAULT '',
     address TEXT DEFAULT '',
+    area TEXT DEFAULT '',
     package_id INTEGER REFERENCES packages(id) ON DELETE SET NULL,
     genieacs_tag TEXT DEFAULT '',
     pppoe_username TEXT DEFAULT '',
@@ -141,6 +149,7 @@ db.exec(`
     password TEXT NOT NULL,
     name TEXT NOT NULL,
     phone TEXT DEFAULT '',
+    area TEXT DEFAULT '',
     is_active INTEGER DEFAULT 1,
     auto_approve INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT (NOW_LOCAL())
@@ -998,15 +1007,32 @@ try {
   console.error('Failed to migrate digiflazz_staff_transactions:', e);
 }
 
-// Safe migration: tambah kolom balance ke tabel customers (untuk sistem saldo PPOB pelanggan)
+// Safe migration: tambah kolom balance dan area ke tabel customers
 try {
   const custCols = db.prepare("PRAGMA table_info(customers)").all();
   if (!custCols.find(c => c.name === 'balance')) {
     db.exec("ALTER TABLE customers ADD COLUMN balance INTEGER NOT NULL DEFAULT 0");
   }
+  if (!custCols.find(c => c.name === 'area')) {
+    db.exec("ALTER TABLE customers ADD COLUMN area TEXT DEFAULT ''");
+  }
 } catch(e) {
-  console.error('Failed to migrate customers balance:', e);
+  console.error('Failed to migrate customers columns:', e);
 }
+
+// Safe migration: sync area-area yang sudah pernah diinput ke tabel areas
+try {
+  db.exec(`
+    INSERT OR IGNORE INTO areas (name)
+    SELECT DISTINCT TRIM(area) FROM (
+      SELECT area FROM customers WHERE area IS NOT NULL AND TRIM(area) != ''
+      UNION
+      SELECT area FROM collectors WHERE area IS NOT NULL AND TRIM(area) != ''
+      UNION
+      SELECT area FROM technicians WHERE area IS NOT NULL AND TRIM(area) != ''
+    );
+  `);
+} catch(e) {}
 
 module.exports = db;
 module.exports.getAppSetting = getAppSetting;
