@@ -115,7 +115,7 @@
                   <div style="font-size:11px;color:var(--muted)"><%= (c.speed_down/1000).toFixed(0) %>/<%= (c.speed_up/1000).toFixed(0) %> Mbps &bull; Rp <%= c.package_price ? c.package_price.toLocaleString('id-ID') : '-' %></div>
                 <% } else { %><span class="text-muted">-</span><% } %>
               </td>
-              <td>
+              <td class="cust-conn-cell" data-username="<%= String(c.pppoe_username || c.hotspot_username || '').trim().toLowerCase() %>">
                 <% 
                   const username = String(c.pppoe_username || c.hotspot_username || '').trim().toLowerCase();
                   const session = username && typeof activeSessionsMap !== 'undefined' && activeSessionsMap && activeSessionsMap.get ? activeSessionsMap.get(username) : null;
@@ -138,10 +138,10 @@
                     <i class="bi bi-circle-fill" style="font-size:7px;margin-right:4px"></i>ONLINE
                   </span>
                   <div style="font-size:12px;font-weight:800;color:var(--text);margin-top:3px">
-                    <i class="bi bi-clock-history text-success me-1"></i><%= session.uptime %>
+                    <i class="bi bi-clock-history text-success me-1"></i><span class="conn-uptime"><%= session.uptime %></span>
                   </div>
                   <div style="font-size:10px;color:var(--muted)">
-                    <%= session.ip %><% if (session.type) { %> (<%= session.type.toUpperCase() %>)<% } %>
+                    <span class="conn-ip"><%= session.ip %></span><% if (session.type) { %> (<%= session.type.toUpperCase() %>)<% } %>
                   </div>
                 <% } else { %>
                   <span class="badge" style="background:rgba(148,163,184,0.12);color:#94a3b8;border:1px solid rgba(148,163,184,0.25)">
@@ -150,8 +150,8 @@
                   <div style="font-size:10px;color:var(--muted);margin-top:3px">Tidak Terhubung</div>
                 <% } %>
                 <div style="font-size:11px;margin-top:4px;display:flex;gap:6px;font-family:monospace;flex-wrap:wrap">
-                  <span style="color:#38bdf8" title="Download (Receive)"><i class="bi bi-arrow-down"></i>RX: <%= fmtB(rxBytes) %></span>
-                  <span style="color:#f472b6" title="Upload (Transmit)"><i class="bi bi-arrow-up"></i>TX: <%= fmtB(txBytes) %></span>
+                  <span style="color:#38bdf8" title="Download (Receive)"><i class="bi bi-arrow-down"></i>RX: <strong class="conn-rx"><%= fmtB(rxBytes) %></strong></span>
+                  <span style="color:#f472b6" title="Upload (Transmit)"><i class="bi bi-arrow-up"></i>TX: <strong class="conn-tx"><%= fmtB(txBytes) %></strong></span>
                 </div>
               </td>
               <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
@@ -1026,12 +1026,79 @@ function viewCustDetail(idx) {
       document.getElementById('v_disconnect_form').action = '/admin/customers/' + c.id + '/disconnect';
     }
 
+    currentDetailIdx = idx;
     openModal('viewDetailModal');
+    fetchLiveSessions();
   } catch (err) {
     console.error('Error in viewCustDetail:', err);
     alert('Terjadi kesalahan saat memuat detail pelanggan: ' + err.message);
   }
 }
+
+let currentDetailIdx = null;
+
+async function fetchLiveSessions() {
+  try {
+    const res = await fetch('/admin/api/customers/live-sessions');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.ok || !data.sessions) return;
+
+    for (const [uname, session] of Object.entries(data.sessions)) {
+      activeSessionsMapObj.set(uname.toLowerCase(), session);
+    }
+
+    document.querySelectorAll('.cust-conn-cell').forEach(cell => {
+      const username = cell.dataset.username;
+      if (!username) return;
+      const s = data.sessions[username];
+      const rxEl = cell.querySelector('.conn-rx');
+      const txEl = cell.querySelector('.conn-tx');
+      const uptimeEl = cell.querySelector('.conn-uptime');
+      const ipEl = cell.querySelector('.conn-ip');
+
+      if (s) {
+        if (rxEl) rxEl.textContent = formatBytesVal(s.bytesIn);
+        if (txEl) txEl.textContent = formatBytesVal(s.bytesOut);
+        if (uptimeEl) uptimeEl.textContent = s.uptime || '-';
+        if (ipEl) ipEl.textContent = s.ip || '-';
+      }
+    });
+
+    if (currentDetailIdx !== null) {
+      updateDetailModalLive(currentDetailIdx);
+    }
+  } catch (err) {
+    console.warn('Live sessions fetch error:', err);
+  }
+}
+
+function updateDetailModalLive(idx) {
+  const c = customersData[idx];
+  if (!c) return;
+  const username = String(c.pppoe_username || c.hotspot_username || c.name || '').trim().toLowerCase();
+  const session = activeSessionsMapObj.get(username);
+  if (session) {
+    const rxBytes = session.bytesIn || 0;
+    const txBytes = session.bytesOut || 0;
+    const totalBytes = rxBytes + txBytes;
+
+    if (document.getElementById('v_rx_fmt')) document.getElementById('v_rx_fmt').textContent = formatBytesVal(rxBytes);
+    if (document.getElementById('v_rx_bytes')) document.getElementById('v_rx_bytes').textContent = Number(rxBytes).toLocaleString('id-ID') + ' Bytes';
+    if (document.getElementById('v_tx_fmt')) document.getElementById('v_tx_fmt').textContent = formatBytesVal(txBytes);
+    if (document.getElementById('v_tx_bytes')) document.getElementById('v_tx_bytes').textContent = Number(txBytes).toLocaleString('id-ID') + ' Bytes';
+    if (document.getElementById('v_uptime')) document.getElementById('v_uptime').textContent = session.uptime || 'Active';
+    if (document.getElementById('v_ip')) document.getElementById('v_ip').textContent = session.ip || (c.static_ip || '-');
+    if (document.getElementById('v_mac')) document.getElementById('v_mac').textContent = session.callerId || (c.mac_address || '-');
+
+    const limitGB = c.fup_limit_gb || 0;
+    const useFup = c.use_fup === 1;
+    const fupText = formatBytesVal(totalBytes) + (useFup && limitGB > 0 ? ` (Limit FUP: ${limitGB} GB)` : ' (Unlimited)');
+    if (document.getElementById('v_total_fup')) document.getElementById('v_total_fup').textContent = fupText;
+  }
+}
+
+setInterval(fetchLiveSessions, 5000);
 
 window.viewCustDetail = viewCustDetail;
 window.copyToClipboard = copyToClipboard;
