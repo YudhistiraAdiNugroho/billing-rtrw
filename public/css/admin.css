@@ -226,3 +226,162 @@ html,body{width:100%}
   .mb{width:96%;border-radius:16px 16px 0 0;position:fixed;bottom:0;left:0;right:0;max-height:92vh;margin:0 auto}
   .mo.show{align-items:flex-end}
 }
+
+/* ── LIGHT THEME COMPREHENSIVE OVERRIDES ── */
+:root[data-theme="light"],
+html[data-theme="light"],
+html.light-theme,
+body.light-theme,
+[data-theme="light"] {
+  --bg:       #f8fafc;
+  --bg2:      #ffffff;
+  --bg3:      #f1f5f9;
+  --border:   rgba(0, 0, 0, 0.12);
+  --text:     #0f172a;
+  --muted:    #64748b;
+  --primary:  #4f46e5;
+  --pdim:     rgba(79, 70, 229, 0.12);
+  --success:  #16a34a;
+  --sdim:     rgba(22, 163, 74, 0.12);
+  --warning:  #d97706;
+  --wdim:     rgba(217, 119, 6, 0.12);
+  --danger:   #dc2626;
+  --ddim:     rgba(220, 38, 38, 0.12);
+  --info:     #0284c7;
+  --idim:     rgba(2, 132, 199, 0.12);
+  --panel2:   #f8fafc;
+  color-scheme: light;
+}
+
+html[data-theme="light"] body,
+html[data-theme="light"] .mw,
+html[data-theme="light"] .page,
+html[data-theme="light"] .main-content,
+html[data-theme="light"] .content-wrapper,
+html[data-theme="light"] main {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .sidebar,
+html[data-theme="light"] .topbar,
+html[data-theme="light"] .card,
+html[data-theme="light"] .mb,
+html[data-theme="light"] .mb-card,
+html[data-theme="light"] .bottom-nav,
+html[data-theme="light"] .modal-content,
+html[data-theme="light"] .modal-body,
+html[data-theme="light"] .modal-header,
+html[data-theme="light"] .modal-footer,
+html[data-theme="light"] .sc,
+html[data-theme="light"] .sc-card,
+html[data-theme="light"] .stat-card,
+html[data-theme="light"] .stat-card-v2,
+html[data-theme="light"] .box {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+html[data-theme="light"] .card-hd,
+html[data-theme="light"] .mh,
+html[data-theme="light"] .mf,
+html[data-theme="light"] .sb-brand,
+html[data-theme="light"] .topbar {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+html[data-theme="light"] .sb-name,
+html[data-theme="light"] .tb-title,
+html[data-theme="light"] .card-hd h6,
+html[data-theme="light"] .mt,
+html[data-theme="light"] h1, html[data-theme="light"] h2, html[data-theme="light"] h3, 
+html[data-theme="light"] h4, html[data-theme="light"] h5, html[data-theme="light"] h6,
+html[data-theme="light"] .sc-val,
+html[data-theme="light"] strong,
+html[data-theme="light"] b {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .fc,
+html[data-theme="light"] .fs,
+html[data-theme="light"] input,
+html[data-theme="light"] select,
+html[data-theme="light"] textarea,
+html[data-theme="light"] .form-control,
+html[data-theme="light"] .form-select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html[data-theme="light"] select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .dtbl,
+html[data-theme="light"] .table,
+html[data-theme="light"] table {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .dtbl th,
+html[data-theme="light"] .table th,
+html[data-theme="light"] table th {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html[data-theme="light"] .dtbl td,
+html[data-theme="light"] .table td,
+html[data-theme="light"] table td {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #f1f5f9 !important;
+}
+
+html[data-theme="light"] .dtbl tr:hover td,
+html[data-theme="light"] .table tr:hover td,
+html[data-theme="light"] table tr:hover td {
+  background-color: #f8fafc !important;
+}
+
+html[data-theme="light"] .router-selector,
+html[data-theme="light"] .filter-bar {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html[data-theme="light"] .btn-g {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html[data-theme="light"] .sb-item {
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .sb-item:hover {
+  color: #0f172a !important;
+  background-color: #f1f5f9 !important;
+}
+
+html[data-theme="light"] .sb-item.active {
+  color: #4f46e5 !important;
+  background-color: rgba(79, 70, 229, 0.1) !important;
+}
+
+html[data-theme="light"] .mo,
+html[data-theme="light"] .modal-backdrop {
+  background: rgba(15, 23, 42, 0.5) !important;
+}
+
+html[data-theme="light"] pre,
+html[data-theme="light"] code {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
