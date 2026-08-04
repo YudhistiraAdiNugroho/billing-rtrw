@@ -20,7 +20,7 @@
       </select>
       <a href="/admin/reports/export-csv?year=<%= filterYear %>" class="btn btn-g btn-sm" title="Export Excel (CSV)"><i class="bi bi-file-earmark-excel" style="color:#10b981"></i> Excel</a>
       <a href="/admin/reports/print?year=<%= filterYear %>" target="_blank" class="btn btn-g btn-sm" title="Print PDF"><i class="bi bi-printer" style="color:#3b82f6"></i> Print</a>
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>

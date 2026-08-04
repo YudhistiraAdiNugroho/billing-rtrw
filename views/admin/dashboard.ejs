@@ -56,7 +56,7 @@
       <div class="realtime-bar"><span class="live-dot"></span> <%= t('admin.dashboard.live_update', 'Live Update') %></div>
       <span class="adm-badge">
         <i class="bi bi-person-fill"></i> 
-        <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %>
+        <%= (typeof session !== 'undefined' && session && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %>
       </span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i> <%= t('common.logout', 'Logout') %></a>
     </div>

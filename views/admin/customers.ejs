@@ -20,7 +20,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-people"></i> <%= t('admin.customers.manage_title', 'Manajemen Pelanggan') %></div>
     <div class="tb-right">
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -178,7 +178,7 @@
                 <button class="btn btn-g btn-icon btn-sm" title="Lihat Detail & Koneksi MikroTik" onclick="viewCustDetail(<%= i %>)"><i class="bi bi-eye"></i></button>
                 <button class="btn btn-s btn-icon btn-sm" title="<%= t('admin.customers.actions.generate_invoice', 'Generate Tagihan') %>" data-idx="<%= i %>" onclick="openGenInvoice(+this.dataset.idx)"><i class="bi bi-lightning-charge"></i></button>
                 <button class="btn btn-p btn-icon btn-sm" title="<%= t('admin.customers.actions.pay_invoice', 'Bayar Tagihan') %>" data-idx="<%= i %>" onclick="openPayInvoice(+this.dataset.idx)"><i class="bi bi-cash-coin"></i></button>
-                <% if (typeof session !== 'undefined' && !session.isCashier) { %>
+                <% if (typeof session !== 'undefined' && session && !session.isCashier) { %>
                 <% if (c.package_id && (c.package_promo_cycles || 0) > 0) { %>
                 <form method="POST" action="/admin/customers/<%= c.id %>/billing/reset-promo-cycles" style="display:inline" onsubmit="return confirm('Reset counter siklus promo untuk pelanggan ini? Tagihan berikutnya akan memakai harga promo lagi sesuai pengaturan paket.')">
                   <button type="submit" class="btn btn-g btn-icon btn-sm" title="Reset siklus promo"><i class="bi bi-arrow-counterclockwise"></i></button>
@@ -713,7 +713,7 @@
         <div class="form-row">
           <div class="fg">
             <label class="fl"><%= t('admin.billing.received_by', 'Diterima Oleh') %></label>
-            <% const payByDefault = (typeof session !== 'undefined' && session.isCashier)
+            <% const payByDefault = (typeof session !== 'undefined' && session && session.isCashier)
               ? (`Kasir ${(session.cashierName || '').trim()}` + ((session.cashierUsername || '').trim() ? ` (@${String(session.cashierUsername).trim()})` : '')).trim()
               : 'Admin'; %>
             <input class="fc" name="paid_by_name" value="<%= payByDefault || 'Admin' %>" placeholder="<%= t('admin.billing.received_by_placeholder', 'Nama petugas / teknisi') %>">
