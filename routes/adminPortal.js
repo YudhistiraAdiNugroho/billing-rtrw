@@ -707,6 +707,20 @@ router.get('/map', requireAdminSession, requireSidebarMenuAccess('map'), (req, r
   });
 });
 
+router.get('/api/customers/live-sessions', requireAdminSession, async (req, res) => {
+  try {
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const activeMap = await mikrotikService.getAllActiveSessionsMap(force);
+    const sessionsObj = {};
+    for (const [uname, session] of activeMap.entries()) {
+      sessionsObj[uname] = session;
+    }
+    return res.json({ ok: true, sessions: sessionsObj });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 router.get('/api/customers/:id/pppoe-traffic', requireAdminSession, async (req, res) => {
   const customerId = Number(req.params.id);
   if (!customerId) return res.status(400).json({ ok: false, error: 'invalid_customer' });
