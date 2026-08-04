@@ -54,6 +54,7 @@
               <th>Username</th>
               <th>Password</th>
               <th>No. HP</th>
+              <th>Area Tugas</th>
               <th>Status</th>
               <th>Mode Pembayaran</th>
               <th>Aksi</th>
@@ -61,7 +62,7 @@
           </thead>
           <tbody>
             <% if (!collectors || collectors.length === 0) { %>
-              <tr><td colspan="7" class="text-center text-muted" style="padding:20px">Belum ada data kolektor.</td></tr>
+              <tr><td colspan="8" class="text-center text-muted" style="padding:20px">Belum ada data kolektor.</td></tr>
             <% } else { %>
               <% collectors.forEach(c => { %>
                 <tr data-mode="<%= c.auto_approve ? 'direct' : 'approval' %>" data-status="<%= c.is_active ? 'active' : 'inactive' %>">
@@ -69,6 +70,7 @@
                   <td><code><%= c.username %></code></td>
                   <td><span class="text-muted"><%= c.password %></span></td>
                   <td><%= c.phone || '-' %></td>
+                  <td><span class="badge" style="background:rgba(99,102,241,0.15);color:#818cf8"><%= c.area || '-' %></span></td>
                   <td>
                     <span class="badge <%= c.is_active ? 'bs' : 'bd' %>"><%= c.is_active ? t('common.active','Aktif') : t('common.inactive','Nonaktif') %></span>
                   </td>
@@ -105,6 +107,17 @@
         <div class="fg"><label class="fl">Password</label><input type="text" name="password" class="fc" required></div>
         <div class="fg"><label class="fl">No. HP</label><input type="text" name="phone" class="fc" placeholder="08123456789"></div>
         <div class="fg">
+          <label class="fl">Area / Wilayah Tugas</label>
+          <select name="area" class="fs">
+            <option value="">-- Semua Area / Bebas --</option>
+            <% if (typeof masterAreas !== 'undefined' && masterAreas && masterAreas.length > 0) { %>
+              <% masterAreas.forEach(a => { %>
+                <option value="<%= a.name %>"><%= a.name %></option>
+              <% }) %>
+            <% } %>
+          </select>
+        </div>
+        <div class="fg">
           <label class="fl">
             <i class="bi bi-check-circle"></i> Auto-Approve Pembayaran
           </label>
@@ -137,6 +150,17 @@
         <div class="fg"><label class="fl">Username Login</label><input type="text" name="username" id="e-username" class="fc" required></div>
         <div class="fg"><label class="fl">Password</label><input type="text" name="password" id="e-password" class="fc" required></div>
         <div class="fg"><label class="fl">No. HP</label><input type="text" name="phone" id="e-phone" class="fc"></div>
+        <div class="fg">
+          <label class="fl">Area / Wilayah Tugas</label>
+          <select name="area" id="e-area" class="fs">
+            <option value="">-- Semua Area / Bebas --</option>
+            <% if (typeof masterAreas !== 'undefined' && masterAreas && masterAreas.length > 0) { %>
+              <% masterAreas.forEach(a => { %>
+                <option value="<%= a.name %>"><%= a.name %></option>
+              <% }) %>
+            <% } %>
+          </select>
+        </div>
         <div class="fg">
           <label class="fl">Status Akun</label>
           <select name="is_active" id="e-status" class="fs">
@@ -199,6 +223,7 @@ function editCollector(c){
   document.getElementById('e-username').value=c.username||'';
   document.getElementById('e-password').value=c.password||'';
   document.getElementById('e-phone').value=c.phone||'';
+  document.getElementById('e-area').value=c.area||'';
   document.getElementById('e-status').value=String(c.is_active ? 1 : 0);
   document.getElementById('e-auto-approve').value=String(c.auto_approve ? 1 : 0);
   updateCollectorModeBadge('edit');

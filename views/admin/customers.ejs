@@ -62,6 +62,14 @@
             <option value="suspended" <%= filterStatus==='suspended' ? 'selected':'' %>><%= t('admin.customers.filter.suspended', 'Suspend') %></option>
             <option value="inactive" <%= filterStatus==='inactive' ? 'selected':'' %>><%= t('admin.customers.filter.inactive', 'Pendaftar Baru / Nonaktif') %></option>
           </select>
+          <select class="fs" name="area" style="width:160px" onchange="this.form.submit()">
+            <option value="">Semua Area</option>
+            <% if (typeof areas !== 'undefined' && areas && areas.length > 0) { %>
+              <% areas.forEach(a => { %>
+                <option value="<%= a %>" <%= (typeof filterArea !== 'undefined' && filterArea === a) ? 'selected' : '' %>><%= a %></option>
+              <% }) %>
+            <% } %>
+          </select>
           <% if (typeof routers !== 'undefined' && routers && routers.length > 0) { %>
           <select class="fs" style="width:160px;background:#0f172a;color:#f8fafc;border-color:#334155;" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
             <option value="all" style="background:#0f172a;color:#f8fafc;" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router</option>
@@ -82,7 +90,7 @@
               <th><%= t('admin.customers.table.name', 'Nama') %></th>
               <th><%= t('admin.customers.table.phone_tag', 'Telepon / Tag ONU') %></th>
               <th><%= t('admin.customers.table.package', 'Paket') %></th>
-              <th>Usage (FUP)</th>
+              <th>Koneksi MikroTik</th>
               <th><%= t('admin.customers.table.address', 'Alamat') %></th>
               <th><%= t('admin.customers.table.status', 'Status') %></th>
               <th><%= t('admin.customers.table.unpaid', 'Tagihan Belum Bayar') %></th>
@@ -109,24 +117,47 @@
               </td>
               <td>
                 <% 
-                  const usedGB = ((c.bytes_in || 0) + (c.bytes_out || 0)) / (1024 * 1024 * 1024);
-                  const limitGB = c.fup_limit_gb || 0;
-                  const useFup = c.use_fup === 1;
+                  const username = String(c.pppoe_username || c.hotspot_username || '').trim().toLowerCase();
+                  const session = username && typeof activeSessionsMap !== 'undefined' && activeSessionsMap && activeSessionsMap.get ? activeSessionsMap.get(username) : null;
+                  const isOnline = !!session;
+                  
+                  const rxBytes = session && session.bytesIn ? session.bytesIn : (c.bytes_in || 0);
+                  const txBytes = session && session.bytesOut ? session.bytesOut : (c.bytes_out || 0);
+                  
+                  function fmtB(b) {
+                    const num = Number(b) || 0;
+                    if (num <= 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    const i = Math.floor(Math.log(num) / Math.log(k));
+                    return (num / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+                  }
                 %>
-                <div class="fw6" style="font-size:12px"><%= usedGB.toFixed(2) %> GB</div>
-                <% if (useFup && limitGB > 0) { 
-                   const percent = Math.min(100, (usedGB / limitGB) * 100);
-                   const barColor = percent > 90 ? 'var(--danger)' : percent > 70 ? 'var(--warning)' : 'var(--success)';
-                %>
-                  <div class="usage-bar">
-                    <div class="usage-fill" style="--p: <%= percent %>%; --b: <%= barColor %>;"></div>
+                <% if (isOnline) { %>
+                  <span class="badge" style="background:rgba(16,185,129,0.18);color:#10b981;border:1px solid rgba(16,185,129,0.35);font-weight:700">
+                    <i class="bi bi-circle-fill" style="font-size:7px;margin-right:4px"></i>ONLINE
+                  </span>
+                  <div style="font-size:12px;font-weight:800;color:var(--text);margin-top:3px">
+                    <i class="bi bi-clock-history text-success me-1"></i><%= session.uptime %>
                   </div>
-                  <div style="font-size:10px; color:var(--muted)">Limit: <%= limitGB %> GB</div>
+                  <div style="font-size:10px;color:var(--muted)">
+                    <%= session.ip %><% if (session.type) { %> (<%= session.type.toUpperCase() %>)<% } %>
+                  </div>
                 <% } else { %>
-                  <div style="font-size:10px; color:var(--muted)">Unlimited</div>
+                  <span class="badge" style="background:rgba(148,163,184,0.12);color:#94a3b8;border:1px solid rgba(148,163,184,0.25)">
+                    <i class="bi bi-circle-fill" style="font-size:7px;margin-right:4px"></i>OFFLINE
+                  </span>
+                  <div style="font-size:10px;color:var(--muted);margin-top:3px">Tidak Terhubung</div>
                 <% } %>
+                <div style="font-size:11px;margin-top:4px;display:flex;gap:6px;font-family:monospace;flex-wrap:wrap">
+                  <span style="color:#38bdf8" title="Download (Receive)"><i class="bi bi-arrow-down"></i>RX: <%= fmtB(rxBytes) %></span>
+                  <span style="color:#f472b6" title="Upload (Transmit)"><i class="bi bi-arrow-up"></i>TX: <%= fmtB(txBytes) %></span>
+                </div>
               </td>
-              <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= c.address || '-' %></td>
+              <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                <div><%= c.address || '-' %></div>
+                <% if (c.area) { %><div style="font-size:11px;color:#818cf8"><i class="bi bi-geo-alt"></i> <%= c.area %></div><% } %>
+              </td>
               <td>
                 <% if (c.status==='active') { %><span class="badge bs"><i class="bi bi-circle-fill" style="font-size:7px"></i><%= t('admin.customers.filter.active', 'Aktif') %></span>
                 <% } else if (c.status==='suspended') { %><span class="badge bw"><%= t('admin.customers.filter.suspended', 'Suspend') %></span>
@@ -144,6 +175,7 @@
                 <% } else { %><span class="text-muted" style="font-size:12px"><%= t('admin.customers.paid_label', 'Lunas') %></span><% } %>
               </td>
               <td>
+                <button class="btn btn-g btn-icon btn-sm" title="Lihat Detail & Koneksi MikroTik" onclick="viewCustDetail(<%= i %>)"><i class="bi bi-eye"></i></button>
                 <button class="btn btn-s btn-icon btn-sm" title="<%= t('admin.customers.actions.generate_invoice', 'Generate Tagihan') %>" data-idx="<%= i %>" onclick="openGenInvoice(+this.dataset.idx)"><i class="bi bi-lightning-charge"></i></button>
                 <button class="btn btn-p btn-icon btn-sm" title="<%= t('admin.customers.actions.pay_invoice', 'Bayar Tagihan') %>" data-idx="<%= i %>" onclick="openPayInvoice(+this.dataset.idx)"><i class="bi bi-cash-coin"></i></button>
                 <% if (typeof session !== 'undefined' && !session.isCashier) { %>
@@ -310,14 +342,29 @@
         </div>
         <div class="form-row">
           <div class="fg">
+            <label class="fl"><i class="bi bi-geo-alt"></i> Area / Wilayah</label>
+            <select class="fs" name="area" id="add_area">
+              <option value="">-- Pilih Area --</option>
+              <% if (typeof masterAreas !== 'undefined' && masterAreas && masterAreas.length > 0) { %>
+                <% masterAreas.forEach(a => { %>
+                  <option value="<%= a.name %>"><%= a.name %></option>
+                <% }) %>
+              <% } else if (typeof areas !== 'undefined') { %>
+                <% areas.forEach(a => { %>
+                  <option value="<%= a %>"><%= a %></option>
+                <% }) %>
+              <% } %>
+            </select>
+          </div>
+          <div class="fg">
             <label class="fl">
               <i class="bi bi-person-badge"></i> Kolektor Penagihan
             </label>
-            <select class="fs" name="collector_id">
+            <select class="fs" name="collector_id" id="add_collector_id">
               <option value="">-- Tanpa Kolektor --</option>
               <% if (typeof collectors !== 'undefined') { %>
                 <% collectors.forEach(col => { %>
-                  <option value="<%= col.id %>"><%= col.name %> (<%= col.username %>)</option>
+                  <option value="<%= col.id %>" data-area="<%= col.area || '' %>"><%= col.name %> (<%= col.username %>)<%= col.area ? ' [Area: ' + col.area + ']' : '' %></option>
                 <% }) %>
               <% } %>
             </select>
@@ -508,6 +555,21 @@
         </div>
         <div class="form-row">
           <div class="fg">
+            <label class="fl"><i class="bi bi-geo-alt"></i> Area / Wilayah</label>
+            <select class="fs" name="area" id="e_area">
+              <option value="">-- Pilih Area --</option>
+              <% if (typeof masterAreas !== 'undefined' && masterAreas && masterAreas.length > 0) { %>
+                <% masterAreas.forEach(a => { %>
+                  <option value="<%= a.name %>"><%= a.name %></option>
+                <% }) %>
+              <% } else if (typeof areas !== 'undefined') { %>
+                <% areas.forEach(a => { %>
+                  <option value="<%= a %>"><%= a %></option>
+                <% }) %>
+              <% } %>
+            </select>
+          </div>
+          <div class="fg">
             <label class="fl">
               <i class="bi bi-person-badge"></i> Kolektor Penagihan
             </label>
@@ -515,7 +577,7 @@
               <option value="">-- Tanpa Kolektor --</option>
               <% if (typeof collectors !== 'undefined') { %>
                 <% collectors.forEach(col => { %>
-                  <option value="<%= col.id %>"><%= col.name %> (<%= col.username %>)</option>
+                  <option value="<%= col.id %>" data-area="<%= col.area || '' %>"><%= col.name %> (<%= col.username %>)<%= col.area ? ' [Area: ' + col.area + ']' : '' %></option>
                 <% }) %>
               <% } %>
             </select>
@@ -686,8 +748,151 @@
   </div>
 </div>
 
+<!-- Modal Detail & Koneksi Pelanggan -->
+<div class="mo" id="viewDetailModal">
+  <div class="mb" style="max-width:700px">
+    <div class="mh">
+      <span class="mt" id="v_title"><i class="bi bi-eye-fill"></i> Detail & Informasi Koneksi Pelanggan</span>
+      <button type="button" class="mc" onclick="closeModal('viewDetailModal')">&times;</button>
+    </div>
+    <div class="mbody" style="padding:16px 20px">
+      <!-- Status Badge & Quick Info -->
+      <div class="d-flex justify-content-between align-items-center mb-3 p-3" style="background:var(--panel2);border:1px solid rgba(148,163,184,0.15);border-radius:12px">
+        <div>
+          <h5 id="v_cust_name" class="m-0 font-weight-bold" style="color:var(--text);font-size:16px">-</h5>
+          <span class="text-muted" style="font-size:12px">ID Pelanggan: #<strong id="v_cust_id">-</strong></span>
+        </div>
+        <div id="v_online_badge">
+          <!-- Badge Online/Offline inserted dynamically -->
+        </div>
+      </div>
+
+      <!-- Grid Data MikroTik & Koneksi -->
+      <div class="mb-3">
+        <div class="fw6 mb-2 text-primary" style="font-size:13px"><i class="bi bi-router"></i> Data Informasi Koneksi MikroTik</div>
+        <div style="background:var(--panel2);border:1px solid rgba(148,163,184,0.15);border-radius:10px;padding:12px">
+          <table class="tbl" style="width:100%;border-collapse:collapse;font-size:12px">
+            <tr>
+              <td style="width:38%;color:var(--muted);padding:6px 0">Username PPPoE / Hotspot</td>
+              <td style="padding:6px 0">
+                <code id="v_username" style="font-weight:700;color:#38bdf8;font-size:13px">-</code>
+                <button class="btn btn-g btn-sm py-0 px-2 ms-2" onclick="copyToClipboard('v_username', 'Username')"><i class="bi bi-copy"></i> Copy</button>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">Password PPPoE / Hotspot</td>
+              <td style="padding:6px 0">
+                <code id="v_password" style="font-weight:700;color:#f472b6;font-size:13px">-</code>
+                <button class="btn btn-g btn-sm py-0 px-2 ms-2" onclick="copyToClipboard('v_password', 'Password')"><i class="bi bi-copy"></i> Copy</button>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">IP Address (Sesi / Static)</td>
+              <td style="padding:6px 0">
+                <code id="v_ip" style="font-weight:700;color:#4ade80;font-size:13px">-</code>
+                <button class="btn btn-g btn-sm py-0 px-2 ms-2" onclick="copyToClipboard('v_ip', 'IP Address')"><i class="bi bi-copy"></i> Copy</button>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">MAC Address / Caller-ID</td>
+              <td style="padding:6px 0">
+                <code id="v_mac" style="font-weight:700;color:#fbbf24;font-size:12px">-</code>
+                <button class="btn btn-g btn-sm py-0 px-2 ms-2" onclick="copyToClipboard('v_mac', 'MAC Address')"><i class="bi bi-copy"></i> Copy</button>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">Router Target</td>
+              <td id="v_router_name" style="padding:6px 0">-</td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">Tipe Koneksi</td>
+              <td id="v_conn_type" style="padding:6px 0">-</td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">Uptime Sesi Active</td>
+              <td style="padding:6px 0"><strong id="v_uptime" style="color:var(--text)">-</strong></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Grid Trafik Data & Pemakaian -->
+      <div class="mb-3">
+        <div class="fw6 mb-2 text-primary" style="font-size:13px"><i class="bi bi-arrow-down-up"></i> Data Statistik Trafik Data & Pemakaian</div>
+        <div style="background:var(--panel2);border:1px solid rgba(148,163,184,0.15);border-radius:10px;padding:12px">
+          <div class="row g-2 text-center mb-2">
+            <div class="col-6">
+              <div style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:#38bdf8;font-weight:700"><i class="bi bi-arrow-down-circle me-1"></i>RX (Download)</div>
+                <div id="v_rx_fmt" style="font-size:18px;font-weight:900;color:var(--text);margin-top:2px">-</div>
+                <div id="v_rx_bytes" style="font-size:11px;color:var(--muted)">0 Bytes</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div style="background:rgba(244,114,182,0.1);border:1px solid rgba(244,114,182,0.2);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:#f472b6;font-weight:700"><i class="bi bi-arrow-up-circle me-1"></i>TX (Upload)</div>
+                <div id="v_tx_fmt" style="font-size:18px;font-weight:900;color:var(--text);margin-top:2px">-</div>
+                <div id="v_tx_bytes" style="font-size:11px;color:var(--muted)">0 Bytes</div>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex justify-content-between align-items-center" style="font-size:12px;padding:4px 4px 0 4px">
+            <span class="text-muted">Total Kuota Terpakai (FUP):</span>
+            <strong id="v_total_fup" style="color:var(--text)">0 GB</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info Pelanggan Tambahan -->
+      <div>
+        <div class="fw6 mb-2 text-primary" style="font-size:13px"><i class="bi bi-person-vcard"></i> Data Informasi Pelanggan</div>
+        <div style="background:var(--panel2);border:1px solid rgba(148,163,184,0.15);border-radius:10px;padding:12px">
+          <table class="tbl" style="width:100%;border-collapse:collapse;font-size:12px">
+            <tr>
+              <td style="width:38%;color:var(--muted);padding:6px 0">No. Telepon / WhatsApp</td>
+              <td style="padding:6px 0">
+                <code id="v_phone" style="font-weight:700;color:var(--text);font-size:12px">-</code>
+                <button class="btn btn-g btn-sm py-0 px-2 ms-2" onclick="copyToClipboard('v_phone', 'No HP')"><i class="bi bi-copy"></i> Copy</button>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">Alamat & Area</td>
+              <td id="v_address_area" style="padding:6px 0">-</td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">Paket Internet</td>
+              <td id="v_package" style="padding:6px 0">-</td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">Tag ONU (GenieACS)</td>
+              <td style="padding:6px 0">
+                <code id="v_genieacs" style="font-weight:700;color:var(--text);font-size:12px">-</code>
+                <button class="btn btn-g btn-sm py-0 px-2 ms-2" onclick="copyToClipboard('v_genieacs', 'GenieACS Tag')"><i class="bi bi-copy"></i> Copy</button>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:6px 0">Status Akun & Auto-Isolir</td>
+              <td id="v_status_account" style="padding:6px 0">-</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="mf d-flex justify-content-between align-items-center">
+      <form id="v_disconnect_form" method="POST" action="" style="display:inline" onsubmit="return confirm('Apakah Anda yakin ingin MEMUTUS koneksi aktif pelanggan ini dari MikroTik?')">
+        <button type="submit" class="btn btn-d btn-sm fw-bold" style="background:#ef4444;color:#fff;border:none;padding:6px 14px">
+          <i class="bi bi-power me-1"></i> Putus Sesi Active MikroTik
+        </button>
+      </form>
+      <button type="button" class="btn btn-g" onclick="closeModal('viewDetailModal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
 <script id="customers-data" type="application/json"><%- JSON.stringify(customers) %></script>
+<script id="sessions-data" type="application/json"><%- JSON.stringify(Array.from(typeof activeSessionsMap !== 'undefined' && activeSessionsMap && activeSessionsMap.entries ? activeSessionsMap.entries() : [])) %></script>
 <script id="settings-data" type="application/json"><%- JSON.stringify(settings) %></script>
+<script id="routers-data" type="application/json"><%- JSON.stringify(routers || []) %></script>
 <script id="pay-months-data" type="application/json"><%- JSON.stringify((lang === 'en')
   ? ['January','February','March','April','May','June','July','August','September','October','November','December']
   : ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']) %></script>
@@ -698,11 +903,138 @@
   monthsSuffix: t('admin.customers.months_suffix', 'bulan')
 }) %></script>
 <script>
-const customersData = JSON.parse(document.getElementById('customers-data').textContent);
-const appSettings = JSON.parse(document.getElementById('settings-data').textContent);
+function openModal(id){
+  const el = document.getElementById(id);
+  if (el) el.classList.add('show');
+}
+function closeModal(id){
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('show');
+}
+
+function safeParseJSON(elementId, fallback = []) {
+  try {
+    const el = document.getElementById(elementId);
+    if (!el || !el.textContent || !el.textContent.trim()) return fallback;
+    return JSON.parse(el.textContent);
+  } catch (e) {
+    console.warn('Failed to parse JSON for ' + elementId, e);
+    return fallback;
+  }
+}
+
+const customersData = safeParseJSON('customers-data', []);
+const activeSessionsArray = safeParseJSON('sessions-data', []);
+const activeSessionsMapObj = new Map(Array.isArray(activeSessionsArray) ? activeSessionsArray : []);
+const routersData = safeParseJSON('routers-data', []);
+const appSettings = safeParseJSON('settings-data', {});
 let pickerMap, pickerMarker, activePickerType;
 let payCustomerId = null;
 let payBillingMeta = null;
+
+function formatBytesVal(b) {
+  const num = Number(b) || 0;
+  if (num <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(num) / Math.log(k));
+  return (num / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+}
+
+function copyToClipboard(elementId, label) {
+  const el = document.getElementById(elementId);
+  const text = el ? (el.innerText || el.textContent || '').trim() : '';
+  if (!text || text === '-') {
+    alert('Tidak ada data ' + label + ' untuk disalin.');
+    return;
+  }
+  navigator.clipboard.writeText(text).then(() => {
+    alert('📋 ' + label + ' berhasil disalin: ' + text);
+  }).catch(() => {
+    const input = document.createElement('textarea');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    alert('📋 ' + label + ' berhasil disalin: ' + text);
+  });
+}
+
+function viewCustDetail(idx) {
+  try {
+    const c = customersData[idx];
+    if (!c) {
+      alert('Data pelanggan tidak ditemukan.');
+      return;
+    }
+
+    const username = String(c.pppoe_username || c.hotspot_username || c.name || '').trim().toLowerCase();
+    const session = activeSessionsMapObj && activeSessionsMapObj.get ? activeSessionsMapObj.get(username) : null;
+    const isOnline = !!session;
+
+    if (document.getElementById('v_cust_name')) document.getElementById('v_cust_name').textContent = c.name || '-';
+    if (document.getElementById('v_cust_id')) document.getElementById('v_cust_id').textContent = c.id || '-';
+
+    if (document.getElementById('v_online_badge')) {
+      if (isOnline) {
+        document.getElementById('v_online_badge').innerHTML = `
+          <span class="badge" style="background:rgba(16,185,129,0.18);color:#10b981;border:1px solid rgba(16,185,129,0.35);font-size:12px;padding:6px 12px;font-weight:800">
+            <i class="bi bi-circle-fill" style="font-size:8px;margin-right:6px"></i>ONLINE
+          </span>
+        `;
+      } else {
+        document.getElementById('v_online_badge').innerHTML = `
+          <span class="badge" style="background:rgba(148,163,184,0.12);color:#94a3b8;border:1px solid rgba(148,163,184,0.25);font-size:12px;padding:6px 12px">
+            <i class="bi bi-circle-fill" style="font-size:8px;margin-right:6px"></i>OFFLINE
+          </span>
+        `;
+      }
+    }
+
+    if (document.getElementById('v_username')) document.getElementById('v_username').textContent = c.pppoe_username || c.hotspot_username || '-';
+    if (document.getElementById('v_password')) document.getElementById('v_password').textContent = c.pppoe_password || c.hotspot_password || '-';
+    if (document.getElementById('v_ip')) document.getElementById('v_ip').textContent = (session && session.ip) ? session.ip : (c.static_ip || '-');
+    if (document.getElementById('v_mac')) document.getElementById('v_mac').textContent = (session && session.callerId) ? session.callerId : (c.mac_address || '-');
+    
+    const routerObj = (routersData || []).find(r => Number(r.id) === Number(c.router_id));
+    if (document.getElementById('v_router_name')) document.getElementById('v_router_name').textContent = routerObj ? routerObj.name : (c.router_id ? ('Router #' + c.router_id) : '-');
+    if (document.getElementById('v_conn_type')) document.getElementById('v_conn_type').textContent = (c.connection_type || 'pppoe').toUpperCase();
+    if (document.getElementById('v_uptime')) document.getElementById('v_uptime').textContent = session ? (session.uptime || 'Active') : 'Tidak Terhubung (Offline)';
+
+    const rxBytes = session && session.bytesIn ? session.bytesIn : (c.bytes_in || 0);
+    const txBytes = session && session.bytesOut ? session.bytesOut : (c.bytes_out || 0);
+    const totalBytes = rxBytes + txBytes;
+
+    if (document.getElementById('v_rx_fmt')) document.getElementById('v_rx_fmt').textContent = formatBytesVal(rxBytes);
+    if (document.getElementById('v_rx_bytes')) document.getElementById('v_rx_bytes').textContent = Number(rxBytes).toLocaleString('id-ID') + ' Bytes';
+    if (document.getElementById('v_tx_fmt')) document.getElementById('v_tx_fmt').textContent = formatBytesVal(txBytes);
+    if (document.getElementById('v_tx_bytes')) document.getElementById('v_tx_bytes').textContent = Number(txBytes).toLocaleString('id-ID') + ' Bytes';
+    
+    const limitGB = c.fup_limit_gb || 0;
+    const useFup = c.use_fup === 1;
+    const fupText = formatBytesVal(totalBytes) + (useFup && limitGB > 0 ? ` (Limit FUP: ${limitGB} GB)` : ' (Unlimited)');
+    if (document.getElementById('v_total_fup')) document.getElementById('v_total_fup').textContent = fupText;
+
+    if (document.getElementById('v_phone')) document.getElementById('v_phone').textContent = c.phone || '-';
+    if (document.getElementById('v_address_area')) document.getElementById('v_address_area').textContent = (c.address || '-') + (c.area ? ` [Area: ${c.area}]` : '');
+    if (document.getElementById('v_package')) document.getElementById('v_package').textContent = c.package_name ? `${c.package_name} (Rp ${Number(c.package_price||0).toLocaleString('id-ID')})` : '-';
+    if (document.getElementById('v_genieacs')) document.getElementById('v_genieacs').textContent = c.genieacs_tag || '-';
+    if (document.getElementById('v_status_account')) document.getElementById('v_status_account').textContent = `Status: ${c.status || 'active'} | Auto Isolir: ${c.auto_isolate === 0 ? 'Nonaktif' : 'Aktif (Tgl ' + (c.isolate_day || '-') + ')'}`;
+
+    if (document.getElementById('v_disconnect_form')) {
+      document.getElementById('v_disconnect_form').action = '/admin/customers/' + c.id + '/disconnect';
+    }
+
+    openModal('viewDetailModal');
+  } catch (err) {
+    console.error('Error in viewCustDetail:', err);
+    alert('Terjadi kesalahan saat memuat detail pelanggan: ' + err.message);
+  }
+}
+
+window.viewCustDetail = viewCustDetail;
+window.copyToClipboard = copyToClipboard;
 
 const PAY_MNS = JSON.parse(document.getElementById('pay-months-data').textContent);
 const PAY_I18N = JSON.parse(document.getElementById('pay-i18n-data').textContent);
@@ -838,6 +1170,7 @@ function editCust(idx) {
   document.getElementById('e_hotspot_username').value=c.hotspot_username||'';
   document.getElementById('e_hotspot_password').value=c.hotspot_password||'';
   document.getElementById('e_hotspot_profile').value=c.hotspot_profile||'';
+  document.getElementById('e_area').value=c.area||'';
   document.getElementById('e_tag').value=c.genieacs_tag||'';
   document.getElementById('e_collector_id').value=c.collector_id||'';
   document.getElementById('e_olt_id').value=c.olt_id||'';

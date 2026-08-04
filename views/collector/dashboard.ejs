@@ -32,8 +32,15 @@
   <div class="container" style="max-width:980px;padding-top:14px;padding-bottom:96px">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <div>
-        <div style="font-weight:900;letter-spacing:-.02em">Kolektor</div>
-        <div class="muted" style="font-size:12px"><%= company %></div>
+        <div style="font-weight:900;letter-spacing:-.02em">Kolektor: <%= session.collectorName || 'Penagih' %></div>
+        <div class="muted" style="font-size:12px">
+          <%= company %>
+          <% if (session.collectorArea) { %>
+            <span class="badge bg-indigo ms-1" style="background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3)"><i class="bi bi-geo-alt"></i> Area: <%= session.collectorArea %></span>
+          <% } else { %>
+            <span class="badge bg-secondary ms-1" style="font-weight:normal;opacity:0.7"><i class="bi bi-globe"></i> Semua Area</span>
+          <% } %>
+        </div>
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" href="/collector/attendance">
@@ -116,29 +123,44 @@
     </div>
 
     <div class="cardx p-3 mb-3" id="data-tagihan">
-      <div style="font-weight:800" class="mb-2"><i class="bi bi-list-ul"></i> Data Tagihan (<%= (invoices || []).length %>)</div>
+      <div style="font-weight:800" class="mb-2"><i class="bi bi-list-ul"></i> Data Pelanggan & Tagihan Area (<%= (invoices || []).length %>)</div>
       <% if (!invoices || invoices.length === 0) { %>
-        <div class="muted" style="font-size:12px">Tidak ada data tagihan untuk filter ini.</div>
+        <div class="muted" style="font-size:12px">Tidak ada data pelanggan untuk filter ini.</div>
       <% } else { %>
         <div class="d-flex flex-column gap-2">
           <% invoices.forEach(inv => { 
-               const isPaid = String(inv.status||'').toLowerCase()==='paid';
-               const reqRow = pendingMap && pendingMap.get ? pendingMap.get(Number(inv.id)) : null;
+               const invId = inv.invoice_id;
+               const isPaid = String(inv.invoice_status||'').toLowerCase()==='paid';
+               const reqRow = pendingMap && pendingMap.get ? (pendingMap.get('inv_' + invId) || pendingMap.get('cust_' + inv.customer_id)) : null;
                const reqStatus = reqRow ? String(reqRow.status||'') : '';
                const isPending = reqStatus === 'pending';
+               const noInvoice = !invId;
+               const amount = Number(inv.invoice_amount || inv.package_price || 0);
           %>
             <div style="background:var(--panel2);border:1px solid rgba(148,163,184,.14);border-radius:14px;padding:12px">
               <div class="d-flex justify-content-between align-items-start gap-2">
                 <div style="min-width:0">
-                  <div style="font-weight:900"><%= inv.customer_name || '-' %> <span class="muted" style="font-size:12px"><%= inv.customer_phone ? '('+inv.customer_phone+')' : '' %></span></div>
-                  <div class="muted" style="font-size:12px"><%= inv.package_name || 'Internet' %> • Invoice #<%= inv.id %></div>
+                  <div style="font-weight:900">
+                    <%= inv.customer_name || '-' %>
+                    <span class="muted" style="font-size:12px"><%= inv.customer_phone ? '('+inv.customer_phone+')' : '' %></span>
+                    <% if (inv.customer_status === 'suspended') { %>
+                      <span class="badge bg-danger ms-1" style="font-size:10px"><i class="bi bi-pause-circle"></i> ISOLIR</span>
+                    <% } else if (inv.customer_status === 'active') { %>
+                      <span class="badge bg-success ms-1" style="font-size:10px;opacity:0.8"><i class="bi bi-check-circle"></i> Aktif</span>
+                    <% } else { %>
+                      <span class="badge bg-secondary ms-1" style="font-size:10px;opacity:0.8"><%= inv.customer_status %></span>
+                    <% } %>
+                  </div>
+                  <div class="muted" style="font-size:12px"><%= inv.package_name || 'Internet' %> <%= invId ? ('• Invoice #' + invId) : '• Belum Ada Invoice' %></div>
                 </div>
                 <div class="text-end">
-                  <div style="font-weight:900">Rp <%= Number(inv.amount||0).toLocaleString('id-ID') %></div>
+                  <div style="font-weight:900">Rp <%= amount.toLocaleString('id-ID') %></div>
                   <% if (isPaid) { %>
                     <span class="badgey s"><i class="bi bi-check-circle"></i> LUNAS</span>
                   <% } else if (isPending) { %>
                     <span class="badgey w"><i class="bi bi-hourglass"></i> MENUNGGU APPROVAL</span>
+                  <% } else if (noInvoice) { %>
+                    <span class="badgey w" style="background:rgba(99,102,241,0.15);color:#a5b4fc;border-color:rgba(99,102,241,0.3)"><i class="bi bi-file-earmark-plus"></i> BELUM TAGIHAN</span>
                   <% } else { %>
                     <span class="badgey d"><i class="bi bi-exclamation-circle"></i> BELUM BAYAR</span>
                   <% } %>
@@ -146,11 +168,12 @@
               </div>
 
               <table class="tbl mt-2" style="width:100%;border-collapse:collapse">
-                <tr><td>Periode</td><td><%= inv.period_month %>/<%= inv.period_year %></td></tr>
+                <tr><td>Periode</td><td><%= month %>/<%= year %></td></tr>
+                <tr><td>Area / Wilayah</td><td><strong style="color:#a5b4fc"><%= inv.customer_area || '-' %></strong></td></tr>
                 <tr><td>Jatuh Tempo</td><td><%= inv.isolate_day ? ('Tgl ' + inv.isolate_day) : '-' %></td></tr>
                 <tr><td>ID Pelanggan</td><td>#<%= inv.customer_id %></td></tr>
                 <tr><td>PPPoE</td><td><%= inv.pppoe_username ? inv.pppoe_username : '-' %></td></tr>
-                <tr><td>Tag</td><td><%= inv.genieacs_tag ? inv.genieacs_tag : '-' %></td></tr>
+                <tr><td>Tag ONU</td><td><%= inv.genieacs_tag ? inv.genieacs_tag : '-' %></td></tr>
                 <tr><td>Alamat</td><td><%= inv.customer_address ? inv.customer_address : '-' %></td></tr>
               </table>
 
@@ -160,13 +183,16 @@
                 <% } %>
                 <% if (!isPaid && !isPending) { %>
                   <form method="POST" action="/collector/payment-request" class="d-flex gap-2" style="flex:1;min-width:260px">
-                    <input type="hidden" name="invoice_id" value="<%= inv.id %>">
+                    <input type="hidden" name="customer_id" value="<%= inv.customer_id %>">
+                    <input type="hidden" name="invoice_id" value="<%= inv.invoice_id || '' %>">
                     <input type="hidden" name="month" value="<%= month %>">
                     <input type="hidden" name="year" value="<%= year %>">
                     <input type="hidden" name="status" value="<%= status %>">
                     <input type="hidden" name="search" value="<%= search || '' %>">
                     <input class="form-control form-control-sm" name="note" placeholder="Catatan (opsional)">
-                    <button class="btn btn-warning btn-sm" type="submit"><i class="bi bi-send-check"></i> Ajukan</button>
+                    <button class="btn btn-warning btn-sm fw-bold" type="submit">
+                      <i class="bi bi-cash-stack"></i> <%= noInvoice ? 'Buat & Bayar Tagihan' : 'Ajukan Pembayaran' %>
+                    </button>
                   </form>
                 <% } %>
               </div>
