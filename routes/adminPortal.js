@@ -345,12 +345,22 @@ function copyDirSync(srcDir, destDir) {
 }
 
 function getGitDefaultBranch(repoRoot) {
-  const r = runCmd('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], repoRoot);
+  let r = runCmd('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], repoRoot);
   if (r.ok) {
     const ref = String(r.stdout || '').trim();
     const m = ref.match(/refs\/remotes\/origin\/(.+)$/);
     if (m && m[1]) return m[1].trim();
   }
+  r = runCmd('git', ['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);
+  if (r.ok) {
+    const b = String(r.stdout || '').trim();
+    if (b && b !== 'HEAD') return b;
+  }
+  r = runCmd('git', ['rev-parse', '--verify', 'origin/main'], repoRoot);
+  if (r.ok) return 'main';
+  r = runCmd('git', ['rev-parse', '--verify', 'origin/master'], repoRoot);
+  if (r.ok) return 'master';
+
   return 'main';
 }
 
