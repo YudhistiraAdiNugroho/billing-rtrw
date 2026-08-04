@@ -1,4 +1,51 @@
 <!-- views/admin/partials/sidebar.ejs -->
+<script>
+(function() {
+  const savedTheme = localStorage.getItem('app-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  if (savedTheme === 'light') {
+    document.documentElement.classList.add('light-theme');
+  } else {
+    document.documentElement.classList.remove('light-theme');
+  }
+})();
+
+function toggleAppTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  if (newTheme === 'light') {
+    document.documentElement.classList.add('light-theme');
+    if (document.body) document.body.classList.add('light-theme');
+  } else {
+    document.documentElement.classList.remove('light-theme');
+    if (document.body) document.body.classList.remove('light-theme');
+  }
+  localStorage.setItem('app-theme', newTheme);
+  updateThemeToggleIcons(newTheme);
+}
+
+function updateThemeToggleIcons(theme) {
+  const isLight = theme === 'light';
+  document.querySelectorAll('.theme-toggle-icon').forEach(icon => {
+    icon.className = isLight ? 'bi bi-sun-fill theme-toggle-icon' : 'bi bi-moon-stars-fill theme-toggle-icon';
+    icon.style.color = isLight ? '#f59e0b' : '#fbbf24';
+  });
+  document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+    btn.setAttribute('title', isLight ? 'Ganti ke Mode Gelap (Dark)' : 'Ganti ke Mode Terang (Light)');
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const theme = localStorage.getItem('app-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  if (theme === 'light') {
+    document.documentElement.classList.add('light-theme');
+    if (document.body) document.body.classList.add('light-theme');
+  }
+  updateThemeToggleIcons(theme);
+});
+</script>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 <aside class="sidebar" id="sidebar">
   <div class="sb-brand">
@@ -8,19 +55,22 @@
         <%= company %>
       </div>
       <div class="sb-sub"><%= t('admin.panel', 'Admin Panel') %></div>
-      <div style="margin-top:8px;display:flex;gap:6px">
+      <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
         <a href="/lang/id" class="btn btn-g btn-sm" style="padding:4px 8px">ID</a>
         <a href="/lang/en" class="btn btn-g btn-sm" style="padding:4px 8px">EN</a>
+        <button type="button" class="btn btn-g btn-sm theme-toggle-btn" onclick="toggleAppTheme()" title="Ganti Tema Dark / Light" style="padding:4px 8px;margin-left:auto">
+          <i class="bi bi-moon-stars-fill theme-toggle-icon" style="color:#fbbf24"></i> Tema
+        </button>
       </div>
       <% if (typeof multiRouterMode !== 'undefined' && multiRouterMode && allActiveRouters && allActiveRouters.length > 0) { %>
         <div style="margin-top:10px;padding:8px;background:rgba(255,255,255,0.06);border-radius:10px;border:1px solid rgba(255,255,255,0.1)">
           <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;font-weight:600;display:flex;align-items:center;gap:4px">
             <i class="bi bi-router"></i> Router Filter
           </div>
-          <select class="form-select form-select-sm" style="background:#0f172a;color:#f8fafc;border-color:#334155;font-size:12px;cursor:pointer" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
-            <option value="all" style="background:#0f172a;color:#f8fafc;" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router (<%= allActiveRouters.length %>)</option>
+          <select class="form-select form-select-sm" style="font-size:12px;cursor:pointer" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
+            <option value="all" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router (<%= allActiveRouters.length %>)</option>
             <% allActiveRouters.forEach(r => { %>
-              <option value="<%= r.id %>" style="background:#0f172a;color:#f8fafc;" <%= (selectedRouterId === r.id) ? 'selected' : '' %>>
+              <option value="<%= r.id %>" <%= (selectedRouterId === r.id) ? 'selected' : '' %>>
                 🔌 <%= r.name %> (<%= r.host %>)
               </option>
             <% }) %>
@@ -137,6 +187,7 @@
     if (event.key === 'Escape') hideLockedMenuNotice();
   });
 </script>
+<script src="/js/theme.js"></script>
 
 <!-- Bottom Navigation (Mobile Only) -->
 <nav class="bottom-nav" id="bottomNav">

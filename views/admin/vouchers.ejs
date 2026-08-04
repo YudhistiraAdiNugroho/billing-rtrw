@@ -26,12 +26,12 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-ticket-perforated"></i> <%= t('admin.nav.voucher_hotspot', 'Voucher Hotspot') %></div>
     <div class="tb-right" style="display:flex;align-items:center;gap:15px">
-      <div class="router-selector" style="display:flex;align-items:center;gap:8px;background:#1e293b;padding:4px 10px;border-radius:10px;border:1px solid #334155;">
+      <div class="router-selector" style="display:flex;align-items:center;gap:8px;padding:4px 10px;border-radius:10px;">
         <i class="bi bi-hdd-network small" style="color:#60a5fa;"></i>
-        <select id="global-router-id" class="fs" style="background:#0f172a;border:1px solid #334155;color:#f8fafc;padding:4px 8px;font-size:13px;border-radius:6px;cursor:pointer;" onchange="changeRouter()">
-          <option value="" style="background:#0f172a;color:#f8fafc;" <%= (!selectedRouterId) ? 'selected' : '' %>><%= t('admin.vouchers.default_router', '-- Default / Semua Router --') %></option>
+        <select id="global-router-id" class="fs" style="padding:4px 8px;font-size:13px;border-radius:6px;cursor:pointer;" onchange="changeRouter()">
+          <option value="" <%= (!selectedRouterId) ? 'selected' : '' %>><%= t('admin.vouchers.default_router', '-- Default / Semua Router --') %></option>
           <% routers.forEach(r => { %>
-            <option value="<%= r.id %>" style="background:#0f172a;color:#f8fafc;" <%= (String(selectedRouterId || '') === String(r.id)) ? 'selected' : '' %>><%= r.name %></option>
+            <option value="<%= r.id %>" <%= (String(selectedRouterId || '') === String(r.id)) ? 'selected' : '' %>><%= r.name %></option>
           <% }) %>
         </select>
       </div>

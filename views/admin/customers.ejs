@@ -71,10 +71,10 @@
             <% } %>
           </select>
           <% if (typeof routers !== 'undefined' && routers && routers.length > 0) { %>
-          <select class="fs" style="width:160px;background:#0f172a;color:#f8fafc;border-color:#334155;" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
-            <option value="all" style="background:#0f172a;color:#f8fafc;" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router</option>
+          <select class="fs" style="width:160px;" onchange="window.location.href='/admin/set-active-router?router_id=' + this.value">
+            <option value="all" <%= (!selectedRouterId) ? 'selected' : '' %>>🌐 Semua Router</option>
             <% routers.forEach(r => { %>
-              <option value="<%= r.id %>" style="background:#0f172a;color:#f8fafc;" <%= (selectedRouterId === r.id) ? 'selected' : '' %>>🔌 <%= r.name %></option>
+              <option value="<%= r.id %>" <%= (selectedRouterId === r.id) ? 'selected' : '' %>>🔌 <%= r.name %></option>
             <% }) %>
           </select>
           <% } %>
