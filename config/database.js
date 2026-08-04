@@ -1007,7 +1007,7 @@ try {
   console.error('Failed to migrate digiflazz_staff_transactions:', e);
 }
 
-// Safe migration: tambah kolom balance dan area ke tabel customers
+// Safe migration: tambah kolom balance dan area ke tabel customers, collectors, dan technicians
 try {
   const custCols = db.prepare("PRAGMA table_info(customers)").all();
   if (!custCols.find(c => c.name === 'balance')) {
@@ -1016,22 +1016,39 @@ try {
   if (!custCols.find(c => c.name === 'area')) {
     db.exec("ALTER TABLE customers ADD COLUMN area TEXT DEFAULT ''");
   }
+
+  const colCols = db.prepare("PRAGMA table_info(collectors)").all();
+  if (!colCols.find(c => c.name === 'area')) {
+    db.exec("ALTER TABLE collectors ADD COLUMN area TEXT DEFAULT ''");
+  }
+
+  const techCols = db.prepare("PRAGMA table_info(technicians)").all();
+  if (!techCols.find(c => c.name === 'area')) {
+    db.exec("ALTER TABLE technicians ADD COLUMN area TEXT DEFAULT ''");
+  }
 } catch(e) {
-  console.error('Failed to migrate customers columns:', e);
+  console.error('Failed to migrate area columns:', e);
 }
 
 // Safe migration: sync area-area yang sudah pernah diinput ke tabel areas
 try {
-  db.exec(`
-    INSERT OR IGNORE INTO areas (name)
-    SELECT DISTINCT TRIM(area) FROM (
-      SELECT area FROM customers WHERE area IS NOT NULL AND TRIM(area) != ''
-      UNION
-      SELECT area FROM collectors WHERE area IS NOT NULL AND TRIM(area) != ''
-      UNION
-      SELECT area FROM technicians WHERE area IS NOT NULL AND TRIM(area) != ''
-    );
-  `);
+  const hasCustArea = db.prepare("PRAGMA table_info(customers)").all().some(c => c.name === 'area');
+  const hasColArea = db.prepare("PRAGMA table_info(collectors)").all().some(c => c.name === 'area');
+  const hasTechArea = db.prepare("PRAGMA table_info(technicians)").all().some(c => c.name === 'area');
+
+  const syncQueries = [];
+  if (hasCustArea) syncQueries.push("SELECT area FROM customers WHERE area IS NOT NULL AND TRIM(area) != ''");
+  if (hasColArea) syncQueries.push("SELECT area FROM collectors WHERE area IS NOT NULL AND TRIM(area) != ''");
+  if (hasTechArea) syncQueries.push("SELECT area FROM technicians WHERE area IS NOT NULL AND TRIM(area) != ''");
+
+  if (syncQueries.length > 0) {
+    db.exec(`
+      INSERT OR IGNORE INTO areas (name)
+      SELECT DISTINCT TRIM(area) FROM (
+        ` + syncQueries.join(' UNION ') + `
+      );
+    `);
+  }
 } catch(e) {}
 
 module.exports = db;

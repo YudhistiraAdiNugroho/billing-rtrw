@@ -46,10 +46,8 @@ const app = express();
 
 const isProduction = process.env.NODE_ENV === 'production';
 const cookieSecure = getSetting('cookie_secure', isProduction);
-const trustProxy = getSetting('trust_proxy', false);
-if (trustProxy) {
-  app.set('trust proxy', 1);
-}
+const trustProxySetting = getSetting('trust_proxy', true);
+app.set('trust proxy', trustProxySetting ? 1 : true);
 
 // Middleware dasar
 app.use(express.json({

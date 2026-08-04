@@ -7,6 +7,7 @@ try {
     max: 10, // Limit each IP to 10 login requests per windowMs
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
     handler: (req, res) => {
       if (req.xhr || (req.headers.accept && req.headers.accept.includes('application/json'))) {
         return res.status(429).json({

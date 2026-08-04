@@ -110,16 +110,25 @@ function getAllCustomers(search = '', routerId = null, filterStatus = '', filter
 }
 
 function getAllCustomerAreas() {
-  const rows = db.prepare(`
-    SELECT DISTINCT TRIM(area) as area FROM (
-      SELECT area FROM customers WHERE area IS NOT NULL AND TRIM(area) != ''
-      UNION
-      SELECT area FROM collectors WHERE area IS NOT NULL AND TRIM(area) != ''
-      UNION
-      SELECT area FROM technicians WHERE area IS NOT NULL AND TRIM(area) != ''
-    ) ORDER BY area ASC
-  `).all();
-  return rows.map(r => r.area).filter(Boolean);
+  try {
+    const hasCustArea = db.prepare("PRAGMA table_info(customers)").all().some(c => c.name === 'area');
+    const hasColArea = db.prepare("PRAGMA table_info(collectors)").all().some(c => c.name === 'area');
+    const hasTechArea = db.prepare("PRAGMA table_info(technicians)").all().some(c => c.name === 'area');
+
+    const queries = [];
+    if (hasCustArea) queries.push("SELECT area FROM customers WHERE area IS NOT NULL AND TRIM(area) != ''");
+    if (hasColArea) queries.push("SELECT area FROM collectors WHERE area IS NOT NULL AND TRIM(area) != ''");
+    if (hasTechArea) queries.push("SELECT area FROM technicians WHERE area IS NOT NULL AND TRIM(area) != ''");
+
+    if (queries.length === 0) return [];
+
+    const unionSql = `SELECT DISTINCT TRIM(area) as area FROM (` + queries.join(' UNION ') + `) ORDER BY area ASC`;
+    const rows = db.prepare(unionSql).all();
+    return rows.map(r => r.area).filter(Boolean);
+  } catch (e) {
+    logger.warn('[CustomerService] getAllCustomerAreas error:', e.message);
+    return [];
+  }
 }
 
 function resetPromoCyclesUsed(customerId) {
