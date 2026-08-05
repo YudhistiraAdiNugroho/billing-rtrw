@@ -250,13 +250,16 @@ function startCronJobs() {
             }
           }
 
-          // Format pesan dengan variation untuk anti-spam
+          // Format pesan dengan Spintax & variation untuk anti-spam
           let formattedMsg = template
             .replace(/{{nama}}/gi, c.name || 'Pelanggan')
             .replace(/{{tagihan}}/gi, finalTagihanStr)
             .replace(/{{rincian}}/gi, rincianBulan || '-')
             .replace(/{{paket}}/gi, c.package_name || '-')
             .replace(/{{link}}/gi, loginLink);
+
+          const { parseSpintax } = await import('./whatsappBot.mjs');
+          formattedMsg = parseSpintax(formattedMsg);
 
           // Add subtle variation untuk menghindari spam detection
           formattedMsg = addMessageVariation(formattedMsg, i);

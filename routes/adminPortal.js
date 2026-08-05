@@ -2890,9 +2890,9 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
     const loginLink = `${baseUrl}/customer/login`;
 
     const comp = company();
-    const defaultAutoBilling = `Yth. Pelanggan {{nama}},\n\nIni adalah pengingat sebelum tanggal jatuh tempo/isolir.\n\n📦 *Paket:* {{paket}}\n💰 *Total Tagihan:* Rp {{tagihan}}\n📅 *Periode:* {{rincian}}\n\nMohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\nTerima kasih atas kerja samanya.\nSalam,\nAdmin ${comp}`;
+    const defaultAutoBilling = `{Halo|Selamat Pagi|Yth.} Pelanggan {{nama}},\n\n{Ini adalah|Berikut} pengingat {sebelum tanggal jatuh tempo|pembayaran tagihan internet} Anda.\n\n📦 *Paket:* {{paket}}\n💰 *Total Tagihan:* Rp {{tagihan}}\n📅 *Periode:* {{rincian}}\n\n{Mohon|Silakan} {segera lakukan|lakukan} pembayaran melalui portal pelanggan: {{link}}\n\n{Terima kasih atas perhatian dan kerja samanya.|Terima kasih.}\nSalam,\nAdmin ${comp}`;
     
-    const defaultQris = `Yth. Pelanggan {{nama}},\n\nBerikut rincian tagihan manual + Kode Bayar QRIS Anda:\n\n📦 *Paket:* {{paket}}\n📅 *Periode:* {{periode}}\n💰 *Nominal:* Rp {{qris_nominal}}\n\nSilakan scan QRIS berikut untuk melakukan pembayaran otomatis:\n{{qris_qr}}\n\nTerima kasih.`;
+    const defaultQris = `{Halo|Selamat Pagi|Yth.} Pelanggan {{nama}},\n\n{Berikut|Ini adalah} rincian tagihan manual + Kode Bayar QRIS Anda:\n\n📦 *Paket:* {{paket}}\n📅 *Periode:* {{periode}}\n💰 *Nominal:* Rp {{qris_nominal}}\n\n{Silakan scan|Mohon scan} QRIS terlampir untuk melakukan pembayaran otomatis:\n{{qris_qr}}\n\nTerima kasih.`;
 
     const templateQris = db.getAppSetting('whatsapp_billing_qris_message', defaultQris);
     const template = db.getAppSetting('whatsapp_auto_billing_message', defaultAutoBilling);
@@ -5456,7 +5456,7 @@ router.post('/whatsapp/broadcast', requireAdminSession, express.urlencoded({ ext
             const host = req.get('host');
             const loginLink = `${protocol}://${host}/customer/login`;
 
-            // Format Pesan dengan variation untuk menghindari spam detection
+            // Format Pesan dengan Spintax & variation untuk menghindari spam detection
             let formattedMsg = message
               .replace(/{{nama}}/gi, cust.name || 'Pelanggan')
               .replace(/{{tagihan}}/gi, totalTagihan.toLocaleString('id-ID'))
@@ -5464,10 +5464,11 @@ router.post('/whatsapp/broadcast', requireAdminSession, express.urlencoded({ ext
               .replace(/{{paket}}/gi, cust.package_name || '-')
               .replace(/{{link}}/gi, loginLink);
             
-            // Add subtle variation untuk menghindari spam detection
+            const { parseSpintax } = await import('../services/whatsappBot.mjs');
+            formattedMsg = parseSpintax(formattedMsg);
             formattedMsg = addMessageVariation(formattedMsg, i);
 
-            await sendWA(cust.phone, formattedMsg);
+            await sendWA(cust.phone, formattedMsg, { simulateTyping: true });
             global.broadcastStatus.sent++;
             messagesInCurrentHour++;
             global.broadcastStatus.messagesPerHour = messagesInCurrentHour;

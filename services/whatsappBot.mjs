@@ -818,7 +818,28 @@ export async function sendMonitoringAlert(message, priority = 'medium') {
   }
 }
 
-export async function sendWA(to, text) {
+export function parseSpintax(text) {
+  if (!text) return '';
+  return String(text).replace(/\{([^{}]+)\}/g, (match, choices) => {
+    const arr = choices.split('|');
+    return arr[Math.floor(Math.random() * arr.length)];
+  });
+}
+
+export async function simulateHumanTyping(sock, jid, text = '') {
+  if (!sock || !jid) return;
+  try {
+    await sock.sendPresenceUpdate('composing', jid);
+    const textLen = String(text || '').length;
+    const typingDuration = Math.min(Math.max(textLen * 35, 1200), 4000);
+    await new Promise(resolve => setTimeout(resolve, typingDuration));
+    await sock.sendPresenceUpdate('paused', jid);
+  } catch (err) {
+    // Non-critical, ignore presence errors
+  }
+}
+
+export async function sendWA(to, text, options = {}) {
   if (!currentSock || whatsappStatus.connection !== 'open') {
     logger.warn('WhatsApp: Gagal kirim pesan, bot belum terhubung.');
     return false;
@@ -832,21 +853,26 @@ export async function sendWA(to, text) {
     logger.info(`[WA sendWA] Mengirim ke: ${to} -> JID Awal: ${jid}`);
     if (jid.endsWith('@s.whatsapp.net')) {
       try {
-        logger.info(`[WA sendWA] Memeriksa JID terdaftar via onWhatsApp untuk: ${jid}`);
         const waCheck = await currentSock.onWhatsApp(jid);
-        logger.info(`[WA sendWA] Hasil onWhatsApp: ${JSON.stringify(waCheck)}`);
         if (waCheck && waCheck.length > 0 && waCheck[0].exists) {
           jid = waCheck[0].lid || waCheck[0].jid || jid;
-          logger.info(`[WA sendWA] JID terverifikasi (menggunakan LID jika ada): ${jid}`);
-        } else {
-          logger.info(`[WA sendWA] JID tidak ditemukan di server WA, menggunakan fallback JID`);
         }
       } catch (err) {
         logger.error(`[WA sendWA] Gagal check onWhatsApp untuk ${jid}: ${err.message}`);
       }
     }
+
+    let finalText = text;
+    if (options.spintax !== false && (text.includes('{') && text.includes('}'))) {
+      finalText = parseSpintax(text);
+    }
+
+    if (options.simulateTyping !== false) {
+      await simulateHumanTyping(currentSock, jid, finalText);
+    }
+
     logger.info(`[WA sendWA] Mengeksekusi sendMessage ke JID: ${jid}`);
-    const result = await currentSock.sendMessage(jid, { text });
+    const result = await currentSock.sendMessage(jid, { text: finalText });
     logger.info(`[WA sendWA] sendMessage selesai! Result JID: ${result?.key?.remoteJid || 'null'}, ID: ${result?.key?.id || 'null'}`);
     return true;
   } catch (e) {
@@ -855,7 +881,7 @@ export async function sendWA(to, text) {
   }
 }
 
-export async function sendWAImage(to, imageBuffer, caption = '') {
+export async function sendWAImage(to, imageBuffer, caption = '', options = {}) {
   if (!currentSock || whatsappStatus.connection !== 'open') {
     logger.warn('WhatsApp: Gagal kirim pesan, bot belum terhubung.');
     return false;
@@ -878,7 +904,17 @@ export async function sendWAImage(to, imageBuffer, caption = '') {
     }
     const img = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer || []);
     if (!img.length) return false;
-    await currentSock.sendMessage(jid, { image: img, caption: String(caption || '') });
+
+    let finalCaption = caption;
+    if (options.spintax !== false && (caption.includes('{') && caption.includes('}'))) {
+      finalCaption = parseSpintax(caption);
+    }
+
+    if (options.simulateTyping !== false) {
+      await simulateHumanTyping(currentSock, jid, finalCaption);
+    }
+
+    await currentSock.sendMessage(jid, { image: img, caption: String(finalCaption || '') });
     return true;
   } catch (e) {
     logger.error('Gagal kirim WA image:', e.message);
