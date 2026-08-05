@@ -48,8 +48,15 @@
       </div>
       <form id="broadcastForm" method="POST" action="/admin/whatsapp/broadcast" data-confirm="<%= t('admin.broadcast.confirm_send', 'Kirim pesan broadcast sekarang? Pastikan target dan pesan sudah benar.') %>">
         <div class="card-bd">
-          <div class="alert alert-i" style="margin-bottom: 10px;">
-            <i class="bi bi-info-circle"></i> <%= t('admin.broadcast.info', 'Pesan akan dikirim menggunakan nomor WhatsApp Bot Anda secara otomatis dengan jeda aman per pesan agar tidak terdeteksi sebagai spam.') %>
+          <div class="alert alert-i" style="margin-bottom: 14px; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);">
+            <div style="font-weight: 800; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; color: var(--primary);">
+              <i class="bi bi-shield-check" style="font-size: 16px;"></i> Protection Anti-Banned Active (Human Typing Simulation & Spintax)
+            </div>
+            <div style="font-size: 12px; line-height: 1.5; color: var(--text);">
+              • <strong>Simulasi Mengetik Manusia:</strong> Sistem mengirim sinyal <code>sedang mengetik...</code> di WhatsApp penerima sebelum pesan dikirim.<br>
+              • <strong>Variasi Kata Spintax:</strong> Gunakan <code>{Halo|Selamat Pagi|Yth.}</code> agar isi pesan otomatis diacak & tidak dianggap spam.<br>
+              • <strong>Jeda Acak & Batching:</strong> Dikirim dengan jeda acak dinamis dan jeda istirahat otomatis antar batch.
+            </div>
           </div>
 
 
