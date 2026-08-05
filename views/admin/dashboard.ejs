@@ -581,6 +581,38 @@ async function loadDevices() {
     if (data && data.error) throw new Error(data.error);
     devicesData = data.devices || [];
 
+    if (!search && status === 'all') {
+      const tot = data.total || devicesData.length;
+      let on = 0, off = 0;
+      devicesData.forEach(d => {
+        if (d.status === 'online') on++;
+        else off++;
+      });
+      const totalEl = document.getElementById('stat-total');
+      const onlineEl = document.getElementById('stat-online');
+      const offlineEl = document.getElementById('stat-offline');
+      if (totalEl) totalEl.textContent = tot;
+      if (onlineEl) onlineEl.textContent = on;
+      if (offlineEl) offlineEl.textContent = off;
+
+      const mTot = document.getElementById('m-total');
+      const mOn = document.getElementById('m-online');
+      const mOff = document.getElementById('m-offline');
+      const mPct = document.getElementById('m-pct');
+      if (mTot) mTot.textContent = tot;
+      if (mOn) mOn.textContent = on;
+      if (mOff) mOff.textContent = off;
+      if (mPct) mPct.textContent = (tot > 0 ? Math.round(on / tot * 100) : 0) + '%';
+
+      const legOn = document.getElementById('leg-online');
+      const legOff = document.getElementById('leg-offline');
+      const donutPct = document.getElementById('donut-pct');
+      if (legOn) legOn.textContent = on;
+      if (legOff) legOff.textContent = off;
+      if (donutPct) donutPct.textContent = (tot > 0 ? Math.round(on / tot * 100) : 0) + '%';
+      updateDonut(on, off);
+    }
+
     document.getElementById('device-count').textContent = devicesData.length + I18N.devicesSuffix;
 
     if (devicesData.length === 0) {

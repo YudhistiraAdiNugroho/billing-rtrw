@@ -7,15 +7,15 @@
     left: 0;
     right: 0;
     height: 70px;
-    background: rgba(30, 41, 59, 0.95);
-    backdrop-filter: blur(10px);
-    border-top: 1px solid #334155;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(16px) saturate(180%);
+    border-top: 1px solid rgba(99, 102, 241, 0.25);
     display: flex;
     justify-content: space-around;
     align-items: center;
     z-index: 1050;
     padding-bottom: env(safe-area-inset-bottom);
-    box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.5);
   }
 
   .nav-item {
@@ -23,37 +23,45 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #94a3b8;
+    color: #cbd5e1;
     text-decoration: none;
     font-size: 11px;
-    font-weight: 500;
-    transition: all 0.3s ease;
+    font-weight: 700;
+    transition: all 0.25s ease;
     flex: 1;
     height: 100%;
+    cursor: pointer;
+    position: relative;
   }
 
   .nav-item i {
     font-size: 20px;
     margin-bottom: 2px;
+    transition: transform 0.2s ease, color 0.2s ease;
+  }
+
+  .nav-item:hover {
+    color: #ffffff;
+  }
+
+  .nav-item.active {
+    color: #38bdf8;
   }
 
   .nav-item.active i {
     transform: translateY(-2px);
-    color: #6366f1;
+    color: #38bdf8;
   }
 
   .nav-item.active::after {
     content: '';
     position: absolute;
-    bottom: 8px;
-    width: 4px;
-    height: 4px;
-    background: #6366f1;
+    bottom: 6px;
+    width: 5px;
+    height: 5px;
+    background: #38bdf8;
     border-radius: 50%;
-  }
-
-  .nav-item {
-    position: relative;
+    box-shadow: 0 0 8px #38bdf8;
   }
 
   /* Hide on desktop, show only on mobile */
@@ -70,29 +78,61 @@
 <nav class="customer-bottom-nav">
   <a href="/customer/dashboard#home-section" class="nav-item <%= activeNav === 'home' ? 'active' : '' %>">
     <i class="bi bi-house-door-fill"></i>
-    <span><%= t('customer.nav.home', 'Beranda') %></span>
+    <span>Beranda</span>
   </a>
+  <div class="nav-item" onclick="triggerEditSsidNav()" title="Ubah Nama WiFi">
+    <i class="bi bi-wifi text-info"></i>
+    <span>Nama WiFi</span>
+  </div>
+  <div class="nav-item" onclick="triggerEditPasswordNav()" title="Ubah Sandi WiFi">
+    <i class="bi bi-key-fill text-success"></i>
+    <span>Sandi WiFi</span>
+  </div>
   <a href="/customer/dashboard#billing-section" class="nav-item <%= activeNav === 'billing' ? 'active' : '' %>">
-    <i class="bi bi-receipt-cutoff"></i>
-    <span><%= t('customer.nav.billing', 'Tagihan') %></span>
+    <i class="bi bi-receipt-cutoff text-warning"></i>
+    <span>Tagihan</span>
   </a>
-  <a href="/customer/dashboard#ticket-section" class="nav-item <%= activeNav === 'ticket' ? 'active' : '' %>">
-    <i class="bi bi-headset"></i>
-    <span><%= t('customer.nav.help', 'Bantuan') %></span>
-  </a>
-  <a href="/customer/dashboard#settings-section" class="nav-item <%= activeNav === 'settings' ? 'active' : '' %>">
-    <i class="bi bi-gear-fill"></i>
-    <span><%= t('customer.nav.wifi', 'WiFi') %></span>
-  </a>
+  <div class="nav-item" onclick="triggerTicketNav()" title="Bantuan Keluhan">
+    <i class="bi bi-headset" style="color:#a855f7;"></i>
+    <span>Bantuan</span>
+  </div>
 </nav>
 
 <script>
-  // Script to handle active state based on hash
+  function triggerEditSsidNav() {
+    if (typeof editSsid === 'function') {
+      const devId = (typeof customer !== 'undefined' && customer && customer.id) ? customer.id : '';
+      const ssid = (typeof customer !== 'undefined' && customer && customer.ssid) ? customer.ssid : '';
+      editSsid(devId, ssid);
+    } else {
+      window.location.href = '/customer/dashboard#home-section';
+    }
+  }
+
+  function triggerEditPasswordNav() {
+    if (typeof editPassword === 'function') {
+      const devId = (typeof customer !== 'undefined' && customer && customer.id) ? customer.id : '';
+      editPassword(devId);
+    } else {
+      window.location.href = '/customer/dashboard#home-section';
+    }
+  }
+
+  function triggerTicketNav() {
+    const el = document.getElementById('ticketModal');
+    if (el && typeof bootstrap !== 'undefined') {
+      const m = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+      m.show();
+    } else {
+      window.location.href = '/customer/dashboard#ticket-section';
+    }
+  }
+
   function updateActiveNav() {
     const hash = window.location.hash;
     document.querySelectorAll('.customer-bottom-nav .nav-item').forEach(item => {
       item.classList.remove('active');
-      if (item.getAttribute('href').includes(hash) && hash !== '') {
+      if (item.getAttribute('href') && item.getAttribute('href').includes(hash) && hash !== '') {
         item.classList.add('active');
       }
     });
