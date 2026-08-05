@@ -4093,14 +4093,22 @@ router.get('/api/stats', requireAdmin, async (req, res) => {
   try {
     const result = await customerDevice.listAllDevices(999999);
     if (!result.ok) return res.json({ error: result.message });
+    const mikrotikService = require('../services/mikrotikService');
+    const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
+
     const devices = result.devices;
     const total = devices.length;
     let online = 0, offline = 0;
-    const now = Date.now();
+
     devices.forEach(d => {
-      if (d._lastInform && (now - new Date(d._lastInform).getTime()) < 15 * 60 * 1000) online++;
+      const pppoeUser = customerDevice.extractPppoeUser(d);
+      const isPppoeActive = pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-' && activeSessionsMap.has(pppoeUser.toLowerCase());
+      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id, isPppoeActive) || {};
+      const status = String(mapped.status || 'offline').toLowerCase();
+      if (status === 'online') online++;
       else offline++;
     });
+
     res.json({ total, online, offline, warning: 0, lastUpdate: getNowLocalISO() });
   } catch (e) {
     res.status(500).json({ error: 'Failed to get stats', detail: e.message });

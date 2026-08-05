@@ -172,6 +172,25 @@ const BRAND_PROFILES = {
       rx_power_table: '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.21', // 0.1 dBm
       probe_oid:    '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.15',
     }
+  ],
+  generic: [
+    {
+      name: 'GENERIC_EPON_CTC',
+      status_table: '1.3.6.1.4.1.3320.101.10.1.1.26',
+      name_table:   '1.3.6.1.4.1.3320.101.10.1.1.79',
+      sn_table:     '1.3.6.1.4.1.3320.101.10.1.1.3',
+      tx_power_table: '1.3.6.1.4.1.3320.101.10.5.1.5',
+      rx_power_table: '1.3.6.1.4.1.3320.101.10.5.1.6',
+      probe_oid:    '1.3.6.1.4.1.3320.101.10.1.1.26',
+    },
+    {
+      name: 'GENERIC_GPON_STD',
+      status_table: '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
+      name_table:   '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.3',
+      sn_table:     '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
+      rx_power_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.4',
+      probe_oid:    '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
+    }
   ]
 };
 
@@ -180,11 +199,12 @@ const ONLINE_VALUES = {
   hioso: [1, 3, 4],
   hsgq:  [1, 3, 4],
   zte:   [1, 3, 'working', 'online'],
-  vsol:  [1],
+  vsol:  [1, 3, 4],
   huawei: [5, 1, 'active', 'online'], // 5: operation
   fiberhome: [1, 2, 3],
   bdcom: [1, 2, 3],
   cdata: [1, 3],
+  generic: [1, 2, 3, 4, 5, 'online', 'active', 'working'],
 };
 
 const getOnlineValues = (brandKey, profile) => {
@@ -1482,6 +1502,10 @@ async function getOltStatsInternal(id, full = false) {
     version:  snmp.Version2c,
   });
 
+  session.on('error', (err) => {
+    logger.warn(`[SNMP Session Error] OLT ${olt.host}: ${err.message}`);
+  });
+
   let isResolved = false;
 
   return new Promise((resolve) => {
@@ -1493,12 +1517,9 @@ async function getOltStatsInternal(id, full = false) {
       resolve(data);
     };
 
-    // OPTIMIZATION: Reduce timeout for faster UI response
-    // Full data: 15s (was 60s), Summary: 10s (was 25s)
-    // If OLT offline, fail fast instead of hanging
     const timeoutMs = full ? 15000 : 10000;
     const globalTimeout = setTimeout(() => {
-      stats.error = `Request Timeout (${Math.round(timeoutMs / 1000)}s)`;
+      stats.error = `Koneksi Timeout (${Math.round(timeoutMs / 1000)}s) - OLT ${olt.host} tidak merespons SNMP/Telnet`;
       safeResolve(stats);
     }, timeoutMs);
 
@@ -1515,7 +1536,36 @@ async function getOltStatsInternal(id, full = false) {
         });
 
         if (!uptimeVbs[0] || uptimeVbs[0].type === snmp.ObjectType.NoSuchObject || uptimeVbs[0].type === snmp.ObjectType.EndOfMibView) {
-          if (!stats.error) stats.error = 'SNMP Agent not responding / Wrong Community String';
+          // Telnet Fallback for HIOSO/HSGQ if SNMP is not enabled
+          if (brandKey === 'hioso' || brandKey === 'hsgq') {
+            const telnetData = await fetchHiosoOnuDetailViaTelnet(olt);
+            if (telnetData && telnetData.length > 0) {
+              stats.status = 'Online';
+              stats.error = null;
+              stats.onus_total = telnetData.length;
+              stats.onus_online = telnetData.filter(r => String(r.status).toLowerCase().includes('on')).length;
+              stats.onus_offline = stats.onus_total - stats.onus_online;
+              if (full) {
+                stats.onus = telnetData.map((r, idx) => ({
+                  index: r.id || idx,
+                  id: r.id || '-',
+                  name: r.name || r.mac || `ONU-${idx+1}`,
+                  sn: r.mac || '-',
+                  status: String(r.status).toLowerCase().includes('on') ? 'Online' : 'Offline',
+                  offline_reason: translateOfflineReason(brandKey, r.offlineReason),
+                  tx: r.txPower || 'N/A',
+                  rx: r.rxPower || 'N/A',
+                  distance: r.distance || '-',
+                  firmware: r.fwVersion || '-',
+                  uptime: r.onlineTime || '-'
+                }));
+              }
+              safeResolve(stats);
+              return;
+            }
+          }
+
+          stats.error = `Tidak dapat terhubung ke OLT ${olt.host}:${olt.snmp_port || 161} (${stats.error || 'Offline / Socket Closed'}). Pastikan IP OLT aktif & Community string ('${community}') benar.`;
           safeResolve(stats);
           return;
         }
@@ -1534,7 +1584,36 @@ async function getOltStatsInternal(id, full = false) {
         }
 
         if (!activeProfile) {
-          stats.error = 'Brand/Profile OID tidak cocok dengan perangkat ini';
+          // Telnet Fallback if profile not matched
+          if (brandKey === 'hioso' || brandKey === 'hsgq') {
+            const telnetData = await fetchHiosoOnuDetailViaTelnet(olt);
+            if (telnetData && telnetData.length > 0) {
+              stats.status = 'Online';
+              stats.error = null;
+              stats.onus_total = telnetData.length;
+              stats.onus_online = telnetData.filter(r => String(r.status).toLowerCase().includes('on')).length;
+              stats.onus_offline = stats.onus_total - stats.onus_online;
+              if (full) {
+                stats.onus = telnetData.map((r, idx) => ({
+                  index: r.id || idx,
+                  id: r.id || '-',
+                  name: r.name || r.mac || `ONU-${idx+1}`,
+                  sn: r.mac || '-',
+                  status: String(r.status).toLowerCase().includes('on') ? 'Online' : 'Offline',
+                  offline_reason: translateOfflineReason(brandKey, r.offlineReason),
+                  tx: r.txPower || 'N/A',
+                  rx: r.rxPower || 'N/A',
+                  distance: r.distance || '-',
+                  firmware: r.fwVersion || '-',
+                  uptime: r.onlineTime || '-'
+                }));
+              }
+              safeResolve(stats);
+              return;
+            }
+          }
+
+          stats.error = `Brand/Profile OID tidak cocok dengan perangkat OLT ${olt.host}. Silakan ganti Brand di menu 'Edit OLT'.`;
           safeResolve(stats);
           return;
         }

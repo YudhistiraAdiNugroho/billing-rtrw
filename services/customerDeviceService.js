@@ -31,12 +31,12 @@ async function searchDeviceAcrossServers(query, fullData = true) {
         try {
           response = await instance.get('/devices', {
             params,
-            timeout: 15000
+            timeout: 2000
           });
         } catch (e) {
           response = await instance.get('/api/devices', {
             params,
-            timeout: 15000
+            timeout: 2000
           });
         }
         

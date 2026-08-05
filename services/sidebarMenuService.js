@@ -72,7 +72,7 @@ const DEFAULT_MENU_STATES = {
   map: STATE_VISIBLE,
   acs_pro: STATE_VISIBLE,
   onu_provision: STATE_VISIBLE,
-  olts: STATE_VISIBLE,
+  olts: STATE_HIDDEN,
   whatsapp: STATE_VISIBLE,
   broadcast: STATE_VISIBLE,
   promo_slides: STATE_VISIBLE,

@@ -1660,21 +1660,27 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       customer.phone
     ].filter(Boolean);
 
-    // Cari secara paralel dengan allSettled untuk tidak blocking jika ada error
-    const results = await Promise.allSettled(searchTokens.map(async (token) => {
-      let d = await customerDevice.findDeviceByPppoe(token); // Prioritas PPPoE
-      if (!d) d = await customerDevice.findDeviceByTag(token);
-      if (!d) {
-        const variants = await customerDevice.findDeviceWithTagVariants(token);
-        if (variants) d = variants.device;
-      }
-      return d;
-    }));
+    // Cari secara paralel dengan timeout 2.0s agar tidak menggantung jika GenieACS offline/lambat
+    const acsSearchPromise = (async () => {
+      const results = await Promise.allSettled(searchTokens.map(async (token) => {
+        let d = await customerDevice.findDeviceByPppoe(token); // Prioritas PPPoE
+        if (!d) d = await customerDevice.findDeviceByTag(token);
+        if (!d) {
+          const variants = await customerDevice.findDeviceWithTagVariants(token);
+          if (variants) d = variants.device;
+        }
+        return d;
+      }));
+      return results.find(r => r.status === 'fulfilled' && r.value !== null)?.value || null;
+    })();
 
-    device = results.find(r => r.status === 'fulfilled' && r.value !== null)?.value;
+    device = await Promise.race([
+      acsSearchPromise,
+      new Promise(resolve => setTimeout(() => resolve(null), 2000))
+    ]);
+
     if (device) {
       logger.info('[Login] Perangkat terdeteksi di GenieACS (matched).');
-      // Extract PPPoE username from device if not in customer data
       if (!pppoeUsername && device.pppoeUsername) {
         pppoeUsername = device.pppoeUsername;
         logger.info(`[Login] PPPoE username dari device: ${pppoeUsername}`);
@@ -1684,14 +1690,20 @@ router.post('/login', loginRateLimiter, async (req, res) => {
 
   // 2. Tahap 2: Fallback (Jika DB tidak ketemu atau perangkat belum link)
   if (!device) {
-    const directResult = await customerDevice.findDeviceWithTagVariants(phone);
-    if (directResult) {
-      device = directResult.device;
-      if (device.pppoeUsername) {
-        pppoeUsername = device.pppoeUsername;
+    try {
+      const directPromise = customerDevice.findDeviceWithTagVariants(phone);
+      const directResult = await Promise.race([
+        directPromise,
+        new Promise(resolve => setTimeout(() => resolve(null), 1500))
+      ]);
+      if (directResult && directResult.device) {
+        device = directResult.device;
+        if (device.pppoeUsername) {
+          pppoeUsername = device.pppoeUsername;
+        }
+        logger.info('[Login] Perangkat ditemukan secara langsung di GenieACS (fallback).');
       }
-      logger.info('[Login] Perangkat ditemukan secara langsung di GenieACS (fallback).');
-    }
+    } catch (e) {}
   }
 
   // 3. Tahap 3: Verifikasi Akhir
@@ -1840,7 +1852,14 @@ router.get('/dashboard', async (req, res) => {
 
   let deviceData = null;
   for (const token of uniqueCandidates) {
-    deviceData = await getCustomerDeviceData(token);
+    try {
+      deviceData = await Promise.race([
+        getCustomerDeviceData(token),
+        new Promise(resolve => setTimeout(() => resolve(null), 2500))
+      ]);
+    } catch (e) {
+      deviceData = null;
+    }
     if (deviceData) break;
   }
   
