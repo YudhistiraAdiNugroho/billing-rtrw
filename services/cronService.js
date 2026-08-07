@@ -223,15 +223,34 @@ function startCronJobs() {
 
               if ((!code || !amt) && invId > 0 && baseAmount > 0) {
                 const exists = db.prepare('SELECT id FROM invoices WHERE status=? AND qris_amount_unique=? AND id!=? LIMIT 1');
-                for (let k = 0; k < 50; k++) {
-                  const randCode = 1 + Math.floor(Math.random() * 999);
-                  const tryAmt = baseAmount + randCode;
-                  if (!exists.get('unpaid', tryAmt, invId)) {
-                    code = randCode;
-                    amt = tryAmt;
-                    db.prepare('UPDATE invoices SET qris_unique_code=?, qris_amount_unique=?, qris_assigned_at=CURRENT_TIMESTAMP WHERE id=?').run(code, amt, invId);
-                    break;
+                const custId = Number(c?.id || inv?.customer_id || 0);
+                let tryCode = 0;
+                let tryAmt = 0;
+
+                if (custId > 0) {
+                  const prefCode = (custId % 499 === 0) ? 499 : (custId % 499);
+                  const pAmt = baseAmount + prefCode;
+                  if (!exists.get('unpaid', pAmt, invId)) {
+                    tryCode = prefCode;
+                    tryAmt = pAmt;
                   }
+                }
+
+                if (!tryAmt) {
+                  for (let randCode = 1; randCode <= 499; randCode++) {
+                    const pAmt = baseAmount + randCode;
+                    if (!exists.get('unpaid', pAmt, invId)) {
+                      tryCode = randCode;
+                      tryAmt = pAmt;
+                      break;
+                    }
+                  }
+                }
+
+                if (tryAmt > 0) {
+                  code = tryCode;
+                  amt = tryAmt;
+                  db.prepare('UPDATE invoices SET qris_unique_code=?, qris_amount_unique=?, qris_assigned_at=CURRENT_TIMESTAMP WHERE id=?').run(code, amt, invId);
                 }
               }
 

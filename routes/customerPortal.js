@@ -591,18 +591,32 @@ function ensureInvoiceQrisUnique(inv, force = false) {
   let chosenCode = 0;
   let chosenAmount = 0;
 
-  for (let i = 0; i < 50; i++) {
-    const code = 1 + Math.floor(Math.random() * 999);
-    const amount = baseAmount + code;
-    if (isQrisAmountAvailable(amount, { excludeInvoiceId: invId })) {
-      chosenCode = code;
-      chosenAmount = amount;
-      break;
+  // 1. Prioritaskan ID Pelanggan sebagai kode unik utama (selalu di bawah 500)
+  const custId = Number(inv?.customer_id || 0);
+  if (custId > 0) {
+    const prefCode = (custId % 499 === 0) ? 499 : (custId % 499);
+    const prefAmount = baseAmount + prefCode;
+    if (isQrisAmountAvailable(prefAmount, { excludeInvoiceId: invId })) {
+      chosenCode = prefCode;
+      chosenAmount = prefAmount;
     }
   }
 
+  // 2. Jika kode ID Pelanggan sudah terpakai, cari kode terendah yang tersedia (1 s/d 499)
   if (!chosenAmount) {
-    for (let code = 1; code <= 999; code++) {
+    for (let code = 1; code <= 499; code++) {
+      const amount = baseAmount + code;
+      if (isQrisAmountAvailable(amount, { excludeInvoiceId: invId })) {
+        chosenCode = code;
+        chosenAmount = amount;
+        break;
+      }
+    }
+  }
+
+  // 3. Fallback keamanan jika slot 1-499 penuh (500 s/d 999)
+  if (!chosenAmount) {
+    for (let code = 500; code <= 999; code++) {
       const amount = baseAmount + code;
       if (isQrisAmountAvailable(amount, { excludeInvoiceId: invId })) {
         chosenCode = code;
@@ -641,8 +655,8 @@ function ensureVoucherOrderQrisUnique(order, force = false) {
   let chosenCode = 0;
   let chosenAmount = 0;
 
-  for (let i = 0; i < 50; i++) {
-    const code = 1 + Math.floor(Math.random() * 999);
+  // Search sequentially from 1 to 499 (always under 500)
+  for (let code = 1; code <= 499; code++) {
     const amount = baseAmount + code;
     if (isQrisAmountAvailable(amount, { excludeVoucherOrderId: orderId })) {
       chosenCode = code;
@@ -651,8 +665,9 @@ function ensureVoucherOrderQrisUnique(order, force = false) {
     }
   }
 
+  // Safety fallback if 1-499 full
   if (!chosenAmount) {
-    for (let code = 1; code <= 999; code++) {
+    for (let code = 500; code <= 999; code++) {
       const amount = baseAmount + code;
       if (isQrisAmountAvailable(amount, { excludeVoucherOrderId: orderId })) {
         chosenCode = code;
