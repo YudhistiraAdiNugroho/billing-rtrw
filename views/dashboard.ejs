@@ -846,14 +846,20 @@
                             <span class="badge bg-warning text-dark" style="border-radius:8px;">BELUM BAYAR</span>
                           <% } %>
                         </td>
-                        <td class="text-end">
+                        <td class="text-end" style="white-space:nowrap;">
                           <% if (inv.status !== 'paid') { %>
-                            <button class="btn btn-warning btn-sm fw-bold" onclick="openPaymentModal('<%= inv.id %>', '<%= itemAmt %>')" style="border-radius:8px;">
-                              <i class="bi bi-qr-code"></i> Bayar
+                            <button class="btn btn-sm text-dark fw-bold shadow-sm" onclick="openPaymentModal('<%= inv.id %>', '<%= itemAmt %>')" style="background: linear-gradient(135deg, #f59e0b, #fbbf24); border:none; border-radius:8px; padding: 6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+                              <i class="bi bi-qr-code-scan" style="font-size:15px; color:#0f172a;"></i> <span>Bayar</span>
                             </button>
+                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn btn-sm text-white fw-bold shadow-sm ms-1" style="background: rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); border-radius:8px; padding: 6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Unduh Tagihan PDF">
+                              <i class="bi bi-file-earmark-pdf-fill" style="font-size:15px; color:#38bdf8;"></i> <span style="color:#f8fafc;">PDF</span>
+                            </a>
                           <% } else { %>
-                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn btn-outline-light btn-sm" style="border-radius:8px;" target="_blank">
-                              <i class="bi bi-file-earmark-pdf"></i> Faktur
+                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn btn-sm text-white fw-bold shadow-sm" style="background: linear-gradient(135deg, #0284c7, #06b6d4); border:none; border-radius:8px; padding: 6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Unduh Faktur PDF">
+                              <i class="bi bi-file-earmark-pdf-fill" style="font-size:15px; color:#ffffff;"></i> <span>Faktur PDF</span>
+                            </a>
+                            <a href="/customer/invoice/<%= inv.id %>/print" class="btn btn-sm text-white fw-bold shadow-sm ms-1" style="background: linear-gradient(135deg, #4f46e5, #6366f1); border:none; border-radius:8px; padding: 6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Cetak Struk/Faktur">
+                              <i class="bi bi-printer-fill" style="font-size:15px; color:#ffffff;"></i> <span>Cetak</span>
                             </a>
                           <% } %>
                         </td>
