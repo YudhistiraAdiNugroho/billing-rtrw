@@ -650,8 +650,16 @@
 <!-- Floating Action Buttons -->
 <div class="print-controls">
   <button class="btn-action btn-print" onclick="window.print();">
-    <span>🖨️</span> Cetak Invoice
+    <span>🖨️</span> Cetak
   </button>
+  <a href="/admin/billing/<%= invoice.id %>/pdf" target="_blank" class="btn-action btn-print" style="text-decoration:none; background: linear-gradient(135deg, #059669, #10b981);">
+    <span>📥</span> Unduh PDF
+  </a>
+  <% if (customer && customer.phone) { %>
+  <button class="btn-action btn-print" id="btnSendWaPdf" onclick="sendInvoicePdfWa('<%= invoice.id %>')" style="background: linear-gradient(135deg, #25d366, #128c7e);">
+    <span>📱</span> Kirim PDF WA
+  </button>
+  <% } %>
   <button class="btn-action btn-close" onclick="window.close();">
     <span>✕</span> Tutup
   </button>
@@ -660,9 +668,36 @@
 <script>
   window.onload = function() {
     setTimeout(function() {
-      window.print();
+      if (!window.location.search.includes('noprint')) {
+        window.print();
+      }
     }, 500);
   };
+
+  async function sendInvoicePdfWa(invoiceId) {
+    const btn = document.getElementById('btnSendWaPdf');
+    if (!btn) return;
+    const oldText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Mengirim...';
+    try {
+      const res = await fetch(`/admin/billing/${invoiceId}/send-pdf-wa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ ' + data.message);
+      } else {
+        alert('❌ ' + data.message);
+      }
+    } catch (err) {
+      alert('❌ Error: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = oldText;
+    }
+  }
 </script>
 </body>
 </html>

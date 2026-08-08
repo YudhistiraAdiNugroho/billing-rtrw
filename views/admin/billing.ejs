@@ -177,6 +177,10 @@
                   </form>
                 <%}else{%>
                   <a href="/admin/billing/<%= inv.id %>/print" target="_blank" class="btn btn-s btn-icon btn-sm" title="<%= t('admin.billing.actions.print_invoice', 'Cetak Struk/Invoice') %>"><i class="bi bi-printer"></i></a>
+                  <a href="/admin/billing/<%= inv.id %>/pdf" target="_blank" class="btn btn-g btn-icon btn-sm" title="Unduh Invoice PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+                  <% if (inv.customer_phone) { %>
+                    <button type="button" onclick="sendInvoicePdfWa('<%= inv.id %>', this)" class="btn btn-icon btn-sm" style="background:#25d366;color:white" title="Kirim Invoice PDF ke WA"><i class="bi bi-file-earmark-arrow-up"></i></button>
+                  <% } %>
                   <form method="POST" action="/admin/billing/<%= inv.id %>/unpay" style="display:inline" class="needs-confirm" data-confirm-key="confirmUnpay">
                     <button class="btn btn-w btn-icon btn-sm" title="<%= t('admin.billing.actions.unpay', 'Batalkan Lunas') %>"><i class="bi bi-arrow-counterclockwise"></i></button>
                   </form>
@@ -431,6 +435,30 @@ document.getElementById('bulkDeleteBtn')?.addEventListener('click', function() {
   }
   f.submit();
 });
+
+async function sendInvoicePdfWa(invoiceId, btn) {
+  if (!btn) return;
+  const oldHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+  try {
+    const res = await fetch(`/admin/billing/${invoiceId}/send-pdf-wa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('✅ ' + data.message);
+    } else {
+      alert('❌ ' + data.message);
+    }
+  } catch (err) {
+    alert('❌ Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
+}
 
 updateBulkUi();
 
