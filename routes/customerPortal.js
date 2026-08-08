@@ -2392,7 +2392,7 @@ router.post('/logout', (req, res) => {
   });
 });
 
-router.get('/customer/invoice/:id/pdf', async (req, res) => {
+router.get('/invoice/:id/pdf', async (req, res) => {
   try {
     const inv = billingSvc.getInvoiceById(req.params.id);
     if (!inv) return res.status(404).send('Invoice tidak ditemukan');
