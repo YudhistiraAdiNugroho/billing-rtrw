@@ -202,28 +202,31 @@
     }
 
     .glass-header {
-      padding: 18px 24px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(30, 41, 59, 0.6);
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(30, 41, 59, 0.7);
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
     }
 
     .glass-header h5 {
       margin: 0;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 700;
-      color: #f8fafc;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
     }
 
     /* ── HERO BANNER ── */
     .hero-banner {
       background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
-      border-radius: 24px;
-      padding: 24px;
+      border-radius: 20px;
+      padding: 20px 24px;
       border: 1px solid rgba(99, 102, 241, 0.25);
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
       position: relative;
       overflow: hidden;
     }
@@ -249,38 +252,39 @@
 
     .action-item {
       background: rgba(30, 41, 59, 0.7);
-      border: 1px solid rgba(99, 102, 241, 0.15);
-      border-radius: 18px;
-      padding: 16px 10px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 16px;
+      padding: 14px 8px;
       text-align: center;
       color: #f8fafc;
       text-decoration: none;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       gap: 8px;
     }
 
     .action-item:hover {
-      background: rgba(99, 102, 241, 0.18);
-      border-color: rgba(99, 102, 241, 0.4);
-      transform: translateY(-3px);
-      box-shadow: 0 10px 25px rgba(99, 102, 241, 0.2);
+      background: rgba(99, 102, 241, 0.2);
+      border-color: rgba(99, 102, 241, 0.5);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(99, 102, 241, 0.25);
       color: #fff;
     }
 
     .action-icon {
-      width: 46px;
-      height: 46px;
-      border-radius: 14px;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 20px;
       color: #fff;
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
     .ai-pay { background: linear-gradient(135deg, #6366f1, #4f46e5); }
@@ -341,33 +345,33 @@
     /* ── STATS GRID & GAUGES ── */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
     }
 
     .stat-card {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid rgba(99, 102, 241, 0.12);
-      border-radius: 16px;
-      padding: 18px 14px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(99, 102, 241, 0.15);
+      border-radius: 14px;
+      padding: 14px 8px;
       text-align: center;
-      transition: all 0.3s ease;
+      transition: all 0.25s ease;
     }
 
     .stat-card:hover {
-      border-color: rgba(99, 102, 241, 0.3);
+      border-color: rgba(99, 102, 241, 0.35);
       transform: translateY(-2px);
     }
 
     .stat-icon {
-      width: 44px;
-      height: 44px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 0 auto 10px;
-      font-size: 18px;
+      margin: 0 auto 8px;
+      font-size: 17px;
       color: white;
     }
 
@@ -378,16 +382,16 @@
     .stat-icon.people { background: linear-gradient(135deg, #ef4444, #dc2626); }
 
     .stat-label {
-      font-size: 11px;
-      color: #e2e8f0;
-      margin-bottom: 6px;
+      font-size: 10px;
+      color: #cbd5e1;
+      margin-bottom: 4px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     .stat-value {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 800;
       color: #ffffff;
       word-break: break-word;
@@ -460,36 +464,213 @@
     }
 
     /* ── RESPONSIVE MOBILE ── */
-    @media (max-width: 768px) {
+
+    /* Prevent ALL horizontal overflow globally */
+    html, body {
+      overflow-x: hidden;
+      max-width: 100%;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    @media (max-width: 991px) {
       .action-grid {
         grid-template-columns: repeat(3, 1fr);
         gap: 10px;
       }
+    }
+
+    @media (max-width: 767px) {
+      body {
+        padding-bottom: 95px;
+      }
+
+      /* Container flush on small screens */
+      .container {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      /* Glass cards smaller radius, no margin blow-out */
+      .glass-card {
+        border-radius: 16px;
+        margin-bottom: 14px;
+      }
+
+      .glass-header {
+        padding: 12px 14px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .glass-header h5 {
+        font-size: 13px;
+      }
+
+      /* Hero banner compact */
+      .hero-banner {
+        padding: 16px;
+        border-radius: 16px;
+        margin-bottom: 14px !important;
+      }
+
+      /* Bill hero card stacked */
       .bill-hero-card {
         flex-direction: column;
         align-items: stretch;
         text-align: center;
+        padding: 14px;
+        gap: 12px;
+        border-radius: 14px;
+        margin-bottom: 14px;
       }
+
+      .bill-hero-card > div:first-child {
+        justify-content: center;
+      }
+
       .btn-pay-hero {
         justify-content: center;
         width: 100%;
+        padding: 12px 16px;
+        font-size: 14px;
+      }
+
+      /* Action grid */
+      .action-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .action-item {
+        padding: 10px 6px;
+        border-radius: 12px;
+        gap: 6px;
+      }
+
+      .action-icon {
+        width: 38px;
+        height: 38px;
+        font-size: 17px;
+        border-radius: 10px;
+      }
+
+      .action-label {
+        font-size: 10px;
+        line-height: 1.2;
+      }
+
+      /* Stats grid compact */
+      .stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .stat-card {
+        padding: 10px 4px;
+        border-radius: 10px;
+      }
+
+      .stat-icon {
+        width: 30px;
+        height: 30px;
+        font-size: 13px;
+        margin-bottom: 4px;
+      }
+
+      .stat-label {
+        font-size: 9px;
+        letter-spacing: 0;
+        margin-bottom: 2px;
+      }
+
+      .stat-value {
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      /* Traffic gauges shrink */
+      .traffic-gauge {
+        max-width: 130px;
+      }
+
+      .traffic-gauge-value {
+        font-size: 13px;
+      }
+
+      .traffic-gauge-unit {
+        font-size: 9px;
+      }
+
+      .traffic-gauge-scale {
+        font-size: 9px;
+      }
+
+      /* WiFi box compact */
+      .wifi-box {
+        padding: 12px;
+      }
+
+      /* Accordion body flush */
+      .accordion-body {
+        padding: 10px 8px !important;
+      }
+
+      /* Mobile invoice card full width */
+      .mobile-invoice-card {
+        border-radius: 12px;
+        padding: 14px;
+      }
+
+      /* Alert compact */
+      .alert.small {
+        padding: 8px 12px;
+        font-size: 11px;
       }
     }
 
     @media (max-width: 480px) {
+      .container {
+        padding-left: 8px;
+        padding-right: 8px;
+      }
+
+      .hero-banner {
+        padding: 12px;
+      }
+
+      .bill-hero-card {
+        padding: 12px;
+      }
+
       .action-grid {
-        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
       }
+
       .action-item {
-        padding: 12px 6px;
+        padding: 8px 4px;
+        border-radius: 10px;
       }
+
       .action-icon {
-        width: 40px;
-        height: 40px;
-        font-size: 18px;
+        width: 34px;
+        height: 34px;
+        font-size: 15px;
       }
+
       .action-label {
-        font-size: 10px;
+        font-size: 9px;
+      }
+
+      .glass-header {
+        padding: 10px 12px;
+      }
+
+      .glass-header h5 {
+        font-size: 12px;
       }
     }
   </style>
@@ -634,11 +815,11 @@
             <% const unpaidAmt = (latestUnpaid.amount != null ? latestUnpaid.amount : (latestUnpaid.package_price != null ? latestUnpaid.package_price : 0)); %>
             <div class="badge bg-warning text-dark fw-bold mb-1" style="font-size:10px; letter-spacing:0.5px;">TAGIHAN BELUM DIBAYAR</div>
             <h5 class="fw-bold mb-0 text-white">Rp <%= parseInt(unpaidAmt || 0).toLocaleString('id-ID') %></h5>
-            <div class="text-muted small">Periode <%= latestUnpaid.period_month %>/<%= latestUnpaid.period_year %> • Jatuh tempo tgl 20</div>
+            <div class="small" style="color:#cbd5e1; font-weight:500; margin-top:2px;">Periode <%= latestUnpaid.period_month %>/<%= latestUnpaid.period_year %> • Jatuh tempo tgl 20</div>
           <% } else { %>
             <div class="badge bg-success fw-bold mb-1" style="font-size:10px; letter-spacing:0.5px;">SEMUA TAGIHAN LUNAS</div>
             <h5 class="fw-bold mb-0 text-white">Layanan Internet Aktif</h5>
-            <div class="text-muted small">Terima kasih telah membayar tepat waktu!</div>
+            <div class="small" style="color:#cbd5e1; font-weight:500; margin-top:2px;">Terima kasih telah membayar tepat waktu!</div>
           <% } %>
         </div>
       </div>
@@ -688,7 +869,7 @@
     </div>
 
     <!-- MAIN DEVICE & TRAFFIC MONITORING GRID -->
-    <div class="row g-4 mb-4">
+    <div class="row g-3 g-lg-4 mb-4">
       <!-- SMART HOME ROUTER CARD -->
       <div class="col-lg-6">
         <div class="glass-card h-100 mb-0">
@@ -696,7 +877,7 @@
             <h5><i class="bi bi-router me-2 text-primary"></i> Kontrol Perangkat Router</h5>
             <span class="badge bg-primary" style="border-radius:8px;"><%= customer.model !== '-' ? customer.model : 'ONT / ONU' %></span>
           </div>
-          <div class="p-4">
+          <div class="p-3 p-md-4">
             <div class="stats-grid mb-3">
               <div class="stat-card">
                 <div class="stat-icon <%= customer.status === 'Online' ? 'online' : 'offline' %>">
@@ -722,15 +903,15 @@
             </div>
 
             <!-- WIFI & PASSWORD BOX -->
-            <div style="background:rgba(15,23,42,0.7); border:1px solid var(--card-border); border-radius:16px; padding:16px;" class="mb-3">
+            <div class="wifi-box mb-3" style="background:rgba(15,23,42,0.7); border:1px solid var(--card-border); border-radius:16px; padding:16px;">
               <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="text-muted small fw-bold"><i class="bi bi-wifi text-info me-1"></i> Nama SSID WiFi</span>
+                <span class="small fw-bold" style="color:#93c5fd;"><i class="bi bi-wifi text-info me-1"></i> Nama SSID WiFi</span>
                 <button class="btn btn-link btn-sm text-info p-0 text-decoration-none fw-bold" onclick="editSsid('<%= (customer.tags && customer.tags[0]) || customer.id %>', '<%= customer.ssid %>')">Ubah <i class="bi bi-pencil"></i></button>
               </div>
               <div class="fw-bold text-white mb-3" style="font-size:16px;"><%= customer.ssid || '-' %></div>
 
               <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="text-muted small fw-bold"><i class="bi bi-shield-lock text-success me-1"></i> Password WiFi</span>
+                <span class="small fw-bold" style="color:#86efac;"><i class="bi bi-shield-lock text-success me-1"></i> Password WiFi</span>
                 <button class="btn btn-link btn-sm text-success p-0 text-decoration-none fw-bold" onclick="editPassword('<%= (customer.tags && customer.tags[0]) || customer.id %>')">Ubah <i class="bi bi-pencil"></i></button>
               </div>
               <div class="d-flex align-items-center gap-2">
@@ -740,7 +921,7 @@
             </div>
 
             <!-- CONNECTED USERS LIST -->
-            <div class="small text-muted mb-2 fw-bold"><i class="bi bi-people me-1"></i> Perangkat Terhubung saat ini:</div>
+            <div class="small mb-2 fw-bold" style="color:#cbd5e1;"><i class="bi bi-people me-1"></i> Perangkat Terhubung saat ini:</div>
             <% if (connectedUsers && connectedUsers.length > 0) { %>
               <div class="d-flex flex-column gap-2" style="max-height:180px; overflow-y:auto;">
                 <% connectedUsers.forEach(u => { %>
@@ -749,7 +930,7 @@
                       <i class="bi bi-laptop text-primary"></i>
                       <div>
                         <div class="fw-bold text-white"><%= u.hostname || 'Device' %></div>
-                        <div class="text-muted" style="font-size:10px;"><%= u.ip || '-' %> | <%= u.mac || '-' %></div>
+                        <div style="font-size:10px; color:#94a3b8;"><%= u.ip || '-' %> | <%= u.mac || '-' %></div>
                       </div>
                     </div>
                     <span class="badge bg-success" style="font-size:9px;">Active</span>
@@ -757,7 +938,7 @@
                 <% }) %>
               </div>
             <% } else { %>
-              <div class="text-center text-muted small py-2" style="background:rgba(30,41,59,0.4); border-radius:10px;">Tidak ada perangkat aktif terdeteksi</div>
+              <div class="text-center small py-2" style="background:rgba(30,41,59,0.4); border-radius:10px; color:#94a3b8;">Tidak ada perangkat aktif terdeteksi</div>
             <% } %>
           </div>
         </div>
@@ -770,38 +951,38 @@
             <h5><i class="bi bi-speedometer2 me-2 text-info"></i> Pemantauan Trafik Real-Time</h5>
             <span class="badge bg-info text-dark" style="border-radius:8px;">Live Mbps</span>
           </div>
-          <div class="p-4 d-flex flex-column justify-content-center">
+          <div class="p-3 p-md-4 d-flex flex-column justify-content-center">
             <div class="row g-3 text-center">
               <div class="col-6">
-                <div class="stat-label">Trafik Download</div>
+                <div class="stat-label" style="color:#cbd5e1; font-weight:600;">Trafik Download</div>
                 <div class="traffic-gauge">
                   <canvas id="pppoe_rx_gauge" width="220" height="140" data-max="<%= typeof trafficMaxDownMbps !== 'undefined' ? trafficMaxDownMbps : 10 %>"></canvas>
                   <div class="traffic-gauge-center">
                     <div class="traffic-gauge-value" id="pppoe_rx_value">-</div>
                     <div class="traffic-gauge-unit" id="pppoe_rx_unit">&nbsp;</div>
                   </div>
-                  <div class="traffic-gauge-scale">
+                  <div class="traffic-gauge-scale" style="color:#cbd5e1;">
                     <span>0</span>
                     <span id="pppoe_rx_max"><%= typeof trafficMaxDownMbps !== 'undefined' ? trafficMaxDownMbps : 10 %> Mbps</span>
                   </div>
                 </div>
               </div>
               <div class="col-6">
-                <div class="stat-label">Trafik Upload</div>
+                <div class="stat-label" style="color:#cbd5e1; font-weight:600;">Trafik Upload</div>
                 <div class="traffic-gauge">
                   <canvas id="pppoe_tx_gauge" width="220" height="140" data-max="<%= typeof trafficMaxUpMbps !== 'undefined' ? trafficMaxUpMbps : 10 %>"></canvas>
                   <div class="traffic-gauge-center">
                     <div class="traffic-gauge-value" id="pppoe_tx_value">-</div>
                     <div class="traffic-gauge-unit" id="pppoe_tx_unit">&nbsp;</div>
                   </div>
-                  <div class="traffic-gauge-scale">
+                  <div class="traffic-gauge-scale" style="color:#cbd5e1;">
                     <span>0</span>
                     <span id="pppoe_tx_max"><%= typeof trafficMaxUpMbps !== 'undefined' ? trafficMaxUpMbps : 10 %> Mbps</span>
                   </div>
                 </div>
               </div>
             </div>
-            <div class="alert alert-info border-0 mt-4 mb-0 py-2 small text-center" style="background:rgba(6,182,212,0.1); color:#67e8f9;">
+            <div class="alert alert-info border-0 mt-4 mb-0 py-2 small text-center" style="background:rgba(6,182,212,0.15); color:#a5f3fc; font-weight:500;">
               <i class="bi bi-info-circle me-1"></i> Kecepatan disesuaikan dengan paket berlangganan Anda.
             </div>
           </div>
@@ -819,57 +1000,111 @@
           </button>
         </h2>
         <div id="collapseBilling" class="accordion-collapse collapse show" data-bs-parent="#customerAccordion">
-          <div class="accordion-body p-4">
-            <div class="table-responsive">
-              <table class="table table-hover align-middle" style="color:#e2e8f0;">
+          <div class="accordion-body p-2 p-md-4">
+            <!-- DESKTOP TABLE VIEW (md ke atas) -->
+            <div class="table-responsive d-none d-md-block">
+              <table class="table table-hover align-middle" style="color:#ffffff; margin-bottom:0;">
                 <thead>
-                  <tr style="border-bottom: 2px solid rgba(99,102,241,0.2);">
-                    <th class="text-white">Periode</th>
-                    <th class="text-white">Layanan / Paket</th>
-                    <th class="text-white">Jumlah</th>
-                    <th class="text-white">Status</th>
-                    <th class="text-white text-end">Aksi</th>
+                  <tr style="border-bottom: 2px solid rgba(99,102,241,0.4); background:rgba(30,41,59,0.8);">
+                    <th class="text-white text-start fw-bold" style="padding:12px 14px; font-size:13px;">Aksi</th>
+                    <th class="text-white fw-bold" style="padding:12px 14px; font-size:13px;">Periode</th>
+                    <th class="text-white fw-bold" style="padding:12px 14px; font-size:13px;">Layanan / Paket</th>
+                    <th class="text-white fw-bold" style="padding:12px 14px; font-size:13px;">Jumlah</th>
+                    <th class="text-white fw-bold" style="padding:12px 14px; font-size:13px;">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   <% if (invoices && invoices.length > 0) { %>
                     <% invoices.forEach(inv => { %>
                       <% const itemAmt = inv.amount != null ? inv.amount : (inv.package_price != null ? inv.package_price : 0); %>
-                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); background:rgba(30,41,59,0.4);">
-                        <td class="fw-bold text-white"><%= inv.period_month %>/<%= inv.period_year %></td>
-                        <td class="text-muted"><%= inv.package_name || 'Paket Internet' %></td>
-                        <td class="fw-bold text-info">Rp <%= parseInt(itemAmt || 0).toLocaleString('id-ID') %></td>
-                        <td>
-                          <% if (inv.status === 'paid') { %>
-                            <span class="badge bg-success" style="border-radius:8px;">LUNAS</span>
-                          <% } else { %>
-                            <span class="badge bg-warning text-dark" style="border-radius:8px;">BELUM BAYAR</span>
-                          <% } %>
-                        </td>
-                        <td class="text-end" style="white-space:nowrap;">
+                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); background:rgba(15,23,42,0.6);">
+                        <td class="text-start" style="white-space:nowrap; padding:12px 14px;">
                           <% if (inv.status !== 'paid') { %>
-                            <button class="btn btn-sm text-dark fw-bold shadow-sm" onclick="openPaymentModal('<%= inv.id %>', '<%= itemAmt %>')" style="background: linear-gradient(135deg, #f59e0b, #fbbf24); border:none; border-radius:8px; padding: 6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+                            <button class="btn btn-sm text-dark fw-bold shadow-sm" onclick="openPaymentModal('<%= inv.id %>', '<%= itemAmt %>')" style="background: linear-gradient(135deg, #f59e0b, #fbbf24); border:none; border-radius:8px; padding: 7px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
                               <i class="bi bi-qr-code-scan" style="font-size:15px; color:#0f172a;"></i> <span>Bayar</span>
                             </button>
-                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn btn-sm text-white fw-bold shadow-sm ms-1" style="background: rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); border-radius:8px; padding: 6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Unduh Tagihan PDF">
-                              <i class="bi bi-file-earmark-pdf-fill" style="font-size:15px; color:#38bdf8;"></i> <span style="color:#f8fafc;">PDF</span>
+                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn btn-sm text-white fw-bold shadow-sm ms-1" style="background: rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:8px; padding: 7px 12px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Unduh Tagihan PDF">
+                              <i class="bi bi-file-earmark-pdf-fill" style="font-size:15px; color:#38bdf8;"></i> <span style="color:#ffffff;">PDF</span>
                             </a>
                           <% } else { %>
-                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn btn-sm text-white fw-bold shadow-sm" style="background: linear-gradient(135deg, #0284c7, #06b6d4); border:none; border-radius:8px; padding: 6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Unduh Faktur PDF">
+                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn btn-sm text-white fw-bold shadow-sm" style="background: linear-gradient(135deg, #0284c7, #06b6d4); border:none; border-radius:8px; padding: 7px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Unduh Faktur PDF">
                               <i class="bi bi-file-earmark-pdf-fill" style="font-size:15px; color:#ffffff;"></i> <span>Faktur PDF</span>
                             </a>
-                            <a href="/customer/invoice/<%= inv.id %>/print" class="btn btn-sm text-white fw-bold shadow-sm ms-1" style="background: linear-gradient(135deg, #4f46e5, #6366f1); border:none; border-radius:8px; padding: 6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Cetak Struk/Faktur">
+                            <a href="/customer/invoice/<%= inv.id %>/print" class="btn btn-sm text-white fw-bold shadow-sm ms-1" style="background: linear-gradient(135deg, #4f46e5, #6366f1); border:none; border-radius:8px; padding: 7px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; text-decoration:none;" target="_blank" title="Cetak Struk/Faktur">
                               <i class="bi bi-printer-fill" style="font-size:15px; color:#ffffff;"></i> <span>Cetak</span>
                             </a>
+                          <% } %>
+                        </td>
+                        <td class="fw-bold text-white" style="padding:12px 14px; font-size:13px;"><%= inv.period_month %>/<%= inv.period_year %></td>
+                        <td style="padding:12px 14px; color:#f1f5f9; font-weight:600; font-size:13px;"><%= inv.package_name || 'Paket Internet' %></td>
+                        <td class="fw-bold" style="padding:12px 14px; color:#38bdf8; font-size:14px;">Rp <%= parseInt(itemAmt || 0).toLocaleString('id-ID') %></td>
+                        <td style="padding:12px 14px;">
+                          <% if (inv.status === 'paid') { %>
+                            <span class="badge bg-success text-white" style="border-radius:8px; padding:6px 12px; font-size:11px; font-weight:700;">LUNAS</span>
+                          <% } else { %>
+                            <span class="badge text-white" style="background:#dc2626; border-radius:8px; padding:6px 12px; font-size:11px; font-weight:700;">BELUM BAYAR</span>
                           <% } %>
                         </td>
                       </tr>
                     <% }) %>
                   <% } else { %>
-                    <tr><td colspan="5" class="text-center text-muted py-4">Belum ada riwayat tagihan</td></tr>
+                    <tr><td colspan="5" class="text-center text-white py-4" style="font-size:13px;">Belum ada riwayat tagihan</td></tr>
                   <% } %>
                 </tbody>
               </table>
+            </div>
+
+            <!-- MOBILE CARD LIST VIEW (di bawah md / HP) -->
+            <div class="d-block d-md-none">
+              <% if (invoices && invoices.length > 0) { %>
+                <div class="d-flex flex-column gap-3">
+                  <% invoices.forEach(inv => { %>
+                    <% const itemAmt = inv.amount != null ? inv.amount : (inv.package_price != null ? inv.package_price : 0); %>
+                    <div class="mobile-invoice-card" style="background:rgba(15,23,42,0.85); border:1px solid rgba(255,255,255,0.12); box-shadow:0 4px 16px rgba(0,0,0,0.25);">
+                      <!-- Top Info Bar -->
+                      <div class="d-flex align-items-center justify-content-between mb-2">
+                        <% if (inv.status === 'paid') { %>
+                          <span class="badge bg-success text-white" style="border-radius:6px; padding:5px 10px; font-size:10px; font-weight:700;">LUNAS</span>
+                        <% } else { %>
+                          <span class="badge text-white" style="background:#dc2626; border-radius:6px; padding:5px 10px; font-size:10px; font-weight:700;">BELUM BAYAR</span>
+                        <% } %>
+                        <span class="fw-bold" style="color:#cbd5e1; font-size:12px;"><i class="bi bi-calendar-event me-1"></i> Periode <%= inv.period_month %>/<%= inv.period_year %></span>
+                      </div>
+
+                      <!-- Service & Amount -->
+                      <div class="mb-3">
+                        <div class="fw-bold text-white" style="font-size:15px; margin-bottom:2px;"><%= inv.package_name || 'Paket Internet' %></div>
+                        <div class="fw-extrabold" style="color:#38bdf8; font-size:18px; font-weight:800;">Rp <%= parseInt(itemAmt || 0).toLocaleString('id-ID') %></div>
+                      </div>
+
+                      <!-- Mobile Action Buttons -->
+                      <div>
+                        <% if (inv.status !== 'paid') { %>
+                          <div class="d-flex flex-column gap-2">
+                            <button class="btn text-dark fw-bold w-100 shadow" onclick="openPaymentModal('<%= inv.id %>', '<%= itemAmt %>')" style="background: linear-gradient(135deg, #f59e0b, #fbbf24); border:none; border-radius:10px; padding:10px; font-size:13px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                              <i class="bi bi-qr-code-scan" style="font-size:17px; color:#0f172a;"></i> <span>BAYAR SEKARANG (QRIS)</span>
+                            </button>
+                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn text-white fw-bold w-100 shadow" style="background: rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); border-radius:10px; padding:8px; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none;" target="_blank">
+                              <i class="bi bi-file-earmark-pdf-fill" style="font-size:16px; color:#38bdf8;"></i> <span style="color:#ffffff;">Unduh Tagihan PDF</span>
+                            </a>
+                          </div>
+                        <% } else { %>
+                          <div class="d-flex gap-2">
+                            <a href="/customer/invoice/<%= inv.id %>/pdf" class="btn text-white fw-bold flex-fill shadow" style="background: linear-gradient(135deg, #0284c7, #06b6d4); border:none; border-radius:10px; padding:9px; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none;" target="_blank">
+                              <i class="bi bi-file-earmark-pdf-fill" style="font-size:16px; color:#ffffff;"></i> <span>Faktur PDF</span>
+                            </a>
+                            <a href="/customer/invoice/<%= inv.id %>/print" class="btn text-white fw-bold flex-fill shadow" style="background: linear-gradient(135deg, #4f46e5, #6366f1); border:none; border-radius:10px; padding:9px; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none;" target="_blank">
+                              <i class="bi bi-printer-fill" style="font-size:16px; color:#ffffff;"></i> <span>Cetak Struk</span>
+                            </a>
+                          </div>
+                        <% } %>
+                      </div>
+                    </div>
+                  <% }) %>
+                </div>
+              <% } else { %>
+                <div class="text-center text-white py-4" style="background:rgba(15,23,42,0.6); border-radius:12px; font-size:13px;">Belum ada riwayat tagihan</div>
+              <% } %>
             </div>
           </div>
         </div>
