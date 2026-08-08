@@ -9,6 +9,7 @@ const db = require('../config/database');
 const customerDevice = require('../services/customerDeviceService');
 const customerSvc = require('../services/customerService');
 const billingSvc = require('../services/billingService');
+const pdfSvc = require('../services/pdfInvoiceService');
 const mikrotikService = require('../services/mikrotikService');
 const adminSvc = require('../services/adminService');
 const agentSvc = require('../services/agentService');
@@ -2430,6 +2431,68 @@ router.get('/billing/:id/print', requireAdminSession, (req, res) => {
     company: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
     settings
   });
+});
+
+router.get('/billing/:id/pdf', requireAdminSession, async (req, res) => {
+  try {
+    const inv = billingSvc.getInvoiceById(req.params.id);
+    if (!inv) return res.status(404).send('Invoice tidak ditemukan');
+    
+    const customer = customerSvc.getCustomerById(inv.customer_id);
+    if (!customer) return res.status(404).send('Data pelanggan tidak ditemukan');
+
+    const settings = getSettings();
+    const pdfBuffer = await pdfSvc.generateInvoicePdfBuffer(inv, customer, settings);
+    
+    const safeName = (customer.name || 'Pelanggan').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Invoice_INV-${String(inv.id).padStart(4, '0')}_${safeName}.pdf`;
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Length': pdfBuffer.length
+    });
+    return res.send(pdfBuffer);
+  } catch (err) {
+    logger.error(`[PDF Download] Error: ${err.message}`);
+    return res.status(500).send('Gagal generate PDF invoice: ' + err.message);
+  }
+});
+
+router.post('/billing/:id/send-pdf-wa', requireAdminSession, async (req, res) => {
+  try {
+    const inv = billingSvc.getInvoiceById(req.params.id);
+    if (!inv) return res.json({ success: false, message: 'Invoice tidak ditemukan' });
+    
+    const customer = customerSvc.getCustomerById(inv.customer_id);
+    if (!customer) return res.json({ success: false, message: 'Data pelanggan tidak ditemukan' });
+    if (!customer.phone) return res.json({ success: false, message: 'Nomor WhatsApp pelanggan belum terisi' });
+
+    const settings = getSettings();
+    const pdfBuffer = await pdfSvc.generateInvoicePdfBuffer(inv, customer, settings);
+
+    const mns = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+    const periodStr = `${mns[(inv.period_month || 1) - 1]} ${inv.period_year}`;
+    const safeName = (customer.name || 'Pelanggan').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Invoice_${inv.id}_${safeName}.pdf`;
+    const statusText = inv.status === 'paid' ? 'LUNAS' : 'BELUM BAYAR';
+    
+    const caption = `📄 *INVOICE PEMBAYARAN INTERNET*\n\nYth. *${customer.name}*,\nBerikut kami lampirkan dokumen resmi Invoice Pembayaran Internet untuk periode *${periodStr}*.\n\n💰 *Total Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n📌 *Status:* *${statusText}*\n\nTerima kasih telah menggunakan layanan *${settings.company_header || 'ALIJAYA NET'}*!`;
+
+    const { sendWADocument, whatsappStatus } = await import('../services/whatsappBot.mjs');
+    if (whatsappStatus.connection !== 'open') {
+      return res.json({ success: false, message: 'Bot WhatsApp belum terhubung' });
+    }
+
+    const sent = await sendWADocument(customer.phone, pdfBuffer, filename, caption);
+    if (sent) {
+      return res.json({ success: true, message: `Invoice PDF berhasil dikirim ke WhatsApp ${customer.name} (${customer.phone})` });
+    } else {
+      return res.json({ success: false, message: 'Gagal mengirim dokumen PDF ke WhatsApp' });
+    }
+  } catch (err) {
+    logger.error(`[Send PDF WA] Error: ${err.message}`);
+    return res.json({ success: false, message: 'Gagal kirim PDF: ' + err.message });
+  }
 });
 
 router.post('/billing/generate', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {

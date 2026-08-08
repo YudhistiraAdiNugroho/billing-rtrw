@@ -922,6 +922,52 @@ export async function sendWAImage(to, imageBuffer, caption = '', options = {}) {
   }
 }
 
+export async function sendWADocument(to, documentBuffer, filename = 'Invoice.pdf', caption = '', mimetype = 'application/pdf', options = {}) {
+  if (!currentSock || whatsappStatus.connection !== 'open') {
+    logger.warn('WhatsApp: Gagal kirim dokumen, bot belum terhubung.');
+    return false;
+  }
+  try {
+    let digits = String(to || '').replace(/\D/g, '');
+    if (digits.startsWith('0')) {
+      digits = '62' + digits.slice(1);
+    }
+    let jid = String(to || '').includes('@') ? String(to) : `${digits}@s.whatsapp.net`;
+    if (jid.endsWith('@s.whatsapp.net')) {
+      try {
+        const [waCheck] = await currentSock.onWhatsApp(jid);
+        if (waCheck && waCheck.exists && waCheck.jid) {
+          jid = waCheck.jid;
+        }
+      } catch (err) {
+        logger.debug(`[WA] sendWADocument JID resolution failed for ${jid}: ${err.message}`);
+      }
+    }
+    const doc = Buffer.isBuffer(documentBuffer) ? documentBuffer : Buffer.from(documentBuffer || []);
+    if (!doc.length) return false;
+
+    let finalCaption = caption;
+    if (options.spintax !== false && (caption.includes('{') && caption.includes('}'))) {
+      finalCaption = parseSpintax(caption);
+    }
+
+    if (options.simulateTyping !== false) {
+      await simulateHumanTyping(currentSock, jid, finalCaption);
+    }
+
+    await currentSock.sendMessage(jid, {
+      document: doc,
+      mimetype: mimetype || 'application/pdf',
+      fileName: filename || 'Document.pdf',
+      caption: String(finalCaption || '')
+    });
+    return true;
+  } catch (e) {
+    logger.error('Gagal kirim WA document:', e.message);
+    return false;
+  }
+}
+
 export async function restartWhatsAppBot() {
   logger.info('WhatsApp: Memulai ulang bot...');
   if (currentSock) {

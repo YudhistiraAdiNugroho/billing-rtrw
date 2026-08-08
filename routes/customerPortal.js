@@ -3,6 +3,7 @@ const router = express.Router();
 const customerDevice = require('../services/customerDeviceService');
 const { getSettingsWithCache, getNowLocal, getCurrentTimeInfo, getNowLocalISO, formatDateLocal } = require('../config/settingsManager');
 const billingSvc = require('../services/billingService');
+const pdfSvc = require('../services/pdfInvoiceService');
 const paymentSvc = require('../services/paymentService');
 const customerSvc = require('../services/customerService');
 const mikrotikService = require('../services/mikrotikService');
@@ -2389,6 +2390,36 @@ router.post('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/customer/login');
   });
+});
+
+router.get('/customer/invoice/:id/pdf', async (req, res) => {
+  try {
+    const inv = billingSvc.getInvoiceById(req.params.id);
+    if (!inv) return res.status(404).send('Invoice tidak ditemukan');
+
+    const sessionCustId = req.session && req.session.customer ? Number(req.session.customer.id) : 0;
+    if (sessionCustId > 0 && Number(inv.customer_id) !== sessionCustId) {
+      return res.status(403).send('Akses ditolak');
+    }
+
+    const customer = customerSvc.getCustomerById(inv.customer_id);
+    if (!customer) return res.status(404).send('Data pelanggan tidak ditemukan');
+
+    const settings = getSettingsWithCache();
+    const pdfBuffer = await pdfSvc.generateInvoicePdfBuffer(inv, customer, settings);
+
+    const safeName = (customer.name || 'Pelanggan').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Invoice_INV-${String(inv.id).padStart(4, '0')}_${safeName}.pdf`;
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Length': pdfBuffer.length
+    });
+    return res.send(pdfBuffer);
+  } catch (err) {
+    logger.error(`[Customer PDF Download] Error: ${err.message}`);
+    return res.status(500).send('Gagal generate PDF invoice: ' + err.message);
+  }
 });
 
 router.post('/public/payment/create/:invoiceId', async (req, res) => {

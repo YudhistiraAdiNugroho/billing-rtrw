@@ -25,6 +25,7 @@
     "net-snmp": "^3.26.1",
     "node-cron": "^4.2.1",
     "node-telegram-bot-api": "^0.66.0",
+    "pdfkit": "^0.19.1",
     "pino": "^9.6.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
