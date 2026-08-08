@@ -463,6 +463,64 @@
       border-left: 3px solid #6366f1;
     }
 
+    /* ── INVOICE TABLE OVERRIDE ── */
+    .invoice-table {
+      /* Override Bootstrap 5 CSS variables */
+      --bs-table-color: #ffffff;
+      --bs-table-bg: rgba(15, 23, 42, 0.6);
+      --bs-table-border-color: rgba(255,255,255,0.08);
+      --bs-table-hover-color: #ffffff;
+      --bs-table-hover-bg: rgba(99, 102, 241, 0.15);
+      --bs-table-striped-color: #ffffff;
+      --bs-table-active-color: #ffffff;
+      --bs-table-active-bg: rgba(99, 102, 241, 0.2);
+      color: #ffffff !important;
+      margin-bottom: 0 !important;
+    }
+    .invoice-table thead tr {
+      background: rgba(30, 41, 59, 0.95) !important;
+      border-bottom: 2px solid rgba(99,102,241,0.4) !important;
+    }
+    .invoice-table thead th {
+      color: #ffffff !important;
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      padding: 12px 14px !important;
+      border: none !important;
+      white-space: nowrap;
+      background: transparent !important;
+    }
+    .invoice-table tbody tr {
+      background: rgba(15, 23, 42, 0.7) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+    }
+    .invoice-table tbody tr:hover td {
+      background: rgba(99, 102, 241, 0.15) !important;
+      color: #ffffff !important;
+    }
+    .invoice-table tbody td {
+      color: #ffffff !important;
+      padding: 12px 14px !important;
+      border: none !important;
+      vertical-align: middle !important;
+      background: transparent !important;
+    }
+    .invoice-table .col-periode {
+      color: #ffffff !important;
+      font-weight: 700 !important;
+      font-size: 13px !important;
+    }
+    .invoice-table .col-paket {
+      color: #e2e8f0 !important;
+      font-weight: 600 !important;
+      font-size: 13px !important;
+    }
+    .invoice-table .col-jumlah {
+      color: #7dd3fc !important;
+      font-weight: 800 !important;
+      font-size: 14px !important;
+    }
+
     /* ── RESPONSIVE MOBILE ── */
 
     /* Prevent ALL horizontal overflow globally */
@@ -1003,7 +1061,7 @@
           <div class="accordion-body p-2 p-md-4">
             <!-- DESKTOP TABLE VIEW (md ke atas) -->
             <div class="table-responsive d-none d-md-block">
-              <table class="table table-hover align-middle" style="color:#ffffff; margin-bottom:0;">
+              <table class="table table-hover align-middle invoice-table" style="margin-bottom:0;">
                 <thead>
                   <tr style="border-bottom: 2px solid rgba(99,102,241,0.4); background:rgba(30,41,59,0.8);">
                     <th class="text-white text-start fw-bold" style="padding:12px 14px; font-size:13px;">Aksi</th>
@@ -1035,9 +1093,9 @@
                             </a>
                           <% } %>
                         </td>
-                        <td class="fw-bold text-white" style="padding:12px 14px; font-size:13px;"><%= inv.period_month %>/<%= inv.period_year %></td>
-                        <td style="padding:12px 14px; color:#f1f5f9; font-weight:600; font-size:13px;"><%= inv.package_name || 'Paket Internet' %></td>
-                        <td class="fw-bold" style="padding:12px 14px; color:#38bdf8; font-size:14px;">Rp <%= parseInt(itemAmt || 0).toLocaleString('id-ID') %></td>
+                        <td class="col-periode fw-bold" style="white-space:nowrap;"><%= inv.period_month %>/<%= inv.period_year %></td>
+                        <td class="col-paket"><%= inv.package_name || 'Paket Internet' %></td>
+                        <td class="col-jumlah">Rp <%= parseInt(itemAmt || 0).toLocaleString('id-ID') %></td>
                         <td style="padding:12px 14px;">
                           <% if (inv.status === 'paid') { %>
                             <span class="badge bg-success text-white" style="border-radius:8px; padding:6px 12px; font-size:11px; font-weight:700;">LUNAS</span>
