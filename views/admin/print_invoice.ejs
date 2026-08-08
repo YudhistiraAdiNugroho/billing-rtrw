@@ -3,111 +3,666 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= t('admin.print_invoice.title', 'Cetak Struk Tagihan') %> #<%= invoice.id %></title>
+  <title>Invoice #INV-<%= String(invoice.id).padStart(4, '0') %>-<%= getCurrentTimeInfo().year %> | <%= company %></title>
   <style>
-    @page { margin: 0; }
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+    :root {
+      --primary: #4f46e5;
+      --primary-dark: #3730a3;
+      --accent: #06b6d4;
+      --success: #10b981;
+      --success-bg: #ecfdf5;
+      --danger: #ef4444;
+      --danger-bg: #fef2f2;
+      --text-dark: #0f172a;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      --bg-light: #f8fafc;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 12mm 15mm;
+    }
+
     * {
       box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
+
     body {
-      font-family: 'Courier New', Courier, monospace;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 12px;
-      line-height: 1.3;
-      color: #000;
-      margin: 0 auto;
-      padding: 5px 10px;
-      max-width: 58mm;
+      color: var(--text-dark);
+      background-color: #f1f5f9;
+      line-height: 1.4;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .text-left { text-align: left; }
-    .bold { font-weight: bold; }
-    .title { font-size: 14px; margin-bottom: 5px; text-transform: uppercase; }
-    .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
-    .row { display: flex; justify-content: space-between; }
-    .mb-1 { margin-bottom: 5px; }
-    .mt-2 { margin-top: 10px; }
-    .footer { font-size: 10px; text-align: center; margin-top: 15px; }
-    .signature { margin-top: 25px; text-align: right; }
-    .signature-name { text-decoration: underline; font-weight: bold; }
-    
+
+    .invoice-wrapper {
+      max-width: 800px;
+      margin: 20px auto;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Top Accent Line */
+    .top-accent-bar {
+      height: 6px;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+    }
+
+    /* Inner Container */
+    .invoice-container {
+      padding: 28px 36px;
+      position: relative;
+    }
+
+    /* Header Section */
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding-bottom: 20px;
+      border-bottom: 1.5px dashed var(--border-color);
+      margin-bottom: 20px;
+    }
+
+    .brand-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .company-logo {
+      max-height: 48px;
+      max-width: 160px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .company-avatar-fallback {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+    }
+
+    .company-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-dark);
+      letter-spacing: -0.3px;
+    }
+
+    .company-details {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .invoice-title-block {
+      text-align: right;
+    }
+
+    .doc-type {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: var(--primary);
+      text-transform: uppercase;
+    }
+
+    .invoice-num {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-dark);
+      margin-top: 2px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 8px;
+    }
+
+    .status-badge.paid {
+      background-color: var(--success-bg);
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+
+    .status-badge.unpaid {
+      background-color: var(--danger-bg);
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: currentColor;
+    }
+
+    /* Grid Info Section */
+    .billing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .info-card {
+      background-color: var(--bg-light);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 14px 18px;
+    }
+
+    .card-heading {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .client-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-dark);
+      margin-bottom: 4px;
+    }
+
+    .meta-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .summary-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .summary-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .summary-item .label {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .summary-item .value {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-dark);
+    }
+
+    /* Table Section */
+    .items-table-container {
+      margin-bottom: 20px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    .items-table th {
+      background-color: var(--bg-light);
+      padding: 10px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .items-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 12px;
+    }
+
+    .items-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .item-title {
+      font-weight: 700;
+      color: var(--text-dark);
+    }
+
+    .item-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .text-right {
+      text-align: right;
+    }
+
+    /* Watermark */
+    .watermark-stamp {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-25deg);
+      font-size: 72px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      opacity: 0.07;
+      pointer-events: none;
+      user-select: none;
+      z-index: 1;
+    }
+
+    .watermark-stamp.paid {
+      color: var(--success);
+    }
+
+    .watermark-stamp.unpaid {
+      color: var(--danger);
+    }
+
+    /* Totals & Notes Layout */
+    .bottom-layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 20px;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+
+    .notes-card {
+      background-color: var(--bg-light);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .notes-card strong {
+      color: var(--text-dark);
+    }
+
+    .totals-card {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .total-line {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 14px;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .total-line:last-child {
+      border-bottom: none;
+    }
+
+    .total-line.grand-total {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #ffffff;
+      padding: 10px 14px;
+    }
+
+    .total-line.grand-total .lbl {
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .total-line.grand-total .val {
+      font-size: 16px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    /* Signature & Footer Section */
+    .invoice-footer {
+      padding-top: 16px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .footer-info {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .signature-area {
+      text-align: center;
+      min-width: 140px;
+    }
+
+    .sig-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 30px;
+    }
+
+    .sig-line {
+      border-top: 1.5px solid var(--text-dark);
+      margin-bottom: 4px;
+    }
+
+    .sig-name {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-dark);
+    }
+
+    .sig-role {
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+
+    /* Print Controls Floating */
+    .print-controls {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+
+    .btn-action {
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-print {
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: #ffffff;
+    }
+
+    .btn-print:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(79, 70, 229, 0.35);
+    }
+
+    .btn-close {
+      background: #ffffff;
+      color: var(--text-dark);
+      border: 1px solid var(--border-color);
+    }
+
+    .btn-close:hover {
+      background: var(--bg-light);
+    }
+
     @media print {
-      body { 
-        width: 100%; 
-        max-width: 100%;
-        padding: 5mm 5mm 0 5mm; /* Tambahan jarak aman atas 5mm, kiri-kanan 5mm */
-        margin: 0; 
+      body {
+        background: #ffffff !important;
+      }
+      .invoice-wrapper {
+        margin: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+      }
+      .print-controls {
+        display: none !important;
       }
     }
   </style>
 </head>
 <body>
-  <div class="text-center">
-    <div class="title bold"><%= company %></div>
-    <div><%= settings.company_address || t('admin.print_invoice.address_fallback', 'Pusat Layanan Internet') %></div>
-    <div><%= t('admin.print_invoice.contact_label', 'Telp/WA') %>: <%= (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) ? '+' + settings.whatsapp_admin_numbers[0] : (settings.company_phone || '081234567890') %></div>
-  </div>
-  
-  <div class="divider"></div>
-  
-  <% const mns = (lang || 'id') === 'en' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des']; %>
-  
-  <div class="mb-1">
-    <div><%= t('admin.print_invoice.receipt_no', 'No. Struk') %>: <span class="bold">INV-<%= invoice.id %>-<%= getCurrentTimeInfo().year %></span></div>
-    <div><%= t('admin.print_invoice.date', 'Tanggal') %>: <%= invoice.paid_at ? formatDateLocal(invoice.paid_at) : getNowLocal() %></div>
-    <div><%= t('admin.print_invoice.cashier', 'Kasir') %>: <%= invoice.paid_by_name || t('admin.print_invoice.system', 'Sistem') %></div>
-    <% if (invoice.notes) { %>
-      <div><%= t('admin.print_invoice.notes', 'Catatan') %>: <%= invoice.notes %></div>
-    <% } %>
-  </div>
-  
-  <div class="divider"></div>
-  
-  <div class="mb-1">
-    <div class="bold"><%= t('admin.print_invoice.dear', 'Yth.') %> <%= customer.name %></div>
-    <div><%= t('admin.print_invoice.id_tag', 'ID/Tag') %>: <%= customer.phone || customer.genieacs_tag || '-' %></div>
-  </div>
-  
-  <div class="divider"></div>
-  
-  <div class="mb-1">
-    <div><%= t('admin.print_invoice.payment_title', 'Pembayaran Tagihan Internet') %></div>
-    <div><%= t('admin.print_invoice.period', 'Periode') %>: <%= mns[invoice.period_month-1] %> <%= invoice.period_year %></div>
-    <div><%= t('admin.print_invoice.package', 'Paket') %>: <%= customer.package_name || t('admin.print_invoice.package_fallback', 'Internet Service') %></div>
-  </div>
-  
-  <div class="divider"></div>
-  
-  <div class="row bold">
-    <div><%= t('admin.print_invoice.total_paid', 'TOTAL BAYAR') %>:</div>
-    <div>Rp <%= invoice.amount.toLocaleString('id-ID') %></div>
-  </div>
-  
-  <div class="divider"></div>
-  
-  <div class="text-center bold" style="margin-top: 5px;">
-    *** <%= t('admin.print_invoice.paid', 'LUNAS') %> ***
-  </div>
 
-  <div class="signature">
-    <div><%= t('admin.print_invoice.manager', 'Manajer') %>,</div>
-    <br><br>
-    <div class="signature-name"><%= settings.company_manager || t('admin.print_invoice.manager_fallback', 'Admin Pusat') %></div>
-  </div>
+<% 
+  const mns = (lang || 'id') === 'en'
+    ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    : ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+  const isPaid = invoice.status === 'paid';
+  const companyInitial = (company || 'A').charAt(0).toUpperCase();
+  const customerInitial = (customer.name || 'P').charAt(0).toUpperCase();
+  const invNo = 'INV-' + String(invoice.id).padStart(4, '0') + '-' + getCurrentTimeInfo().year;
+  const periodStr = mns[invoice.period_month - 1] + ' ' + invoice.period_year;
+%>
+
+<div class="invoice-wrapper">
+  <div class="top-accent-bar"></div>
   
-  <div class="footer">
-    <%= t('admin.print_invoice.footer.thanks', 'Terima kasih atas pembayaran Anda.') %><br>
-    <%= t('admin.print_invoice.footer.keep_receipt', 'Simpan struk ini sebagai bukti pembayaran yang sah.') %><br>
-    --- <%= t('admin.print_invoice.footer.printed_from', 'Dicetak dari Sistem Billing') %> ---
+  <div class="invoice-container">
+    
+    <!-- Header -->
+    <div class="invoice-header">
+      <div class="brand-section">
+        <div class="logo-container">
+          <img src="/img/logo.png?v=<%= Date.now() %>"
+               alt="<%= company %> Logo"
+               class="company-logo"
+               onerror="this.style.display='none'; document.getElementById('companyAvatar').style.display='flex';">
+          <div class="company-avatar-fallback" id="companyAvatar" style="display:none;"><%= companyInitial %></div>
+          <div>
+            <div class="company-title"><%= company %></div>
+            <div class="company-details"><%= settings.company_address || 'Pusat Layanan Internet Terpercaya' %></div>
+            <% if (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0) { %>
+            <div class="company-details">Telp/WA: +<%= settings.whatsapp_admin_numbers[0] %></div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="invoice-title-block">
+        <div class="doc-type">INVOICE</div>
+        <div class="invoice-num"># <%= invNo %></div>
+        <div>
+          <% if (isPaid) { %>
+          <span class="status-badge paid"><span class="badge-dot"></span>LUNAS</span>
+          <% } else { %>
+          <span class="status-badge unpaid"><span class="badge-dot"></span>BELUM BAYAR</span>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid Billing Details -->
+    <div class="billing-grid">
+      <!-- Client Details -->
+      <div class="info-card">
+        <div class="card-heading">Ditagihkan Kepada</div>
+        <div class="client-name"><%= customer.name %></div>
+        <div class="meta-list">
+          <% if (customer.phone) { %>
+          <div class="meta-item"><span>📱</span> <%= customer.phone %></div>
+          <% } %>
+          <% if (customer.pppoe_username) { %>
+          <div class="meta-item"><span>🔗</span> PPPoE: <%= customer.pppoe_username %></div>
+          <% } %>
+          <% if (customer.address) { %>
+          <div class="meta-item"><span>📍</span> <%= customer.address %></div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Transaction Info -->
+      <div class="info-card">
+        <div class="card-heading">Informasi Transaksi</div>
+        <div class="summary-list">
+          <div class="summary-item">
+            <span class="label">Tanggal <%= isPaid ? 'Pembayaran' : 'Tagihan' %></span>
+            <span class="value"><%= isPaid && invoice.paid_at ? formatDateLocal(invoice.paid_at) : getNowLocal() %></span>
+          </div>
+          <div class="summary-item">
+            <span class="label">Periode Tagihan</span>
+            <span class="value"><%= periodStr %></span>
+          </div>
+          <div class="summary-item" style="margin-top:6px;">
+            <span class="label">Kasir / Penerima</span>
+            <span class="value"><%= invoice.paid_by_name || 'Sistem' %></span>
+          </div>
+          <div class="summary-item" style="margin-top:6px;">
+            <span class="label">Metode Pembayaran</span>
+            <span class="value"><%= invoice.payment_gateway ? invoice.payment_gateway.toUpperCase() : 'Tunai / Transfer' %></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table Items -->
+    <div class="items-table-container">
+      <% if (isPaid) { %>
+      <div class="watermark-stamp paid">LUNAS</div>
+      <% } else { %>
+      <div class="watermark-stamp unpaid">TAGIHAN</div>
+      <% } %>
+
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width: 50px;">#</th>
+            <th>Deskripsi Layanan</th>
+            <th style="width: 120px;">Periode</th>
+            <th class="text-right" style="width: 140px;">Jumlah</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>01</td>
+            <td>
+              <div class="item-title">Layanan Internet — <%= customer.package_name || 'Paket Internet Broadband' %></div>
+              <div class="item-sub">Langganan bulanan internet high-speed</div>
+            </td>
+            <td><%= periodStr %></td>
+            <td class="text-right" style="font-weight:700;">Rp <%= Number(invoice.amount || 0).toLocaleString('id-ID') %></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Bottom Layout (Notes & Totals) -->
+    <div class="bottom-layout">
+      <div class="notes-card">
+        <div>📋 <strong>Catatan Pembayaran:</strong></div>
+        <div><%= invoice.notes || 'Terima kasih telah berlangganan layanan internet kami. Simpan struk ini sebagai bukti pembayaran yang sah.' %></div>
+        <% if (invoice.payment_order_id) { %>
+        <div style="font-size:10px; margin-top:2px; color:var(--primary);">Referensi Transaksi: <strong><%= invoice.payment_order_id %></strong></div>
+        <% } %>
+      </div>
+
+      <div class="totals-card">
+        <div class="total-line">
+          <span class="lbl">Subtotal</span>
+          <span class="val">Rp <%= Number(invoice.amount || 0).toLocaleString('id-ID') %></span>
+        </div>
+        <div class="total-line">
+          <span class="lbl">Diskon / Potongan</span>
+          <span class="val">Rp 0</span>
+        </div>
+        <div class="total-line grand-total">
+          <span class="lbl">Total Bayar</span>
+          <span class="val">Rp <%= Number(invoice.amount || 0).toLocaleString('id-ID') %></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer & Signatures -->
+    <div class="invoice-footer">
+      <div class="footer-info">
+        <div style="font-weight:700; color:var(--text-dark);"><%= company %></div>
+        <div><%= settings.company_address || 'Pusat Layanan Internet' %></div>
+        <div>Dicetak Otomatis pada <%= getNowLocal() %></div>
+      </div>
+
+      <div class="signature-area">
+        <div class="sig-title">Hormat Kami,</div>
+        <div class="sig-line"></div>
+        <div class="sig-name"><%= settings.company_manager || 'Admin Pengelola' %></div>
+        <div class="sig-role">Manajer Operasional</div>
+      </div>
+    </div>
+
   </div>
-  
-  <script>
-    // Otomatis print saat halaman dibuka
-    window.onload = function() {
-      setTimeout(() => {
-        window.print();
-      }, 500);
-    }
-  </script>
+</div>
+
+<!-- Floating Action Buttons -->
+<div class="print-controls">
+  <button class="btn-action btn-print" onclick="window.print();">
+    <span>🖨️</span> Cetak Invoice
+  </button>
+  <button class="btn-action btn-close" onclick="window.close();">
+    <span>✕</span> Tutup
+  </button>
+</div>
+
+<script>
+  window.onload = function() {
+    setTimeout(function() {
+      window.print();
+    }, 500);
+  };
+</script>
 </body>
 </html>
