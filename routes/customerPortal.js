@@ -2422,6 +2422,37 @@ router.get('/invoice/:id/pdf', async (req, res) => {
   }
 });
 
+router.get('/invoice/:id/print', async (req, res) => {
+  try {
+    const inv = billingSvc.getInvoiceById(req.params.id);
+    if (!inv) return res.status(404).send('Invoice tidak ditemukan');
+
+    const sessionCustId = req.session && req.session.customer ? Number(req.session.customer.id) : 0;
+    if (sessionCustId > 0 && Number(inv.customer_id) !== sessionCustId) {
+      return res.status(403).send('Akses ditolak');
+    }
+
+    const customer = customerSvc.getCustomerById(inv.customer_id);
+    if (!customer) return res.status(404).send('Data pelanggan tidak ditemukan');
+
+    const settings = getSettingsWithCache();
+    return res.render('admin/print_invoice', {
+      invoice: inv,
+      customer,
+      company: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
+      settings,
+      lang: 'id',
+      t: (key, def) => def || key,
+      getCurrentTimeInfo,
+      formatDateLocal,
+      getNowLocal
+    });
+  } catch (err) {
+    logger.error(`[Customer Print Invoice] Error: ${err.message}`);
+    return res.status(500).send('Gagal memuat invoice: ' + err.message);
+  }
+});
+
 router.post('/public/payment/create/:invoiceId', async (req, res) => {
   const settings = getSettingsWithCache();
   const secret = settings.session_secret || 'rahasia-portal-pelanggan-default-ganti-ini';
