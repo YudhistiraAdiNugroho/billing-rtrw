@@ -2453,6 +2453,36 @@ router.get('/invoice/:id/print', async (req, res) => {
   }
 });
 
+router.get('/invoice/:id/print-thermal', async (req, res) => {
+  try {
+    const inv = billingSvc.getInvoiceById(req.params.id);
+    if (!inv) return res.status(404).send('Invoice tidak ditemukan');
+
+    const sessionCustId = req.session && req.session.customer ? Number(req.session.customer.id) : 0;
+    if (sessionCustId > 0 && Number(inv.customer_id) !== sessionCustId) {
+      return res.status(403).send('Akses ditolak');
+    }
+
+    const customer = customerSvc.getCustomerById(inv.customer_id);
+    if (!customer) return res.status(404).send('Data pelanggan tidak ditemukan');
+
+    const settings = getSettingsWithCache();
+    return res.render('collector/print_thermal', {
+      invoice: inv,
+      customer,
+      company: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
+      settings,
+      collectorName: 'Portal Pelanggan',
+      formatDateLocal,
+      formatTimeLocal,
+      getNowLocal
+    });
+  } catch (err) {
+    logger.error(`[Customer Print Thermal Error]: ${err.message}`);
+    return res.status(500).send('Gagal memuat struk thermal: ' + err.message);
+  }
+});
+
 router.post('/public/payment/create/:invoiceId', async (req, res) => {
   const settings = getSettingsWithCache();
   const secret = settings.session_secret || 'rahasia-portal-pelanggan-default-ganti-ini';

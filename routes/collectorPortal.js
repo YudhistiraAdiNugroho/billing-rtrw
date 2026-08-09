@@ -7,6 +7,7 @@ const billingSvc = require('../services/billingService');
 const customerSvc = require('../services/customerService');
 const adminSvc = require('../services/adminService');
 const attendanceSvc = require('../services/attendanceService');
+const pdfSvc = require('../services/pdfInvoiceService');
 const { uploadAttendance, removeAttendanceFile } = require('../middleware/attendanceUpload');
 
 function requireCollectorSession(req, res, next) {
@@ -418,7 +419,7 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
         }
       }
 
-      req.session._msg = { type: 'success', text: `Pembayaran berhasil diproses, tagihan lunas${unisolatedText}.` };
+      req.session._msg = { type: 'success', text: `Pembayaran berhasil diproses, tagihan lunas${unisolatedText}. <a href="/collector/invoice/${invoiceId}/print-thermal" target="_blank" class="btn btn-sm btn-dark ms-2 fw-bold"><i class="bi bi-printer"></i> Cetak Struk (Bluetooth Thermal)</a>` };
     } else {
       // Manual approval: insert as pending
       db.prepare(`
@@ -438,6 +439,59 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
   if (req.body.search) qs.set('search', String(req.body.search));
   const suffix = qs.toString() ? ('?' + qs.toString()) : '';
   res.redirect('/collector' + suffix);
+});
+
+// ─── THERMAL RECEIPT PRINT ROUTE (58mm/80mm Bluetooth Printer) ───────────────
+router.get('/invoice/:id/print-thermal', requireCollectorSession, (req, res) => {
+  try {
+    const invoiceId = Number(req.params.id || 0);
+    const invoice = billingSvc.getInvoiceById(invoiceId);
+    if (!invoice) return res.status(404).send('Invoice tidak ditemukan');
+
+    const customer = customerSvc.getCustomerById(invoice.customer_id);
+    if (!customer) return res.status(404).send('Data pelanggan tidak ditemukan');
+    const settings = getSettings();
+
+    res.render('collector/print_thermal', {
+      invoice,
+      customer,
+      settings,
+      company: company(),
+      collectorName: req.session.collectorName || 'Kolektor',
+      formatDateLocal,
+      formatTimeLocal,
+      getNowLocal
+    });
+  } catch (e) {
+    res.status(500).send('Error: ' + e.message);
+  }
+});
+
+// ─── SEND INVOICE PDF VIA WHATSAPP ROUTE ──────────────────────────────────────
+router.post('/invoice/:id/send-pdf-wa', requireCollectorSession, async (req, res) => {
+  try {
+    const invoiceId = Number(req.params.id || 0);
+    const inv = billingSvc.getInvoiceById(invoiceId);
+    if (!inv) return res.json({ success: false, message: 'Invoice tidak ditemukan' });
+
+    const customer = customerSvc.getCustomerById(inv.customer_id);
+    if (!customer || !customer.phone) return res.json({ success: false, message: 'Nomor HP pelanggan tidak valid' });
+
+    const settings = getSettings();
+    const pdfBuffer = await pdfSvc.generateInvoicePdfBuffer(inv, customer, settings);
+    const filename = `Invoice_INV-${String(inv.id).padStart(4, '0')}.pdf`;
+    const caption = `🧾 *FAKTUR / INVOICE LUNAS*\n\nYth. Bpk/Ibu *${customer.name}*,\nBerikut kami lampirkan dokumen Invoice LUNAS periode ${inv.period_month}/${inv.period_year}.\n\nTerima kasih atas pembayaran Anda.`;
+
+    const waBot = require('../services/whatsappBot.mjs');
+    const result = await waBot.sendWADocument(customer.phone, pdfBuffer, filename, caption);
+    if (result && result.success) {
+      return res.json({ success: true, message: 'Dokumen Invoice PDF berhasil dikirim via WhatsApp ke pelanggan!' });
+    } else {
+      return res.json({ success: false, message: result?.message || 'Gagal mengirim WA PDF' });
+    }
+  } catch (e) {
+    return res.json({ success: false, message: 'Error: ' + e.message });
+  }
 });
 
 module.exports = router;

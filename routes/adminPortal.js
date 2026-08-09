@@ -2433,6 +2433,26 @@ router.get('/billing/:id/print', requireAdminSession, (req, res) => {
   });
 });
 
+router.get('/billing/:id/print-thermal', requireAdminSession, (req, res) => {
+  const inv = billingSvc.getInvoiceById(req.params.id);
+  if (!inv) return res.status(404).send('Invoice tidak ditemukan');
+  
+  const customer = customerSvc.getCustomerById(inv.customer_id);
+  if (!customer) return res.status(404).send('Data pelanggan tidak ditemukan');
+
+  const settings = getSettings();
+  res.render('collector/print_thermal', {
+    invoice: inv,
+    customer,
+    company: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
+    settings,
+    collectorName: req.session.adminUsername || 'Admin',
+    formatDateLocal,
+    formatTimeLocal,
+    getNowLocal
+  });
+});
+
 router.get('/billing/:id/pdf', requireAdminSession, async (req, res) => {
   try {
     const inv = billingSvc.getInvoiceById(req.params.id);
