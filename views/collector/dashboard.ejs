@@ -51,7 +51,9 @@
     </div>
 
     <% if (msg) { %>
-      <div class="alert alert-<%= msg.type==='error'?'danger':'success' %>"><%= msg.text %></div>
+      <div class="alert alert-<%= msg.type==='error'?'danger':'success' %> d-flex align-items-center gap-2 flex-wrap">
+        <span><%- msg.text %></span>
+      </div>
     <% } %>
 
     <div class="row g-2 mb-3">
@@ -181,7 +183,17 @@
                 <% if (inv.lat && inv.lng) { %>
                   <a class="btn btn-outline-light btn-sm" target="_blank" href="https://www.google.com/maps?q=<%= encodeURIComponent(inv.lat + ',' + inv.lng) %>"><i class="bi bi-geo-alt"></i> Map</a>
                 <% } %>
-                <% if (!isPaid && !isPending) { %>
+                <% if (isPaid && inv.invoice_id) { %>
+                  <a class="btn btn-primary btn-sm fw-bold shadow-sm" target="_blank" href="/collector/invoice/<%= inv.invoice_id %>/print-thermal">
+                    <i class="bi bi-printer"></i> Cetak Struk (Thermal)
+                  </a>
+                  <a class="btn btn-outline-info btn-sm fw-bold" target="_blank" href="/customer/invoice/<%= inv.invoice_id %>/pdf">
+                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                  </a>
+                  <button type="button" class="btn btn-outline-success btn-sm fw-bold" onclick="sendWaPdf('<%= inv.invoice_id %>')">
+                    <i class="bi bi-whatsapp"></i> Kirim WA PDF
+                  </button>
+                <% } else if (!isPaid && !isPending) { %>
                   <form method="POST" action="/collector/payment-request" class="d-flex gap-2" style="flex:1;min-width:260px">
                     <input type="hidden" name="customer_id" value="<%= inv.customer_id %>">
                     <input type="hidden" name="invoice_id" value="<%= inv.invoice_id || '' %>">
@@ -218,7 +230,7 @@
                 <th>Pelanggan</th>
                 <th>Periode</th>
                 <th class="text-end">Nominal</th>
-                <th>Status</th>
+                <th>Status / Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -232,6 +244,7 @@
                   <td style="font-size:12px">
                     <% if (st === 'approved') { %>
                       <span class="badgey s">APPROVED</span>
+                      <a href="/collector/invoice/<%= r.invoice_id %>/print-thermal" target="_blank" class="btn btn-sm btn-outline-light ms-1" style="font-size:11px;padding:2px 6px;" title="Cetak Struk Thermal"><i class="bi bi-printer"></i> Struk</a>
                     <% } else if (st === 'rejected') { %>
                       <span class="badgey d">REJECTED</span>
                     <% } else { %>
@@ -297,6 +310,17 @@
         }
       } catch (e) {}
     })();
+
+    async function sendWaPdf(invId) {
+      if (!confirm('Kirimkan dokumen Invoice PDF ke WhatsApp pelanggan sekarang?')) return;
+      try {
+        const res = await fetch('/collector/invoice/' + invId + '/send-pdf-wa', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || (data.success ? 'Berhasil dikirim!' : 'Gagal mengirim'));
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
   </script>
 </body>
 </html>

@@ -649,9 +649,12 @@
 
 <!-- Floating Action Buttons -->
 <div class="print-controls">
-  <button class="btn-action btn-print" onclick="window.print();">
-    <span>🖨️</span> Cetak
+  <button class="btn-action btn-print" onclick="window.print();" title="Cetak Faktur A4">
+    <span>🖨️</span> Cetak A4
   </button>
+  <a href="/admin/billing/<%= invoice.id %>/print-thermal" target="_blank" class="btn-action btn-print" style="text-decoration:none; background: linear-gradient(135deg, #0284c7, #06b6d4);" title="Cetak Struk Bluetooth Thermal 58mm/80mm">
+    <span>🧾</span> Struk Thermal
+  </a>
   <a href="/admin/billing/<%= invoice.id %>/pdf" target="_blank" class="btn-action btn-print" style="text-decoration:none; background: linear-gradient(135deg, #059669, #10b981);">
     <span>📥</span> Unduh PDF
   </a>
