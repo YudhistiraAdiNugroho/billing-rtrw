@@ -691,12 +691,22 @@ app.post('/api/webhook/v1/payment-notif', multer().any(), async (req, res) => {
               try { updateWebhookPaymentNotifMatchInvoice.run(invId, notifId); } catch {}
             }
 
-            if (custId > 0 && String(inv.customer_status || '') === 'suspended') {
-              const cnt = countUnpaidInvoicesForCustomer.get(custId);
-              const unpaid = Number(cnt?.c || 0);
-              if (unpaid === 0) {
-                try { await customerSvc.activateCustomer(custId); } catch (e) {
-                  logger.error(`[WEBHOOK][payment-notif] Activate customer failed: ${e && e.message ? e.message : String(e)}`);
+            if (custId > 0) {
+              const otherUnpaid = db.prepare("SELECT id FROM invoices WHERE customer_id=? AND status='unpaid' AND id!=?").all(custId, invId);
+              if (otherUnpaid && otherUnpaid.length > 0) {
+                const oNote = `AUTO-QRIS: lunas dari pembayaran gabungan QRIS Rp ${amount}`;
+                for (const other of otherUnpaid) {
+                  markInvoicePaidAppendNote.run('QRIS', oNote, oNote, notifId || null, other.id);
+                }
+              }
+
+              if (String(inv.customer_status || '') === 'suspended') {
+                const cnt = countUnpaidInvoicesForCustomer.get(custId);
+                const unpaid = Number(cnt?.c || 0);
+                if (unpaid === 0) {
+                  try { await customerSvc.activateCustomer(custId); } catch (e) {
+                    logger.error(`[WEBHOOK][payment-notif] Activate customer failed: ${e && e.message ? e.message : String(e)}`);
+                  }
                 }
               }
             }
@@ -1254,6 +1264,12 @@ startCronJobs();
 
 // Mulai auto backup
 scheduleAutoBackup();
+
+// Inisialisasi RADIUS Server jika diaktifkan di settings
+const radiusSvc = require('./services/radiusServerService');
+if (getSetting('radius_enabled', '0') === '1') {
+  radiusSvc.start();
+}
 
 // Error handling middleware (harus di akhir setelah semua routes)
 app.use(notFoundHandler);
