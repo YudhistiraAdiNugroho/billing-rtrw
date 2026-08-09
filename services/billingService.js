@@ -279,7 +279,49 @@ function getAllInvoices({ month, year, status, search, limit = 300 } = {}) {
     params.push(s, s, s);
   }
   q += ` ORDER BY i.period_year DESC, i.period_month DESC, c.name ASC LIMIT ${parseInt(limit)}`;
-  return db.prepare(q).all(...params);
+  const rows = db.prepare(q).all(...params);
+
+  const mns = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+  const customerUnpaidCache = {};
+
+  return rows.map(inv => {
+    if (inv.status === 'unpaid') {
+      const cid = inv.customer_id;
+      if (!customerUnpaidCache[cid]) {
+        customerUnpaidCache[cid] = db.prepare(`
+          SELECT id, period_month, period_year, amount, qris_amount_unique, qris_unique_code
+          FROM invoices
+          WHERE customer_id = ? AND status = 'unpaid'
+          ORDER BY period_year ASC, period_month ASC
+        `).all(cid);
+      }
+      const unpaidList = customerUnpaidCache[cid] || [];
+      const unpaidCount = unpaidList.length;
+      const totalUnpaidAmount = unpaidList.reduce((sum, u) => sum + (Number(u.amount) || 0), 0);
+      const unpaidPeriods = unpaidList.map(u => `${mns[u.period_month - 1]} ${u.period_year}`).join(', ');
+      
+      const code = Number(inv.qris_unique_code || 0);
+      const qrisAmt = Number(inv.qris_amount_unique || 0);
+      const accumulatedQrisAmount = (code > 0 && totalUnpaidAmount > 0)
+        ? (totalUnpaidAmount + code)
+        : (qrisAmt > 0 ? qrisAmt : totalUnpaidAmount);
+
+      return {
+        ...inv,
+        unpaidCount,
+        totalUnpaidAmount,
+        unpaidPeriods,
+        accumulatedQrisAmount
+      };
+    }
+    return {
+      ...inv,
+      unpaidCount: 1,
+      totalUnpaidAmount: Number(inv.amount || 0),
+      unpaidPeriods: `${mns[inv.period_month - 1]} ${inv.period_year}`,
+      accumulatedQrisAmount: Number(inv.qris_amount_unique || inv.amount || 0)
+    };
+  });
 }
 
 function getInvoiceById(id) {
