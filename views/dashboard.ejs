@@ -862,6 +862,10 @@
       const unpaidInvoices = (invoices || []).filter(i => i.status !== 'paid');
       const hasUnpaid = unpaidInvoices.length > 0;
       const latestUnpaid = hasUnpaid ? unpaidInvoices[0] : null;
+
+      const totalUnpaidAmount = unpaidInvoices.reduce((sum, i) => sum + (Number(i.amount != null ? i.amount : (i.package_price != null ? i.package_price : 0)) || 0), 0);
+      const unpaidPeriods = unpaidInvoices.map(i => `${i.period_month}/${i.period_year}`).join(', ');
+      const unpaidCount = unpaidInvoices.length;
     %>
     <div class="bill-hero-card <%= !hasUnpaid ? 'paid' : '' %>">
       <div class="d-flex align-items-center gap-3">
@@ -870,10 +874,13 @@
         </div>
         <div>
           <% if (hasUnpaid) { %>
-            <% const unpaidAmt = (latestUnpaid.amount != null ? latestUnpaid.amount : (latestUnpaid.package_price != null ? latestUnpaid.package_price : 0)); %>
-            <div class="badge bg-warning text-dark fw-bold mb-1" style="font-size:10px; letter-spacing:0.5px;">TAGIHAN BELUM DIBAYAR</div>
-            <h5 class="fw-bold mb-0 text-white">Rp <%= parseInt(unpaidAmt || 0).toLocaleString('id-ID') %></h5>
-            <div class="small" style="color:#cbd5e1; font-weight:500; margin-top:2px;">Periode <%= latestUnpaid.period_month %>/<%= latestUnpaid.period_year %> • Jatuh tempo tgl 20</div>
+            <div class="badge bg-warning text-dark fw-bold mb-1" style="font-size:10px; letter-spacing:0.5px;">
+              TAGIHAN BELUM DIBAYAR <%= unpaidCount > 1 ? `(${unpaidCount} BULAN)` : '' %>
+            </div>
+            <h5 class="fw-bold mb-0 text-white">Rp <%= parseInt(totalUnpaidAmount || 0).toLocaleString('id-ID') %></h5>
+            <div class="small" style="color:#cbd5e1; font-weight:500; margin-top:2px;">
+              Periode <%= unpaidPeriods %> <%= unpaidCount > 1 ? '• Total Akumulasi' : '• Jatuh tempo tgl 20' %>
+            </div>
           <% } else { %>
             <div class="badge bg-success fw-bold mb-1" style="font-size:10px; letter-spacing:0.5px;">SEMUA TAGIHAN LUNAS</div>
             <h5 class="fw-bold mb-0 text-white">Layanan Internet Aktif</h5>
@@ -883,8 +890,7 @@
       </div>
 
       <% if (hasUnpaid) { %>
-        <% const unpaidAmt = (latestUnpaid.amount != null ? latestUnpaid.amount : (latestUnpaid.package_price != null ? latestUnpaid.package_price : 0)); %>
-        <button type="button" class="btn-pay-hero" onclick="openPaymentModal('<%= latestUnpaid.id %>', '<%= unpaidAmt %>')">
+        <button type="button" class="btn-pay-hero" onclick="openPaymentModal('<%= latestUnpaid.id %>', '<%= totalUnpaidAmount %>')">
           <i class="bi bi-qr-code-scan"></i> BAYAR SEKARANG (QRIS)
         </button>
       <% } %>
@@ -892,7 +898,7 @@
 
     <!-- QUICK ACTION DOCK (6 ICONS) -->
     <div class="action-grid">
-      <% const navPayAmt = hasUnpaid ? (latestUnpaid.amount != null ? latestUnpaid.amount : (latestUnpaid.package_price != null ? latestUnpaid.package_price : 0)) : 0; %>
+      <% const navPayAmt = hasUnpaid ? totalUnpaidAmount : 0; %>
       <div class="action-item" onclick="<%= hasUnpaid ? `openPaymentModal('${latestUnpaid.id}', '${navPayAmt}')` : `location.href='#billing-section'` %>">
         <div class="action-icon ai-pay"><i class="bi bi-credit-card-2-front-fill"></i></div>
         <div class="action-label">Bayar Tagihan</div>
