@@ -554,6 +554,39 @@ db.exec(`
     updated_at DATETIME DEFAULT (NOW_LOCAL()),
     UNIQUE(router_id, profile_name)
   );
+
+  CREATE TABLE IF NOT EXISTS radius_nas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nasname TEXT NOT NULL UNIQUE,
+    shortname TEXT DEFAULT '',
+    secret TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE TABLE IF NOT EXISTS radius_accounting (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    nas_ip TEXT DEFAULT '',
+    framed_ip TEXT DEFAULT '',
+    session_id TEXT NOT NULL,
+    status_type INTEGER DEFAULT 1,
+    input_octets INTEGER DEFAULT 0,
+    output_octets INTEGER DEFAULT 0,
+    input_gigawords INTEGER DEFAULT 0,
+    output_gigawords INTEGER DEFAULT 0,
+    session_time INTEGER DEFAULT 0,
+    terminate_cause INTEGER DEFAULT 0,
+    calling_station_id TEXT DEFAULT '',
+    called_station_id TEXT DEFAULT '',
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_radius_acct_user ON radius_accounting(username);
+  CREATE INDEX IF NOT EXISTS idx_radius_acct_session ON radius_accounting(session_id);
+  CREATE INDEX IF NOT EXISTS idx_radius_acct_status ON radius_accounting(status_type);
 `);
 
 
@@ -573,7 +606,7 @@ function forceUnlockCoreMenus() {
     let states = rowStates ? JSON.parse(rowStates.value) : {};
     let keys = rowKeys ? JSON.parse(rowKeys.value) : {};
     
-    const coreMenus = ['mikrotik', 'whatsapp', 'broadcast', 'digiflazz', 'update', 'settings', 'backup', 'monitoring', 'audit_logs'];
+    const coreMenus = ['mikrotik', 'radius_server', 'whatsapp', 'broadcast', 'digiflazz', 'update', 'settings', 'backup', 'monitoring', 'audit_logs'];
     const passwordHash = '45d841d9f79ebadb8db21b0068b6b6d10a49ff66865e9fbf88267cceccd3c784'; // Hash dari 'donasidulu'
     
     const crypto = require('crypto');
