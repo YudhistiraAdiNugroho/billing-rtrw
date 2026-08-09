@@ -2782,6 +2782,14 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
       throw new Error('Bot WhatsApp belum terhubung. Silakan cek status WhatsApp di menu Admin.');
     }
 
+    const unpaidInvoices = billingSvc.getUnpaidInvoicesByCustomerId(customer.id);
+    const totalTagihan = (unpaidInvoices && unpaidInvoices.length > 0)
+      ? unpaidInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
+      : Number(inv.amount || 0);
+    const rincianBulan = (unpaidInvoices && unpaidInvoices.length > 0)
+      ? unpaidInvoices.map(i => `${i.period_month}/${i.period_year}`).join(', ')
+      : `${inv.period_month}/${inv.period_year}`;
+
     let qrisAmountUnique = Number(inv.qris_amount_unique || 0) || 0;
     let qrisCode = Number(inv.qris_unique_code || 0) || 0;
     const qrisQrUrl = String(getSetting('qris_static_qr_url', '') || '').trim();
@@ -2790,9 +2798,10 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
     const qrisEnabled = !(qrisEnabledRaw === false || qrisEnabledRaw === 'false' || qrisEnabledRaw === 0 || qrisEnabledRaw === '0');
     const hasStaticQris = qrisEnabled && (!!qrisQrUrl || !!String(qrisPayloadSetting || '').trim());
 
-    if (hasStaticQris && String(inv.status) === 'unpaid' && (!qrisAmountUnique || !qrisCode)) {
+    const baseAmount = totalTagihan > 0 ? totalTagihan : Number(inv.amount || 0);
+
+    if (hasStaticQris && String(inv.status) === 'unpaid' && (!qrisAmountUnique || !qrisCode || (qrisAmountUnique - qrisCode !== baseAmount))) {
       const invId = Number(inv.id);
-      const baseAmount = Number(inv.amount || 0);
       if (Number.isFinite(invId) && invId > 0 && Number.isFinite(baseAmount) && baseAmount > 0) {
         const exists = db.prepare('SELECT id FROM invoices WHERE status=? AND qris_amount_unique=? AND id!=? LIMIT 1');
         const update = db.prepare(`
@@ -2801,15 +2810,25 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
           WHERE id=?
         `);
 
-        let chosenCode = 0;
+        let chosenCode = qrisCode > 0 ? qrisCode : 0;
         let chosenAmount = 0;
-        for (let i = 0; i < 50; i++) {
-          const code = 1 + Math.floor(Math.random() * 999);
-          const amount = baseAmount + code;
-          if (!exists.get('unpaid', amount, invId)) {
-            chosenCode = code;
-            chosenAmount = amount;
-            break;
+
+        if (chosenCode > 0) {
+          const pAmt = baseAmount + chosenCode;
+          if (!exists.get('unpaid', pAmt, invId)) {
+            chosenAmount = pAmt;
+          }
+        }
+
+        if (!chosenAmount) {
+          for (let i = 0; i < 50; i++) {
+            const code = 1 + Math.floor(Math.random() * 999);
+            const amount = baseAmount + code;
+            if (!exists.get('unpaid', amount, invId)) {
+              chosenCode = code;
+              chosenAmount = amount;
+              break;
+            }
           }
         }
         if (!chosenAmount) {
@@ -2957,11 +2976,6 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
       return await decodeQrisPayloadFromUploadedQr();
     };
 
-    // Hitung Tagihan
-    const unpaidInvoices = billingSvc.getUnpaidInvoicesByCustomerId(customer.id);
-    const totalTagihan = unpaidInvoices.reduce((sum, i) => sum + i.amount, 0);
-    const rincianBulan = unpaidInvoices.map(i => `${i.period_month}/${i.period_year}`).join(', ');
-    
     // Generate Link Login
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host = req.get('host');
@@ -2981,13 +2995,18 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
     const template = db.getAppSetting('whatsapp_auto_billing_message', defaultAutoBilling);
 
     const isQrisCase = (qrisAmountUnique > 0 && qrisCode > 0);
-    const qrisJpgLink = `${baseUrl}/customer/qris/static.jpg?amount=${encodeURIComponent(String(qrisAmountUnique))}`;
+    const finalNominal = qrisAmountUnique > 0 ? qrisAmountUnique : totalTagihan;
+    const finalNominalStr = Number(finalNominal).toLocaleString('id-ID');
+
+    const qrisJpgLink = `${baseUrl}/customer/qris/static.jpg?amount=${encodeURIComponent(String(finalNominal))}`;
     const qrisJpgCaption = isQrisCase
       ? templateQris
           .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
-          .replace(/{{periode}}/gi, `${inv.period_month}/${inv.period_year}`)
-          .replace(/{{paket}}/gi, inv.package_name || '-')
-          .replace(/{{qris_nominal}}/gi, Number(qrisAmountUnique).toLocaleString('id-ID'))
+          .replace(/{{periode}}/gi, rincianBulan)
+          .replace(/{{rincian}}/gi, rincianBulan)
+          .replace(/{{paket}}/gi, inv.package_name || customer.package_name || '-')
+          .replace(/{{qris_nominal}}/gi, finalNominalStr)
+          .replace(/{{tagihan}}/gi, finalNominalStr)
           .replace(/{{qris_kode}}/gi, String(qrisCode).padStart(3, '0'))
           .replace(/{{qris_qr}}/gi, `QRIS terlampir (gambar).\n🌐 Portal Pelanggan: ${loginLink}`)
       : '';
@@ -2995,16 +3014,20 @@ router.post('/billing/:id/whatsapp', requireAdminSession, async (req, res) => {
     const formattedMsg = isQrisCase
       ? templateQris
           .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
-          .replace(/{{periode}}/gi, `${inv.period_month}/${inv.period_year}`)
-          .replace(/{{paket}}/gi, inv.package_name || '-')
-          .replace(/{{qris_nominal}}/gi, Number(qrisAmountUnique).toLocaleString('id-ID'))
+          .replace(/{{periode}}/gi, rincianBulan)
+          .replace(/{{rincian}}/gi, rincianBulan)
+          .replace(/{{paket}}/gi, inv.package_name || customer.package_name || '-')
+          .replace(/{{qris_nominal}}/gi, finalNominalStr)
+          .replace(/{{tagihan}}/gi, finalNominalStr)
           .replace(/{{qris_kode}}/gi, String(qrisCode).padStart(3, '0'))
           .replace(/{{qris_qr}}/gi, `🔗 Link QRIS JPG: ${qrisJpgLink}\n🌐 Portal Pelanggan: ${loginLink}`)
       : template
           .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
-          .replace(/{{tagihan}}/gi, totalTagihan.toLocaleString('id-ID'))
-          .replace(/{{rincian}}/gi, rincianBulan || '-')
-          .replace(/{{paket}}/gi, inv.package_name || '-')
+          .replace(/{{tagihan}}/gi, finalNominalStr)
+          .replace(/{{qris_nominal}}/gi, finalNominalStr)
+          .replace(/{{periode}}/gi, rincianBulan)
+          .replace(/{{rincian}}/gi, rincianBulan)
+          .replace(/{{paket}}/gi, inv.package_name || customer.package_name || '-')
           .replace(/{{link}}/gi, loginLink);
 
     let sent = false;
@@ -3744,9 +3767,18 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
 
     restorePreservedFiles('post-update');
 
-    const npm = runCmd('npm', ['install'], repoRoot);
-    pushCmd('npm install', npm);
-    if (!npm.ok) throw new Error('Update berhasil, tetapi npm install gagal.');
+    // Cek apakah package.json berubah sebelum install
+    const pkgDiff = runCmd('git', ['diff', 'HEAD@{1}', 'HEAD', '--', 'package.json'], repoRoot);
+    const pkgChanged = pkgDiff.ok && String(pkgDiff.stdout || '').trim().length > 0;
+
+    if (pkgChanged) {
+      log.push('$ package.json berubah, menjalankan npm install (Low-CPU Mode)...');
+      const npm = runCmd('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--prefer-offline'], repoRoot);
+      pushCmd('npm install --omit=dev --no-audit --no-fund --prefer-offline', npm);
+      if (!npm.ok) throw new Error('Update berhasil, tetapi npm install gagal.');
+    } else {
+      log.push('$ package.json tidak berubah, npm install dilewati (Hemat CPU & Waktu!).');
+    }
 
     const localAfter = readTextFileSafe(versionPath) || '-';
     req.session._msg = { type: 'success', text: `Update selesai. Versi: ${localBefore} → ${localAfter}. Silakan restart aplikasi.` };
@@ -6017,6 +6049,32 @@ router.get('/api/isolir-portal-script', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/api/system/update', requireAdmin, async (req, res) => {
+  const { exec } = require('child_process');
+  const path = require('path');
+  const projectDir = path.join(__dirname, '..');
+  const isWindows = process.platform === 'win32';
+
+  const cmd = isWindows 
+    ? 'git pull origin main || git pull' 
+    : 'nice -n 19 bash update.sh';
+
+  logger.info(`[System Update] Admin initiated 1-Click System Update.`);
+
+  exec(cmd, { cwd: projectDir, timeout: 120000 }, (error, stdout, stderr) => {
+    if (error) {
+      logger.error(`[System Update Error]: ${error.message}`);
+      return res.json({ success: false, message: 'Gagal update: ' + error.message, output: stderr || stdout });
+    }
+    logger.info(`[System Update Complete]: ${stdout}`);
+    return res.json({ 
+      success: true, 
+      message: 'Pembaruan aplikasi berhasil diterapkan (Low-CPU Mode)!', 
+      output: stdout || 'Git pull & reload berhasil.' 
+    });
+  });
+});
+
 router.get('/api/mikrotik/profiles/:routerId', requireAdmin, async (req, res) => {
   try {
     const profiles = await mikrotikService.getPppoeProfiles(req.params.routerId);
@@ -6662,5 +6720,127 @@ router.post('/onu-provision/delete', requireAdminSession, restrictToAdmin, expre
   }
 });
 
+// --- RADIUS SERVER MANAGEMENT ---
+const radiusSvc = require('../services/radiusServerService');
+
+router.get('/radius-settings', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const radiusStatus = radiusSvc.getStatus();
+    const onlineSessions = radiusSvc.getOnlineSessions();
+    const acctLogs = radiusSvc.getAccountingLogs(100);
+    const nasList = db.prepare(`SELECT * FROM radius_nas ORDER BY id DESC`).all() || [];
+
+    const todayStats = db.prepare(`
+      SELECT 
+        COUNT(1) as total_events,
+        COALESCE(SUM(input_octets + output_octets), 0) as total_bytes
+      FROM radius_accounting
+      WHERE DATE(created_at) = DATE('now')
+    `).get() || { total_events: 0, total_bytes: 0 };
+
+    const todayTrafficMB = (todayStats.total_bytes / (1024 * 1024)).toFixed(1);
+    const todayEvents = todayStats.total_events;
+
+    const msg = req.session._msg || null;
+    req.session._msg = null;
+
+    res.render('admin/radius-settings', {
+      title: 'RADIUS Server Settings',
+      company: getSetting('company_name', 'RTRW-Net'),
+      activePage: 'radius_settings',
+      session: req.session,
+      radiusStatus,
+      onlineSessions,
+      acctLogs,
+      nasList,
+      todayTrafficMB,
+      todayEvents,
+      msg
+    });
+  } catch (error) {
+    logger.error('Error rendering RADIUS settings page:', error);
+    res.status(500).send('Internal Server Error: ' + error.message);
+  }
+});
+
+router.post('/radius-settings', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const {
+      radius_enabled,
+      radius_secret,
+      radius_auth_port,
+      radius_acct_port,
+      radius_isolir_action,
+      radius_isolir_pool,
+      radius_limit_simultaneous,
+      radius_default_rate_limit
+    } = req.body;
+
+    saveSettings({
+      radius_enabled: radius_enabled === '1' ? '1' : '0',
+      radius_secret: String(radius_secret || 'secret123').trim(),
+      radius_auth_port: String(radius_auth_port || '1812').trim(),
+      radius_acct_port: String(radius_acct_port || '1813').trim(),
+      radius_isolir_action: String(radius_isolir_action || 'pool').trim(),
+      radius_isolir_pool: String(radius_isolir_pool || 'isolir').trim(),
+      radius_limit_simultaneous: radius_limit_simultaneous === '1' ? '1' : '0',
+      radius_default_rate_limit: String(radius_default_rate_limit || '5M/10M').trim()
+    });
+
+    // Kontrol background service UDP RADIUS
+    radiusSvc.stop();
+    if (radius_enabled === '1') {
+      radiusSvc.start();
+    }
+
+    req.session._msg = { type: 'success', text: 'Pengaturan RADIUS Server berhasil diperbarui.' };
+  } catch (error) {
+    logger.error('Error saving RADIUS settings:', error);
+    req.session._msg = { type: 'danger', text: 'Gagal menyimpan pengaturan: ' + error.message };
+  }
+  res.redirect('/admin/radius-settings');
+});
+
+router.post('/radius/nas/add', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const { nasname, shortname, secret, description } = req.body;
+    if (!nasname || !secret) {
+      throw new Error('IP NAS & Shared Secret wajib diisi.');
+    }
+
+    db.prepare(`
+      INSERT INTO radius_nas (nasname, shortname, secret, description, is_active)
+      VALUES (?, ?, ?, ?, 1)
+      ON CONFLICT(nasname) DO UPDATE SET
+        shortname = excluded.shortname,
+        secret = excluded.secret,
+        description = excluded.description,
+        is_active = 1
+    `).run(
+      String(nasname).trim(),
+      String(shortname || '').trim(),
+      String(secret).trim(),
+      String(description || '').trim()
+    );
+
+    req.session._msg = { type: 'success', text: `NAS ${nasname} berhasil ditambahkan/diperbarui.` };
+  } catch (error) {
+    logger.error('Error adding NAS:', error);
+    req.session._msg = { type: 'danger', text: 'Gagal menambah NAS: ' + error.message };
+  }
+  res.redirect('/admin/radius-settings');
+});
+
+router.post('/radius/nas/delete', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const { id } = req.body;
+    db.prepare(`DELETE FROM radius_nas WHERE id = ?`).run(id);
+    req.session._msg = { type: 'success', text: 'NAS berhasil dihapus.' };
+  } catch (error) {
+    logger.error('Error deleting NAS:', error);
+    req.session._msg = { type: 'danger', text: 'Gagal menghapus NAS: ' + error.message };
+  }
+  res.redirect('/admin/radius-settings');
+});
 
 module.exports = router;

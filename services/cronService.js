@@ -219,15 +219,24 @@ function startCronJobs() {
               let code = Number(inv.qris_unique_code || 0) || 0;
               let amt = Number(inv.qris_amount_unique || 0) || 0;
               const invId = Number(inv.id);
-              const baseAmount = Number(inv.amount || 0);
+              const baseAmount = totalTagihan > 0 ? totalTagihan : Number(inv.amount || 0);
 
-              if ((!code || !amt) && invId > 0 && baseAmount > 0) {
+              // Jika amt tidak ada atau amt tidak cocok dengan akumulasi total tagihan + kode, buat/perbarui nominal unik
+              if ((!code || !amt || (amt - code !== baseAmount)) && invId > 0 && baseAmount > 0) {
                 const exists = db.prepare('SELECT id FROM invoices WHERE status=? AND qris_amount_unique=? AND id!=? LIMIT 1');
                 const custId = Number(c?.id || inv?.customer_id || 0);
                 let tryCode = 0;
                 let tryAmt = 0;
 
-                if (custId > 0) {
+                if (code > 0) {
+                  const pAmt = baseAmount + code;
+                  if (!exists.get('unpaid', pAmt, invId)) {
+                    tryCode = code;
+                    tryAmt = pAmt;
+                  }
+                }
+
+                if (!tryAmt && custId > 0) {
                   const prefCode = (custId % 499 === 0) ? 499 : (custId % 499);
                   const pAmt = baseAmount + prefCode;
                   if (!exists.get('unpaid', pAmt, invId)) {

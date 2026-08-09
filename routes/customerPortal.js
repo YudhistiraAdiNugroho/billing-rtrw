@@ -574,12 +574,22 @@ function ensureInvoiceQrisUnique(inv, force = false) {
   if (!Number.isFinite(invId) || invId <= 0) throw new Error('Invoice ID tidak valid');
   if (String(inv?.status) !== 'unpaid') throw new Error('Hanya tagihan BELUM BAYAR yang bisa dibuat kode QRIS.');
 
-  const baseAmount = Number(inv?.amount || 0);
+  const custId = Number(inv?.customer_id || 0);
+  let baseAmount = Number(inv?.amount || 0);
+
+  if (custId > 0) {
+    const unpaidInvoices = db.prepare("SELECT amount FROM invoices WHERE customer_id=? AND status='unpaid'").all(custId);
+    if (unpaidInvoices && unpaidInvoices.length > 0) {
+      const sumAll = unpaidInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+      if (sumAll > 0) baseAmount = sumAll;
+    }
+  }
+
   if (!Number.isFinite(baseAmount) || baseAmount <= 0) throw new Error('Nominal tagihan tidak valid');
 
   const currentAmount = Number(inv?.qris_amount_unique || 0) || 0;
   const currentCode = Number(inv?.qris_unique_code || 0) || 0;
-  if (!force && currentAmount > 0 && currentCode > 0) {
+  if (!force && currentAmount > 0 && currentCode > 0 && (currentAmount - currentCode === baseAmount)) {
     return { uniqueCode: currentCode, amountUnique: currentAmount };
   }
 
@@ -593,7 +603,6 @@ function ensureInvoiceQrisUnique(inv, force = false) {
   let chosenAmount = 0;
 
   // 1. Prioritaskan ID Pelanggan sebagai kode unik utama (selalu di bawah 500)
-  const custId = Number(inv?.customer_id || 0);
   if (custId > 0) {
     const prefCode = (custId % 499 === 0) ? 499 : (custId % 499);
     const prefAmount = baseAmount + prefCode;
