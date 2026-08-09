@@ -256,7 +256,7 @@
                   <th>Shared Secret</th>
                   <th>Keterangan</th>
                   <th>Status</th>
-                  <th style="width:100px;text-align:right;">Aksi</th>
+                  <th style="width:140px;text-align:right;">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -274,10 +274,22 @@
                           <span class="badge bd">Non-Aktif</span>
                         <% } %>
                       </td>
-                      <td style="text-align:right;">
-                        <form action="/admin/radius/nas/delete" method="POST" onsubmit="return confirm('Hapus NAS ini?')" style="display:inline;">
+                      <td style="text-align:right;white-space:nowrap;">
+                        <!-- Toggle Status -->
+                        <form action="/admin/radius/nas/toggle" method="POST" style="display:inline;">
                           <input type="hidden" name="id" value="<%= nas.id %>">
-                          <button type="submit" class="btn btn-d btn-sm"><i class="bi bi-trash"></i></button>
+                          <button type="submit" class="btn btn-g btn-sm" title="<%= nas.is_active ? 'Non-aktifkan NAS' : 'Aktifkan NAS' %>">
+                            <i class="bi bi-<%= nas.is_active ? 'pause-circle-fill text-warning' : 'play-circle-fill text-success' %>"></i>
+                          </button>
+                        </form>
+                        <!-- Edit NAS -->
+                        <button type="button" class="btn btn-p btn-sm" onclick='openEditNasModal(<%- JSON.stringify(nas) %>)' title="Edit NAS Client">
+                          <i class="bi bi-pencil"></i>
+                        </button>
+                        <!-- Hapus NAS -->
+                        <form action="/admin/radius/nas/delete" method="POST" onsubmit="return confirm('Hapus NAS <%= nas.nasname %>?')" style="display:inline;">
+                          <input type="hidden" name="id" value="<%= nas.id %>">
+                          <button type="submit" class="btn btn-d btn-sm" title="Hapus NAS"><i class="bi bi-trash"></i></button>
                         </form>
                       </td>
                     </tr>
@@ -437,6 +449,48 @@
   </div>
 </div>
 
+<!-- MODAL EDIT NAS -->
+<div class="mo" id="editNasModal">
+  <div class="mb">
+    <div class="mh">
+      <div class="mt"><i class="bi bi-pencil-square"></i> Edit NAS Client RADIUS</div>
+      <button type="button" class="mc" onclick="closeModal('editNasModal')">&times;</button>
+    </div>
+    <form action="/admin/radius/nas/edit" method="POST">
+      <input type="hidden" name="id" id="edit_nas_id">
+      <div class="mbody">
+        <div class="fg">
+          <label class="fl">IP Address Router NAS</label>
+          <input type="text" name="nasname" id="edit_nas_nasname" class="fc" placeholder="Contoh: 192.168.88.1" required>
+        </div>
+        <div class="fg">
+          <label class="fl">Nama Singkat Router (Shortname)</label>
+          <input type="text" name="shortname" id="edit_nas_shortname" class="fc" placeholder="Contoh: Router-Utama">
+        </div>
+        <div class="fg">
+          <label class="fl">Shared Secret Router</label>
+          <input type="text" name="secret" id="edit_nas_secret" class="fc" placeholder="Contoh: secret123" required>
+        </div>
+        <div class="fg">
+          <label class="fl">Keterangan (Opsional)</label>
+          <input type="text" name="description" id="edit_nas_description" class="fc" placeholder="Lokasi / Catatan">
+        </div>
+        <div class="fg">
+          <label class="fl">Status NAS Client</label>
+          <select name="is_active" id="edit_nas_is_active" class="fs">
+            <option value="1">Aktif</option>
+            <option value="0">Non-Aktif</option>
+          </select>
+        </div>
+      </div>
+      <div class="mf">
+        <button type="button" class="btn btn-g" onclick="closeModal('editNasModal')">Batal</button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Simpan Perubahan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
   function switchTab(tabId) {
     document.querySelectorAll('.mtab').forEach(b => b.classList.remove('active'));
@@ -457,6 +511,17 @@
   function closeModal(id) {
     const el = document.getElementById(id);
     if (el) el.classList.remove('show');
+  }
+
+  function openEditNasModal(nas) {
+    if (!nas) return;
+    document.getElementById('edit_nas_id').value = nas.id || '';
+    document.getElementById('edit_nas_nasname').value = nas.nasname || '';
+    document.getElementById('edit_nas_shortname').value = nas.shortname || '';
+    document.getElementById('edit_nas_secret').value = nas.secret || '';
+    document.getElementById('edit_nas_description').value = nas.description || '';
+    document.getElementById('edit_nas_is_active').value = nas.is_active ? '1' : '0';
+    showModal('editNasModal');
   }
 </script>
 </body>
