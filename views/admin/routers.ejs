@@ -458,18 +458,59 @@
   </div>
 </div>
 
-<!-- Modal Script Isolir Portal -->
+<!-- Modal Script & Setup Firewall Isolir Portal -->
 <div class="mo" id="isolirScriptModal">
-  <div class="mb" style="max-width:720px">
-    <div class="mh"><span class="mt"><i class="bi bi-shield-lock"></i> <%= t('admin.routers.isolir_script_title', 'Script RouterOS — halaman isolir') %></span><button class="mc" onclick="closeModal('isolirScriptModal')">&times;</button></div>
+  <div class="mb" style="max-width:740px">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-shield-lock text-warning me-2"></i> Setup Firewall & Halaman Isolir Pelanggan</span>
+      <button class="mc" onclick="closeModal('isolirScriptModal')">&times;</button>
+    </div>
     <div class="mbody">
-      <p class="small text-muted mb-2"><%= t('admin.routers.isolir_script_help', 'Dari Pengaturan → URL aplikasi (app_url). Salin ke Winbox Terminal atau import .rsc. Sesuaikan jika bentrok dengan rule yang ada.') %></p>
-      <div id="isolir-script-meta" class="small text-muted mb-2"></div>
-      <textarea id="isolir-script-body" class="fc" readonly rows="18" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+      <!-- Tabs Header -->
+      <div class="d-flex gap-2 mb-3 border-bottom pb-2">
+        <button type="button" class="btn btn-sm btn-p" id="tab-btn-auto" onclick="switchIsolirTab('auto')">
+          <i class="bi bi-lightning-charge-fill me-1"></i> 1-Click Auto Setup (API)
+        </button>
+        <button type="button" class="btn btn-sm btn-g" id="tab-btn-script" onclick="switchIsolirTab('script')">
+          <i class="bi bi-filetype-txt me-1"></i> Copy Script RouterOS (.rsc)
+        </button>
+      </div>
+
+      <!-- TAB 1: Auto Setup via API -->
+      <div id="isolir-tab-auto">
+        <div class="alert alert-info p-3 small mb-3" style="background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.3); color:#e0e7ff;">
+          <h6 class="fw-bold mb-1"><i class="bi bi-info-circle me-1 text-info"></i> Otomatisasi Redirect Halaman Isolir</h6>
+          <p class="mb-0 small" style="opacity:0.9;">
+            Sistem akan mengirimkan perintah API ke MikroTik untuk membuat <strong>Rule NAT Redirect (Port 80/443)</strong>, <strong>Firewall Rule (LIST_ISOLIR)</strong>, serta memasang <strong>Hook Script on-up di Profil PPPoE Isolir</strong> secara otomatis.
+          </p>
+        </div>
+
+        <div class="form-group mb-3">
+          <label class="fl fw-bold text-white mb-2">Pilih Router MikroTik Target *</label>
+          <select class="fs w-100" id="isolir-modal-router-select">
+            <% routers.forEach(r => { %>
+              <option value="<%= r.id %>"><%= r.name %> (<%= r.host %>:<%= r.port %>)</option>
+            <% }) %>
+          </select>
+        </div>
+
+        <button type="button" class="btn btn-primary fw-bold w-100 py-2 shadow-sm" onclick="runAutoSetupFirewallFromModal()">
+          <i class="bi bi-play-circle-fill me-1"></i> Jalankan Setup Firewall & Hook Isolir Sekarang
+        </button>
+
+        <div id="isolir-auto-setup-result" style="display:none;"></div>
+      </div>
+
+      <!-- TAB 2: RouterOS Manual Script (.rsc) -->
+      <div id="isolir-tab-script" style="display:none;">
+        <p class="small text-muted mb-2">Script ini di-generate otomatis berdasarkan IP server & URL billing (app_url). Anda dapat menyalin dan menempelkannya di Winbox Terminal MikroTik.</p>
+        <div id="isolir-script-meta" class="small text-muted mb-2 fw-bold" style="color:#a5b4fc !important;"></div>
+        <textarea id="isolir-script-body" class="fc" readonly rows="14" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;background:rgba(15,23,42,0.9);color:#818cf8;border-radius:8px;"></textarea>
+      </div>
     </div>
     <div class="mf">
       <button type="button" class="btn btn-g" onclick="closeModal('isolirScriptModal')"><%= t('common.close', 'Tutup') %></button>
-      <button type="button" class="btn btn-p" onclick="copyIsolirScript()"><i class="bi bi-clipboard"></i> <%= t('admin.routers.isolir_script_copy', 'Salin script') %></button>
+      <button type="button" class="btn btn-p" id="btn-copy-script-modal" style="display:none;" onclick="copyIsolirScript()"><i class="bi bi-clipboard me-1"></i> <%= t('admin.routers.isolir_script_copy', 'Salin script') %></button>
     </div>
   </div>
 </div>
@@ -867,30 +908,86 @@ async function testConn(id) {
   } catch (e) { alert(I18N.systemError); }
 }
 
-async function setupFirewall(id) {
-  if(!confirm('Setup otomatis Firewall Isolir di MikroTik? Ini akan menambahkan Address List dan Rule NAT/Filter.')) return;
-  try {
-    const res = await fetch('/admin/api/routers/' + id + '/setup-firewall', { method: 'POST' });
-    const data = await res.json();
-    alert(data.success ? '✅ ' + data.message : '❌ ' + data.error);
-  } catch (e) { alert(I18N.systemError); }
+function switchIsolirTab(tab) {
+  const autoTab = document.getElementById('isolir-tab-auto');
+  const scriptTab = document.getElementById('isolir-tab-script');
+  const autoBtn = document.getElementById('tab-btn-auto');
+  const scriptBtn = document.getElementById('tab-btn-script');
+  const copyBtn = document.getElementById('btn-copy-script-modal');
+
+  if (tab === 'auto') {
+    autoTab.style.display = 'block';
+    scriptTab.style.display = 'none';
+    autoBtn.className = 'btn btn-sm btn-p';
+    scriptBtn.className = 'btn btn-sm btn-g';
+    if (copyBtn) copyBtn.style.display = 'none';
+  } else {
+    autoTab.style.display = 'none';
+    scriptTab.style.display = 'block';
+    autoBtn.className = 'btn btn-sm btn-g';
+    scriptBtn.className = 'btn btn-sm btn-p';
+    if (copyBtn) copyBtn.style.display = 'inline-block';
+  }
 }
 
-async function openIsolirScriptModal() {
+async function setupFirewall(routerId) {
+  openIsolirScriptModal(routerId);
+  switchIsolirTab('auto');
+}
+
+async function openIsolirScriptModal(routerId = null) {
   const ta = document.getElementById('isolir-script-body');
   const meta = document.getElementById('isolir-script-meta');
+  const routerSel = document.getElementById('isolir-modal-router-select');
+  const statusBox = document.getElementById('isolir-auto-setup-result');
+  if (statusBox) statusBox.style.display = 'none';
+
+  if (routerSel && routerId) {
+    routerSel.value = String(routerId);
+  }
+
   ta.value = '<%= t('common.loading', 'Memuat...') %>';
   meta.textContent = '';
   openModal('isolirScriptModal');
+
   try {
     const res = await fetch('/admin/api/isolir-portal-script');
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Gagal');
     ta.value = data.script || '';
-    meta.textContent = (data.appUrl ? ('app_url: ' + data.appUrl + ' | ') : '') + 'IP: ' + (data.billingIp || '-') + ' | NAT → HTTP:' + (data.httpNatPort ?? '-') + ' HTTPS:' + (data.httpsNatPort ?? '-');
+    meta.textContent = (data.appUrl ? ('app_url: ' + data.appUrl + ' | ') : '') + 'IP Server: ' + (data.billingIp || '-') + ' | NAT → HTTP:' + (data.httpNatPort ?? '-') + ' HTTPS:' + (data.httpsNatPort ?? '-');
   } catch (e) {
     ta.value = '';
     meta.textContent = e.message || 'Error';
+  }
+}
+
+async function runAutoSetupFirewallFromModal() {
+  const routerSel = document.getElementById('isolir-modal-router-select');
+  const routerId = routerSel ? routerSel.value : null;
+  const statusBox = document.getElementById('isolir-auto-setup-result');
+  if (!routerId) {
+    alert('Pilih router terlebih dahulu!');
+    return;
+  }
+  
+  statusBox.style.display = 'block';
+  statusBox.className = 'alert alert-info p-3 small mt-3';
+  statusBox.innerHTML = '<i class="bi bi-arrow-repeat spin me-1"></i> Sedang menghubungkan dan memasang rule Firewall/NAT isolir di MikroTik...';
+
+  try {
+    const res = await fetch('/admin/api/routers/' + routerId + '/setup-firewall', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      statusBox.className = 'alert alert-success p-3 small mt-3';
+      statusBox.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> <strong>BERHASIL:</strong> ' + data.message;
+    } else {
+      statusBox.className = 'alert alert-danger p-3 small mt-3';
+      statusBox.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>GAGAL:</strong> ' + (data.error || data.message || 'Terjadi kesalahan');
+    }
+  } catch (e) {
+    statusBox.className = 'alert alert-danger p-3 small mt-3';
+    statusBox.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>ERROR:</strong> ' + e.message;
   }
 }
 
