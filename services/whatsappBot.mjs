@@ -19,6 +19,30 @@ const agentSvc = require('./agentService.js');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 
+// Cache Retry Counter untuk Baileys Signal Enkripsi (Mencegah "Waiting for this message" / Pesan tidak terbaca)
+class SimpleRetryCache {
+  constructor(ttlMs = 600000) {
+    this.cache = new Map();
+    this.ttlMs = ttlMs;
+  }
+  get(key) {
+    const item = this.cache.get(key);
+    if (!item) return undefined;
+    if (Date.now() - item.time > this.ttlMs) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return item.val;
+  }
+  set(key, val) {
+    this.cache.set(key, { val, time: Date.now() });
+  }
+  del(key) {
+    this.cache.delete(key);
+  }
+}
+const msgRetryCounterCache = new SimpleRetryCache();
+
 // Rate Limiting untuk WhatsApp Bot Self-Service
 const rateLimitStore = new Map(); // Format: { phone: { count: 0, lastReset: timestamp } }
 const MAX_COMMANDS_PER_MINUTE = 10;
@@ -1018,7 +1042,10 @@ export async function startWhatsAppBot() {
     syncFullHistory: false,
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
-    getMessage: true,
+    msgRetryCounterCache,
+    getMessage: async (key) => {
+      return { conversation: '' };
+    },
     keepAliveIntervalMs: 30000,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
