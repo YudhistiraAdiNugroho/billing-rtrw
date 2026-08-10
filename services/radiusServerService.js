@@ -256,6 +256,24 @@ function handleAuthMessage(msg, rinfo) {
   }
 
   logger.info(`[RADIUS Auth] Accept '${username}' - Berhasil diautentikasi`);
+
+  // Record instant online session entry upon Access-Accept
+  try {
+    const authSessionId = reqPacket.parsedAttrs.acctSessionId || `auth-${Date.now()}-${username}`;
+    db.prepare(`
+      INSERT INTO radius_accounting (
+        username, nas_ip, framed_ip, session_id, status_type,
+        calling_station_id, updated_at
+      ) VALUES (?, ?, ?, ?, 1, ?, NOW_LOCAL())
+    `).run(
+      username,
+      nasIp,
+      reqPacket.parsedAttrs.framedIp || '',
+      authSessionId,
+      reqPacket.parsedAttrs.callingStationId || ''
+    );
+  } catch (e) {}
+
   sendAuthResponse(CODES.ACCESS_ACCEPT, reqPacket, responseAttrs, secret, rinfo);
 }
 
