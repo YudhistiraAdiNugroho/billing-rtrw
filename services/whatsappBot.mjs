@@ -43,6 +43,17 @@ class SimpleRetryCache {
 }
 const msgRetryCounterCache = new SimpleRetryCache();
 
+const sentMessageMap = new Map();
+function cacheSentMessage(key, message) {
+  if (!key || !key.id || !message) return;
+  const storeKey = `${key.remoteJid || ''}:${key.id}`;
+  sentMessageMap.set(storeKey, message);
+  if (sentMessageMap.size > 2000) {
+    const firstKey = sentMessageMap.keys().next().value;
+    sentMessageMap.delete(firstKey);
+  }
+}
+
 // Rate Limiting untuk WhatsApp Bot Self-Service
 const rateLimitStore = new Map(); // Format: { phone: { count: 0, lastReset: timestamp } }
 const MAX_COMMANDS_PER_MINUTE = 10;
@@ -879,7 +890,7 @@ export async function sendWA(to, text, options = {}) {
       try {
         const waCheck = await currentSock.onWhatsApp(jid);
         if (waCheck && waCheck.length > 0 && waCheck[0].exists) {
-          jid = waCheck[0].lid || waCheck[0].jid || jid;
+          jid = waCheck[0].jid || waCheck[0].lid || jid;
         }
       } catch (err) {
         logger.error(`[WA sendWA] Gagal check onWhatsApp untuk ${jid}: ${err.message}`);
@@ -897,6 +908,9 @@ export async function sendWA(to, text, options = {}) {
 
     logger.info(`[WA sendWA] Mengeksekusi sendMessage ke JID: ${jid}`);
     const result = await currentSock.sendMessage(jid, { text: finalText });
+    if (result && result.key && result.message) {
+      cacheSentMessage(result.key, result.message);
+    }
     logger.info(`[WA sendWA] sendMessage selesai! Result JID: ${result?.key?.remoteJid || 'null'}, ID: ${result?.key?.id || 'null'}`);
     return true;
   } catch (e) {
@@ -1044,6 +1058,11 @@ export async function startWhatsAppBot() {
     generateHighQualityLinkPreview: false,
     msgRetryCounterCache,
     getMessage: async (key) => {
+      if (key && key.id) {
+        const storeKey = `${key.remoteJid || ''}:${key.id}`;
+        const cached = sentMessageMap.get(storeKey);
+        if (cached) return cached;
+      }
       return { conversation: '' };
     },
     keepAliveIntervalMs: 30000,
