@@ -1715,10 +1715,13 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.router_id = effectiveRouterId;
     }
 
+    const isRadius = req.body.is_radius !== undefined ? (req.body.is_radius ? 1 : 0) : 1;
+    req.body.is_radius = isRadius;
+
     customerSvc.createCustomer(req.body);
     
-    // Sync to MikroTik if username provided
-    if (connectionType === 'pppoe' && req.body.pppoe_username) {
+    // Sync to MikroTik if username provided AND not RADIUS
+    if (connectionType === 'pppoe' && req.body.pppoe_username && !isRadius) {
       const password = String(req.body.pppoe_password || '').trim();
       const remoteAddress = String(req.body.pppoe_remote_address || '').trim();
       
@@ -1898,6 +1901,9 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       req.body.router_id = effectiveRouterId;
     }
 
+    const isRadius = req.body.is_radius !== undefined ? (req.body.is_radius ? 1 : 0) : 1;
+    req.body.is_radius = isRadius;
+
     // Get old customer data to detect username changes
     const oldCustomer = customerSvc.getCustomerById(customerId);
     
@@ -1905,71 +1911,93 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
     
     // Sync to MikroTik if username provided
     if (connectionType === 'pppoe' && req.body.pppoe_username) {
-      const oldUsername = oldCustomer ? String(oldCustomer.pppoe_username || '').trim() : '';
-      const newUsername = String(req.body.pppoe_username || '').trim();
-      const oldRouterIdForOldUser = oldCustomer ? oldCustomer.router_id : null;
-      const oldEffectiveRouterId = oldCustomer ? customerSvc.getEffectiveRouterId(oldRouterIdForOldUser) : null;
-      
-      // If username changed, handle old one first
-      if (oldUsername && oldUsername !== newUsername && oldEffectiveRouterId) {
-        try {
-          logger.info(`[Update] PPPoE username changed: "${oldUsername}" → "${newUsername}" for customer ${customerId}`);
-          // Delete old PPPoE user from MikroTik
-          const oldSecrets = await mikrotikService.getPppoeSecrets(oldEffectiveRouterId);
-          const oldSecret = oldSecrets.find(s => String(s.name || '').toLowerCase() === String(oldUsername || '').toLowerCase());
-          if (oldSecret) {
-            const secretId = oldSecret['.id'] || oldSecret.id;
-            if (secretId) {
-              await mikrotikService.deletePppoeSecret(secretId, oldEffectiveRouterId);
-              logger.info(`[Update] Deleted old PPPoE secret: ${oldUsername} from router ${oldEffectiveRouterId}`);
+      try {
+        const oldUsername = oldCustomer ? String(oldCustomer.pppoe_username || '').trim() : '';
+        const newUsername = String(req.body.pppoe_username || '').trim();
+        const oldRouterIdForOldUser = oldCustomer ? oldCustomer.router_id : null;
+        const oldEffectiveRouterId = oldCustomer ? customerSvc.getEffectiveRouterId(oldRouterIdForOldUser) : null;
+        
+        // If isRadius is active, delete local secret from MikroTik so RADIUS takes over
+        if (isRadius) {
+          const targetRouterId = req.body.router_id || oldEffectiveRouterId;
+          if (targetRouterId && newUsername) {
+            try {
+              const secrets = await mikrotikService.getPppoeSecrets(targetRouterId);
+              const existingSecret = secrets ? secrets.find(s => String(s.name || '').toLowerCase() === String(newUsername || '').toLowerCase()) : null;
+              if (existingSecret) {
+                const sId = existingSecret['.id'] || existingSecret.id;
+                if (sId) {
+                  await mikrotikService.deletePppoeSecret(sId, targetRouterId);
+                  logger.info(`[Update] Removed local secret for "${newUsername}" from MikroTik to enable RADIUS authentication`);
+                }
+              }
+            } catch (rErr) {
+              logger.warn(`[Update] Could not clean local secret for RADIUS user ${newUsername}: ${rErr.message}`);
             }
           }
-        } catch (err) {
-          logger.warn(`[Update] Failed to delete old PPPoE user ${oldUsername}: ${err.message}`);
+        } else {
+          // If username changed, handle old one first
+          if (oldUsername && oldUsername !== newUsername && oldEffectiveRouterId) {
+            try {
+              logger.info(`[Update] PPPoE username changed: "${oldUsername}" → "${newUsername}" for customer ${customerId}`);
+              const oldSecrets = await mikrotikService.getPppoeSecrets(oldEffectiveRouterId);
+              const oldSecret = oldSecrets ? oldSecrets.find(s => String(s.name || '').toLowerCase() === String(oldUsername || '').toLowerCase()) : null;
+              if (oldSecret) {
+                const secretId = oldSecret['.id'] || oldSecret.id;
+                if (secretId) {
+                  await mikrotikService.deletePppoeSecret(secretId, oldEffectiveRouterId);
+                  logger.info(`[Update] Deleted old PPPoE secret: ${oldUsername} from router ${oldEffectiveRouterId}`);
+                }
+              }
+            } catch (err) {
+              logger.warn(`[Update] Failed to delete old PPPoE user ${oldUsername}: ${err.message}`);
+            }
+          }
+          
+          // Now handle new username for local MikroTik secret
+          let targetProfile = '';
+          if (req.body.status === 'suspended') {
+            targetProfile = req.body.isolir_profile || 'isolir';
+          } else if (req.body.package_id) {
+            const pkg = customerSvc.getPackageById(req.body.package_id);
+            if (pkg) targetProfile = pkg.name;
+          }
+          if (targetProfile) {
+            try {
+              await mikrotikService.setPppoeProfile(newUsername, targetProfile, req.body.router_id);
+            } catch (mErr) {
+              logger.error('Mikrotik sync error (update PPPoE):', mErr.message);
+            }
+          }
         }
-      }
-      
-      // Now handle new username
-      let targetProfile = '';
-      if (req.body.status === 'suspended') {
-        targetProfile = req.body.isolir_profile || 'isolir';
-      } else if (req.body.package_id) {
-        const pkg = customerSvc.getPackageById(req.body.package_id);
-        if (pkg) targetProfile = pkg.name;
-      }
-      if (targetProfile) {
-        try {
-          await mikrotikService.setPppoeProfile(newUsername, targetProfile, req.body.router_id);
-        } catch (mErr) {
-          logger.error('Mikrotik sync error (update PPPoE):', mErr.message);
-        }
+      } catch (syncErr) {
+        logger.warn(`[Update] MikroTik API sync skipped/failed for customer ${customerId}: ${syncErr.message}`);
       }
     }
     if (connectionType === 'hotspot' && req.body.hotspot_username) {
-      const oldUsername = oldCustomer ? String(oldCustomer.hotspot_username || '').trim() : '';
-      const newUsername = String(req.body.hotspot_username || '').trim();
-      const oldRouterIdForOldUser = oldCustomer ? oldCustomer.router_id : null;
-      const oldEffectiveRouterId = oldCustomer ? customerSvc.getEffectiveRouterId(oldRouterIdForOldUser) : null;
-      
-      // If username changed, handle old one first
-      if (oldUsername && oldUsername !== newUsername && oldEffectiveRouterId) {
-        try {
-          logger.info(`[Update] Hotspot username changed: "${oldUsername}" → "${newUsername}" for customer ${customerId}`);
-          // Delete old Hotspot user from MikroTik
-          const oldUser = await mikrotikService.getHotspotUserByName(oldUsername, oldEffectiveRouterId);
-          if (oldUser && (oldUser.id || oldUser['.id'])) {
-            const userId = oldUser['.id'] || oldUser.id;
-            await mikrotikService.deleteHotspotUser(userId, oldEffectiveRouterId);
-            logger.info(`[Update] Deleted old Hotspot user: ${oldUsername} from router ${oldEffectiveRouterId}`);
-          }
-        } catch (err) {
-          logger.warn(`[Update] Failed to delete old Hotspot user ${oldUsername}: ${err.message}`);
-        }
-      }
-      
-      // Now handle new username
-      const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
       try {
+        const oldUsername = oldCustomer ? String(oldCustomer.hotspot_username || '').trim() : '';
+        const newUsername = String(req.body.hotspot_username || '').trim();
+        const oldRouterIdForOldUser = oldCustomer ? oldCustomer.router_id : null;
+        const oldEffectiveRouterId = oldCustomer ? customerSvc.getEffectiveRouterId(oldRouterIdForOldUser) : null;
+        
+        // If username changed, handle old one first
+        if (oldUsername && oldUsername !== newUsername && oldEffectiveRouterId) {
+          try {
+            logger.info(`[Update] Hotspot username changed: "${oldUsername}" → "${newUsername}" for customer ${customerId}`);
+            const oldUser = await mikrotikService.getHotspotUserByName(oldUsername, oldEffectiveRouterId);
+            if (oldUser && (oldUser.id || oldUser['.id'])) {
+              const userId = oldUser['.id'] || oldUser.id;
+              await mikrotikService.deleteHotspotUser(userId, oldEffectiveRouterId);
+              logger.info(`[Update] Deleted old Hotspot user: ${oldUsername} from router ${oldEffectiveRouterId}`);
+            }
+          } catch (err) {
+            logger.warn(`[Update] Failed to delete old Hotspot user ${oldUsername}: ${err.message}`);
+          }
+        }
+        
+        // Now handle new username
+        const disabled = String(req.body.status || 'active').toLowerCase() !== 'active';
         await mikrotikService.upsertHotspotUser({
           username: newUsername,
           password: String(req.body.hotspot_password || '').trim(),
@@ -1978,7 +2006,7 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
           disabled
         }, req.body.router_id ? Number(req.body.router_id) : null);
       } catch (mErr) {
-        logger.error('Mikrotik sync error (update hotspot):', mErr.message);
+        logger.warn(`[Update] Mikrotik sync error (update hotspot): ${mErr.message}`);
       }
     }
 
@@ -6772,8 +6800,16 @@ router.post('/radius-settings', requireAdminSession, restrictToAdmin, async (req
       radius_acct_port,
       radius_isolir_action,
       radius_isolir_pool,
+      radius_isolir_rate_limit,
+      radius_isolir_ip_pool_enabled,
+      radius_isolir_ip_pool_start,
+      radius_isolir_ip_pool_end,
       radius_limit_simultaneous,
-      radius_default_rate_limit
+      radius_default_rate_limit,
+      radius_ip_pool_enabled,
+      radius_ip_pool_start,
+      radius_ip_pool_end,
+      radius_framed_pool
     } = req.body;
 
     saveSettings({
@@ -6783,8 +6819,16 @@ router.post('/radius-settings', requireAdminSession, restrictToAdmin, async (req
       radius_acct_port: String(radius_acct_port || '1813').trim(),
       radius_isolir_action: String(radius_isolir_action || 'pool').trim(),
       radius_isolir_pool: String(radius_isolir_pool || 'isolir').trim(),
+      radius_isolir_rate_limit: String(radius_isolir_rate_limit || '512k/512k').trim(),
+      radius_isolir_ip_pool_enabled: radius_isolir_ip_pool_enabled === '1' ? '1' : '0',
+      radius_isolir_ip_pool_start: String(radius_isolir_ip_pool_start || '10.10.99.2').trim(),
+      radius_isolir_ip_pool_end: String(radius_isolir_ip_pool_end || '10.10.99.254').trim(),
       radius_limit_simultaneous: radius_limit_simultaneous === '1' ? '1' : '0',
-      radius_default_rate_limit: String(radius_default_rate_limit || '5M/10M').trim()
+      radius_default_rate_limit: String(radius_default_rate_limit || '5M/10M').trim(),
+      radius_ip_pool_enabled: radius_ip_pool_enabled === '1' ? '1' : '0',
+      radius_ip_pool_start: String(radius_ip_pool_start || '10.10.10.2').trim(),
+      radius_ip_pool_end: String(radius_ip_pool_end || '10.10.10.254').trim(),
+      radius_framed_pool: String(radius_framed_pool || 'pool-pppoe').trim()
     });
 
     // Kontrol background service UDP RADIUS
@@ -6823,10 +6867,54 @@ router.post('/radius/nas/add', requireAdminSession, restrictToAdmin, async (req,
       String(description || '').trim()
     );
 
-    req.session._msg = { type: 'success', text: `NAS ${nasname} berhasil ditambahkan/diperbarui.` };
+    req.session._msg = { type: 'success', text: `NAS ${nasname} berhasil ditambahkan.` };
   } catch (error) {
     logger.error('Error adding NAS:', error);
     req.session._msg = { type: 'danger', text: 'Gagal menambah NAS: ' + error.message };
+  }
+  res.redirect('/admin/radius-settings');
+});
+
+router.post('/radius/nas/edit', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const { id, nasname, shortname, secret, description, is_active } = req.body;
+    if (!id || !nasname || !secret) {
+      throw new Error('ID, IP NAS & Shared Secret wajib diisi.');
+    }
+
+    db.prepare(`
+      UPDATE radius_nas
+      SET nasname = ?, shortname = ?, secret = ?, description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      String(nasname).trim(),
+      String(shortname || '').trim(),
+      String(secret).trim(),
+      String(description || '').trim(),
+      is_active === '1' || is_active === 1 ? 1 : 0,
+      id
+    );
+
+    req.session._msg = { type: 'success', text: `Data NAS ${nasname} berhasil diperbarui.` };
+  } catch (error) {
+    logger.error('Error updating NAS:', error);
+    req.session._msg = { type: 'danger', text: 'Gagal memperbarui NAS: ' + error.message };
+  }
+  res.redirect('/admin/radius-settings');
+});
+
+router.post('/radius/nas/toggle', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const { id } = req.body;
+    const nas = db.prepare(`SELECT id, nasname, is_active FROM radius_nas WHERE id = ?`).get(id);
+    if (nas) {
+      const newStatus = nas.is_active ? 0 : 1;
+      db.prepare(`UPDATE radius_nas SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(newStatus, id);
+      req.session._msg = { type: 'success', text: `Status NAS ${nas.nasname} diubah menjadi ${newStatus ? 'Aktif' : 'Non-Aktif'}.` };
+    }
+  } catch (error) {
+    logger.error('Error toggling NAS status:', error);
+    req.session._msg = { type: 'danger', text: 'Gagal mengubah status NAS: ' + error.message };
   }
   res.redirect('/admin/radius-settings');
 });
@@ -6835,7 +6923,7 @@ router.post('/radius/nas/delete', requireAdminSession, restrictToAdmin, async (r
   try {
     const { id } = req.body;
     db.prepare(`DELETE FROM radius_nas WHERE id = ?`).run(id);
-    req.session._msg = { type: 'success', text: 'NAS berhasil dihapus.' };
+    req.session._msg = { type: 'success', text: 'NAS Client berhasil dihapus.' };
   } catch (error) {
     logger.error('Error deleting NAS:', error);
     req.session._msg = { type: 'danger', text: 'Gagal menghapus NAS: ' + error.message };

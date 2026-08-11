@@ -50,7 +50,7 @@ function findUserCredentials(username) {
   // 1. Cek tabel customers (pppoe_username atau name atau phone)
   try {
     const cust = db.prepare(`
-      SELECT c.id, c.name, c.pppoe_username, c.status, c.static_ip, c.package_id,
+      SELECT c.id, c.name, c.pppoe_username, c.pppoe_password, c.status, c.static_ip, c.package_id,
              p.name as package_name, p.speed_up, p.speed_down
       FROM customers c
       LEFT JOIN packages p ON p.id = c.package_id
@@ -59,11 +59,13 @@ function findUserCredentials(username) {
     `).get(cleanUsername, cleanUsername, cleanUsername);
 
     if (cust) {
-      let secret = '';
-      try {
-        const pppoeUser = db.prepare(`SELECT secret FROM pppoe_users WHERE username = ? LIMIT 1`).get(cleanUsername);
-        if (pppoeUser) secret = pppoeUser.secret;
-      } catch (e) {}
+      let secret = cust.pppoe_password || cust.pppoe_username || '';
+      if (!secret) {
+        try {
+          const pppoeUser = db.prepare(`SELECT secret FROM pppoe_users WHERE username = ? LIMIT 1`).get(cleanUsername);
+          if (pppoeUser) secret = pppoeUser.secret;
+        } catch (e) {}
+      }
 
       return {
         type: 'customer',
@@ -167,9 +169,11 @@ function handleAuthMessage(msg, rinfo) {
     return;
   }
 
-  // Verifikasi Password (jika user.secret diset)
-  if (user.secret && user.secret !== inputPassword) {
-    logger.warn(`[RADIUS Auth] Reject '${username}' - Password salah`);
+  // Verifikasi Password
+  // Jika inputPassword dikirim (PAP), verifikasi persis.
+  // Jika inputPassword kosong (''), berarti MikroTik menggunakan enkripsi CHAP/MS-CHAPv2 di mana plain-text password tidak dikirim di User-Password attribute.
+  if (inputPassword !== '' && user.secret != null && user.secret !== '' && user.secret !== inputPassword) {
+    logger.warn(`[RADIUS Auth] Reject '${username}' - Password salah (input: '${inputPassword}', expected: '${user.secret}')`);
     sendAuthResponse(CODES.ACCESS_REJECT, reqPacket, [], secret, rinfo);
     return;
   }
@@ -184,22 +188,73 @@ function handleAuthMessage(msg, rinfo) {
       sendAuthResponse(CODES.ACCESS_REJECT, reqPacket, [], secret, rinfo);
       return;
     } else {
-      logger.info(`[RADIUS Auth] Accept '${username}' dengan Isolir Pool '${isolirPool}'`);
       const isolirAttrs = [
         { type: ATTR_TYPES.SERVICE_TYPE, value: 2 },
-        { type: ATTR_TYPES.FRAMED_PROTOCOL, value: 1 },
-        { type: ATTR_TYPES.FRAMED_POOL, value: isolirPool },
-        {
+        { type: ATTR_TYPES.FRAMED_PROTOCOL, value: 1 }
+      ];
+
+      const isolirIpEnabled = getSetting('radius_isolir_ip_pool_enabled', '1') === '1';
+      const isolirIpStart = getSetting('radius_isolir_ip_pool_start', '10.10.99.2');
+      const isolirIpEnd = getSetting('radius_isolir_ip_pool_end', '10.10.99.254');
+
+      let allocatedIsolirIp = null;
+      if (isolirIpEnabled && isolirIpStart && isolirIpEnd) {
+        allocatedIsolirIp = allocateDynamicIp(username, isolirIpStart, isolirIpEnd, nasIp);
+        if (allocatedIsolirIp) {
+          isolirAttrs.push({ type: ATTR_TYPES.FRAMED_IP_ADDRESS, value: allocatedIsolirIp, isIp: true });
+          isolirAttrs.push({ type: ATTR_TYPES.FRAMED_IP_NETMASK, value: '255.255.255.255', isIp: true });
+        }
+      }
+
+      if (isolirPool) {
+        isolirAttrs.push({ type: ATTR_TYPES.FRAMED_POOL, value: isolirPool });
+        isolirAttrs.push({
           type: ATTR_TYPES.VENDOR_SPECIFIC,
           vendorId: MIKROTIK_VENDOR_ID,
-          vendorType: MIKROTIK_VSAS.RATE_LIMIT,
-          value: '512k/512k'
-        }
-      ];
+          vendorType: MIKROTIK_VSAS.GROUP,
+          value: isolirPool
+        });
+      }
+
+      const isolirRateLimit = getSetting('radius_isolir_rate_limit', '512k/512k');
+      isolirAttrs.push({
+        type: ATTR_TYPES.VENDOR_SPECIFIC,
+        vendorId: MIKROTIK_VENDOR_ID,
+        vendorType: MIKROTIK_VSAS.RATE_LIMIT,
+        value: isolirRateLimit
+      });
+
+      logger.info(`[RADIUS Auth] Accept '${username}' - TERISOLIR (Dynamic IP: ${allocatedIsolirIp || 'Framed-Pool'}, Speed: ${isolirRateLimit}, Pool: ${isolirPool})`);
+      
+      // Record instant session entry for isolir user
+      try {
+        const authSessionId = reqPacket.parsedAttrs.acctSessionId || `auth-${Date.now()}-${username}`;
+        db.prepare(`
+          INSERT INTO radius_accounting (
+            username, nas_ip, framed_ip, session_id, status_type,
+            calling_station_id, updated_at
+          ) VALUES (?, ?, ?, ?, 1, ?, NOW_LOCAL())
+        `).run(
+          username,
+          nasIp,
+          allocatedIsolirIp || '',
+          authSessionId,
+          reqPacket.parsedAttrs.callingStationId || ''
+        );
+      } catch (e) {}
+
       sendAuthResponse(CODES.ACCESS_ACCEPT, reqPacket, isolirAttrs, secret, rinfo);
       return;
     }
   }
+
+  // Hapus dummy auth-* session untuk user ini agar re-dial / re-connect tidak terblokir
+  try {
+    db.prepare(`
+      DELETE FROM radius_accounting
+      WHERE username = ? AND session_id LIKE 'auth-%'
+    `).run(username);
+  } catch (e) {}
 
   // 3. Cek Batasan Sesi Login Ganda (Simultaneous-Use / Multi-Login)
   const limitSimultaneous = getSetting('radius_limit_simultaneous', '1') === '1';
@@ -207,6 +262,8 @@ function handleAuthMessage(msg, rinfo) {
     const activeSession = db.prepare(`
       SELECT COUNT(1) as c FROM radius_accounting
       WHERE username = ? AND status_type IN (1, 3)
+        AND session_id NOT LIKE 'auth-%'
+        AND updated_at >= datetime('now', '-15 minutes')
     `).get(username)?.c || 0;
 
     if (activeSession >= 1) {
@@ -222,36 +279,50 @@ function handleAuthMessage(msg, rinfo) {
     { type: ATTR_TYPES.FRAMED_PROTOCOL, value: 1 }
   ];
 
+  // Dynamic IP Pool & Static IP Allocation
+  const ipPoolEnabled = getSetting('radius_ip_pool_enabled', '1') === '1';
+  const ipPoolStart = getSetting('radius_ip_pool_start', '10.10.10.2');
+  const ipPoolEnd = getSetting('radius_ip_pool_end', '10.10.10.254');
+  const framedPool = getSetting('radius_framed_pool', 'pool-pppoe');
+
+  let allocatedIp = null;
   if (user.staticIp) {
     responseAttrs.push({ type: ATTR_TYPES.FRAMED_IP_ADDRESS, value: user.staticIp, isIp: true });
+    responseAttrs.push({ type: ATTR_TYPES.FRAMED_IP_NETMASK, value: '255.255.255.255', isIp: true });
+  } else if (ipPoolEnabled && ipPoolStart && ipPoolEnd) {
+    allocatedIp = allocateDynamicIp(username, ipPoolStart, ipPoolEnd, nasIp);
+    if (allocatedIp) {
+      responseAttrs.push({ type: ATTR_TYPES.FRAMED_IP_ADDRESS, value: allocatedIp, isIp: true });
+      responseAttrs.push({ type: ATTR_TYPES.FRAMED_IP_NETMASK, value: '255.255.255.255', isIp: true });
+      logger.info(`[RADIUS Auth] Dynamic IP '${allocatedIp}' dialokasikan untuk '${username}'`);
+    } else if (framedPool) {
+      responseAttrs.push({ type: ATTR_TYPES.FRAMED_POOL, value: framedPool });
+    }
+  } else if (framedPool) {
+    responseAttrs.push({ type: ATTR_TYPES.FRAMED_POOL, value: framedPool });
   }
 
   // Atribut Rate Limit (Mikrotik-Rate-Limit) & Mikrotik-Group (Profile)
   const defaultRateLimit = getSetting('radius_default_rate_limit', '5M/10M');
-  if (user.speedDown || user.speedUp) {
-    const rateLimitStr = `${user.speedUp}M/${user.speedDown}M`;
+  const rateLimitStr = formatRateLimit(user.speedUp, user.speedDown, defaultRateLimit);
+  if (rateLimitStr) {
     responseAttrs.push({
       type: ATTR_TYPES.VENDOR_SPECIFIC,
       vendorId: MIKROTIK_VENDOR_ID,
       vendorType: MIKROTIK_VSAS.RATE_LIMIT,
       value: rateLimitStr
     });
-  } else if (defaultRateLimit) {
-    responseAttrs.push({
-      type: ATTR_TYPES.VENDOR_SPECIFIC,
-      vendorId: MIKROTIK_VENDOR_ID,
-      vendorType: MIKROTIK_VSAS.RATE_LIMIT,
-      value: defaultRateLimit
-    });
+    logger.info(`[RADIUS Auth] Rate-limit '${rateLimitStr}' dikirim untuk '${username}'`);
   }
 
-  // Kirimkan nama paket / profile ke MikroTik via Mikrotik-Group jika ada
-  if (user.packageName) {
+  // Kirimkan nama paket / profile ke MikroTik via Mikrotik-Group hanya jika diset & valid
+  const sendGroup = getSetting('radius_send_group', '0') === '1';
+  if (sendGroup && user.packageName) {
     responseAttrs.push({
       type: ATTR_TYPES.VENDOR_SPECIFIC,
       vendorId: MIKROTIK_VENDOR_ID,
       vendorType: MIKROTIK_VSAS.GROUP,
-      value: user.packageName
+      value: String(user.packageName).trim()
     });
   }
 
@@ -268,7 +339,7 @@ function handleAuthMessage(msg, rinfo) {
     `).run(
       username,
       nasIp,
-      reqPacket.parsedAttrs.framedIp || '',
+      user.staticIp || allocatedIp || '',
       authSessionId,
       reqPacket.parsedAttrs.callingStationId || ''
     );
@@ -328,6 +399,23 @@ function handleAcctMessage(msg, rinfo) {
 
   if (username && acctSessionId) {
     try {
+      let effectiveFramedIp = framedIp;
+      if (!effectiveFramedIp || effectiveFramedIp === '0.0.0.0') {
+        const recentAuth = db.prepare(`
+          SELECT framed_ip FROM radius_accounting
+          WHERE username = ? AND framed_ip IS NOT NULL AND framed_ip != '' AND framed_ip != '0.0.0.0'
+          ORDER BY id DESC LIMIT 1
+        `).get(username);
+        if (recentAuth && recentAuth.framed_ip) {
+          effectiveFramedIp = recentAuth.framed_ip;
+        } else {
+          const cust = db.prepare(`SELECT static_ip FROM customers WHERE pppoe_username = ? OR name = ? LIMIT 1`).get(username, username);
+          if (cust && cust.static_ip) {
+            effectiveFramedIp = cust.static_ip;
+          }
+        }
+      }
+
       // Upsert ke radius_accounting
       const stmt = db.prepare(`
         INSERT INTO radius_accounting (
@@ -336,13 +424,6 @@ function handleAcctMessage(msg, rinfo) {
           session_time, terminate_cause, calling_station_id, called_station_id,
           updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW_LOCAL())
-        ON CONFLICT(id) DO UPDATE SET
-          status_type = excluded.status_type,
-          input_octets = excluded.input_octets,
-          output_octets = excluded.output_octets,
-          session_time = excluded.session_time,
-          terminate_cause = excluded.terminate_cause,
-          updated_at = NOW_LOCAL()
       `);
 
       // Cek apakah session_id sudah ada
@@ -351,6 +432,7 @@ function handleAcctMessage(msg, rinfo) {
         db.prepare(`
           UPDATE radius_accounting SET
             status_type = ?,
+            framed_ip = COALESCE(NULLIF(?, ''), framed_ip),
             input_octets = ?,
             output_octets = ?,
             input_gigawords = ?,
@@ -361,6 +443,7 @@ function handleAcctMessage(msg, rinfo) {
           WHERE session_id = ?
         `).run(
           acctStatusType,
+          effectiveFramedIp,
           acctInputOctets,
           acctOutputOctets,
           acctInputGigawords,
@@ -370,21 +453,46 @@ function handleAcctMessage(msg, rinfo) {
           acctSessionId
         );
       } else {
+        // Hapus entri auth-* lama untuk user ini ketika sesi accounting asli dimulai
+        try {
+          db.prepare(`DELETE FROM radius_accounting WHERE username = ? AND session_id LIKE 'auth-%'`).run(username);
+        } catch (e) {}
+
         stmt.run(
-          username, nasIp, framedIp, acctSessionId, acctStatusType,
+          username, nasIp, effectiveFramedIp, acctSessionId, acctStatusType,
           acctInputOctets, acctOutputOctets, acctInputGigawords, acctOutputGigawords,
           acctSessionTime, acctTerminateCause, callingStationId, calledStationId
         );
       }
 
-      // Catat sampel trafik ke pppoe_traffic_samples jika user terdaftar di pppoe_users
-      const pppoeUser = db.prepare(`SELECT id FROM pppoe_users WHERE username = ? LIMIT 1`).get(username);
-      if (pppoeUser) {
-        db.prepare(`
-          INSERT INTO pppoe_traffic_samples (pppoe_user_id, bytes_in, bytes_out)
-          VALUES (?, ?, ?)
-        `).run(pppoeUser.id, acctInputOctets, acctOutputOctets);
-      }
+      // Catat sampel trafik ke pppoe_traffic_samples jika tabel pppoe_users ada
+      try {
+        const pppoeUser = db.prepare(`SELECT id FROM pppoe_users WHERE username = ? LIMIT 1`).get(username);
+        if (pppoeUser) {
+          db.prepare(`
+            INSERT INTO pppoe_traffic_samples (pppoe_user_id, bytes_in, bytes_out)
+            VALUES (?, ?, ?)
+          `).run(pppoeUser.id, acctInputOctets, acctOutputOctets);
+        }
+      } catch (e) {}
+
+      // Catat sampel pemakaian ke customer_usage jika terdaftar di customers
+      try {
+        const cust = db.prepare(`SELECT id FROM customers WHERE pppoe_username = ? OR name = ? LIMIT 1`).get(username, username);
+        if (cust) {
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const year = now.getFullYear();
+          db.prepare(`
+            INSERT INTO customer_usage (customer_id, period_month, period_year, bytes_in, bytes_out, updated_at)
+            VALUES (?, ?, ?, ?, ?, NOW_LOCAL())
+            ON CONFLICT(customer_id, period_month, period_year) DO UPDATE SET
+              bytes_in = MAX(customer_usage.bytes_in, excluded.bytes_in),
+              bytes_out = MAX(customer_usage.bytes_out, excluded.bytes_out),
+              updated_at = NOW_LOCAL()
+          `).run(cust.id, month, year, acctInputOctets, acctOutputOctets);
+        }
+      } catch (e) {}
     } catch (err) {
       logger.error(`[RADIUS Acct] Gagal simpan accounting: ${err.message}`);
     }
@@ -450,6 +558,89 @@ function stop() {
   logger.info(`[RADIUS] Server RADIUS telah dihentikan.`);
 }
 
+function formatRateLimit(upVal, downVal, defaultVal = '5M/10M') {
+  function parseSpeed(v) {
+    if (!v) return 0;
+    const str = String(v).trim().toLowerCase();
+    if (str.endsWith('m')) return Math.round(parseFloat(str) * 1000);
+    if (str.endsWith('k')) return Math.round(parseFloat(str));
+    const num = parseFloat(str) || 0;
+    return num;
+  }
+
+  const upKbps = parseSpeed(upVal);
+  const downKbps = parseSpeed(downVal);
+
+  if (upKbps <= 0 || downKbps <= 0) {
+    return defaultVal;
+  }
+
+  const upStr = (upKbps >= 1000 && upKbps % 1000 === 0) ? `${upKbps / 1000}M` : `${upKbps}k`;
+  const downStr = (downKbps >= 1000 && downKbps % 1000 === 0) ? `${downKbps / 1000}M` : `${downKbps}k`;
+
+  return `${upStr}/${downStr}`;
+}
+
+function ipToInt(ip) {
+  if (!ip) return 0;
+  return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+}
+
+function intToIp(int) {
+  return [
+    (int >>> 24) & 255,
+    (int >>> 16) & 255,
+    (int >>> 8) & 255,
+    int & 255
+  ].join('.');
+}
+
+function allocateDynamicIp(username, startIpStr, endIpStr, nasIp) {
+  try {
+    const startInt = ipToInt(startIpStr);
+    const endInt = ipToInt(endIpStr);
+    if (!startInt || !endInt || startInt > endInt) return null;
+
+    // Direct check if user has active session with framed_ip
+    const userSession = db.prepare(`
+      SELECT framed_ip FROM radius_accounting
+      WHERE username = ? AND status_type IN (1, 3) AND framed_ip IS NOT NULL AND framed_ip != ''
+      ORDER BY id DESC LIMIT 1
+    `).get(username);
+    if (userSession && userSession.framed_ip) {
+      return userSession.framed_ip;
+    }
+
+    const assignedRows = db.prepare(`
+      SELECT framed_ip FROM radius_accounting
+      WHERE status_type IN (1, 3) AND framed_ip IS NOT NULL AND framed_ip != ''
+    `).all();
+    const usedIps = new Set(assignedRows.map(r => r.framed_ip));
+
+    let hash = 0;
+    for (let i = 0; i < username.length; i++) {
+      hash = (hash * 31 + username.charCodeAt(i)) >>> 0;
+    }
+    const range = (endInt - startInt + 1);
+    const preferredInt = startInt + (hash % range);
+    const preferredIp = intToIp(preferredInt);
+
+    if (!usedIps.has(preferredIp)) {
+      return preferredIp;
+    }
+
+    for (let current = startInt; current <= endInt; current++) {
+      const candidateIp = intToIp(current);
+      if (!usedIps.has(candidateIp)) {
+        return candidateIp;
+      }
+    }
+  } catch (err) {
+    logger.error(`[RADIUS Dynamic IP] Error allocating IP: ${err.message}`);
+  }
+  return null;
+}
+
 function getStatus() {
   return {
     enabled: getSetting('radius_enabled', '0') === '1',
@@ -459,8 +650,16 @@ function getStatus() {
     secret: getSetting('radius_secret', 'secret123'),
     isolirAction: getSetting('radius_isolir_action', 'pool'),
     isolirPool: getSetting('radius_isolir_pool', 'isolir'),
+    isolirRateLimit: getSetting('radius_isolir_rate_limit', '512k/512k'),
+    isolirIpPoolEnabled: getSetting('radius_isolir_ip_pool_enabled', '1') === '1',
+    isolirIpPoolStart: getSetting('radius_isolir_ip_pool_start', '10.10.99.2'),
+    isolirIpPoolEnd: getSetting('radius_isolir_ip_pool_end', '10.10.99.254'),
     limitSimultaneous: getSetting('radius_limit_simultaneous', '1') === '1',
-    defaultRateLimit: getSetting('radius_default_rate_limit', '5M/10M')
+    defaultRateLimit: getSetting('radius_default_rate_limit', '5M/10M'),
+    ipPoolEnabled: getSetting('radius_ip_pool_enabled', '1') === '1',
+    ipPoolStart: getSetting('radius_ip_pool_start', '10.10.10.2'),
+    ipPoolEnd: getSetting('radius_ip_pool_end', '10.10.10.254'),
+    framedPool: getSetting('radius_framed_pool', 'pool-pppoe')
   };
 }
 

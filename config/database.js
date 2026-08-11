@@ -1040,7 +1040,7 @@ try {
   console.error('Failed to migrate digiflazz_staff_transactions:', e);
 }
 
-// Safe migration: tambah kolom balance dan area ke tabel customers, collectors, dan technicians
+// Safe migration: tambah kolom balance, area, dan is_radius ke tabel customers, collectors, dan technicians
 try {
   const custCols = db.prepare("PRAGMA table_info(customers)").all();
   if (!custCols.find(c => c.name === 'balance')) {
@@ -1048,6 +1048,9 @@ try {
   }
   if (!custCols.find(c => c.name === 'area')) {
     db.exec("ALTER TABLE customers ADD COLUMN area TEXT DEFAULT ''");
+  }
+  if (!custCols.find(c => c.name === 'is_radius')) {
+    db.exec("ALTER TABLE customers ADD COLUMN is_radius INTEGER DEFAULT 1");
   }
 
   const colCols = db.prepare("PRAGMA table_info(collectors)").all();
@@ -1060,7 +1063,7 @@ try {
     db.exec("ALTER TABLE technicians ADD COLUMN area TEXT DEFAULT ''");
   }
 } catch(e) {
-  console.error('Failed to migrate area columns:', e);
+  console.error('Failed to migrate customer columns:', e);
 }
 
 // Safe migration: sync area-area yang sudah pernah diinput ke tabel areas
