@@ -99,7 +99,14 @@
     <div class="stat-grid mb16">
       <div class="sc p">
         <i class="bi bi-broadcast sc-icon"></i>
-        <div class="sc-label">Status RADIUS Server</div>
+        <div class="sc-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+          <span>Status RADIUS Server</span>
+          <form action="/admin/radius/restart" method="POST" style="margin:0;">
+            <button type="submit" class="btn btn-w btn-sm" style="font-size:10px;padding:2px 8px;height:auto;" title="Restart Service UDP RADIUS (1812/1813)">
+              <i class="bi bi-arrow-clockwise"></i> Restart
+            </button>
+          </form>
+        </div>
         <div class="sc-val">
           <% if (radiusStatus.running) { %>
             <span class="badge bs"><i class="bi bi-play-circle-fill"></i> Running</span>
