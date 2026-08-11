@@ -6845,6 +6845,33 @@ router.post('/radius-settings', requireAdminSession, restrictToAdmin, async (req
   res.redirect('/admin/radius-settings');
 });
 
+router.post('/radius/disconnect', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    const { username, session_id, nas_ip } = req.body;
+    if (!username) throw new Error('Username tidak boleh kosong');
+
+    await radiusSvc.disconnectSession(username, session_id, nas_ip);
+    req.session._msg = { type: 'success', text: `Sesi aktif RADIUS untuk user "${username}" berhasil diputus.` };
+  } catch (e) {
+    logger.error('Error disconnecting RADIUS session:', e);
+    req.session._msg = { type: 'danger', text: 'Gagal memutus sesi RADIUS: ' + e.message };
+  }
+  res.redirect('/admin/radius-settings');
+});
+
+router.post('/radius/restart', requireAdminSession, restrictToAdmin, async (req, res) => {
+  try {
+    radiusSvc.stop();
+    await new Promise(r => setTimeout(r, 500));
+    radiusSvc.start();
+    req.session._msg = { type: 'success', text: 'Layanan RADIUS Server (UDP Port 1812/1813) berhasil direstart.' };
+  } catch (e) {
+    logger.error('Error restarting RADIUS service:', e);
+    req.session._msg = { type: 'danger', text: 'Gagal merestart layanan RADIUS: ' + e.message };
+  }
+  res.redirect('/admin/radius-settings');
+});
+
 router.post('/radius/nas/add', requireAdminSession, restrictToAdmin, async (req, res) => {
   try {
     const { nasname, shortname, secret, description } = req.body;
