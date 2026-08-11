@@ -15,7 +15,54 @@
     html[data-theme="light"] .mtab:hover { color: #0f172a !important; background: #f1f5f9 !important; }
     html[data-theme="light"] .mtab.active { color: #ffffff !important; background: #4f46e5 !important; border-color: #4f46e5 !important; }
 
-    .settings-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
+    .settings-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; }
+
+    /* Mobile Responsive Optimizations */
+    @media (max-width: 768px) {
+      .settings-form-grid { grid-template-columns: 1fr; }
+      .mtabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 8px;
+        margin-bottom: 14px;
+        scrollbar-width: thin;
+      }
+      .mtab {
+        padding: 8px 14px;
+        font-size: 12px;
+        flex-shrink: 0;
+      }
+      .stat-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+      }
+      .tbl-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        margin-bottom: 0;
+      }
+      .dtbl {
+        min-width: 600px;
+      }
+      .topbar .tb-title span {
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 180px;
+      }
+    }
+    @media (max-width: 480px) {
+      .stat-grid {
+        grid-template-columns: 1fr !important;
+      }
+      .topbar .tb-title span {
+        max-width: 140px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -404,6 +451,7 @@
                   <th>Download (Out)</th>
                   <th>Session Time</th>
                   <th>Waktu Update</th>
+                  <th style="width:110px;text-align:right;">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -418,11 +466,21 @@
                       <td><%= (s.output_octets / (1024 * 1024)).toFixed(2) %> MB</td>
                       <td><%= s.session_time %>s</td>
                       <td><%= s.updated_at %></td>
+                      <td style="text-align:right;white-space:nowrap;">
+                        <form action="/admin/radius/disconnect" method="POST" onsubmit="return confirm('Putuskan sesi aktif RADIUS untuk user \'<%= s.username %>\'?')" style="display:inline;">
+                          <input type="hidden" name="username" value="<%= s.username %>">
+                          <input type="hidden" name="session_id" value="<%= s.session_id %>">
+                          <input type="hidden" name="nas_ip" value="<%= s.nas_ip %>">
+                          <button type="submit" class="btn btn-d btn-sm" title="Putuskan Sesi Active RADIUS">
+                            <i class="bi bi-power"></i> Putuskan
+                          </button>
+                        </form>
+                      </td>
                     </tr>
                   <% }); %>
                 <% } else { %>
                   <tr>
-                    <td colspan="8" class="text-center text-muted" style="padding:24px;">Belum ada sesi online RADIUS yang terhubung.</td>
+                    <td colspan="9" class="text-center text-muted" style="padding:24px;">Belum ada sesi online RADIUS yang terhubung.</td>
                   </tr>
                 <% } %>
               </tbody>
