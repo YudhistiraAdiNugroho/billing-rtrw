@@ -1062,6 +1062,14 @@ try {
   if (!techCols.find(c => c.name === 'area')) {
     db.exec("ALTER TABLE technicians ADD COLUMN area TEXT DEFAULT ''");
   }
+
+  const pkgCols = db.prepare("PRAGMA table_info(packages)").all();
+  if (!pkgCols.find(c => c.name === 'speed_down_upto')) {
+    db.exec("ALTER TABLE packages ADD COLUMN speed_down_upto INTEGER DEFAULT 0");
+  }
+  if (!pkgCols.find(c => c.name === 'speed_up_upto')) {
+    db.exec("ALTER TABLE packages ADD COLUMN speed_up_upto INTEGER DEFAULT 0");
+  }
 } catch(e) {
   console.error('Failed to migrate customer columns:', e);
 }

@@ -51,7 +51,7 @@ function findUserCredentials(username) {
   try {
     const cust = db.prepare(`
       SELECT c.id, c.name, c.pppoe_username, c.pppoe_password, c.status, c.static_ip, c.package_id,
-             p.name as package_name, p.speed_up, p.speed_down
+             p.name as package_name, p.speed_up, p.speed_down, p.speed_up_upto, p.speed_down_upto
       FROM customers c
       LEFT JOIN packages p ON p.id = c.package_id
       WHERE c.pppoe_username = ? OR c.name = ? OR c.phone = ?
@@ -76,6 +76,8 @@ function findUserCredentials(username) {
         staticIp: cust.static_ip,
         speedUp: cust.speed_up || 0,
         speedDown: cust.speed_down || 0,
+        speedUpUpto: cust.speed_up_upto || 0,
+        speedDownUpto: cust.speed_down_upto || 0,
         packageName: cust.package_name || ''
       };
     }
@@ -88,7 +90,7 @@ function findUserCredentials(username) {
     const pppoe = db.prepare(`
       SELECT pu.id, pu.customer_id, pu.username, pu.secret, pu.status, pu.profile_name,
              c.status as customer_status, c.static_ip,
-             p.speed_up, p.speed_down
+             p.speed_up, p.speed_down, p.speed_up_upto, p.speed_down_upto
       FROM pppoe_users pu
       LEFT JOIN customers c ON c.id = pu.customer_id
       LEFT JOIN packages p ON p.id = c.package_id
@@ -106,6 +108,8 @@ function findUserCredentials(username) {
         staticIp: pppoe.static_ip,
         speedUp: pppoe.speed_up || 0,
         speedDown: pppoe.speed_down || 0,
+        speedUpUpto: pppoe.speed_up_upto || 0,
+        speedDownUpto: pppoe.speed_down_upto || 0,
         packageName: pppoe.profile_name || ''
       };
     }
@@ -128,6 +132,8 @@ function findUserCredentials(username) {
         status: voucher.status === 'used' || voucher.status === 'expired' ? 'suspended' : 'active',
         speedUp: 0,
         speedDown: 0,
+        speedUpUpto: 0,
+        speedDownUpto: 0,
         packageName: voucher.profile_name || ''
       };
     }
@@ -170,8 +176,6 @@ function handleAuthMessage(msg, rinfo) {
   }
 
   // Verifikasi Password
-  // Jika inputPassword dikirim (PAP), verifikasi persis.
-  // Jika inputPassword kosong (''), berarti MikroTik menggunakan enkripsi CHAP/MS-CHAPv2 di mana plain-text password tidak dikirim di User-Password attribute.
   if (inputPassword !== '' && user.secret != null && user.secret !== '' && user.secret !== inputPassword) {
     logger.warn(`[RADIUS Auth] Reject '${username}' - Password salah (input: '${inputPassword}', expected: '${user.secret}')`);
     sendAuthResponse(CODES.ACCESS_REJECT, reqPacket, [], secret, rinfo);
@@ -193,56 +197,35 @@ function handleAuthMessage(msg, rinfo) {
         { type: ATTR_TYPES.FRAMED_PROTOCOL, value: 1 }
       ];
 
-      const isolirIpEnabled = getSetting('radius_isolir_ip_pool_enabled', '1') === '1';
-      const isolirIpStart = getSetting('radius_isolir_ip_pool_start', '10.10.99.2');
-      const isolirIpEnd = getSetting('radius_isolir_ip_pool_end', '10.10.99.254');
+      const isolirRateLimit = getSetting('radius_isolir_rate_limit', '512k/512k');
+      const isolirIpPoolEnabled = getSetting('radius_isolir_ip_pool_enabled', '1') === '1';
+      const isolirIpPoolStart = getSetting('radius_isolir_ip_pool_start', '10.10.99.2');
+      const isolirIpPoolEnd = getSetting('radius_isolir_ip_pool_end', '10.10.99.254');
 
       let allocatedIsolirIp = null;
-      if (isolirIpEnabled && isolirIpStart && isolirIpEnd) {
-        allocatedIsolirIp = allocateDynamicIp(username, isolirIpStart, isolirIpEnd, nasIp);
+      if (isolirIpPoolEnabled && isolirIpPoolStart && isolirIpPoolEnd) {
+        allocatedIsolirIp = allocateDynamicIp(username, isolirIpPoolStart, isolirIpPoolEnd, nasIp);
         if (allocatedIsolirIp) {
           isolirAttrs.push({ type: ATTR_TYPES.FRAMED_IP_ADDRESS, value: allocatedIsolirIp, isIp: true });
           isolirAttrs.push({ type: ATTR_TYPES.FRAMED_IP_NETMASK, value: '255.255.255.255', isIp: true });
+          logger.info(`[RADIUS Auth] Isolir Dynamic IP '${allocatedIsolirIp}' dialokasikan untuk '${username}'`);
+        } else if (isolirPool) {
+          isolirAttrs.push({ type: ATTR_TYPES.FRAMED_POOL, value: isolirPool });
         }
+      } else if (isolirPool) {
+        isolirAttrs.push({ type: ATTR_TYPES.FRAMED_POOL, value: isolirPool });
       }
 
-      if (isolirPool) {
-        isolirAttrs.push({ type: ATTR_TYPES.FRAMED_POOL, value: isolirPool });
+      if (isolirRateLimit) {
         isolirAttrs.push({
           type: ATTR_TYPES.VENDOR_SPECIFIC,
           vendorId: MIKROTIK_VENDOR_ID,
-          vendorType: MIKROTIK_VSAS.GROUP,
-          value: isolirPool
+          vendorType: MIKROTIK_VSAS.RATE_LIMIT,
+          value: isolirRateLimit
         });
       }
 
-      const isolirRateLimit = getSetting('radius_isolir_rate_limit', '512k/512k');
-      isolirAttrs.push({
-        type: ATTR_TYPES.VENDOR_SPECIFIC,
-        vendorId: MIKROTIK_VENDOR_ID,
-        vendorType: MIKROTIK_VSAS.RATE_LIMIT,
-        value: isolirRateLimit
-      });
-
-      logger.info(`[RADIUS Auth] Accept '${username}' - TERISOLIR (Dynamic IP: ${allocatedIsolirIp || 'Framed-Pool'}, Speed: ${isolirRateLimit}, Pool: ${isolirPool})`);
-      
-      // Record instant session entry for isolir user
-      try {
-        const authSessionId = reqPacket.parsedAttrs.acctSessionId || `auth-${Date.now()}-${username}`;
-        db.prepare(`
-          INSERT INTO radius_accounting (
-            username, nas_ip, framed_ip, session_id, status_type,
-            calling_station_id, updated_at
-          ) VALUES (?, ?, ?, ?, 1, ?, NOW_LOCAL())
-        `).run(
-          username,
-          nasIp,
-          allocatedIsolirIp || '',
-          authSessionId,
-          reqPacket.parsedAttrs.callingStationId || ''
-        );
-      } catch (e) {}
-
+      logger.info(`[RADIUS Auth] Accept (Isolir) '${username}' - Terisolir`);
       sendAuthResponse(CODES.ACCESS_ACCEPT, reqPacket, isolirAttrs, secret, rinfo);
       return;
     }
@@ -304,7 +287,7 @@ function handleAuthMessage(msg, rinfo) {
 
   // Atribut Rate Limit (Mikrotik-Rate-Limit) & Mikrotik-Group (Profile)
   const defaultRateLimit = getSetting('radius_default_rate_limit', '5M/10M');
-  const rateLimitStr = formatRateLimit(user.speedUp, user.speedDown, defaultRateLimit);
+  const rateLimitStr = formatRateLimit(user.speedUp, user.speedDown, defaultRateLimit, user.speedUpUpto, user.speedDownUpto);
   if (rateLimitStr) {
     responseAttrs.push({
       type: ATTR_TYPES.VENDOR_SPECIFIC,
@@ -686,10 +669,45 @@ function getAccountingLogs(limit = 100) {
   }
 }
 
+async function disconnectSession(username, sessionId, nasIp) {
+  try {
+    const mikrotikSvc = require('./mikrotikService');
+    
+    // 1. Clear session entry from radius_accounting database table
+    if (sessionId) {
+      db.prepare(`
+        UPDATE radius_accounting
+        SET status_type = 2, updated_at = NOW_LOCAL()
+        WHERE session_id = ? OR (username = ? AND status_type IN (1, 3))
+      `).run(sessionId, username);
+    } else {
+      db.prepare(`
+        UPDATE radius_accounting
+        SET status_type = 2, updated_at = NOW_LOCAL()
+        WHERE username = ? AND status_type IN (1, 3)
+      `).run(username);
+    }
+
+    // 2. Disconnect active session from MikroTik via API
+    let routerId = null;
+    if (nasIp) {
+      const r = db.prepare('SELECT id FROM routers WHERE host = ?').get(nasIp);
+      if (r) routerId = r.id;
+    }
+    
+    await mikrotikSvc.kickPppoeUser(username, routerId);
+    return true;
+  } catch (err) {
+    logger.error(`[RADIUS Disconnect] Error disconnecting user '${username}': ${err.message}`);
+    return false;
+  }
+}
+
 module.exports = {
   start,
   stop,
   getStatus,
   getOnlineSessions,
-  getAccountingLogs
+  getAccountingLogs,
+  disconnectSession
 };

@@ -366,6 +366,8 @@ function getPackageById(id) {
 function createPackage(data) {
   const down = Math.round(parseFloat(data.speed_down || 0) * 1000);
   const up = Math.round(parseFloat(data.speed_up || 0) * 1000);
+  const down_upto = Math.round(parseFloat(data.speed_down_upto || 0) * 1000);
+  const up_upto = Math.round(parseFloat(data.speed_up_upto || 0) * 1000);
   const n_down = Math.round(parseFloat(data.night_speed_down || 0) * 1000);
   const n_up = Math.round(parseFloat(data.night_speed_up || 0) * 1000);
   const f_down = Math.round(parseFloat(data.fup_speed_down || 0) * 1000);
@@ -383,16 +385,16 @@ function createPackage(data) {
   return db.prepare(`
     INSERT INTO packages (
       name, price, promo_price, promo_cycles, prorate_first_invoice,
-      speed_down, speed_up, 
+      speed_down, speed_up, speed_down_upto, speed_up_upto,
       use_night_speed, night_profile_name, night_speed_down, night_speed_up, 
       use_fup, fup_profile_name, fup_limit_gb, fup_speed_down, 
       description,
       use_ppn, ppn_percentage, use_uso, uso_percentage, router_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
-    down, up,
+    down, up, down_upto, up_upto,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || '',
@@ -409,6 +411,8 @@ function parsePromoPrice(raw) {
 function updatePackage(id, data) {
   const down = Math.round(parseFloat(data.speed_down || 0) * 1000);
   const up = Math.round(parseFloat(data.speed_up || 0) * 1000);
+  const down_upto = Math.round(parseFloat(data.speed_down_upto || 0) * 1000);
+  const up_upto = Math.round(parseFloat(data.speed_up_upto || 0) * 1000);
   const n_down = Math.round(parseFloat(data.night_speed_down || 0) * 1000);
   const n_up = Math.round(parseFloat(data.night_speed_up || 0) * 1000);
   const f_down = Math.round(parseFloat(data.fup_speed_down || 0) * 1000);
@@ -425,7 +429,7 @@ function updatePackage(id, data) {
   return db.prepare(`
     UPDATE packages 
     SET name=?, price=?, promo_price=?, promo_cycles=?, prorate_first_invoice=?,
-        speed_down=?, speed_up=?, 
+        speed_down=?, speed_up=?, speed_down_upto=?, speed_up_upto=?,
         use_night_speed=?, night_profile_name=?, night_speed_down=?, night_speed_up=?, 
         use_fup=?, fup_profile_name=?, fup_limit_gb=?, fup_speed_down=?, 
         description=?, is_active=?,
@@ -433,7 +437,7 @@ function updatePackage(id, data) {
     WHERE id=?
   `).run(
     data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
-    down, up,
+    down, up, down_upto, up_upto,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || '', data.is_active == '1' ? 1 : 0,

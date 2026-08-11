@@ -3863,4 +3863,49 @@ router.post('/agent-topup/create', express.urlencoded({ extended: true }), async
   }
 });
 
+// ─── RECONNECT / REFRESH INTERNET INSTAN ───────────────────────────────────
+router.post('/customer/reconnect', async (req, res) => {
+  try {
+    const sessionPhone = req.session.phone;
+    if (!sessionPhone) {
+      if (req.xhr || req.headers.accept?.includes('json')) {
+        return res.status(401).json({ success: false, message: 'Silakan login terlebih dahulu' });
+      }
+      return res.redirect('/customer/login');
+    }
+
+    const customer = customerSvc.findCustomerByAny(sessionPhone);
+    if (!customer) throw new Error('Data pelanggan tidak ditemukan');
+
+    const username = customer.pppoe_username || customer.hotspot_username || customer.name;
+    const radiusSvc = require('../services/radiusServerService');
+    const mikrotikSvc = require('../services/mikrotikService');
+
+    let reconnected = false;
+    if (username) {
+      await radiusSvc.disconnectSession(username);
+      await mikrotikSvc.kickPppoeUser(username, customer.router_id);
+      await mikrotikSvc.kickHotspotUser(username, customer.router_id);
+      reconnected = true;
+    }
+
+    if (req.xhr || req.headers.accept?.includes('json')) {
+      return res.json({
+        success: true,
+        message: 'Koneksi internet Anda berhasil direfresh! Silakan tunggu 2-3 detik agar IP & kecepatan kembali normal.'
+      });
+    }
+
+    req.session._msg = { type: 'success', text: 'Koneksi internet Anda berhasil direfresh! Silakan tunggu 2-3 detik agar IP & kecepatan kembali normal.' };
+    return res.redirect('/customer/dashboard');
+  } catch (e) {
+    logger.error('[Customer Reconnect] Error: ' + e.message);
+    if (req.xhr || req.headers.accept?.includes('json')) {
+      return res.status(500).json({ success: false, message: 'Gagal refresh koneksi: ' + e.message });
+    }
+    req.session._msg = { type: 'error', text: 'Gagal refresh koneksi: ' + e.message };
+    return res.redirect('/customer/dashboard');
+  }
+});
+
 module.exports = router;
