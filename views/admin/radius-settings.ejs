@@ -54,6 +54,26 @@
         text-overflow: ellipsis;
         max-width: 180px;
       }
+      .mo .mb {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        margin: 10px auto !important;
+        padding: 14px !important;
+        border-radius: 14px !important;
+      }
+      .mo .mbody {
+        max-height: 70vh !important;
+        overflow-y: auto !important;
+        padding-right: 4px !important;
+      }
+      .mf {
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+      }
+      .mf button, .mf a {
+        flex: 1 1 100% !important;
+        justify-content: center !important;
+      }
     }
     @media (max-width: 480px) {
       .stat-grid {
@@ -89,7 +109,7 @@
   <div class="page">
 
     <% if (msg) { %>
-    <div class="alert alert-<%= msg.type === 'danger' || msg.type === 'error' ? 'd' : msg.type === 'success' ? 's' : 'w' %> mb16">
+    <div class="alert alert-<%= msg.type === 'danger' || msg.type === 'error' ? 'd' : msg.type === 'success' ? 's' : 'w' %> mb16" id="autoAlert">
       <i class="bi bi-<%= msg.type === 'success' ? 'check-circle' : 'exclamation-triangle' %>"></i>
       <%= msg.text %>
     </div>
@@ -677,6 +697,20 @@
       alert('Script MikroTik berhasil disalin!');
     });
   }
+
+  // Auto dismiss notification alert after 4 seconds
+  setTimeout(() => {
+    const alertEl = document.getElementById('autoAlert');
+    if (alertEl) {
+      alertEl.style.transition = 'opacity 0.5s ease, max-height 0.5s ease, margin 0.5s ease, padding 0.5s ease';
+      alertEl.style.opacity = '0';
+      alertEl.style.maxHeight = '0';
+      alertEl.style.margin = '0';
+      alertEl.style.padding = '0';
+      alertEl.style.overflow = 'hidden';
+      setTimeout(() => alertEl.remove(), 500);
+    }
+  }, 4000);
 </script>
 </body>
 </html>
