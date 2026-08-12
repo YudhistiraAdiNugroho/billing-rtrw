@@ -110,20 +110,30 @@ function startCronJobs() {
     const billingEnabled = getSetting('whatsapp_billing_to_customer_enabled', true);
     if (!enabled || !waEnabled || !billingEnabled) return;
 
-    let sendWA, sendWAImage, whatsappStatus;
-    try {
-      const mod = await import('./whatsappBot.mjs');
-      sendWA = mod.sendWA;
-      sendWAImage = mod.sendWAImage;
-      whatsappStatus = mod.whatsappStatus;
-    } catch (e) {
-      logger.error(`[CRON] Gagal load WhatsApp bot: ${e.message || e}`);
-      return;
-    }
+    const gatewayType = getSetting('wa_gateway_type', 'baileys');
+    const waSvc = require('./whatsappService');
+    
+    if (gatewayType === 'meta') {
+      const phoneId = getSetting('meta_phone_number_id', '');
+      const token = getSetting('meta_access_token', '');
+      if (!phoneId || !token) {
+        logger.warn('[CRON] Kredensial Meta API belum diisi, pengingat tagihan otomatis dilewati.');
+        return;
+      }
+    } else {
+      let whatsappStatus;
+      try {
+        const mod = await import('./whatsappBot.mjs');
+        whatsappStatus = mod.whatsappStatus;
+      } catch (e) {
+        logger.error(`[CRON] Gagal load WhatsApp bot: ${e.message || e}`);
+        return;
+      }
 
-    if (!whatsappStatus || whatsappStatus.connection !== 'open') {
-      logger.warn('[CRON] WhatsApp bot belum terhubung, pengingat tagihan otomatis dilewati.');
-      return;
+      if (!whatsappStatus || whatsappStatus.connection !== 'open') {
+        logger.warn('[CRON] WhatsApp bot belum terhubung, pengingat tagihan otomatis dilewati.');
+        return;
+      }
     }
 
     const resolveBaseUrl = () => {
@@ -292,13 +302,8 @@ function startCronJobs() {
           // Add subtle variation untuk menghindari spam detection
           formattedMsg = addMessageVariation(formattedMsg, i);
 
-          let ok = false;
-          if (qrisImageBuffer && typeof sendWAImage === 'function') {
-            ok = await sendWAImage(c.phone, qrisImageBuffer, formattedMsg);
-          }
-          if (!ok) {
-            ok = await sendWA(c.phone, formattedMsg);
-          }
+          await waSvc.sendWhatsAppMessage(c.phone, formattedMsg);
+          const ok = true;
           if (ok) {
             sent++;
             targetCount++;

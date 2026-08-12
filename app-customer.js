@@ -546,6 +546,11 @@ async function fulfillVoucherOrder(settings, orderId) {
   return { ok: true, created };
 }
 
+// Meta WhatsApp Cloud API Public Webhook Endpoints
+const metaWAService = require('./services/metaWhatsappService');
+app.get('/api/meta-webhook', (req, res) => metaWAService.verifyWebhook(req, res));
+app.post('/api/meta-webhook', (req, res) => metaWAService.processWebhookEvent(req, res));
+
 app.post('/api/webhook/v1/payment-notif', multer().any(), async (req, res) => {
   let body = req.body || {};
   try {

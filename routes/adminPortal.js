@@ -5380,10 +5380,91 @@ function isTemporaryError(errorMessage) {
 // Global message history untuk duplicate detection
 global.broadcastMessageHistory = new Map();
 
+const waSvc = require('../services/whatsappService');
+
 router.get('/whatsapp', requireAdminSession, requireSidebarMenuAccess('whatsapp'), async (req, res) => {
+  const waGatewayType = getSetting('wa_gateway_type', 'baileys');
+  const metaSettings = {
+    meta_phone_number_id: getSetting('meta_phone_number_id', ''),
+    meta_waba_id: getSetting('meta_waba_id', ''),
+    meta_access_token: getSetting('meta_access_token', ''),
+    meta_verify_token: getSetting('meta_verify_token', 'antigravity_meta_wa_secret'),
+    meta_business_phone: getSetting('meta_business_phone', '')
+  };
+
   res.render('admin/whatsapp', {
-    title: 'Status WhatsApp', company: company(), activePage: 'whatsapp', msg: flashMsg(req)
+    title: 'Status WhatsApp',
+    company: company(),
+    activePage: 'whatsapp',
+    msg: flashMsg(req),
+    waGatewayType,
+    metaSettings,
+    host: req.get('host') || 'localhost:3001'
   });
+});
+
+router.post('/whatsapp/gateway-settings', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const { wa_gateway_type, meta_phone_number_id, meta_waba_id, meta_access_token, meta_verify_token, meta_business_phone } = req.body;
+    saveSettings({
+      wa_gateway_type: wa_gateway_type || 'baileys',
+      meta_phone_number_id: String(meta_phone_number_id || '').trim(),
+      meta_waba_id: String(meta_waba_id || '').trim(),
+      meta_access_token: String(meta_access_token || '').trim(),
+      meta_verify_token: String(meta_verify_token || '').trim() || 'antigravity_meta_wa_secret',
+      meta_business_phone: String(meta_business_phone || '').trim()
+    });
+    req.session._msg = { type: 'success', text: 'Pengaturan WhatsApp Gateway & Meta Cloud API berhasil disimpan.' };
+  } catch (e) {
+    req.session._msg = { type: 'danger', text: 'Gagal menyimpan pengaturan: ' + e.message };
+  }
+  res.redirect('/admin/whatsapp');
+});
+
+// LIVE CHAT ROUTES
+router.get('/whatsapp/live-chat', requireAdminSession, requireSidebarMenuAccess('whatsapp'), async (req, res) => {
+  const waGatewayType = getSetting('wa_gateway_type', 'baileys');
+  const customers = customerSvc.getAllCustomers();
+  res.render('admin/whatsapp_live_chat', {
+    title: 'Live Chat WhatsApp',
+    company: company(),
+    activePage: 'whatsapp_live_chat',
+    msg: flashMsg(req),
+    gatewayType: waGatewayType,
+    customers: customers || []
+  });
+});
+
+router.get('/api/whatsapp/conversations', requireAdminSession, (req, res) => {
+  try {
+    const list = waSvc.getRecentConversations(50);
+    res.json({ ok: true, conversations: list });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.get('/api/whatsapp/messages', requireAdminSession, (req, res) => {
+  try {
+    const phone = req.query.phone || '';
+    const list = waSvc.getChatHistory(phone, 100);
+    res.json({ ok: true, messages: list });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.post('/api/whatsapp/send-direct', requireAdminSession, express.json(), async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message) return res.status(400).json({ success: false, error: 'Nomor dan pesan tidak boleh kosong' });
+
+    await waSvc.sendWhatsAppMessage(phone, message);
+    res.json({ success: true, message: 'Pesan WhatsApp terkirim' });
+  } catch (e) {
+    const errorText = e?.message || (typeof e === 'string' ? e : JSON.stringify(e));
+    res.status(500).json({ success: false, error: errorText });
+  }
 });
 
 router.get('/whatsapp/templates', requireAdminSession, requireSidebarMenuAccess('whatsapp'), async (req, res) => {
@@ -5535,8 +5616,6 @@ router.post('/whatsapp/broadcast', requireAdminSession, express.urlencoded({ ext
     if (uniqueCustomers.length === 0) {
       throw new Error('Tidak ada nomor pelanggan yang valid untuk target tersebut.');
     }
-
-    const { sendWA } = await import('../services/whatsappBot.mjs');
     
     // Initialize Tracker dengan Smart Rate Limit
     global.broadcastStatus = {
@@ -5554,72 +5633,56 @@ router.post('/whatsapp/broadcast', requireAdminSession, express.urlencoded({ ext
 
     const sendMessageAsync = async () => {
       let batchCount = 0;
+      let windowStartTime = Date.now();
       let messagesInCurrentHour = 0;
-      let hourStartTime = Date.now();
-      
+
       for (let i = 0; i < uniqueCustomers.length; i++) {
-        // Cek jika broadcast dihentikan
         if (global.broadcastStatus.stopped) {
-          logger.info('[Broadcast] Broadcast dihentikan oleh admin.');
+          logger.info('[Broadcast] Dihentikan oleh admin.');
           break;
         }
-        
-        // Cek jika broadcast dipause
+
         while (global.broadcastStatus.paused) {
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 1000));
           if (global.broadcastStatus.stopped) break;
         }
-        
         if (global.broadcastStatus.stopped) break;
 
-        // Hourly Rate Limiting
-        const elapsedHour = Date.now() - hourStartTime;
-        if (elapsedHour >= 3600000) { // 1 jam
+        // Rate Limiting: Cek batas per jam
+        const now = Date.now();
+        if (now - windowStartTime >= 3600000) {
+          windowStartTime = now;
           messagesInCurrentHour = 0;
-          hourStartTime = Date.now();
+          global.broadcastStatus.messagesPerHour = 0;
         }
-        
+
         if (messagesInCurrentHour >= hourlyLimit) {
-          const waitTime = 3600000 - elapsedHour;
-          logger.info(`[Broadcast] Hourly limit tercapai (${hourlyLimit} pesan). Menunggu ${Math.floor(waitTime / 60000)} menit...`);
-          await new Promise(r => setTimeout(r, waitTime));
+          const waitTimeMs = 3600000 - (now - windowStartTime);
+          logger.info(`[Broadcast] Batas per jam tercapai (${hourlyLimit} pesan). Menunggu ${Math.ceil(waitTimeMs / 60000)} menit...`);
+          await new Promise(r => setTimeout(r, waitTimeMs));
+          windowStartTime = Date.now();
           messagesInCurrentHour = 0;
-          hourStartTime = Date.now();
+          global.broadcastStatus.messagesPerHour = 0;
         }
 
         const cust = uniqueCustomers[i];
         let attemptCount = 0;
         const maxAttempts = 3;
-        
+
         while (attemptCount < maxAttempts) {
           try {
             // Smart Random Delay
             const randomDelay = getRandomDelay(baseDelayMs, 2000);
             await new Promise(r => setTimeout(r, randomDelay));
-            
-            // Hitung Tagihan
-            const unpaidInvoices = billingSvc.getUnpaidInvoicesByCustomerId(cust.id);
-            const totalTagihan = unpaidInvoices.reduce((sum, inv) => sum + inv.amount, 0);
-            const rincianBulan = unpaidInvoices.map(inv => `${inv.period_month}/${inv.period_year}`).join(', ');
-            
-            // Generate Link Login
-            const protocol = req.protocol;
-            const host = req.get('host');
-            const loginLink = `${protocol}://${host}/customer/login`;
 
-            // Format Pesan dengan Spintax & variation untuk menghindari spam detection
-            let formattedMsg = message
-              .replace(/{{nama}}/gi, cust.name || 'Pelanggan')
-              .replace(/{{tagihan}}/gi, totalTagihan.toLocaleString('id-ID'))
-              .replace(/{{rincian}}/gi, rincianBulan || '-')
-              .replace(/{{paket}}/gi, cust.package_name || '-')
-              .replace(/{{link}}/gi, loginLink);
-            
+            // Format Pesan dengan Spintax
+            let formattedMsg = message.replace(/{{nama}}/gi, cust.name || 'Pelanggan');
+
             const { parseSpintax } = await import('../services/whatsappBot.mjs');
             formattedMsg = parseSpintax(formattedMsg);
             formattedMsg = addMessageVariation(formattedMsg, i);
 
-            await sendWA(cust.phone, formattedMsg, { simulateTyping: true });
+            await waSvc.sendWhatsAppMessage(cust.phone, formattedMsg);
             global.broadcastStatus.sent++;
             messagesInCurrentHour++;
             global.broadcastStatus.messagesPerHour = messagesInCurrentHour;
@@ -5697,8 +5760,15 @@ router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ 
 
 router.get('/api/whatsapp/status', requireAdmin, async (req, res) => {
     try {
-      const { whatsappStatus } = await import('../services/whatsappBot.mjs');
-      res.json(whatsappStatus);
+      const gatewayType = getSetting('wa_gateway_type', 'baileys');
+      if (gatewayType === 'meta') {
+        const phoneId = getSetting('meta_phone_number_id', '');
+        const token = getSetting('meta_access_token', '');
+        res.json({ connection: (phoneId && token) ? 'open' : 'connecting', gateway: 'meta' });
+      } else {
+        const { whatsappStatus } = await import('../services/whatsappBot.mjs');
+        res.json(whatsappStatus);
+      }
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

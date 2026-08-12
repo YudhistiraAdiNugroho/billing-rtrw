@@ -536,6 +536,22 @@ db.exec(`
     last_sync DATETIME,
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
+
+  CREATE TABLE IF NOT EXISTS wa_chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    direction TEXT NOT NULL DEFAULT 'outbound',
+    gateway TEXT NOT NULL DEFAULT 'baileys',
+    sender_phone TEXT,
+    recipient_phone TEXT,
+    customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+    customer_name TEXT,
+    message_text TEXT NOT NULL,
+    status TEXT DEFAULT 'sent',
+    meta_message_id TEXT,
+    created_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+  CREATE INDEX IF NOT EXISTS idx_wa_chat_messages_phone ON wa_chat_messages(sender_phone, recipient_phone);
+  CREATE INDEX IF NOT EXISTS idx_wa_chat_messages_created ON wa_chat_messages(created_at);
 `);
 
 // Inisialisasi tabel voucher_packages (Paket Voucher Hotspot Real-time)

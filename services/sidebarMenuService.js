@@ -29,6 +29,7 @@ const MENU_DEFINITIONS = [
   { key: 'olts', section: 'main', href: '/admin/olts', icon: 'bi bi-hdd-fill', labelKey: 'admin.nav.olt_management', labelDefault: 'Manajemen OLT', roles: ['admin'], activePages: ['olts'] },
   { key: 'whatsapp', section: 'main', href: '/admin/whatsapp', icon: 'bi bi-whatsapp', labelKey: 'admin.nav.whatsapp', labelDefault: 'WhatsApp', roles: ['admin', 'cashier'], activePages: ['whatsapp'] },
   { key: 'broadcast', section: 'main', href: '/admin/whatsapp/broadcast', icon: 'bi bi-megaphone', labelKey: 'admin.broadcast.title', labelDefault: 'Broadcast WhatsApp', roles: ['admin', 'cashier'], activePages: ['broadcast'] },
+  { key: 'whatsapp_live_chat', section: 'main', href: '/admin/whatsapp/live-chat', icon: 'bi bi-chat-dots-fill', labelKey: 'admin.nav.whatsapp_live_chat', labelDefault: 'Live Chat WA', roles: ['admin', 'cashier'], activePages: ['whatsapp_live_chat'] },
   { key: 'promo_slides', section: 'billing', href: '/admin/promo-slides', icon: 'bi bi-image', labelKey: 'admin.nav.promo_slides', labelDefault: 'Promo Slides', roles: ['admin'], activePages: ['promo_slides'] },
 
   { key: 'customers', section: 'billing', href: '/admin/customers', icon: 'bi bi-people', labelKey: 'admin.nav.customers', labelDefault: 'Pelanggan', roles: ['admin', 'cashier'], bottomNav: true, activePages: ['customers'] },
@@ -77,6 +78,7 @@ const DEFAULT_MENU_STATES = {
   olts: STATE_HIDDEN,
   whatsapp: STATE_VISIBLE,
   broadcast: STATE_VISIBLE,
+  whatsapp_live_chat: STATE_VISIBLE,
   promo_slides: STATE_VISIBLE,
   customers: STATE_VISIBLE,
   packages: STATE_VISIBLE,
