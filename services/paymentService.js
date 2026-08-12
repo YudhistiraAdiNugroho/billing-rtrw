@@ -8,11 +8,44 @@ const { getSettingsWithCache } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 
 /**
+ * Helper: Format pesan error dari response API Gateway agar tampil manusiawi & cantik
+ */
+function formatGatewayError(gatewayName, error) {
+  const respData = error.response ? error.response.data : null;
+  let cleanMsg = '';
+
+  if (respData) {
+    if (typeof respData === 'string') {
+      cleanMsg = respData;
+    } else if (Array.isArray(respData.error_messages) && respData.error_messages.length > 0) {
+      cleanMsg = respData.error_messages.join(', ');
+    } else if (respData.message) {
+      cleanMsg = respData.message;
+    } else if (respData.statusMessage) {
+      cleanMsg = respData.statusMessage;
+    } else if (respData.error_code) {
+      cleanMsg = respData.error_code;
+    } else {
+      try {
+        cleanMsg = JSON.stringify(respData);
+      } catch (e) {
+        cleanMsg = String(respData);
+      }
+    }
+  } else {
+    cleanMsg = error.message || String(error || 'Terjadi kesalahan pada Payment Gateway');
+  }
+
+  logger.error(`[${gatewayName}] Error: ${cleanMsg}`);
+  return new Error(`${gatewayName}: ${cleanMsg}`);
+}
+
+/**
  * Generate fallback email based on phone number
  */
 function getFallbackEmail(phone) {
-  const digits = phone.replace(/\D/g, '');
-  return `cust${digits}@alijaya.net`;
+  const digits = String(phone || '').replace(/\D/g, '');
+  return `cust${digits || '08123456789'}@alijaya.net`;
 }
 
 /**
@@ -20,7 +53,7 @@ function getFallbackEmail(phone) {
  */
 function normalizePhone(phone) {
   if (!phone) return '';
-  let digits = phone.replace(/\D/g, '');
+  let digits = String(phone).replace(/\D/g, '');
   if (digits.startsWith('0')) {
     digits = '62' + digits.slice(1);
   } else if (!digits.startsWith('62')) {
@@ -39,6 +72,10 @@ async function createTripayTransaction(invoice, customer, method = 'QRIS', appUr
   const merchantCode = settings.tripay_merchant_code;
   const isLive = settings.tripay_mode === 'live' || settings.tripay_mode === 'production';
   
+  if (!apiKey || !privateKey || !merchantCode) {
+    throw new Error('Tripay Error: Pengaturan API Key, Private Key, atau Merchant Code belum diisi.');
+  }
+
   const baseUrl = isLive 
     ? 'https://tripay.co.id/api/transaction/create' 
     : 'https://tripay.co.id/api-sandbox/transaction/create';
@@ -47,7 +84,7 @@ async function createTripayTransaction(invoice, customer, method = 'QRIS', appUr
   const merchantRef = `${prefix}-${invoice.id}-${Date.now()}`;
   const amount = Number(invoice.amount || 0);
   if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error('Tripay Error: amount tidak valid');
+    throw new Error('Tripay Error: Nominal tagihan tidak valid');
   }
 
   const signature = crypto.createHmac('sha256', privateKey)
@@ -100,11 +137,9 @@ async function createTripayTransaction(invoice, customer, method = 'QRIS', appUr
         payload: res.data.data
       };
     }
-    throw new Error(res.data.message || 'Gagal membuat transaksi');
+    throw new Error(res.data.message || 'Gagal membuat transaksi di Tripay');
   } catch (error) {
-    const msg = error.response ? JSON.stringify(error.response.data) : error.message;
-    logger.error('[Tripay] Error:', msg);
-    throw new Error('Tripay Error: ' + msg);
+    throw formatGatewayError('Tripay', error);
   }
 }
 
@@ -117,7 +152,7 @@ async function createMidtransTransaction(invoice, customer, method = 'snap', app
   const isLive = settings.midtrans_mode === 'live' || settings.midtrans_mode === 'production';
   
   if (!serverKey) {
-    throw new Error('Midtrans Server Key belum diatur di pengaturan.');
+    throw new Error('Midtrans Error: Server Key belum diatur di pengaturan.');
   }
 
   const baseUrl = isLive
@@ -197,9 +232,7 @@ async function createMidtransTransaction(invoice, customer, method = 'snap', app
       payload: res.data
     };
   } catch (error) {
-    const msg = error.response ? JSON.stringify(error.response.data) : error.message;
-    logger.error('[Midtrans] Error:', msg);
-    throw new Error('Midtrans Error: ' + msg);
+    throw formatGatewayError('Midtrans', error);
   }
 }
 
@@ -211,7 +244,7 @@ async function createXenditTransaction(invoice, customer, method = 'xendit', app
   const apiKey = settings.xendit_api_key;
   
   if (!apiKey) {
-    throw new Error('Xendit API Key belum diatur di pengaturan.');
+    throw new Error('Xendit Error: API Key belum diatur di pengaturan.');
   }
 
   const prefix = String(opts.orderPrefix || 'INV').toUpperCase();
@@ -284,9 +317,7 @@ async function createXenditTransaction(invoice, customer, method = 'xendit', app
       payload: res.data
     };
   } catch (error) {
-    const msg = error.response ? JSON.stringify(error.response.data) : error.message;
-    logger.error('[Xendit] Error:', msg);
-    throw new Error('Xendit Error: ' + msg);
+    throw formatGatewayError('Xendit', error);
   }
 }
 
@@ -300,7 +331,7 @@ async function createDuitkuTransaction(invoice, customer, method = 'duitku', app
   const isLive = settings.duitku_mode === 'live' || settings.duitku_mode === 'production';
   
   if (!merchantCode || !apiKey) {
-    throw new Error('Duitku Merchant Code atau API Key belum diatur.');
+    throw new Error('Duitku Error: Merchant Code atau API Key belum diatur.');
   }
 
   const baseUrl = isLive 
@@ -362,9 +393,7 @@ async function createDuitkuTransaction(invoice, customer, method = 'duitku', app
     }
     throw new Error(res.data.statusMessage || 'Gagal mendapatkan payment URL dari Duitku');
   } catch (error) {
-    const msg = error.response ? JSON.stringify(error.response.data) : error.message;
-    logger.error('[Duitku] Error:', msg);
-    throw new Error('Duitku Error: ' + msg);
+    throw formatGatewayError('Duitku', error);
   }
 }
 
@@ -408,6 +437,8 @@ async function getTripayChannels() {
   const apiKey = settings.tripay_api_key;
   const isLive = settings.tripay_mode === 'live' || settings.tripay_mode === 'production';
   
+  if (!apiKey) return [];
+
   const baseUrl = isLive
     ? 'https://tripay.co.id/api/merchant/payment-channel'
     : 'https://tripay.co.id/api-sandbox/merchant/payment-channel';
@@ -415,20 +446,18 @@ async function getTripayChannels() {
   try {
     const res = await axios.get(baseUrl, {
       headers: { Authorization: `Bearer ${apiKey}` },
-      timeout: 3000 // Timeout 3 detik untuk menghindari loading lama
+      timeout: 3000
     });
     
-    if (!res.data.success) {
+    if (!res.data || !res.data.success) {
       logger.error('[Tripay] Response tidak success:', res.data);
       return [];
     }
     
-    // Filter hanya channel yang aktif (active === true)
     const allChannels = res.data.data || [];
     const activeChannels = allChannels.filter(ch => ch.active === true);
     
     logger.info(`[Tripay] Total channels: ${allChannels.length}, Active: ${activeChannels.length}`);
-    
     return activeChannels;
   } catch (error) {
     logger.error('[Tripay] Gagal ambil channel:', error.message);
