@@ -6,10 +6,14 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="/css/admin.css">
   <style>
-    .wa-tabs { display: flex; gap: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-    .wa-tab { padding: 8px 14px; border-radius: 8px; cursor: pointer; color: var(--muted); transition: all 0.2s; font-weight: 700; text-decoration: none; }
+    .wa-tabs { display: flex; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+    .wa-tab { padding: 8px 14px; border-radius: 8px; cursor: pointer; color: var(--muted); transition: all 0.2s; font-weight: 700; text-decoration: none; flex-shrink: 0; }
     .wa-tab:hover { background: rgba(255,255,255,0.06); color: var(--text); }
     .wa-tab.active { background: var(--primary); color: white; }
+    @media (max-width: 768px) {
+      .wa-tab { padding: 6px 10px; font-size: 12px; }
+      .form-row, .grid-2 { grid-template-columns: 1fr !important; }
+    }
   </style>
 </head>
 <body>
