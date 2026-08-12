@@ -768,10 +768,12 @@
           <span class="status-pill offline d-none d-md-inline-flex"><%= customer.status %></span>
         <% } %>
 
-        <!-- REFRESH -->
-        <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()" style="border-radius:10px; padding: 7px 11px;">
-          <i class="bi bi-arrow-clockwise"></i>
-        </button>
+        <!-- RECONNECT INTERNET INSTAN -->
+        <form method="POST" action="/customer/reconnect" class="d-inline" title="Refresh & Re-connect Internet Instan">
+          <button type="submit" class="btn btn-success btn-sm fw-bold d-inline-flex align-items-center gap-1 shadow-sm" style="border-radius:10px; padding: 6px 12px; font-size:12px;">
+            <i class="bi bi-arrow-repeat"></i> Re-Connect
+          </button>
+        </form>
 
         <!-- LOGOUT -->
         <form method="POST" action="/customer/logout" class="d-inline">

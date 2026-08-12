@@ -12,6 +12,22 @@
     .usage-fill { height: 100%; width: var(--p, 0%); background: var(--b, var(--primary)); transition: width 0.3s; }
     #picker-map { height: 400px; width: 100%; border-radius: 8px; margin-bottom: 15px; }
     .picker-icon { color: #3b82f6; font-size: 32px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); display: block; width: 32px; height: 32px; text-align: center; line-height: 32px; text-shadow: -1.5px -1.5px 0 #fff, 1.5px -1.5px 0 #fff, -1.5px 1.5px 0 #fff, 1.5px 1.5px 0 #fff; }
+    
+    /* Responsive Mobile CSS */
+    @media (max-width: 768px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+      .card-hd { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+      .card-hd > div { flex-wrap: wrap !important; justify-content: stretch !important; }
+      .card-hd .btn { flex: 1 1 auto; justify-content: center; }
+      .srow { flex-direction: column !important; gap: 10px !important; }
+      .sinput, .srow select { width: 100% !important; max-width: 100% !important; }
+      .mo .mb { width: 95vw !important; max-width: 95vw !important; margin: 10px auto !important; padding: 14px !important; border-radius: 14px !important; }
+      .mo .mbody { max-height: 72vh !important; padding-right: 4px !important; }
+      .form-row { flex-direction: column !important; gap: 8px !important; }
+      .form-row > .fg { width: 100% !important; max-width: 100% !important; margin-bottom: 6px !important; }
+      .mf { flex-wrap: wrap !important; gap: 8px !important; }
+      .mf button, .mf a { flex: 1 1 100% !important; text-align: center !important; justify-content: center !important; }
+    }
   </style>
 </head>
 <body>
@@ -247,217 +263,257 @@
 
 <!-- Modal Tambah -->
 <div class="mo" id="addModal">
-  <div class="mb">
-    <div class="mh"><span class="mt"><i class="bi bi-person-plus"></i> Tambah Pelanggan</span><button class="mc" onclick="closeModal('addModal')">&times;</button></div>
+  <div class="mb" style="max-width:720px;">
+    <div class="mh"><span class="mt"><i class="bi bi-person-plus"></i> Tambah Pelanggan Baru</span><button class="mc" onclick="closeModal('addModal')">&times;</button></div>
     <form method="POST" action="/admin/customers">
-      <div class="mbody">
-        <div class="form-row">
-          <div class="fg"><label class="fl">Nama Lengkap *</label><input class="fc" name="name" required placeholder="John Doe"></div>
-          <div class="fg"><label class="fl">No. Telepon / WA</label><input class="fc" name="phone" placeholder="08xxx"></div>
-        </div>
-        <div class="fg"><label class="fl">Email (Untuk Notifikasi Payment)</label><input class="fc" name="email" type="email" placeholder="customer@example.com"></div>
-        <div class="fg"><label class="fl">Alamat</label><textarea class="fc" name="address" placeholder="Jl. Example..."></textarea></div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Paket Internet</label>
-            <select class="fs" name="package_id">
-              <option value="">-- Pilih Paket --</option>
-              <% packages.forEach(p => { %>
-              <option value="<%= p.id %>"><%= p.name %> — Rp <%= p.price.toLocaleString('id-ID') %></option>
-              <% }) %>
-            </select>
+      <div class="mbody" style="max-height:75vh; overflow-y:auto; padding-right:6px;">
+        
+        <!-- SECTION 1: MODE AUTENTIKASI KONEKSI (UTAMA) -->
+        <div style="background: rgba(99, 102, 241, 0.08); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.25); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="color:var(--primary); font-size:13px; display:flex; align-items:center; justify-content:space-between;">
+            <span><i class="bi bi-cpu text-primary me-1"></i> Mode Autentikasi Pelanggan (Utama)</span>
+            <span class="badge bp" style="font-size:10px; padding:3px 8px;">Diutamakan MikroTik API</span>
           </div>
-          <div class="fg"><label class="fl">Tag ONU (GenieACS)</label><input class="fc" name="genieacs_tag" placeholder="Sama dengan ID pelanggan"></div>
+          <div class="form-row" style="margin-bottom:0;" id="add_radius_select_fg">
+            <div class="fg" style="margin-bottom:0;">
+              <select class="fs" name="is_radius" id="add_is_radius" style="font-weight:700; height:42px;" onchange="handleAuthModeChange('add', this.value)">
+                <option value="0" selected>⚡ MikroTik API (Lokal /ppp secret - Utama & Default)</option>
+                <option value="1">📡 RADIUS Server (Billing Database Only)</option>
+              </select>
+              <small class="text-muted" style="font-size:11px; display:block; margin-top:4px;">
+                Mode MikroTik API mengelola kredensial PPP langsung di menu /ppp secret RouterOS MikroTik.
+              </small>
+            </div>
+          </div>
         </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Router MikroTik</label>
-            <select class="fs" name="router_id" id="add_router_select" onchange="loadRouterLists('add', this.value)">
-              <option value="">-- Default (Pengaturan) --</option>
-              <% if (typeof routers !== 'undefined') { %>
-                <% routers.forEach(r => { %>
-                  <option value="<%= r.id %>"><%= r.name %> (<%= r.host %>)</option>
+
+        <!-- SECTION 2: INFORMASI PELANGGAN -->
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="font-size:13px; color:var(--text);"><i class="bi bi-person-vcard text-info me-1"></i> Informasi Pribadi Pelanggan</div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Nama Lengkap *</label><input class="fc" name="name" required placeholder="Contoh: John Doe"></div>
+            <div class="fg"><label class="fl">No. Telepon / WA *</label><input class="fc" name="phone" placeholder="Contoh: 08123456789" required></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Email (Notifikasi Billing)</label><input class="fc" name="email" type="email" placeholder="customer@example.com"></div>
+            <div class="fg">
+              <label class="fl"><i class="bi bi-geo-alt"></i> Area / Wilayah</label>
+              <select class="fs" name="area" id="add_area">
+                <option value="">-- Pilih Area --</option>
+                <% if (typeof masterAreas !== 'undefined' && masterAreas && masterAreas.length > 0) { %>
+                  <% masterAreas.forEach(a => { %>
+                    <option value="<%= a.name %>"><%= a.name %></option>
+                  <% }) %>
+                <% } else if (typeof areas !== 'undefined') { %>
+                  <% areas.forEach(a => { %>
+                    <option value="<%= a %>"><%= a %></option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+          </div>
+          <div class="fg"><label class="fl">Alamat Lengkap</label><textarea class="fc" name="address" placeholder="Jl. Raya No. 123..."></textarea></div>
+        </div>
+
+        <!-- SECTION 3: PAKET & PENGATURAN KONEKSI -->
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="font-size:13px; color:var(--text);"><i class="bi bi-router text-warning me-1"></i> Paket & Akses Jaringan (MikroTik / RADIUS)</div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Paket Internet *</label>
+              <select class="fs" name="package_id" required>
+                <option value="">-- Pilih Paket --</option>
+                <% packages.forEach(p => { %>
+                <option value="<%= p.id %>"><%= p.name %> — Rp <%= p.price.toLocaleString('id-ID') %></option>
                 <% }) %>
-              <% } %>
-            </select>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Router MikroTik</label>
+              <select class="fs" name="router_id" id="add_router_select" onchange="loadRouterLists('add', this.value)">
+                <option value="">-- Default (Pengaturan) --</option>
+                <% if (typeof routers !== 'undefined') { %>
+                  <% routers.forEach(r => { %>
+                    <option value="<%= r.id %>"><%= r.name %> (<%= r.host %>)</option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
           </div>
-          <div class="fg">
-            <label class="fl">Metode Koneksi</label>
-            <select class="fs" name="connection_type" id="add_connection_type" onchange="toggleConnectionFields('add')">
-              <option value="pppoe">PPPoE (MikroTik)</option>
-              <option value="static">Static IP (MikroTik)</option>
-              <option value="hotspot">Hotspot (MikroTik)</option>
-            </select>
+
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Metode Koneksi</label>
+              <select class="fs" name="connection_type" id="add_connection_type" onchange="toggleConnectionFields('add')">
+                <option value="pppoe" selected>PPPoE (RADIUS / MikroTik)</option>
+                <option value="static">Static IP (MikroTik)</option>
+                <option value="hotspot">Hotspot (MikroTik)</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Tag ONU (GenieACS)</label>
+              <input class="fc" name="genieacs_tag" placeholder="Sama dengan ID/User Pelanggan">
+            </div>
           </div>
-          <div class="fg" id="add_radius_select_fg">
-            <label class="fl"><i class="bi bi-broadcast text-primary me-1"></i> Mode Autentikasi PPP</label>
-            <select class="fs" name="is_radius" id="add_is_radius">
-              <option value="1" selected>RADIUS Server (Billing Database Only)</option>
-              <option value="0">Lokal MikroTik (/ppp secret)</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="fg" id="add_pppoe_field">
-            <div class="form-row">
+
+          <!-- KREDENSIAL PPPoE / RADIUS -->
+          <div id="add_pppoe_field">
+            <div class="form-row" style="background:rgba(59,130,246,0.04); padding:12px 14px; border-radius:10px; border:1px solid rgba(59,130,246,0.15);">
               <div class="fg">
-                <label class="fl">PPPoE Username</label>
-                <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-                  <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px">
+                <label class="fl" style="font-weight:700; color:var(--primary);"><i class="bi bi-person-fill"></i> PPPoE Username *</label>
+                <div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">
+                  <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:600;">
                     <input type="radio" name="pppoe_input_mode" value="mikrotik" checked onchange="togglePppoeInputMode('add')">
-                    <span>Dari MikroTik</span>
+                    <span>Pilih dari MikroTik (API)</span>
                   </label>
-                  <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px">
+                  <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:600;">
                     <input type="radio" name="pppoe_input_mode" value="manual" onchange="togglePppoeInputMode('add')">
-                    <span>Manual</span>
+                    <span>Input Manual (RADIUS)</span>
                   </label>
                 </div>
                 <div id="add_pppoe_mikrotik_input">
-                  <input class="fc" name="pppoe_username" list="add_pppoe_list" placeholder="Pilih / cari username PPPoE">
+                  <input class="fc" name="pppoe_username" list="add_pppoe_list" placeholder="Pilih / cari username PPPoE MikroTik">
                   <datalist id="add_pppoe_list"></datalist>
                   <div class="hint" id="add_pppoe_hint"></div>
                 </div>
                 <div id="add_pppoe_manual_input" style="display:none">
-                  <input class="fc" id="add_pppoe_username_manual" placeholder="Masukkan username PPPoE">
+                  <input class="fc" id="add_pppoe_username_manual" placeholder="Ketik username PPPoE baru...">
                 </div>
               </div>
               <div class="fg">
-                <label class="fl"><i class="bi bi-key-fill text-warning"></i> Password PPPoE / RADIUS</label>
-                <input class="fc" name="pppoe_password" id="add_pppoe_password" placeholder="Masukkan password PPPoE">
-                <small class="text-muted" style="font-size:10px;display:block;margin-top:2px">Password untuk autentikasi RADIUS / PPPoE MikroTik.</small>
+                <label class="fl" style="font-weight:700; color:var(--warning);"><i class="bi bi-key-fill"></i> Password PPPoE / RADIUS *</label>
+                <input class="fc" name="pppoe_password" id="add_pppoe_password" placeholder="Masukkan password PPPoE" required>
+                <small class="text-muted" style="font-size:10px;display:block;margin-top:4px">Kredensial login modem pelanggan untuk RADIUS & PPPoE.</small>
               </div>
             </div>
           </div>
-          <div class="fg" id="add_static_field" style="display:none">
-            <label class="fl">IP Address Pelanggan</label>
-            <input class="fc" name="static_ip" placeholder="Contoh: 192.168.10.10">
+
+          <!-- STATIC IP -->
+          <div class="form-row" id="add_static_field" style="display:none">
+            <div class="fg">
+              <label class="fl">IP Address Pelanggan</label>
+              <input class="fc" name="static_ip" placeholder="Contoh: 192.168.10.10">
+            </div>
+          </div>
+
+          <!-- HOTSPOT -->
+          <div id="add_hotspot_field" style="display:none">
+            <div class="form-row">
+              <div class="fg">
+                <label class="fl">Hotspot Username</label>
+                <input class="fc" name="hotspot_username" placeholder="Contoh: user01">
+              </div>
+              <div class="fg">
+                <label class="fl">Hotspot Password</label>
+                <input class="fc" name="hotspot_password" placeholder="Kosong = sama dengan username">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="fg">
+                <label class="fl">Hotspot User Profile</label>
+                <input class="fc" name="hotspot_profile" list="add_hotspot_profile_list" placeholder="Pilih profile hotspot">
+                <datalist id="add_hotspot_profile_list"></datalist>
+                <div class="hint" id="add_hotspot_profile_hint"></div>
+              </div>
+            </div>
           </div>
         </div>
-        <div id="add_hotspot_field" style="display:none">
+
+        <!-- SECTION 4: BILLING & OTOMASI -->
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="font-size:13px; color:var(--text);"><i class="bi bi-cash-stack text-success me-1"></i> Penagihan, Kolektor, & Status Akun</div>
           <div class="form-row">
             <div class="fg">
-              <label class="fl">Hotspot Username</label>
-              <input class="fc" name="hotspot_username" placeholder="Contoh: user01">
+              <label class="fl">Status Akun</label>
+              <select class="fs" name="status">
+                <option value="active" selected>Aktif</option>
+                <option value="suspended">Suspend / Isolir</option>
+                <option value="inactive">Nonaktif</option>
+              </select>
+            </div>
+            <div class="fg"><label class="fl">Tanggal Pasang</label><input class="fc" type="date" name="install_date"></div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Isolir Otomatis</label>
+              <select class="fs" name="auto_isolate">
+                <option value="1" selected>Aktif (Auto-Isolir Jatuh Tempo)</option>
+                <option value="0">Bebas Isolir (Tidak Pernah Isolir)</option>
+              </select>
             </div>
             <div class="fg">
-              <label class="fl">Hotspot Password</label>
-              <input class="fc" name="hotspot_password" placeholder="Kosong = sama dengan username">
+              <label class="fl">Tanggal Isolir (1-31)</label>
+              <input class="fc" type="number" name="isolate_day" value="10" min="1" max="31">
             </div>
           </div>
           <div class="form-row">
             <div class="fg">
-              <label class="fl">Hotspot User Profile</label>
-              <input class="fc" name="hotspot_profile" list="add_hotspot_profile_list" placeholder="Pilih profile hotspot">
-              <datalist id="add_hotspot_profile_list"></datalist>
-              <div class="hint" id="add_hotspot_profile_hint"></div>
+              <label class="fl"><i class="bi bi-person-badge"></i> Kolektor Penagihan</label>
+              <select class="fs" name="collector_id" id="add_collector_id">
+                <option value="">-- Tanpa Kolektor --</option>
+                <% if (typeof collectors !== 'undefined') { %>
+                  <% collectors.forEach(col => { %>
+                    <option value="<%= col.id %>" data-area="<%= col.area || '' %>"><%= col.name %> (<%= col.username %>)<%= col.area ? ' [Area: ' + col.area + ']' : '' %></option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Profile Isolir / Address List</label>
+              <select class="fs" name="isolir_profile" id="add_isolir_select">
+                <option value="isolir">isolir</option>
+              </select>
             </div>
           </div>
         </div>
-        <div class="form-row">
-          <div class="fg" id="add_mac_field" style="display:none">
-            <label class="fl">MAC Address (Optional)</label>
-            <input class="fc" name="mac_address" placeholder="Contoh: AA:BB:CC:DD:EE:FF">
-          </div>
-          <div class="fg" style="max-width:200px">
-            <label class="fl">Profile Isolir / Address List</label>
-            <select class="fs" name="isolir_profile" id="add_isolir_select">
-              <option value="isolir">isolir</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Status</label>
-            <select class="fs" name="status">
-              <option value="active">Aktif</option>
-              <option value="suspended">Suspend</option>
-              <option value="inactive">Nonaktif</option>
-            </select>
-          </div>
-          <div class="fg"><label class="fl">Tanggal Pasang</label><input class="fc" type="date" name="install_date"></div>
-        </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Isolir Otomatis</label>
-            <select class="fs" name="auto_isolate">
-              <option value="1">Aktif</option>
-              <option value="0">Tidak Aktif</option>
-            </select>
-          </div>
-          <div class="fg">
-            <label class="fl">Tanggal Isolir (1-31)</label>
-            <input class="fc" type="number" name="isolate_day" value="10" min="1" max="31">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl"><i class="bi bi-geo-alt"></i> Area / Wilayah</label>
-            <select class="fs" name="area" id="add_area">
-              <option value="">-- Pilih Area --</option>
-              <% if (typeof masterAreas !== 'undefined' && masterAreas && masterAreas.length > 0) { %>
-                <% masterAreas.forEach(a => { %>
-                  <option value="<%= a.name %>"><%= a.name %></option>
-                <% }) %>
-              <% } else if (typeof areas !== 'undefined') { %>
-                <% areas.forEach(a => { %>
-                  <option value="<%= a %>"><%= a %></option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-          <div class="fg">
-            <label class="fl">
-              <i class="bi bi-person-badge"></i> Kolektor Penagihan
-            </label>
-            <select class="fs" name="collector_id" id="add_collector_id">
-              <option value="">-- Tanpa Kolektor --</option>
-              <% if (typeof collectors !== 'undefined') { %>
-                <% collectors.forEach(col => { %>
-                  <option value="<%= col.id %>" data-area="<%= col.area || '' %>"><%= col.name %> (<%= col.username %>)<%= col.area ? ' [Area: ' + col.area + ']' : '' %></option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Perangkat OLT</label>
-            <select class="fs" name="olt_id">
-              <option value="">-- Tanpa OLT --</option>
-              <% if (typeof olts !== 'undefined') { %>
-                <% olts.forEach(o => { %>
-                  <option value="<%= o.id %>"><%= o.name %> (<%= o.brand %>)</option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-          <div class="fg">
-            <label class="fl">ODP</label>
-            <select class="fs" name="odp_id">
-              <option value="">-- Tanpa ODP --</option>
-              <% if (typeof odps !== 'undefined') { %>
-                <% odps.forEach(o => { %>
-                  <option value="<%= o.id %>"><%= o.name %></option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-        </div>
-        <div class="fg"><label class="fl">Port PON / ODP</label><input class="fc" name="pon_port" placeholder="Contoh: PON 1/1, ODP-01"></div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Latitude</label>
-            <input class="fc" name="lat" id="add_lat" placeholder="-6.xxx">
-          </div>
-          <div class="fg">
-            <label class="fl">Longitude</label>
-            <div style="display:flex;gap:4px">
-              <input class="fc" name="lng" id="add_lng" placeholder="106.xxx">
-              <button type="button" class="btn btn-g btn-sm" onclick="openPicker('add')" title="Pilih di Peta"><i class="bi bi-geo-alt"></i></button>
+
+        <!-- SECTION 5: OPSEK & INFRASTRUKTUR (OLT, ODP, KOORDINAT) -->
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="font-size:13px; color:var(--text);"><i class="bi bi-diagram-3 text-secondary me-1"></i> Infrastruktur (OLT, ODP, & Peta)</div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Perangkat OLT</label>
+              <select class="fs" name="olt_id">
+                <option value="">-- Tanpa OLT --</option>
+                <% if (typeof olts !== 'undefined') { %>
+                  <% olts.forEach(o => { %>
+                    <option value="<%= o.id %>"><%= o.name %> (<%= o.brand %>)</option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">ODP</label>
+              <select class="fs" name="odp_id">
+                <option value="">-- Tanpa ODP --</option>
+                <% if (typeof odps !== 'undefined') { %>
+                  <% odps.forEach(o => { %>
+                    <option value="<%= o.id %>"><%= o.name %></option>
+                  <% }) %>
+                <% } %>
+              </select>
             </div>
           </div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Port PON / ODP</label><input class="fc" name="pon_port" placeholder="Contoh: PON 1/1, ODP-01"></div>
+            <div class="fg" id="add_mac_field" style="display:none">
+              <label class="fl">MAC Address (Opsional)</label>
+              <input class="fc" name="mac_address" placeholder="Contoh: AA:BB:CC:DD:EE:FF">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Latitude</label><input class="fc" name="lat" id="add_lat" placeholder="-6.xxx"></div>
+            <div class="fg">
+              <label class="fl">Longitude</label>
+              <div style="display:flex;gap:4px">
+                <input class="fc" name="lng" id="add_lng" placeholder="106.xxx">
+                <button type="button" class="btn btn-g btn-sm" onclick="openPicker('add')" title="Pilih di Peta"><i class="bi bi-geo-alt"></i></button>
+              </div>
+            </div>
+          </div>
+          <div class="fg" style="margin-top:10px;"><label class="fl">Catatan</label><textarea class="fc" name="notes" placeholder="Catatan internal opsional..."></textarea></div>
         </div>
-        <div class="fg"><label class="fl">Catatan</label><textarea class="fc" name="notes" placeholder="Opsional..."></textarea></div>
+
       </div>
       <div class="mf">
         <button type="button" class="btn btn-g" onclick="closeModal('addModal')">Batal</button>
@@ -493,205 +549,246 @@
 
 <!-- Modal Edit -->
 <div class="mo" id="editModal">
-  <div class="mb">
+  <div class="mb" style="max-width:720px;">
     <div class="mh"><span class="mt"><i class="bi bi-pencil"></i> Edit Pelanggan</span><button class="mc" onclick="closeModal('editModal')">&times;</button></div>
     <form method="POST" id="editForm">
-      <div class="mbody">
-        <div class="form-row">
-          <div class="fg"><label class="fl">Nama Lengkap *</label><input class="fc" name="name" id="e_name" required></div>
-          <div class="fg"><label class="fl">No. Telepon / WA</label><input class="fc" name="phone" id="e_phone"></div>
-        </div>
-        <div class="fg"><label class="fl">Email (Untuk Notifikasi Payment)</label><input class="fc" name="email" id="e_email" type="email"></div>
-        <div class="fg"><label class="fl">Alamat</label><textarea class="fc" name="address" id="e_address"></textarea></div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Paket Internet</label>
-            <select class="fs" name="package_id" id="e_package">
-              <option value="">-- Pilih Paket --</option>
-              <% packages.forEach(p => { %>
-              <option value="<%= p.id %>"><%= p.name %> — Rp <%= p.price.toLocaleString('id-ID') %></option>
-              <% }) %>
-            </select>
+      <div class="mbody" style="max-height:75vh; overflow-y:auto; padding-right:6px;">
+        
+        <!-- SECTION 1: MODE AUTENTIKASI KONEKSI (UTAMA) -->
+        <div style="background: rgba(99, 102, 241, 0.08); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.25); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="color:var(--primary); font-size:13px; display:flex; align-items:center; justify-content:space-between;">
+            <span><i class="bi bi-cpu text-primary me-1"></i> Mode Autentikasi Pelanggan (Utama)</span>
+            <span class="badge bp" style="font-size:10px; padding:3px 8px;">Diutamakan MikroTik API</span>
           </div>
-          <div class="fg"><label class="fl">Tag ONU (GenieACS)</label><input class="fc" name="genieacs_tag" id="e_tag"></div>
+          <div class="form-row" style="margin-bottom:0;" id="e_radius_select_fg">
+            <div class="fg" style="margin-bottom:0;">
+              <select class="fs" name="is_radius" id="e_is_radius" style="font-weight:700; height:42px;" onchange="handleAuthModeChange('edit', this.value)">
+                <option value="0">⚡ MikroTik API (Lokal /ppp secret - Utama & Default)</option>
+                <option value="1">📡 RADIUS Server (Billing Database Only)</option>
+              </select>
+              <small class="text-muted" style="font-size:11px; display:block; margin-top:4px;">
+                Mode MikroTik API mengelola kredensial PPP langsung di menu /ppp secret RouterOS MikroTik.
+              </small>
+            </div>
+          </div>
         </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Router MikroTik</label>
-            <select class="fs" name="router_id" id="e_router_id" onchange="loadRouterLists('edit', this.value)">
-              <option value="">-- Default (Pengaturan) --</option>
-              <% if (typeof routers !== 'undefined') { %>
-                <% routers.forEach(r => { %>
-                  <option value="<%= r.id %>"><%= r.name %> (<%= r.host %>)</option>
+
+        <!-- SECTION 2: INFORMASI PELANGGAN -->
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="font-size:13px; color:var(--text);"><i class="bi bi-person-vcard text-info me-1"></i> Informasi Pribadi Pelanggan</div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Nama Lengkap *</label><input class="fc" name="name" id="e_name" required></div>
+            <div class="fg"><label class="fl">No. Telepon / WA *</label><input class="fc" name="phone" id="e_phone" required></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Email (Notifikasi Billing)</label><input class="fc" name="email" id="e_email" type="email"></div>
+            <div class="fg">
+              <label class="fl"><i class="bi bi-geo-alt"></i> Area / Wilayah</label>
+              <select class="fs" name="area" id="e_area">
+                <option value="">-- Pilih Area --</option>
+                <% if (typeof masterAreas !== 'undefined' && masterAreas && masterAreas.length > 0) { %>
+                  <% masterAreas.forEach(a => { %>
+                    <option value="<%= a.name %>"><%= a.name %></option>
+                  <% }) %>
+                <% } else if (typeof areas !== 'undefined') { %>
+                  <% areas.forEach(a => { %>
+                    <option value="<%= a %>"><%= a %></option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+          </div>
+          <div class="fg"><label class="fl">Alamat Lengkap</label><textarea class="fc" name="address" id="e_address"></textarea></div>
+        </div>
+
+        <!-- SECTION 3: PAKET & PENGATURAN KONEKSI -->
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="font-size:13px; color:var(--text);"><i class="bi bi-router text-warning me-1"></i> Paket & Akses Jaringan (MikroTik / RADIUS)</div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Paket Internet *</label>
+              <select class="fs" name="package_id" id="e_package" required>
+                <option value="">-- Pilih Paket --</option>
+                <% packages.forEach(p => { %>
+                <option value="<%= p.id %>"><%= p.name %> — Rp <%= p.price.toLocaleString('id-ID') %></option>
                 <% }) %>
-              <% } %>
-            </select>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Router MikroTik</label>
+              <select class="fs" name="router_id" id="e_router_id" onchange="loadRouterLists('edit', this.value)">
+                <option value="">-- Default (Pengaturan) --</option>
+                <% if (typeof routers !== 'undefined') { %>
+                  <% routers.forEach(r => { %>
+                    <option value="<%= r.id %>"><%= r.name %> (<%= r.host %>)</option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
           </div>
-          <div class="fg">
-            <label class="fl">Metode Koneksi</label>
-            <select class="fs" name="connection_type" id="e_connection_type" onchange="toggleConnectionFields('edit')">
-              <option value="pppoe">PPPoE (MikroTik)</option>
-              <option value="static">Static IP (MikroTik)</option>
-              <option value="hotspot">Hotspot (MikroTik)</option>
-            </select>
+
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Metode Koneksi</label>
+              <select class="fs" name="connection_type" id="e_connection_type" onchange="toggleConnectionFields('edit')">
+                <option value="pppoe">PPPoE (RADIUS / MikroTik)</option>
+                <option value="static">Static IP (MikroTik)</option>
+                <option value="hotspot">Hotspot (MikroTik)</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Tag ONU (GenieACS)</label>
+              <input class="fc" name="genieacs_tag" id="e_tag">
+            </div>
           </div>
-          <div class="fg" id="e_radius_select_fg">
-            <label class="fl"><i class="bi bi-broadcast text-primary me-1"></i> Mode Autentikasi PPP</label>
-            <select class="fs" name="is_radius" id="e_is_radius">
-              <option value="1">RADIUS Server (Billing Database Only)</option>
-              <option value="0">Lokal MikroTik (/ppp secret)</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="fg" id="e_pppoe_field">
-            <div class="form-row">
+
+          <!-- KREDENSIAL PPPoE / RADIUS -->
+          <div id="e_pppoe_field">
+            <div class="form-row" style="background:rgba(59,130,246,0.04); padding:12px 14px; border-radius:10px; border:1px solid rgba(59,130,246,0.15);">
               <div class="fg">
-                <label class="fl">PPPoE Username</label>
-                <input class="fc" name="pppoe_username" id="e_pppoe" list="e_pppoe_list" placeholder="Pilih / cari dari MikroTik">
+                <label class="fl" style="font-weight:700; color:var(--primary);"><i class="bi bi-person-fill"></i> PPPoE Username *</label>
+                <input class="fc" name="pppoe_username" id="e_pppoe" list="e_pppoe_list" placeholder="PPPoE Username" required>
                 <datalist id="e_pppoe_list"></datalist>
                 <div class="hint" id="e_pppoe_hint"></div>
               </div>
               <div class="fg">
-                <label class="fl"><i class="bi bi-key-fill text-warning"></i> Password PPPoE / RADIUS</label>
-                <input class="fc" name="pppoe_password" id="e_pppoe_password" placeholder="Masukkan password PPPoE">
+                <label class="fl" style="font-weight:700; color:var(--warning);"><i class="bi bi-key-fill"></i> Password PPPoE / RADIUS *</label>
+                <input class="fc" name="pppoe_password" id="e_pppoe_password" placeholder="Masukkan password PPPoE" required>
+                <small class="text-muted" style="font-size:10px;display:block;margin-top:4px">Kredensial login modem pelanggan untuk RADIUS & PPPoE.</small>
               </div>
             </div>
           </div>
-          <div class="fg" id="e_static_field" style="display:none">
-            <label class="fl">IP Address Pelanggan</label>
-            <input class="fc" name="static_ip" id="e_static_ip" placeholder="Contoh: 192.168.10.10">
+
+          <!-- STATIC IP -->
+          <div class="form-row" id="e_static_field" style="display:none">
+            <div class="fg">
+              <label class="fl">IP Address Pelanggan</label>
+              <input class="fc" name="static_ip" id="e_static_ip" placeholder="Contoh: 192.168.10.10">
+            </div>
+          </div>
+
+          <!-- HOTSPOT -->
+          <div id="e_hotspot_field" style="display:none">
+            <div class="form-row">
+              <div class="fg">
+                <label class="fl">Hotspot Username</label>
+                <input class="fc" name="hotspot_username" id="e_hotspot_username" placeholder="Contoh: user01">
+              </div>
+              <div class="fg">
+                <label class="fl">Hotspot Password</label>
+                <input class="fc" name="hotspot_password" id="e_hotspot_password" placeholder="Kosong = sama dengan username">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="fg">
+                <label class="fl">Hotspot User Profile</label>
+                <input class="fc" name="hotspot_profile" id="e_hotspot_profile" list="e_hotspot_profile_list" placeholder="Pilih profile hotspot">
+                <datalist id="e_hotspot_profile_list"></datalist>
+                <div class="hint" id="e_hotspot_profile_hint"></div>
+              </div>
+            </div>
           </div>
         </div>
-        <div id="e_hotspot_field" style="display:none">
+
+        <!-- SECTION 4: BILLING & OTOMASI -->
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="font-size:13px; color:var(--text);"><i class="bi bi-cash-stack text-success me-1"></i> Penagihan, Kolektor, & Status Akun</div>
           <div class="form-row">
             <div class="fg">
-              <label class="fl">Hotspot Username</label>
-              <input class="fc" name="hotspot_username" id="e_hotspot_username" placeholder="Contoh: user01">
+              <label class="fl">Status Akun</label>
+              <select class="fs" name="status" id="e_status">
+                <option value="active">Aktif</option>
+                <option value="suspended">Suspend / Isolir</option>
+                <option value="inactive">Nonaktif</option>
+              </select>
+            </div>
+            <div class="fg"><label class="fl">Tanggal Pasang</label><input class="fc" type="date" name="install_date" id="e_install"></div>
+          </div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Isolir Otomatis</label>
+              <select class="fs" name="auto_isolate" id="e_auto_isolate">
+                <option value="1">Aktif (Auto-Isolir Jatuh Tempo)</option>
+                <option value="0">Bebas Isolir (Tidak Pernah Isolir)</option>
+              </select>
             </div>
             <div class="fg">
-              <label class="fl">Hotspot Password</label>
-              <input class="fc" name="hotspot_password" id="e_hotspot_password" placeholder="Kosong = sama dengan username">
+              <label class="fl">Tanggal Isolir (1-31)</label>
+              <input class="fc" type="number" name="isolate_day" id="e_isolate_day" min="1" max="31">
             </div>
           </div>
           <div class="form-row">
             <div class="fg">
-              <label class="fl">Hotspot User Profile</label>
-              <input class="fc" name="hotspot_profile" id="e_hotspot_profile" list="e_hotspot_profile_list" placeholder="Pilih profile hotspot">
-              <datalist id="e_hotspot_profile_list"></datalist>
-              <div class="hint" id="e_hotspot_profile_hint"></div>
+              <label class="fl"><i class="bi bi-person-badge"></i> Kolektor Penagihan</label>
+              <select class="fs" name="collector_id" id="e_collector_id">
+                <option value="">-- Tanpa Kolektor --</option>
+                <% if (typeof collectors !== 'undefined') { %>
+                  <% collectors.forEach(col => { %>
+                    <option value="<%= col.id %>" data-area="<%= col.area || '' %>"><%= col.name %> (<%= col.username %>)<%= col.area ? ' [Area: ' + col.area + ']' : '' %></option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">Profile Isolir / Address List</label>
+              <select class="fs" name="isolir_profile" id="e_isolir_profile">
+                <option value="isolir">isolir</option>
+              </select>
             </div>
           </div>
         </div>
-        <div class="form-row">
-          <div class="fg" id="e_mac_field" style="display:none">
-            <label class="fl">MAC Address (Optional)</label>
-            <input class="fc" name="mac_address" id="e_mac_address" placeholder="Contoh: AA:BB:CC:DD:EE:FF">
-          </div>
-          <div class="fg" style="max-width:200px">
-            <label class="fl">Profile Isolir / Address List</label>
-            <select class="fs" name="isolir_profile" id="e_isolir_profile">
-              <option value="isolir">isolir</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Status</label>
-            <select class="fs" name="status" id="e_status">
-              <option value="active">Aktif</option>
-              <option value="suspended">Suspend</option>
-              <option value="inactive">Nonaktif</option>
-            </select>
-          </div>
-          <div class="fg"><label class="fl">Tanggal Pasang</label><input class="fc" type="date" name="install_date" id="e_install"></div>
-        </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Isolir Otomatis</label>
-            <select class="fs" name="auto_isolate" id="e_auto_isolate">
-              <option value="1">Aktif</option>
-              <option value="0">Tidak Aktif</option>
-            </select>
-          </div>
-          <div class="fg">
-            <label class="fl">Tanggal Isolir (1-31)</label>
-            <input class="fc" type="number" name="isolate_day" id="e_isolate_day" min="1" max="31">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl"><i class="bi bi-geo-alt"></i> Area / Wilayah</label>
-            <select class="fs" name="area" id="e_area">
-              <option value="">-- Pilih Area --</option>
-              <% if (typeof masterAreas !== 'undefined' && masterAreas && masterAreas.length > 0) { %>
-                <% masterAreas.forEach(a => { %>
-                  <option value="<%= a.name %>"><%= a.name %></option>
-                <% }) %>
-              <% } else if (typeof areas !== 'undefined') { %>
-                <% areas.forEach(a => { %>
-                  <option value="<%= a %>"><%= a %></option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-          <div class="fg">
-            <label class="fl">
-              <i class="bi bi-person-badge"></i> Kolektor Penagihan
-            </label>
-            <select class="fs" name="collector_id" id="e_collector_id">
-              <option value="">-- Tanpa Kolektor --</option>
-              <% if (typeof collectors !== 'undefined') { %>
-                <% collectors.forEach(col => { %>
-                  <option value="<%= col.id %>" data-area="<%= col.area || '' %>"><%= col.name %> (<%= col.username %>)<%= col.area ? ' [Area: ' + col.area + ']' : '' %></option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Perangkat OLT</label>
-            <select class="fs" name="olt_id" id="e_olt_id">
-              <option value="">-- Tanpa OLT --</option>
-              <% if (typeof olts !== 'undefined') { %>
-                <% olts.forEach(o => { %>
-                  <option value="<%= o.id %>"><%= o.name %> (<%= o.brand %>)</option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-          <div class="fg">
-            <label class="fl">ODP</label>
-            <select class="fs" name="odp_id" id="e_odp_id">
-              <option value="">-- Tanpa ODP --</option>
-              <% if (typeof odps !== 'undefined') { %>
-                <% odps.forEach(o => { %>
-                  <option value="<%= o.id %>"><%= o.name %></option>
-                <% }) %>
-              <% } %>
-            </select>
-          </div>
-        </div>
-        <div class="fg"><label class="fl">Port PON / ODP</label><input class="fc" name="pon_port" id="e_pon_port"></div>
-        <div class="form-row">
-          <div class="fg">
-            <label class="fl">Latitude</label>
-            <input class="fc" name="lat" id="e_lat" placeholder="-6.xxx">
-          </div>
-          <div class="fg">
-            <label class="fl">Longitude</label>
-            <div style="display:flex;gap:4px">
-              <input class="fc" name="lng" id="e_lng" placeholder="106.xxx">
-              <button type="button" class="btn btn-g btn-sm" onclick="openPicker('edit')" title="Pilih di Peta"><i class="bi bi-geo-alt"></i></button>
+
+        <!-- SECTION 5: OPSEK & INFRASTRUKTUR (OLT, ODP, KOORDINAT) -->
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
+          <div class="fw6 mb-2" style="font-size:13px; color:var(--text);"><i class="bi bi-diagram-3 text-secondary me-1"></i> Infrastruktur (OLT, ODP, & Peta)</div>
+          <div class="form-row">
+            <div class="fg">
+              <label class="fl">Perangkat OLT</label>
+              <select class="fs" name="olt_id" id="e_olt_id">
+                <option value="">-- Tanpa OLT --</option>
+                <% if (typeof olts !== 'undefined') { %>
+                  <% olts.forEach(o => { %>
+                    <option value="<%= o.id %>"><%= o.name %> (<%= o.brand %>)</option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fl">ODP</label>
+              <select class="fs" name="odp_id" id="e_odp_id">
+                <option value="">-- Tanpa ODP --</option>
+                <% if (typeof odps !== 'undefined') { %>
+                  <% odps.forEach(o => { %>
+                    <option value="<%= o.id %>"><%= o.name %></option>
+                  <% }) %>
+                <% } %>
+              </select>
             </div>
           </div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Port PON / ODP</label><input class="fc" name="pon_port" id="e_pon_port"></div>
+            <div class="fg" id="e_mac_field" style="display:none">
+              <label class="fl">MAC Address (Opsional)</label>
+              <input class="fc" name="mac_address" id="e_mac_address" placeholder="Contoh: AA:BB:CC:DD:EE:FF">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="fl">Latitude</label><input class="fc" name="lat" id="e_lat" placeholder="-6.xxx"></div>
+            <div class="fg">
+              <label class="fl">Longitude</label>
+              <div style="display:flex;gap:4px">
+                <input class="fc" name="lng" id="e_lng" placeholder="106.xxx">
+                <button type="button" class="btn btn-g btn-sm" onclick="openPicker('edit')" title="Pilih di Peta"><i class="bi bi-geo-alt"></i></button>
+              </div>
+            </div>
+          </div>
+          <div class="fg" style="margin-top:10px;"><label class="fl">Catatan</label><textarea class="fc" name="notes" id="e_notes" placeholder="Catatan internal opsional..."></textarea></div>
         </div>
-        <div class="fg"><label class="fl">Catatan</label><textarea class="fc" name="notes" id="e_notes"></textarea></div>
+
       </div>
       <div class="mf">
         <button type="button" class="btn btn-g" onclick="closeModal('editModal')">Batal</button>
-        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Update</button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Update Pelanggan</button>
       </div>
     </form>
   </div>
@@ -1242,6 +1339,20 @@ function updateInputs(lat, lng) {
   const prefix = activePickerType === 'add' ? 'add_' : 'e_';
   document.getElementById(prefix + 'lat').value = lat.toFixed(8);
   document.getElementById(prefix + 'lng').value = lng.toFixed(8);
+}
+
+function handleAuthModeChange(type, val) {
+  const isRadius = String(val) === '1';
+  if (type === 'add') {
+    const radioMikrotik = document.querySelector('#addModal input[name="pppoe_input_mode"][value="mikrotik"]');
+    const radioManual = document.querySelector('#addModal input[name="pppoe_input_mode"][value="manual"]');
+    if (isRadius) {
+      if (radioManual) radioManual.checked = true;
+    } else {
+      if (radioMikrotik) radioMikrotik.checked = true;
+    }
+    togglePppoeInputMode('add');
+  }
 }
 
 function togglePppoeInputMode(type) {

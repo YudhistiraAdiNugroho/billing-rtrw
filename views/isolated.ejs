@@ -403,10 +403,16 @@
       </div>
 
       <div class="status-message loading">
-        <div class="spinner"></div> Mengaktifkan layanan...
+        <div class="spinner"></div> Tagihan Lunas! Klik tombol di bawah jika koneksi belum merefresh otomatis:
       </div>
 
-      <p class="description" style="text-align: center;">Halaman akan dimuat ulang secara otomatis. Jika tidak berubah dalam 30 detik, silakan refresh halaman atau hubungi admin.</p>
+      <form action="/customer/reconnect" method="POST" style="margin-top:12px;margin-bottom:14px;">
+        <button type="submit" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);">
+          <i class="bi bi-arrow-repeat"></i> Re-Connect & Refresh Internet Sekarang
+        </button>
+      </form>
+
+      <p class="description" style="text-align: center;">Halaman akan dimuat ulang secara otomatis. Jika tidak berubah dalam 30 detik, silakan klik tombol Re-Connect di atas.</p>
     </div>
     <script>
       let checkCount = 0;
