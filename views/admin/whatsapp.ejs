@@ -39,10 +39,73 @@
     <% } %>
 
     <div class="wa-tabs">
-      <a href="/admin/whatsapp" class="wa-tab <%= waTab==='status' ? 'active' : '' %>"><i class="bi bi-phone"></i> Status</a>
+      <a href="/admin/whatsapp" class="wa-tab <%= waTab==='status' ? 'active' : '' %>"><i class="bi bi-phone"></i> Status Baileys</a>
       <a href="/admin/whatsapp/broadcast" class="wa-tab <%= waTab==='broadcast' ? 'active' : '' %>"><i class="bi bi-megaphone"></i> Broadcast & Pengingat</a>
       <a href="/admin/whatsapp/templates" class="wa-tab <%= waTab==='templates' ? 'active' : '' %>"><i class="bi bi-chat-left-quote"></i> Template Pesan</a>
+      <a href="/admin/whatsapp/live-chat" class="wa-tab"><i class="bi bi-chat-dots-fill"></i> Live Chat (Pesan Langsung)</a>
     </div>
+
+    <!-- PENGATURAN HYBRID GATEWAY (BAILEYS VS META API) -->
+    <div class="card mb16" style="padding: 20px;">
+      <h6 style="margin-bottom: 15px; font-weight: 700; color: var(--primary);"><i class="bi bi-sliders"></i> Mode WhatsApp Gateway & Meta Cloud API (Resmi)</h6>
+      
+      <form method="POST" action="/admin/whatsapp/gateway-settings">
+        <div class="form-row mb16">
+          <div class="fg">
+            <label class="fl">Pilihan Provider / Gateway WhatsApp</label>
+            <select class="fs" name="wa_gateway_type" id="wa_gateway_type" onchange="toggleMetaFields()">
+              <option value="baileys" <%= waGatewayType === 'baileys' ? 'selected' : '' %>>🌐 Baileys Web (Unofficial - Gratis & Scan QR Code)</option>
+              <option value="meta" <%= waGatewayType === 'meta' ? 'selected' : '' %>>🟢 Meta Cloud API (Official - Resmi Meta & Anti-Banned)</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label class="fl">Nomor WA Pengirim (Business Phone)</label>
+            <input class="fc" name="meta_business_phone" value="<%= metaSettings.meta_business_phone %>" placeholder="Contoh: 628123456789">
+          </div>
+        </div>
+
+        <div id="meta_fields_container" style="<%= waGatewayType === 'meta' ? '' : 'display:none;' %> background: rgba(16, 185, 129, 0.04); padding: 16px; border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.2); margin-bottom: 16px;">
+          <div class="fw6 mb12" style="color: var(--success); font-size: 13px;"><i class="bi bi-shield-check"></i> Kredensial Meta WhatsApp Cloud API</div>
+          
+          <div class="form-row mb12">
+            <div class="fg">
+              <label class="fl">Meta Phone Number ID *</label>
+              <input class="fc" name="meta_phone_number_id" value="<%= metaSettings.meta_phone_number_id %>" placeholder="Contoh: 100654321987654">
+            </div>
+            <div class="fg">
+              <label class="fl">Meta Business Account ID (WABA ID)</label>
+              <input class="fc" name="meta_waba_id" value="<%= metaSettings.meta_waba_id %>" placeholder="Contoh: 109876543210987">
+            </div>
+          </div>
+
+          <div class="fg mb12">
+            <label class="fl">Meta Permanent Access Token *</label>
+            <textarea class="fc" name="meta_access_token" rows="2" placeholder="Paste Permanent Access Token Meta Graph API di sini..."><%= metaSettings.meta_access_token %></textarea>
+          </div>
+
+          <div class="fg">
+            <label class="fl">Webhook Verification Token (Verify Token)</label>
+            <input class="fc" name="meta_verify_token" value="<%= metaSettings.meta_verify_token %>" placeholder="Token Rahasia Webhook">
+          </div>
+
+          <div style="font-size: 11px; margin-top: 10px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
+            <strong style="color: var(--primary);"><i class="bi bi-link-45deg"></i> Callback Webhook URL untuk diajukan di Meta Developer Portal:</strong><br>
+            <code style="background:var(--bg3); padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 4px; user-select: all;">
+              http://<%= host %>/api/meta-webhook
+            </code>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-p"><i class="bi bi-save"></i> Simpan Pengaturan Gateway</button>
+      </form>
+    </div>
+
+    <script>
+      function toggleMetaFields() {
+        const val = document.getElementById('wa_gateway_type').value;
+        document.getElementById('meta_fields_container').style.display = val === 'meta' ? 'block' : 'none';
+      }
+    </script>
 
     <div class="card">
       <div class="wa-status-card">

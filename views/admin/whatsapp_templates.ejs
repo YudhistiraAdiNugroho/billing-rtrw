@@ -35,9 +35,10 @@
     <% } %>
 
     <div class="wa-tabs">
-      <a href="/admin/whatsapp" class="wa-tab <%= waTab==='status' ? 'active' : '' %>"><i class="bi bi-phone"></i> Status</a>
+      <a href="/admin/whatsapp" class="wa-tab <%= waTab==='status' ? 'active' : '' %>"><i class="bi bi-phone"></i> Status Baileys</a>
       <a href="/admin/whatsapp/broadcast" class="wa-tab <%= waTab==='broadcast' ? 'active' : '' %>"><i class="bi bi-megaphone"></i> Broadcast & Pengingat</a>
       <a href="/admin/whatsapp/templates" class="wa-tab <%= waTab==='templates' ? 'active' : '' %>"><i class="bi bi-chat-left-quote"></i> Template Pesan</a>
+      <a href="/admin/whatsapp/live-chat" class="wa-tab"><i class="bi bi-chat-dots-fill"></i> Live Chat (Pesan Langsung)</a>
     </div>
 
     <form method="POST" action="/admin/whatsapp/templates">
@@ -49,15 +50,15 @@
           <div>
             <div class="fg">
               <label class="fl">Template Pengingat Tagihan (Bulanan / Manual)</label>
-              <textarea class="fc" name="whatsapp_auto_billing_message" rows="8" required style="width: 100%;"><%= templates.whatsapp_auto_billing_message %></textarea>
-              <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
-                <i class="bi bi-info-circle"></i> Variabel: <b>{{nama}}</b>, <b>{{tagihan}}</b>, <b>{{rincian}}</b>, <b>{{paket}}</b>, <b>{{link}}</b>.
+              <textarea class="fc" id="tmpl_auto_billing" name="whatsapp_auto_billing_message" rows="8" required style="width: 100%;"><%= templates.whatsapp_auto_billing_message %></textarea>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 6px; display:flex; justify-between; align-items:center;">
+                <span><i class="bi bi-info-circle"></i> Variabel: <b>{{nama}}</b>, <b>{{tagihan}}</b>, <b>{{rincian}}</b>, <b>{{paket}}</b>, <b>{{link}}</b>.</span>
               </div>
             </div>
             
             <div class="fg" style="margin-top: 20px;">
               <label class="fl">Template Tagihan QRIS (Manual)</label>
-              <textarea class="fc" name="whatsapp_billing_qris_message" rows="8" required style="width: 100%;"><%= templates.whatsapp_billing_qris_message %></textarea>
+              <textarea class="fc" id="tmpl_billing_qris" name="whatsapp_billing_qris_message" rows="8" required style="width: 100%;"><%= templates.whatsapp_billing_qris_message %></textarea>
               <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
                 <i class="bi bi-info-circle"></i> Variabel: <b>{{nama}}</b>, <b>{{periode}}</b>, <b>{{paket}}</b>, <b>{{qris_nominal}}</b>, <b>{{qris_kode}}</b>, <b>{{qris_qr}}</b>.
               </div>
@@ -67,7 +68,7 @@
           <div>
             <div class="fg">
               <label class="fl">Template Pembayaran Sukses (Lunas)</label>
-              <textarea class="fc" name="whatsapp_payment_success_message" rows="8" required style="width: 100%;"><%= templates.whatsapp_payment_success_message %></textarea>
+              <textarea class="fc" id="tmpl_payment_success" name="whatsapp_payment_success_message" rows="8" required style="width: 100%;"><%= templates.whatsapp_payment_success_message %></textarea>
               <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
                 <i class="bi bi-info-circle"></i> Variabel: <b>{{nama}}</b>, <b>{{periode}}</b>, <b>{{total}}</b>, <b>{{metode}}</b>.
               </div>
@@ -75,21 +76,60 @@
 
             <div class="fg" style="margin-top: 20px;">
               <label class="fl">Template Pemberitahuan Isolir (Otomatis / Manual)</label>
-              <textarea class="fc" name="whatsapp_isolir_message" rows="8" required style="width: 100%;"><%= templates.whatsapp_isolir_message %></textarea>
+              <textarea class="fc" id="tmpl_isolir" name="whatsapp_isolir_message" rows="8" required style="width: 100%;"><%= templates.whatsapp_isolir_message %></textarea>
               <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">
                 <i class="bi bi-info-circle"></i> Variabel: <b>{{nama}}</b>, <b>{{paket}}</b>, <b>{{tagihan}}</b>, <b>{{link}}</b>.
               </div>
             </div>
           </div>
         </div>
-        <div class="card-bd" style="border-top: 1px solid var(--border); background: var(--bg2); display: flex; justify-content: space-between; align-items: center;">
-          <button type="button" class="btn btn-g" onclick="fillSpintaxPreset()"><i class="bi bi-magic"></i> Apply Spintax Anti-Ban Presets</button>
+        <div class="card-bd" style="border-top: 1px solid var(--border); background: var(--bg2); display: flex; flex-wrap:wrap; gap:10px; justify-content: space-between; align-items: center;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-g btn-sm" onclick="fillSpintaxPreset()"><i class="bi bi-magic"></i> Apply Spintax Anti-Ban Presets</button>
+            <button type="button" class="btn btn-w btn-sm" onclick="showMetaConverter()"><i class="bi bi-meta"></i> 🪄 Konversi Format Meta Cloud API</button>
+          </div>
           <button type="submit" class="btn btn-p"><i class="bi bi-save"></i> Simpan Template</button>
         </div>
       </div>
     </form>
+
+    <!-- MODAL META CONVERTER -->
+    <div class="mo" id="metaConverterModal">
+      <div class="mb" style="max-width: 680px;">
+        <div class="mh">
+          <span class="mt"><i class="bi bi-meta"></i> Tool Konversi Template Meta WhatsApp Cloud API</span>
+          <button type="button" class="mc" onclick="closeModal('metaConverterModal')">&times;</button>
+        </div>
+        <div class="mbody" style="max-height:70vh; overflow-y:auto;">
+          <div class="fg mb12">
+            <label class="fl">Pilih Template yang Akan Dikonversi ke Format Meta:</label>
+            <select class="fs" id="metaSourceSelect" onchange="convertCurrentTemplate()">
+              <option value="tmpl_auto_billing">Template Pengingat Tagihan</option>
+              <option value="tmpl_billing_qris">Template Tagihan QRIS</option>
+              <option value="tmpl_payment_success">Template Pembayaran Sukses</option>
+              <option value="tmpl_isolir">Template Pemberitahuan Isolir</option>
+            </select>
+          </div>
+
+          <div class="fg mb12">
+            <label class="fl">Hasil Format Teks Template untuk Meta Business Manager (Placeholder {{1}}, {{2}}...):</label>
+            <textarea class="fc" id="metaFormattedResult" rows="6" readonly style="background:var(--bg3); font-family:monospace;"></textarea>
+          </div>
+
+          <div class="fg mb12">
+            <label class="fl">Daftar Variabel Urutan Parameter (Components Payload):</label>
+            <div id="metaParamMapping" style="background:var(--bg3); padding:10px 14px; border-radius:8px; font-size:12px; font-family:monospace;"></div>
+          </div>
+        </div>
+        <div class="mf">
+          <button type="button" class="btn btn-g" onclick="closeModal('metaConverterModal')">Tutup</button>
+          <button type="button" class="btn btn-p" onclick="copyMetaTemplateResult()"><i class="bi bi-clipboard-check"></i> Salin Teks Meta</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
+
 <script>
 function fillSpintaxPreset() {
   if (!confirm('Isi otomatis form template dengan format Anti-Ban (Spintax)? Teks lama di form akan digantikan.')) return;
@@ -101,6 +141,61 @@ function fillSpintaxPreset() {
   document.querySelector('[name="whatsapp_payment_success_message"]').value = `{Terima kasih|Alhamdulillah}, {{nama}}!\n\nPembayaran tagihan internet periode *{{periode}}* sebesar *Rp {{total}}* melalui {{metode}} telah kami terima.\n\nStatus: *LUNAS*. Layanan internet Anda aktif.\n\nSalam,\nAdmin ` + company;
 
   document.querySelector('[name="whatsapp_isolir_message"]').value = `{Halo|Selamat Pagi|Yth.} Pelanggan {{nama}},\n\nLayanan internet Anda (Paket {{paket}}) saat ini {ditangguhkan|terisolir sementara} karena belum melunasi tagihan sebesar *Rp {{tagihan}}*.\n\n{Mohon segera|Silakan} lakukan pembayaran melalui portal pelanggan: {{link}}\n\nTerima kasih.`;
+}
+
+function showMetaConverter() {
+  document.getElementById('metaConverterModal').classList.add('show');
+  convertCurrentTemplate();
+}
+
+function convertCurrentTemplate() {
+  const selectId = document.getElementById('metaSourceSelect').value;
+  const sourceText = document.getElementById(selectId).value || '';
+
+  // Match all {{variable}} placeholders
+  const varMatches = [];
+  const regex = /\{\{([^}]+)\}\}/g;
+  let match;
+  let counter = 1;
+  const mapping = {};
+
+  let convertedText = sourceText;
+
+  // Clear spintax if present: {A|B|C} -> A
+  convertedText = convertedText.replace(/\{([^{}]+)\}/g, (full, choices) => {
+    return choices.split('|')[0];
+  });
+
+  while ((match = regex.exec(sourceText)) !== null) {
+    const varName = match[1].trim();
+    if (!mapping[varName]) {
+      mapping[varName] = `{{${counter}}}`;
+      varMatches.push({ index: counter, name: varName });
+      counter++;
+    }
+  }
+
+  // Replace {{name}} with {{1}}, {{2}}, etc.
+  for (const [varName, metaPlaceholder] of Object.entries(mapping)) {
+    const replaceReg = new RegExp(`\\{\\{${varName}\\}\\}`, 'g');
+    convertedText = convertedText.replace(replaceReg, metaPlaceholder);
+  }
+
+  document.getElementById('metaFormattedResult').value = convertedText;
+
+  if (varMatches.length === 0) {
+    document.getElementById('metaParamMapping').innerHTML = `<span class="text-muted">Tidak ada variabel {{variabel}} dalam template ini.</span>`;
+  } else {
+    document.getElementById('metaParamMapping').innerHTML = varMatches.map(v => `<b>{{${v.index}}}</b> ➔ ${v.name}`).join('<br>');
+  }
+}
+
+function copyMetaTemplateResult() {
+  const resultEl = document.getElementById('metaFormattedResult');
+  resultEl.select();
+  navigator.clipboard.writeText(resultEl.value).then(() => {
+    alert('Teks format Meta API berhasil disalin! Silakan paste di Meta Business Manager untuk pengajuan template.');
+  });
 }
 </script>
 </body>
