@@ -268,6 +268,8 @@
     <form method="POST" action="/admin/customers">
       <div class="mbody" style="max-height:75vh; overflow-y:auto; padding-right:6px;">
         
+        <% const isRadiusActive = (typeof settings !== 'undefined' && settings && String(settings.radius_enabled) === '1'); %>
+        <% if (isRadiusActive) { %>
         <!-- SECTION 1: MODE AUTENTIKASI KONEKSI (UTAMA) -->
         <div style="background: rgba(99, 102, 241, 0.08); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.25); margin-bottom: 16px;">
           <div class="fw6 mb-2" style="color:var(--primary); font-size:13px; display:flex; align-items:center; justify-content:space-between;">
@@ -286,6 +288,9 @@
             </div>
           </div>
         </div>
+        <% } else { %>
+          <input type="hidden" name="is_radius" id="add_is_radius" value="0">
+        <% } %>
 
         <!-- SECTION 2: INFORMASI PELANGGAN -->
         <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
@@ -345,7 +350,7 @@
             <div class="fg">
               <label class="fl">Metode Koneksi</label>
               <select class="fs" name="connection_type" id="add_connection_type" onchange="toggleConnectionFields('add')">
-                <option value="pppoe" selected>PPPoE (RADIUS / MikroTik)</option>
+                <option value="pppoe" selected><%= isRadiusActive ? 'PPPoE (RADIUS / MikroTik)' : 'PPPoE (MikroTik API)' %></option>
                 <option value="static">Static IP (MikroTik)</option>
                 <option value="hotspot">Hotspot (MikroTik)</option>
               </select>
@@ -361,6 +366,7 @@
             <div class="form-row" style="background:rgba(59,130,246,0.04); padding:12px 14px; border-radius:10px; border:1px solid rgba(59,130,246,0.15);">
               <div class="fg">
                 <label class="fl" style="font-weight:700; color:var(--primary);"><i class="bi bi-person-fill"></i> PPPoE Username *</label>
+                <% if (isRadiusActive) { %>
                 <div style="display:flex;gap:12px;align-items:center;margin-bottom:6px">
                   <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:600;">
                     <input type="radio" name="pppoe_input_mode" value="mikrotik" checked onchange="togglePppoeInputMode('add')">
@@ -371,6 +377,9 @@
                     <span>Input Manual (RADIUS)</span>
                   </label>
                 </div>
+                <% } else { %>
+                  <input type="hidden" name="pppoe_input_mode" value="mikrotik">
+                <% } %>
                 <div id="add_pppoe_mikrotik_input">
                   <input class="fc" name="pppoe_username" list="add_pppoe_list" placeholder="Pilih / cari username PPPoE MikroTik">
                   <datalist id="add_pppoe_list"></datalist>
@@ -381,9 +390,9 @@
                 </div>
               </div>
               <div class="fg">
-                <label class="fl" style="font-weight:700; color:var(--warning);"><i class="bi bi-key-fill"></i> Password PPPoE / RADIUS *</label>
+                <label class="fl" style="font-weight:700; color:var(--warning);"><i class="bi bi-key-fill"></i> <%= isRadiusActive ? 'Password PPPoE / RADIUS *' : 'Password PPPoE *' %></label>
                 <input class="fc" name="pppoe_password" id="add_pppoe_password" placeholder="Masukkan password PPPoE" required>
-                <small class="text-muted" style="font-size:10px;display:block;margin-top:4px">Kredensial login modem pelanggan untuk RADIUS & PPPoE.</small>
+                <small class="text-muted" style="font-size:10px;display:block;margin-top:4px"><%= isRadiusActive ? 'Kredensial login modem pelanggan untuk RADIUS & PPPoE.' : 'Kredensial login modem pelanggan untuk PPPoE MikroTik API.' %></small>
               </div>
             </div>
           </div>
@@ -554,6 +563,7 @@
     <form method="POST" id="editForm">
       <div class="mbody" style="max-height:75vh; overflow-y:auto; padding-right:6px;">
         
+        <% if (isRadiusActive) { %>
         <!-- SECTION 1: MODE AUTENTIKASI KONEKSI (UTAMA) -->
         <div style="background: rgba(99, 102, 241, 0.08); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.25); margin-bottom: 16px;">
           <div class="fw6 mb-2" style="color:var(--primary); font-size:13px; display:flex; align-items:center; justify-content:space-between;">
@@ -572,6 +582,9 @@
             </div>
           </div>
         </div>
+        <% } else { %>
+          <input type="hidden" name="is_radius" id="e_is_radius" value="0">
+        <% } %>
 
         <!-- SECTION 2: INFORMASI PELANGGAN -->
         <div style="background: rgba(255, 255, 255, 0.02); padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 16px;">
@@ -631,7 +644,7 @@
             <div class="fg">
               <label class="fl">Metode Koneksi</label>
               <select class="fs" name="connection_type" id="e_connection_type" onchange="toggleConnectionFields('edit')">
-                <option value="pppoe">PPPoE (RADIUS / MikroTik)</option>
+                <option value="pppoe"><%= isRadiusActive ? 'PPPoE (RADIUS / MikroTik)' : 'PPPoE (MikroTik API)' %></option>
                 <option value="static">Static IP (MikroTik)</option>
                 <option value="hotspot">Hotspot (MikroTik)</option>
               </select>
