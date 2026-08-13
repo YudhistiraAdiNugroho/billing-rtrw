@@ -2666,9 +2666,13 @@ router.post('/tickets/create', uploadCustomer.array('photos', 5), async (req, re
   const loginId = req.session && req.session.phone;
   if (!loginId) return res.redirect('/customer/login');
   
-  const { subject, message, customerId } = req.body;
+  const profile = findCustomerProfileByLoginId(loginId) ||
+    (req.session.pppoe_username ? findCustomerProfileByLoginId(req.session.pppoe_username) : null);
+
+  const customerId = req.body.customerId || (profile ? profile.id : null);
+  const { subject, message } = req.body;
   if (!subject || !message || !customerId) {
-    req.session._msg = { type: 'danger', text: 'Semua field harus diisi.' };
+    req.session._msg = { type: 'danger', text: 'Semua field wajib diisi.' };
     return res.redirect('/customer/dashboard');
   }
 
