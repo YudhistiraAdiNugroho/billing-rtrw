@@ -2,9 +2,13 @@ const db = require('../config/database');
 
 function getAllTickets(status = null) {
   let query = `
-    SELECT t.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, tech.name as technician_name
+    SELECT t.*, 
+           CASE WHEN t.customer_id IS NULL OR t.customer_id = 0 THEN 'Tugas Umum / Maintenance Admin' ELSE COALESCE(c.name, 'Pelanggan #' || t.customer_id) END as customer_name, 
+           COALESCE(c.phone, '-') as customer_phone, 
+           COALESCE(c.address, '-') as customer_address, 
+           tech.name as technician_name
     FROM tickets t
-    JOIN customers c ON t.customer_id = c.id
+    LEFT JOIN customers c ON (t.customer_id = c.id AND t.customer_id != 0)
     LEFT JOIN technicians tech ON t.technician_id = tech.id
   `;
   
@@ -29,37 +33,46 @@ function getTicketsByCustomerId(customerId) {
 
 function getTicketById(id) {
   return db.prepare(`
-    SELECT t.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, tech.name as technician_name
+    SELECT t.*, 
+           CASE WHEN t.customer_id IS NULL OR t.customer_id = 0 THEN 'Tugas Umum / Maintenance Admin' ELSE COALESCE(c.name, 'Pelanggan #' || t.customer_id) END as customer_name, 
+           COALESCE(c.phone, '-') as customer_phone, 
+           COALESCE(c.address, '-') as customer_address, 
+           tech.name as technician_name
     FROM tickets t
-    JOIN customers c ON t.customer_id = c.id
+    LEFT JOIN customers c ON (t.customer_id = c.id AND t.customer_id != 0)
     LEFT JOIN technicians tech ON t.technician_id = tech.id
     WHERE t.id = ?
   `).get(id);
 }
 
 function createTicket(customerId, subject, message, extraData = {}) {
-  const { customerPhotos, customerPhotoMetadata } = extraData;
+  const { customerPhotos, customerPhotoMetadata, technicianId, status } = extraData;
+  const custId = (customerId && parseInt(customerId, 10) > 0) ? parseInt(customerId, 10) : 0;
+  const techId = (technicianId && parseInt(technicianId, 10) > 0) ? parseInt(technicianId, 10) : null;
+  const initialStatus = status || (techId ? 'in_progress' : 'open');
   
-  if (customerPhotos || customerPhotoMetadata) {
-    return db.prepare(`
-      INSERT INTO tickets (customer_id, subject, message, customer_photos, customer_photo_metadata)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(customerId, subject, message, customerPhotos || '', customerPhotoMetadata || '');
-  } else {
-    return db.prepare(`
-      INSERT INTO tickets (customer_id, subject, message)
-      VALUES (?, ?, ?)
-    `).run(customerId, subject, message);
-  }
+  return db.prepare(`
+    INSERT INTO tickets (customer_id, subject, message, status, technician_id, customer_photos, customer_photo_metadata)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    custId,
+    subject,
+    message,
+    initialStatus,
+    techId,
+    customerPhotos || '',
+    customerPhotoMetadata || ''
+  );
 }
 
-function updateTicketStatus(id, status, technicianId = null) {
-  if (technicianId) {
+function updateTicketStatus(id, status, technicianId = undefined) {
+  if (technicianId !== undefined) {
+    const techId = (technicianId && parseInt(technicianId, 10) > 0) ? parseInt(technicianId, 10) : null;
     return db.prepare(`
       UPDATE tickets 
       SET status = ?, technician_id = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(status, technicianId, id);
+    `).run(status, techId, id);
   } else {
     return db.prepare(`
       UPDATE tickets 

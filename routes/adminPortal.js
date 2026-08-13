@@ -3058,19 +3058,121 @@ router.get('/tickets', requireAdminSession, requireSidebarMenuAccess('tickets'),
   const { status = 'all' } = req.query;
   const tickets = ticketSvc.getAllTickets(status);
   const stats = ticketSvc.getTicketStats();
+  const customers = customerSvc.getAllCustomers();
+  const techSvc = require('../services/techService');
+  const technicians = techSvc.getAllTechnicians().filter(t => t.is_active === 1);
+  
   res.render('admin/tickets', {
-    title: 'Keluhan Pelanggan', company: company(), activePage: 'tickets',
-    tickets, stats, filterStatus: status, msg: flashMsg(req)
+    title: 'Keluhan & Tugas Teknisi', company: company(), activePage: 'tickets',
+    tickets, stats, customers, technicians, filterStatus: status, msg: flashMsg(req)
   });
+});
+
+router.post('/tickets/create', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const { customer_id, subject, message, technician_id, status } = req.body;
+    if (!subject || !message) {
+      req.session._msg = { type: 'error', text: 'Subjek dan Detail Pesan wajib diisi.' };
+      return res.redirect('/admin/tickets');
+    }
+
+    const custId = customer_id ? parseInt(customer_id, 10) : 0;
+    const techId = technician_id ? parseInt(technician_id, 10) : null;
+    const ticketStatus = status || (techId ? 'in_progress' : 'open');
+
+    const result = ticketSvc.createTicket(custId, subject, message, {
+      technicianId: techId,
+      status: ticketStatus
+    });
+
+    const ticketId = result.lastInsertRowid;
+    req.session._msg = { type: 'success', text: 'Tiket/tugas baru berhasil dibuat!' };
+
+    // --- WHATSAPP NOTIFICATION FOR NEW ADMIN CREATED TICKET ---
+    try {
+      const settings = getSettings();
+      if (settings.whatsapp_enabled) {
+        const { sendWA } = await import('../services/whatsappBot.mjs');
+        const cust = custId ? customerSvc.getCustomerById(custId) : null;
+        const techSvc = require('../services/techService');
+        const tech = techId ? techSvc.getTechnicianById(techId) : null;
+
+        const custName = cust ? cust.name : 'Tugas Umum / Maintenance Admin';
+        const custPhone = cust ? cust.phone : '-';
+        const custAddr = cust ? cust.address : '-';
+
+        const waMsg = `📌 *TUGAS TEKNISI BARU DARI ADMIN*\n\n` +
+                     `🎫 *ID Tiket:* #${ticketId}\n` +
+                     `👤 *Pelanggan/Objek:* ${custName}\n` +
+                     `📞 *Kontak:* ${custPhone}\n` +
+                     `📍 *Alamat:* ${custAddr}\n` +
+                     `📝 *Kendala/Tugas:* ${subject}\n` +
+                     `💬 *Detail Pesan:* ${message}\n\n` +
+                     `Silakan cek di portal teknisi/admin untuk menindaklanjuti.`;
+
+        // Send to assigned technician or broadcast to all active technicians if not assigned
+        if (tech && tech.phone) {
+          let digits = String(tech.phone).replace(/\D/g, '');
+          if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+          await sendWA(digits, waMsg);
+        } else if (!techId) {
+          const technicians = techSvc.getAllTechnicians().filter(t => t.is_active === 1 && t.phone);
+          for (const t of technicians) {
+            let digits = String(t.phone).replace(/\D/g, '');
+            if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+            await sendWA(digits, waMsg);
+          }
+        }
+      }
+    } catch (waErr) {
+      console.error(`[AdminPortal] WA Ticket Create Notification Error: ${waErr.message}`);
+    }
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal membuat tiket: ' + e.message };
+  }
+  res.redirect('/admin/tickets');
 });
 
 router.post('/tickets/:id/update', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, technician_id } = req.body;
     const ticketId = req.params.id;
+    const oldTicket = ticketSvc.getTicketById(ticketId);
     
-    ticketSvc.updateTicketStatus(ticketId, status);
-    req.session._msg = { type: 'success', text: 'Status keluhan berhasil diperbarui.' };
+    const techId = (technician_id && parseInt(technician_id, 10) > 0) ? parseInt(technician_id, 10) : null;
+    ticketSvc.updateTicketStatus(ticketId, status, techId);
+    req.session._msg = { type: 'success', text: 'Status & penugasan keluhan berhasil diperbarui.' };
+
+    // --- WHATSAPP NOTIFICATION IF TECHNICIAN IS ASSIGNED / CHANGED ---
+    if (techId && (!oldTicket || Number(oldTicket.technician_id) !== techId)) {
+      try {
+        const settings = getSettings();
+        if (settings.whatsapp_enabled) {
+          const { sendWA } = await import('../services/whatsappBot.mjs');
+          const techSvc = require('../services/techService');
+          const newTech = techSvc.getTechnicianById(techId);
+          const updatedTicket = ticketSvc.getTicketById(ticketId);
+
+          if (newTech && newTech.phone && updatedTicket) {
+            let digits = String(newTech.phone).replace(/\D/g, '');
+            if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+            
+            const waMsg = `📌 *PENUGASAN TIKET OLEH ADMIN*\n\n` +
+                         `🎫 *ID Tiket:* #${updatedTicket.id}\n` +
+                         `👤 *Pelanggan/Objek:* ${updatedTicket.customer_name}\n` +
+                         `📞 *Kontak:* ${updatedTicket.customer_phone || '-'}\n` +
+                         `📍 *Alamat:* ${updatedTicket.customer_address || '-'}\n` +
+                         `📝 *Kendala/Tugas:* ${updatedTicket.subject}\n` +
+                         `💬 *Detail Pesan:* ${updatedTicket.message}\n` +
+                         `📊 *Status:* ${status}\n\n` +
+                         `Silakan cek portal teknisi untuk memproses tugas ini.`;
+            await sendWA(digits, waMsg);
+          }
+        }
+      } catch (waErr) {
+        console.error(`[AdminPortal] WA Assign Notification Error: ${waErr.message}`);
+      }
+    }
 
     // --- WHATSAPP NOTIFICATION FOR RESOLVED TICKET (BY ADMIN) ---
     if (status === 'resolved') {
