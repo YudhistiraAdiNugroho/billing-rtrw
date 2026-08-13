@@ -1402,6 +1402,7 @@
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <form action="/customer/tickets/create" method="POST" enctype="multipart/form-data">
+          <input type="hidden" name="customerId" value="<%= profile ? profile.id : '' %>">
           <div class="modal-body p-4">
             <div class="mb-3">
               <label class="form-label fw-bold" style="color:#f8fafc; font-size:13px;">Jenis Kendala / Subjek</label>
