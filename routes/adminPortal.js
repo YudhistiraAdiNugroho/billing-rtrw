@@ -3937,6 +3937,32 @@ router.get('/backup', requireAdminSession, requireSidebarMenuAccess('backup'), (
   });
 });
 
+router.get('/backup/download/:fileName', requireAdminSession, (req, res) => {
+  try {
+    const rawFileName = req.params.fileName;
+    const fileName = path.basename(rawFileName);
+    const backupDir = path.join(__dirname, '../backups');
+    const filePath = path.join(backupDir, fileName);
+
+    if (!fs.existsSync(filePath)) {
+      req.session._msg = { type: 'error', text: 'File backup tidak ditemukan.' };
+      return res.redirect('/admin/backup');
+    }
+
+    res.download(filePath, fileName, (err) => {
+      if (err && !res.headersSent) {
+        logger.error(`[Backup] Error downloading file ${fileName}:`, err);
+        req.session._msg = { type: 'error', text: 'Gagal mendownload file backup.' };
+        res.redirect('/admin/backup');
+      }
+    });
+  } catch (e) {
+    logger.error('[Backup] Download error:', e);
+    req.session._msg = { type: 'error', text: 'Gagal mendownload backup: ' + e.message };
+    res.redirect('/admin/backup');
+  }
+});
+
 router.post('/backup/create', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
   try {
     const { type } = req.body;
@@ -3985,6 +4011,63 @@ router.post('/backup/restore', requireAdminSession, express.urlencoded({ extende
     }
   } catch (e) {
     req.session._msg = { type: 'error', text: `Gagal: ${e.message}` };
+  }
+  res.redirect('/admin/backup');
+});
+
+router.post('/backup/upload-restore', requireAdminSession, upload.single('backupFile'), (req, res) => {
+  try {
+    const file = req.file;
+    if (!file || !file.buffer || !file.originalname) {
+      throw new Error('File backup tidak ditemukan.');
+    }
+
+    const originalName = path.basename(file.originalname);
+    const ext = path.extname(originalName).toLowerCase();
+    const timestamp = Date.now();
+    const backupDir = path.join(__dirname, '../backups');
+
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    let result;
+    let savedFileName = '';
+
+    if (ext === '.db' || ext === '.sqlite' || originalName.includes('billing_db')) {
+      savedFileName = `uploaded_db_${timestamp}_${originalName}`;
+      const savePath = path.join(backupDir, savedFileName);
+      fs.writeFileSync(savePath, file.buffer);
+      result = backupSvc.restoreDatabase(savedFileName);
+    } else if (ext === '.json' || originalName.includes('settings')) {
+      savedFileName = `uploaded_settings_${timestamp}_${originalName}`;
+      const savePath = path.join(backupDir, savedFileName);
+      fs.writeFileSync(savePath, file.buffer);
+
+      // Verify JSON validity before restoring settings
+      try {
+        JSON.parse(file.buffer.toString('utf8'));
+      } catch (jsonErr) {
+        fs.unlinkSync(savePath);
+        throw new Error('Format JSON file settings tidak valid: ' + jsonErr.message);
+      }
+
+      result = backupSvc.restoreSettings(savedFileName);
+    } else {
+      throw new Error('Format file tidak didukung. Harap upload file .db (database) atau .json (settings).');
+    }
+
+    if (result && result.success) {
+      req.session._msg = { 
+        type: 'success', 
+        text: `File backup "${originalName}" berhasil di-upload dan di-restore! Backup otomatis sebelum restore telah dibuat (${result.preRestoreBackup || '-'}).` 
+      };
+    } else {
+      req.session._msg = { type: 'error', text: `Gagal restore: ${result ? result.error : 'Error tidak diketahui'}` };
+    }
+  } catch (e) {
+    logger.error('[Backup] Upload & restore error:', e);
+    req.session._msg = { type: 'error', text: 'Gagal upload & restore: ' + e.message };
   }
   res.redirect('/admin/backup');
 });
