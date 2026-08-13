@@ -907,6 +907,83 @@ async function fetchDevicesFromACS(server, vParams = [], paths = {}, options = {
     }
 }
 
+function enrichDevicesWithCustomerNames(devices) {
+    if (!Array.isArray(devices) || devices.length === 0) return devices;
+
+    let customers = [];
+    try {
+        customers = db.prepare(`
+            SELECT id, name, genieacs_tag, pppoe_username, hotspot_username, static_ip
+            FROM customers
+        `).all();
+    } catch (e) {
+        console.error('[enrichDevicesWithCustomerNames] Error loading customers:', e.message);
+        return devices;
+    }
+
+    const byTag = new Map();
+    const byPppoe = new Map();
+    const byHotspot = new Map();
+    const byIp = new Map();
+
+    for (const c of customers) {
+        if (!c.name) continue;
+        const name = String(c.name).trim();
+        if (c.genieacs_tag) byTag.set(String(c.genieacs_tag).trim().toLowerCase(), name);
+        if (c.pppoe_username) byPppoe.set(String(c.pppoe_username).trim().toLowerCase(), name);
+        if (c.hotspot_username) byHotspot.set(String(c.hotspot_username).trim().toLowerCase(), name);
+        if (c.static_ip) byIp.set(String(c.static_ip).trim().toLowerCase(), name);
+    }
+
+    return devices.map(d => {
+        let matchedName = null;
+
+        // 1. PPPoE Username Match
+        const pppUser = String(d.pppoe_user || d.pppoeUser || d.pppoeUsername || '').trim().toLowerCase();
+        if (pppUser && pppUser !== '-' && pppUser !== 'n/a' && byPppoe.has(pppUser)) {
+            matchedName = byPppoe.get(pppUser);
+        }
+
+        // 2. Serial Number, Device ID, or Tags Match
+        if (!matchedName) {
+            const sn = String(d.sn || d.serialNumber || '').trim().toLowerCase();
+            const devId = String(d.id || d.phone || '').trim().toLowerCase();
+            if (sn && byTag.has(sn)) matchedName = byTag.get(sn);
+            else if (devId && byTag.has(devId)) matchedName = byTag.get(devId);
+            else if (Array.isArray(d.tags)) {
+                for (const t of d.tags) {
+                    const tagKey = String(t || '').trim().toLowerCase();
+                    if (byTag.has(tagKey)) {
+                        matchedName = byTag.get(tagKey);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 3. Hotspot Username Match
+        if (!matchedName && pppUser && byHotspot.has(pppUser)) {
+            matchedName = byHotspot.get(pppUser);
+        }
+
+        // 4. IP Address Match
+        if (!matchedName) {
+            const ip = String(d.ip || d.pppoe_ip || d.pppoeIP || '').trim().toLowerCase();
+            if (ip && ip !== '-' && byIp.has(ip)) {
+                matchedName = byIp.get(ip);
+            }
+        }
+
+        const finalName = matchedName || (d.customer_name && d.customer_name !== '-' ? d.customer_name : (d.customerName && d.customerName !== '-' ? d.customerName : '-'));
+
+        return {
+            ...d,
+            customer_name: finalName,
+            customerName: finalName
+        };
+    });
+}
+
 // ============================================
 // ROUTES
 // ============================================
@@ -988,6 +1065,20 @@ router.get('/', async (req, res) => {
             }
         }
 
+        // Enrich devices with matching customer names from Billing DB
+        allDevices = enrichDevicesWithCustomerNames(allDevices);
+
+        if (searchQuery) {
+            const qLower = searchQuery.toLowerCase();
+            allDevices = allDevices.filter(d => 
+                String(d.sn || '').toLowerCase().includes(qLower) ||
+                String(d.id || '').toLowerCase().includes(qLower) ||
+                String(d.customer_name || '').toLowerCase().includes(qLower) ||
+                String(d.pppoe_user || '').toLowerCase().includes(qLower) ||
+                String(d.ip || d.pppoe_ip || '').toLowerCase().includes(qLower)
+            );
+        }
+
         let pppoeProfiles = [];
         try {
             // Get routerId dari query parameter jika ada (untuk multi-router support)
@@ -1010,6 +1101,11 @@ router.get('/', async (req, res) => {
         console.error('ACS page error:', err);
         res.render('admin/acs', { user: req.session, devices: [], acsServers: [], selectedAcsId: null, searchQuery: null, pppoeProfiles: [], currentPage: 'acs_pro' });
     }
+});
+
+router.get('/search', async (req, res, next) => {
+    req.url = '/';
+    return router.handle(req, res, next);
 });
 
 router.get('/device/:deviceId', async (req, res) => {

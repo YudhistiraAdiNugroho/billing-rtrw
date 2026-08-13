@@ -1911,65 +1911,22 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
     
     customerSvc.updateCustomer(req.params.id, req.body);
     
-    // Sync to MikroTik if username provided
+    // Sync to MikroTik if username provided (update profile only, NEVER delete PPP secret)
     if (connectionType === 'pppoe' && req.body.pppoe_username) {
       try {
-        const oldUsername = oldCustomer ? String(oldCustomer.pppoe_username || '').trim() : '';
         const newUsername = String(req.body.pppoe_username || '').trim();
-        const oldRouterIdForOldUser = oldCustomer ? oldCustomer.router_id : null;
-        const oldEffectiveRouterId = oldCustomer ? customerSvc.getEffectiveRouterId(oldRouterIdForOldUser) : null;
-        
-        // If isRadius is active, delete local secret from MikroTik so RADIUS takes over
-        if (isRadius) {
-          const targetRouterId = req.body.router_id || oldEffectiveRouterId;
-          if (targetRouterId && newUsername) {
-            try {
-              const secrets = await mikrotikService.getPppoeSecrets(targetRouterId);
-              const existingSecret = secrets ? secrets.find(s => String(s.name || '').toLowerCase() === String(newUsername || '').toLowerCase()) : null;
-              if (existingSecret) {
-                const sId = existingSecret['.id'] || existingSecret.id;
-                if (sId) {
-                  await mikrotikService.deletePppoeSecret(sId, targetRouterId);
-                  logger.info(`[Update] Removed local secret for "${newUsername}" from MikroTik to enable RADIUS authentication`);
-                }
-              }
-            } catch (rErr) {
-              logger.warn(`[Update] Could not clean local secret for RADIUS user ${newUsername}: ${rErr.message}`);
-            }
-          }
-        } else {
-          // If username changed, handle old one first
-          if (oldUsername && oldUsername !== newUsername && oldEffectiveRouterId) {
-            try {
-              logger.info(`[Update] PPPoE username changed: "${oldUsername}" → "${newUsername}" for customer ${customerId}`);
-              const oldSecrets = await mikrotikService.getPppoeSecrets(oldEffectiveRouterId);
-              const oldSecret = oldSecrets ? oldSecrets.find(s => String(s.name || '').toLowerCase() === String(oldUsername || '').toLowerCase()) : null;
-              if (oldSecret) {
-                const secretId = oldSecret['.id'] || oldSecret.id;
-                if (secretId) {
-                  await mikrotikService.deletePppoeSecret(secretId, oldEffectiveRouterId);
-                  logger.info(`[Update] Deleted old PPPoE secret: ${oldUsername} from router ${oldEffectiveRouterId}`);
-                }
-              }
-            } catch (err) {
-              logger.warn(`[Update] Failed to delete old PPPoE user ${oldUsername}: ${err.message}`);
-            }
-          }
-          
-          // Now handle new username for local MikroTik secret
-          let targetProfile = '';
-          if (req.body.status === 'suspended') {
-            targetProfile = req.body.isolir_profile || 'isolir';
-          } else if (req.body.package_id) {
-            const pkg = customerSvc.getPackageById(req.body.package_id);
-            if (pkg) targetProfile = pkg.name;
-          }
-          if (targetProfile) {
-            try {
-              await mikrotikService.setPppoeProfile(newUsername, targetProfile, req.body.router_id);
-            } catch (mErr) {
-              logger.error('Mikrotik sync error (update PPPoE):', mErr.message);
-            }
+        let targetProfile = '';
+        if (req.body.status === 'suspended') {
+          targetProfile = req.body.isolir_profile || 'isolir';
+        } else if (req.body.package_id) {
+          const pkg = customerSvc.getPackageById(req.body.package_id);
+          if (pkg) targetProfile = pkg.name;
+        }
+        if (targetProfile) {
+          try {
+            await mikrotikService.setPppoeProfile(newUsername, targetProfile, req.body.router_id);
+          } catch (mErr) {
+            logger.error('Mikrotik sync error (update PPPoE):', mErr.message);
           }
         }
       } catch (syncErr) {
