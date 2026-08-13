@@ -1715,7 +1715,8 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
       req.body.router_id = effectiveRouterId;
     }
 
-    const isRadius = req.body.is_radius !== undefined ? (req.body.is_radius ? 1 : 0) : 1;
+    const radiusEnabled = getSetting('radius_enabled', '0') === '1';
+    const isRadius = radiusEnabled ? (req.body.is_radius !== undefined ? (Number(req.body.is_radius) === 1 ? 1 : 0) : 0) : 0;
     req.body.is_radius = isRadius;
 
     customerSvc.createCustomer(req.body);
@@ -1901,7 +1902,8 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
       req.body.router_id = effectiveRouterId;
     }
 
-    const isRadius = req.body.is_radius !== undefined ? (req.body.is_radius ? 1 : 0) : 1;
+    const radiusEnabled = getSetting('radius_enabled', '0') === '1';
+    const isRadius = radiusEnabled ? (req.body.is_radius !== undefined ? (Number(req.body.is_radius) === 1 ? 1 : 0) : 0) : 0;
     req.body.is_radius = isRadius;
 
     // Get old customer data to detect username changes
