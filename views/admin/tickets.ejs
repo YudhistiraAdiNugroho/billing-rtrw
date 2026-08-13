@@ -34,8 +34,11 @@
 
     <!-- Filter -->
     <div class="card">
-      <div class="card-hd">
-        <h6><i class="bi bi-list-ul"></i> <%= t('admin.tickets.list_title', 'Daftar Keluhan') %> (<%= tickets.length %>)</h6>
+      <div class="card-hd" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <h6><i class="bi bi-list-ul"></i> <%= t('admin.tickets.list_title', 'Daftar Keluhan & Tugas') %> (<%= tickets.length %>)</h6>
+        <button class="btn btn-p btn-sm" onclick="openModal('createTicketModal')">
+          <i class="bi bi-plus-circle me-1"></i> + Buat Tiket / Tugas Baru
+        </button>
       </div>
       <div class="card-bd" style="padding-bottom:0">
         <form method="GET" action="/admin/tickets" style="display:flex;gap:10px;margin-bottom:18px">
@@ -97,6 +100,7 @@
                   data-notes="<%= ticket.technician_notes || '' %>"
                   data-photos="<%= ticket.photos || '' %>"
                   data-customer-photos="<%= ticket.customer_photos || '' %>"
+                  data-tech-id="<%= ticket.technician_id || '' %>"
                   data-tech="<%= ticket.technician_name || t('admin.tickets.no_technician', 'Belum ada') %>">
                   <i class="bi bi-pencil"></i>
                 </button>
@@ -123,6 +127,61 @@
   </div>
 </div>
 
+<!-- Modal Buat Tiket / Tugas Baru -->
+<div class="mo" id="createTicketModal">
+  <div class="mb">
+    <div class="mh">
+      <span class="mt"><i class="bi bi-plus-circle me-1"></i> Buat Tiket / Tugas Teknisi Baru</span>
+      <button class="mc" onclick="closeModal('createTicketModal')">&times;</button>
+    </div>
+    <form method="POST" action="/admin/tickets/create">
+      <div class="mbody">
+        <div class="fg">
+          <label class="fl">Pilih Pelanggan (Opsional)</label>
+          <select class="fs" name="customer_id" id="createCustomerId">
+            <option value="0">-- Tugas Umum / Non-Pelanggan (Maintenance) --</option>
+            <% if (typeof customers !== 'undefined' && customers) { %>
+              <% customers.forEach(c => { %>
+                <option value="<%= c.id %>"><%= c.name %> (<%= c.phone || '-' %>) - <%= c.address || '' %></option>
+              <% }) %>
+            <% } %>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fl">Judul / Subjek Kendala</label>
+          <input class="fc" name="subject" placeholder="Contoh: Perbaikan ODP 02, Tarik Kabel Baru, Sinyal High Drop" required>
+        </div>
+        <div class="fg">
+          <label class="fl">Detail Pesan / Instruksi Tugas</label>
+          <textarea class="fc" name="message" rows="3" placeholder="Tuliskan detail pekerjaan atau instruksi teknisi secara jelas..." required></textarea>
+        </div>
+        <div class="fg">
+          <label class="fl">Tugaskan ke Teknisi (Opsional)</label>
+          <select class="fs" name="technician_id">
+            <option value="">-- Belum Ditugaskan (Bebas) --</option>
+            <% if (typeof technicians !== 'undefined' && technicians) { %>
+              <% technicians.forEach(t => { %>
+                <option value="<%= t.id %>"><%= t.name %> (<%= t.phone || '-' %>)</option>
+              <% }) %>
+            <% } %>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fl">Status Awal</label>
+          <select class="fs" name="status">
+            <option value="open">Belum Ditangani (Open)</option>
+            <option value="in_progress">Sedang Dikerjakan (In Progress)</option>
+          </select>
+        </div>
+      </div>
+      <div class="mf">
+        <button type="button" class="btn btn-g" onclick="closeModal('createTicketModal')">Batal</button>
+        <button type="submit" class="btn btn-p"><i class="bi bi-send me-1"></i> Simpan & Tugaskan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Modal Update -->
 <div class="mo" id="updateModal">
   <div class="mb">
@@ -131,7 +190,17 @@
       <div class="mbody">
         <div class="fg"><label class="fl"><%= t('admin.tickets.table.customer', 'Pelanggan') %></label><input class="fc" id="upCustomer" readonly></div>
         <div class="fg"><label class="fl"><%= t('admin.tickets.table.issue', 'Kendala') %></label><input class="fc" id="upSubject" readonly></div>
-        <div class="fg"><label class="fl"><%= t('admin.tickets.table.technician', 'Teknisi') %></label><input class="fc" id="upTechnician" readonly></div>
+        <div class="fg">
+          <label class="fl"><i class="bi bi-person-badge me-1"></i><%= t('admin.tickets.table.technician', 'Tugaskan ke Teknisi') %></label>
+          <select class="fs" name="technician_id" id="upTechnicianId">
+            <option value="">-- Belum Ditugaskan (Bebas) --</option>
+            <% if (typeof technicians !== 'undefined' && technicians) { %>
+              <% technicians.forEach(t => { %>
+                <option value="<%= t.id %>"><%= t.name %> (<%= t.phone || '-' %>)</option>
+              <% }) %>
+            <% } %>
+          </select>
+        </div>
         <div class="fg"><label class="fl"><%= t('admin.tickets.modal.message', 'Detail Pesan') %></label><textarea class="fc" id="upMessage" rows="3" readonly></textarea></div>
         <div class="fg" id="techNotesContainer" style="display:none;">
           <label class="fl"><i class="bi bi-pencil-square me-1"></i>Catatan Teknisi</label>
@@ -188,7 +257,8 @@ document.addEventListener('click', function(e) {
   document.getElementById('upMessage').value = btn.dataset.message;
   document.getElementById('upSubject').value = btn.dataset.subject;
   document.getElementById('upCustomer').value = btn.dataset.customer;
-  document.getElementById('upTechnician').value = btn.dataset.tech;
+  const upTechSelect = document.getElementById('upTechnicianId');
+  if (upTechSelect) upTechSelect.value = btn.dataset.techId || '';
   
   // Show technician notes if available
   const notes = btn.dataset.notes || '';
