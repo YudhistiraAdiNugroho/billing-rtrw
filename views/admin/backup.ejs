@@ -70,7 +70,7 @@
       </div>
     </div>
 
-    <div class="form-row mb16">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 16px;">
       <!-- Create Backup -->
       <div class="card">
         <div class="card-hd"><h6><i class="bi bi-plus-circle"></i> Buat Backup Baru</h6></div>
@@ -86,6 +86,23 @@
             </div>
             <button type="submit" class="btn btn-p w-100">
               <i class="bi bi-cloud-upload"></i> Mulai Backup
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Upload & Restore -->
+      <div class="card">
+        <div class="card-hd"><h6><i class="bi bi-upload"></i> Upload & Restore Backup</h6></div>
+        <div class="card-bd">
+          <form action="/admin/backup/upload-restore" method="POST" enctype="multipart/form-data" onsubmit="return confirm('PERINGATAN: Memulihkan file backup akan menimpa data/pengaturan aplikasi saat ini. Sistem akan membuat backup otomatis sebelum restore. Lanjutkan?')">
+            <div class="fg">
+              <label class="fl">Pilih File Backup (.db / .json)</label>
+              <input type="file" class="fc" name="backupFile" accept=".db,.sqlite,.json" required style="padding: 6px 10px;">
+              <small class="text-muted" style="font-size: 10px; display: block; margin-top: 4px;">File .db (database) atau .json (settings)</small>
+            </div>
+            <button type="submit" class="btn btn-s w-100">
+              <i class="bi bi-cloud-arrow-up"></i> Upload & Restore
             </button>
           </form>
         </div>
@@ -162,6 +179,9 @@
                   </td>
                   <td>
                     <div class="backup-actions jc-fe">
+                      <a href="/admin/backup/download/<%= encodeURIComponent(backup.fileName) %>" class="btn btn-g btn-sm text-primary" title="Download Backup" download>
+                        <i class="bi bi-download"></i>
+                      </a>
                       <button type="button" class="btn btn-g btn-sm text-success" onclick="restoreBackup('<%= backup.fileName %>', '<%= backup.type %>')" title="Restore">
                         <i class="bi bi-arrow-counterclockwise"></i>
                       </button>
