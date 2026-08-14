@@ -144,6 +144,9 @@
     .brand-cdata { background: #fff7ed; color: #ea580c; }
     .brand-hioso { background: #fffbeb; color: #d97706; }
     .brand-hsgq { background: #f5f3ff; color: #7c3aed; }
+    .brand-bdcom { background: #fdf2f8; color: #db2777; }
+    .brand-fiberhome { background: #f0fdfa; color: #0d9488; }
+    .brand-generic { background: #f1f5f9; color: #475569; }
 
     .spin { animation: rotate 2s linear infinite; display: inline-block; }
     @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -392,6 +395,7 @@
               <tr>
                 <th><%= t('admin.olts.table.no', 'No') %></th>
                 <th><%= t('admin.olts.table.id', 'Id') %></th>
+                <th>Nama ONU / Pelanggan</th>
                 <th><%= t('admin.olts.table.serial', 'Serial Number') %></th>
                 <th><%= t('admin.olts.table.status', 'Status') %></th>
                 <th><%= t('admin.olts.table.tx', 'TxPower') %></th>
@@ -402,7 +406,7 @@
             </thead>
             <tbody id="onu-table-body">
               <tr>
-                <td colspan="8">
+                <td colspan="9">
                   <div class="empty-state">
                     <i class="bi bi-hdd-network"></i>
                     <p><%= t('admin.olts.empty_select', 'Pilih perangkat OLT di atas untuk memantau data ONU.') %></p>
@@ -862,9 +866,15 @@ async function loadOltDashboard(id) {
         const targetOltId = onu.olt_id || id;
         const oltBadge = onu.olt_name ? `<span class="badge bg-dark border border-secondary text-info me-1" style="font-size:10px">${onu.olt_name}</span>` : '';
         
+        const custBadge = onu.customer_name ? `<div class="mt-1" style="font-size:11px;color:#2563eb;font-weight:600;"><i class="bi bi-person-fill"></i> ${onu.customer_name}</div>` : '';
+        
         return `<tr>
           <td>${index + 1}</td>
           <td>${oltBadge}<code class="sn-mac">${onu.id || '-'}</code></td>
+          <td>
+            <strong>${onu.name || '-'}</strong>
+            ${custBadge}
+          </td>
           <td><code class="sn-mac">${onu.sn || '-'}</code></td>
           <td>
             <span class="status-pill-v2 ${statusClass}"><i class="bi bi-circle-fill" style="font-size:6px;"></i> ${formatStatus(statusVal) || '-'}</span>
@@ -886,7 +896,7 @@ async function loadOltDashboard(id) {
       }).join('');
     } else {
       document.getElementById('search-container').style.display = 'none';
-      tbody.innerHTML = `<tr><td colspan="8">
+      tbody.innerHTML = `<tr><td colspan="9">
         <div class="empty-state">
           <i class="bi bi-exclamation-triangle"></i>
           <p>${stats.error || I18N.noOnuData}</p>
@@ -895,7 +905,7 @@ async function loadOltDashboard(id) {
       </td></tr>`;
     }
   } catch (e) {
-    document.getElementById('onu-table-body').innerHTML = `<tr><td colspan="8" class="text-center p-5 text-danger">${I18N.errorPrefix}${e.message}</td></tr>`;
+    document.getElementById('onu-table-body').innerHTML = `<tr><td colspan="9" class="text-center p-5 text-danger">${I18N.errorPrefix}${e.message}</td></tr>`;
   } finally {
     overlay.style.display = 'none';
   }
