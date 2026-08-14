@@ -471,12 +471,12 @@
               <thead>
                 <tr>
                   <th>Username</th>
+                  <th>Nama Pelanggan</th>
                   <th>Framed IP</th>
                   <th>NAS IP</th>
-                  <th>Acct Session ID</th>
                   <th>Upload (In)</th>
                   <th>Download (Out)</th>
-                  <th>Session Time</th>
+                  <th>Durasi Sesi</th>
                   <th>Waktu Update</th>
                   <th style="width:110px;text-align:right;">Aksi</th>
                 </tr>
@@ -484,14 +484,25 @@
               <tbody>
                 <% if (onlineSessions && onlineSessions.length > 0) { %>
                   <% onlineSessions.forEach(s => { %>
+                    <%
+                      const totalIn = ((s.input_gigawords || 0) * 4294967296) + (s.input_octets || 0);
+                      const totalOut = ((s.output_gigawords || 0) * 4294967296) + (s.output_octets || 0);
+                      const inMB = totalIn >= 1073741824 ? (totalIn / 1073741824).toFixed(2) + ' GB' : (totalIn / 1048576).toFixed(2) + ' MB';
+                      const outMB = totalOut >= 1073741824 ? (totalOut / 1073741824).toFixed(2) + ' GB' : (totalOut / 1048576).toFixed(2) + ' MB';
+                      const st = s.session_time || 0;
+                      const h = Math.floor(st / 3600);
+                      const m = Math.floor((st % 3600) / 60);
+                      const sec = st % 60;
+                      const stStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+                    %>
                     <tr>
                       <td><strong><%= s.username %></strong></td>
+                      <td><%= s.customer_name || '<span class="text-muted">-</span>' %></td>
                       <td><%= s.framed_ip || '-' %></td>
                       <td><%= s.nas_ip || '-' %></td>
-                      <td><code><%= s.session_id %></code></td>
-                      <td><%= (s.input_octets / (1024 * 1024)).toFixed(2) %> MB</td>
-                      <td><%= (s.output_octets / (1024 * 1024)).toFixed(2) %> MB</td>
-                      <td><%= s.session_time %>s</td>
+                      <td><%= inMB %></td>
+                      <td><%= outMB %></td>
+                      <td><code><%= stStr %></code></td>
                       <td><%= s.updated_at %></td>
                       <td style="text-align:right;white-space:nowrap;">
                         <form action="/admin/radius/disconnect" method="POST" onsubmit="return confirm('Putuskan sesi aktif RADIUS untuk user \'<%= s.username %>\'?')" style="display:inline;">
@@ -542,6 +553,17 @@
               <tbody>
                 <% if (acctLogs && acctLogs.length > 0) { %>
                   <% acctLogs.forEach(log => { %>
+                    <%
+                      const logIn = ((log.input_gigawords || 0) * 4294967296) + (log.input_octets || 0);
+                      const logOut = ((log.output_gigawords || 0) * 4294967296) + (log.output_octets || 0);
+                      const logInStr = logIn >= 1073741824 ? (logIn / 1073741824).toFixed(2) + ' GB' : (logIn / 1048576).toFixed(2) + ' MB';
+                      const logOutStr = logOut >= 1073741824 ? (logOut / 1073741824).toFixed(2) + ' GB' : (logOut / 1048576).toFixed(2) + ' MB';
+                      const lst = log.session_time || 0;
+                      const lh = Math.floor(lst / 3600);
+                      const lm = Math.floor((lst % 3600) / 60);
+                      const ls = lst % 60;
+                      const lstStr = `${String(lh).padStart(2,'0')}:${String(lm).padStart(2,'0')}:${String(ls).padStart(2,'0')}`;
+                    %>
                     <tr>
                       <td>#<%= log.id %></td>
                       <td><strong><%= log.username %></strong></td>
@@ -556,9 +578,9 @@
                           <span class="badge bp">Interim</span>
                         <% } %>
                       </td>
-                      <td><%= (log.input_octets / (1024 * 1024)).toFixed(2) %> MB</td>
-                      <td><%= (log.output_octets / (1024 * 1024)).toFixed(2) %> MB</td>
-                      <td><%= log.session_time %>s</td>
+                      <td><%= logInStr %></td>
+                      <td><%= logOutStr %></td>
+                      <td><code><%= lstStr %></code></td>
                       <td><%= log.created_at %></td>
                     </tr>
                   <% }); %>
