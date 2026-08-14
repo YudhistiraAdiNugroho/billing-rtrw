@@ -108,6 +108,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS customers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nik TEXT DEFAULT '',
     name TEXT NOT NULL,
     phone TEXT DEFAULT '',
     address TEXT DEFAULT '',
@@ -716,6 +717,9 @@ try {
 } catch (e) { /* ignore if already exists */ }
 try {
   db.exec("ALTER TABLE customers ADD COLUMN wifi_ssid TEXT DEFAULT ''");
+} catch (e) { /* ignore if already exists */ }
+try {
+  db.exec("ALTER TABLE customers ADD COLUMN nik TEXT DEFAULT ''");
 } catch (e) { /* ignore if already exists */ }
 try {
   db.exec("ALTER TABLE customers ADD COLUMN collector_id INTEGER REFERENCES collectors(id) ON DELETE SET NULL");

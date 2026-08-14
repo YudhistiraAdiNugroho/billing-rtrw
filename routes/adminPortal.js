@@ -2022,6 +2022,7 @@ router.get('/customers/export', requireAdminSession, (req, res) => {
     const customers = customerSvc.getAllCustomers();
     const data = customers.map(c => ({
       'ID': c.id,
+      'NIK': c.nik || '',
       'Nama': c.name,
       'Telepon': c.phone,
       'Email': c.email || '',
@@ -2099,6 +2100,7 @@ router.post('/customers/import', requireAdminSession, upload.single('file'), asy
       const connType = String(cleanRow['Tipe Koneksi'] || cleanRow['connection_type'] || cleanRow['Connection Type'] || 'pppoe').trim().toLowerCase() || 'pppoe';
       
       const data = {
+        nik: cleanRow['NIK'] || cleanRow['nik'] || cleanRow['No KTP'] || cleanRow['No. KTP'] || '',
         name: name,
         phone: cleanRow['Telepon'] || cleanRow['phone'] || cleanRow['Phone'],
         email: cleanRow['Email'] || cleanRow['email'] || cleanRow['email_address'],
