@@ -59,11 +59,12 @@ function findUserCredentials(username) {
     `).get(cleanUsername, cleanUsername, cleanUsername);
 
     if (cust) {
-      let secret = cust.pppoe_password || cust.pppoe_username || '';
+      // Prioritaskan pppoe_password, fallback ke pppoe_users table — JANGAN gunakan username sebagai password
+      let secret = cust.pppoe_password || '';
       if (!secret) {
         try {
           const pppoeUser = db.prepare(`SELECT secret FROM pppoe_users WHERE username = ? LIMIT 1`).get(cleanUsername);
-          if (pppoeUser) secret = pppoeUser.secret;
+          if (pppoeUser) secret = pppoeUser.secret || '';
         } catch (e) {}
       }
 
@@ -287,7 +288,7 @@ function handleAuthMessage(msg, rinfo) {
 
   // Atribut Rate Limit (Mikrotik-Rate-Limit) & Mikrotik-Group (Profile)
   const defaultRateLimit = getSetting('radius_default_rate_limit', '5M/10M');
-  const rateLimitStr = formatRateLimit(user.speedUp, user.speedDown, defaultRateLimit, user.speedUpUpto, user.speedDownUpto);
+  const rateLimitStr = formatRateLimit(user.speedUp, user.speedDown, defaultRateLimit, user.speedUpUpto || 0, user.speedDownUpto || 0);
   if (rateLimitStr) {
     responseAttrs.push({
       type: ATTR_TYPES.VENDOR_SPECIFIC,
@@ -448,6 +449,10 @@ function handleAcctMessage(msg, rinfo) {
         );
       }
 
+      // Hitung total bytes termasuk Gigawords (untuk sesi > 4GB)
+      const totalBytesIn = (acctInputGigawords * 4294967296) + acctInputOctets;
+      const totalBytesOut = (acctOutputGigawords * 4294967296) + acctOutputOctets;
+
       // Catat sampel trafik ke pppoe_traffic_samples jika tabel pppoe_users ada
       try {
         const pppoeUser = db.prepare(`SELECT id FROM pppoe_users WHERE username = ? LIMIT 1`).get(username);
@@ -455,7 +460,7 @@ function handleAcctMessage(msg, rinfo) {
           db.prepare(`
             INSERT INTO pppoe_traffic_samples (pppoe_user_id, bytes_in, bytes_out)
             VALUES (?, ?, ?)
-          `).run(pppoeUser.id, acctInputOctets, acctOutputOctets);
+          `).run(pppoeUser.id, totalBytesIn, totalBytesOut);
         }
       } catch (e) {}
 
@@ -473,7 +478,7 @@ function handleAcctMessage(msg, rinfo) {
               bytes_in = MAX(customer_usage.bytes_in, excluded.bytes_in),
               bytes_out = MAX(customer_usage.bytes_out, excluded.bytes_out),
               updated_at = NOW_LOCAL()
-          `).run(cust.id, month, year, acctInputOctets, acctOutputOctets);
+          `).run(cust.id, month, year, totalBytesIn, totalBytesOut);
         }
       } catch (e) {}
     } catch (err) {
@@ -541,14 +546,26 @@ function stop() {
   logger.info(`[RADIUS] Server RADIUS telah dihentikan.`);
 }
 
-function formatRateLimit(upVal, downVal, defaultVal = '5M/10M') {
+/**
+ * Format Mikrotik-Rate-Limit string dari nilai kecepatan paket.
+ * Format: "CIR_upload/CIR_download" atau "CIR_up/CIR_dn burst_up/burst_dn"
+ * jika burst/upto tersedia.
+ */
+function formatRateLimit(upVal, downVal, defaultVal = '5M/10M', uptoUp = 0, uptoDown = 0) {
   function parseSpeed(v) {
     if (!v) return 0;
     const str = String(v).trim().toLowerCase();
+    // Jika sudah dalam Kbps mentah (angka tanpa satuan — dari DB yang menyimpan dalam Kbps)
     if (str.endsWith('m')) return Math.round(parseFloat(str) * 1000);
     if (str.endsWith('k')) return Math.round(parseFloat(str));
     const num = parseFloat(str) || 0;
     return num;
+  }
+
+  function kbpsToStr(kbps) {
+    if (kbps <= 0) return null;
+    if (kbps >= 1000 && kbps % 1000 === 0) return `${kbps / 1000}M`;
+    return `${kbps}k`;
   }
 
   const upKbps = parseSpeed(upVal);
@@ -558,8 +575,22 @@ function formatRateLimit(upVal, downVal, defaultVal = '5M/10M') {
     return defaultVal;
   }
 
-  const upStr = (upKbps >= 1000 && upKbps % 1000 === 0) ? `${upKbps / 1000}M` : `${upKbps}k`;
-  const downStr = (downKbps >= 1000 && downKbps % 1000 === 0) ? `${downKbps / 1000}M` : `${downKbps}k`;
+  const upStr = kbpsToStr(upKbps);
+  const downStr = kbpsToStr(downKbps);
+
+  // Tambahkan burst rate jika tersedia (Mikrotik-Rate-Limit format: CIR burst threshold time)
+  const uptoUpKbps = parseSpeed(uptoUp);
+  const uptoDownKbps = parseSpeed(uptoDown);
+
+  if (uptoUpKbps > 0 && uptoDownKbps > 0 && (uptoUpKbps > upKbps || uptoDownKbps > downKbps)) {
+    const burstUpStr = kbpsToStr(uptoUpKbps);
+    const burstDownStr = kbpsToStr(uptoDownKbps);
+    // Format MikroTik: "CIR_up/CIR_down burst_up/burst_dn burst_threshold_up/threshold_dn burst_time_up/burst_time_dn"
+    // Threshold default 50% dari burst, waktu burst 8 detik
+    const thresholdUp = kbpsToStr(Math.round(uptoUpKbps * 0.5));
+    const thresholdDown = kbpsToStr(Math.round(uptoDownKbps * 0.5));
+    return `${upStr}/${downStr} ${burstUpStr}/${burstDownStr} ${thresholdUp}/${thresholdDown} 8`;
+  }
 
   return `${upStr}/${downStr}`;
 }
@@ -649,9 +680,11 @@ function getStatus() {
 function getOnlineSessions() {
   try {
     return db.prepare(`
-      SELECT * FROM radius_accounting
-      WHERE status_type IN (1, 3)
-      ORDER BY updated_at DESC LIMIT 100
+      SELECT ra.*, c.name as customer_name
+      FROM radius_accounting ra
+      LEFT JOIN customers c ON (c.pppoe_username = ra.username OR c.name = ra.username)
+      WHERE ra.status_type IN (1, 3)
+      ORDER BY ra.updated_at DESC LIMIT 100
     `).all();
   } catch (e) {
     return [];
