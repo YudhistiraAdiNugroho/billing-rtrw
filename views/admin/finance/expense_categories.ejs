@@ -25,8 +25,10 @@
 <%- include('../partials/sidebar', { activePage: 'expense_categories', company }) %>
 <div class="mw">
   <div class="topbar">
-    <div class="tb-title"><i class="bi bi-tags"></i> Kategori Pengeluaran</div>
+    <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-tags"></i> Kategori Pengeluaran</div>
     <div class="tb-right">
+      <span class="adm-badge" style="font-size:12px;opacity:0.7;"><%= company %></span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session && session.isCashier) ? 'Kasir' : 'Admin' %></span>
       <button class="btn btn-p btn-sm" onclick="openModal('addModal')"><i class="bi bi-plus-lg"></i> Tambah Kategori</button>
     </div>
   </div>

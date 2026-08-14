@@ -17,6 +17,7 @@
       <span>Laporan Kasir</span>
     </div>
     <div class="tb-right">
+      <span class="adm-badge" style="font-size:12px;opacity:0.7;"><%= company %></span>
       <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/billing" class="btn btn-g btn-sm"><i class="bi bi-arrow-left"></i></a>
     </div>

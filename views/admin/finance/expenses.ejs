@@ -19,8 +19,9 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-wallet2"></i> Pengeluaran (Cash Out)</div>
     <div class="tb-right">
+      <span class="adm-badge" style="font-size:12px;opacity:0.7;"><%= company %></span>
+      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session && session.isCashier) ? 'Kasir' : 'Admin' %></span>
       <button class="btn btn-p btn-sm" onclick="openModal('addModal')"><i class="bi bi-plus-lg"></i> Catat Pengeluaran</button>
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? 'Kasir' : 'Admin' %></span>
     </div>
   </div>
   <div class="page">
