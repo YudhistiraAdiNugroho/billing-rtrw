@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
+const { getSetting, getSettings, getNowLocal, formatDateLocal } = require('../config/settingsManager');
+const sidebarMenuSvc = require('../services/sidebarMenuService');
 
 // Helper untuk menampilkan notifikasi sukses/error
 function flashMsg(req) {
@@ -9,6 +11,8 @@ function flashMsg(req) {
   return m || null;
 }
 
+function company() { return getSetting('company_header', 'ISP Admin'); }
+
 // Pastikan hanya admin & kasir yang bisa akses
 function requireAdminSession(req, res, next) {
   if (req.session?.isAdmin || req.session?.isCashier) return next();
@@ -16,6 +20,18 @@ function requireAdminSession(req, res, next) {
 }
 
 router.use(requireAdminSession);
+
+router.use((req, res, next) => {
+  res.locals.session = req.session;
+  res.locals.sidebarSections = sidebarMenuSvc.getSidebarSections(req.session);
+  res.locals.sidebarBottomNavItems = sidebarMenuSvc.getBottomNavItems(req.session);
+  res.locals.settings = getSettings();
+  res.locals.company = company();
+  res.locals.lang = req.session?.lang || 'id';
+  res.locals.getNowLocal = getNowLocal;
+  res.locals.formatDateLocal = formatDateLocal;
+  next();
+});
 
 // ─── KATEGORI PENGELUARAN ──────────────────────────────────────────────
 router.get('/expense-categories', (req, res) => {

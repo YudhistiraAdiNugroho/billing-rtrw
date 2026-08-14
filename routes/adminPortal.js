@@ -6517,10 +6517,9 @@ router.get('/payroll', requireAdmin, requireSidebarMenuAccess('payroll'), (req, 
   const slips = payrollSvc.getSlipsByPeriod(month, year);
   const summary = payrollSvc.getPayrollSummary(month, year);
 
-  const { getSettingsWithCache } = require('../config/settingsManager');
   res.render('admin/payroll', {
     title: 'Gaji Karyawan',
-    company: getSettingsWithCache().company_header || 'My ISP',
+    company: company(),
     employees,
     slips,
     summary,
@@ -6631,9 +6630,8 @@ router.get('/payroll/slip/:id/print', requireAdmin, (req, res) => {
   const slip = payrollSvc.getSlipById(req.params.id);
   if (!slip) return res.status(404).send('Slip tidak ditemukan');
   
-  const { getSettingsWithCache } = require('../config/settingsManager');
   res.render('admin/print_payslip', {
-    company: getSettingsWithCache().company_header || 'My ISP',
+    company: company(),
     slip
   });
 });
