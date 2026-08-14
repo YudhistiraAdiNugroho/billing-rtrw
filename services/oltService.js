@@ -84,7 +84,8 @@ const BRAND_PROFILES = {
       status_table: '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.9',
       name_table:   '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.2',
       sn_table:     '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.6',
-      rx_power_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.2', // 0.01 dBm
+      tx_power_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.1', // TX Optical power (0.01 dBm)
+      rx_power_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.2', // RX Optical power (0.01 dBm)
       offline_reason_table: '1.3.6.1.4.1.3902.1082.500.10.2.3.8.1.7',
       probe_oid:    '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.9',
       unauth_sn_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.2',
@@ -99,6 +100,7 @@ const BRAND_PROFILES = {
       status_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.10',
       name_table:   '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.2',
       sn_table:     '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.3',
+      tx_power_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.7.1.2',
       rx_power_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.7.1.3',
       offline_reason_table: '1.3.6.1.4.1.3902.1082.500.12.2.3.8.1.7',
       probe_oid:    '1.3.6.1.4.1.3902.1082.500.12.2.3.3.1.10',
@@ -110,6 +112,7 @@ const BRAND_PROFILES = {
       status_table: '1.3.6.1.4.1.3902.1012.3.28.2.1.4',
       name_table:   '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.2',
       sn_table:     '1.3.6.1.4.1.3902.1082.500.10.2.3.3.1.6',
+      tx_power_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.1',
       rx_power_table: '1.3.6.1.4.1.3902.1015.1010.11.2.1.2',
       probe_oid:    '1.3.6.1.4.1.3902.1012.3.28.2.1.4',
       unauth_sn_table: '1.3.6.1.4.1.3902.1012.3.13.3.1.2',
@@ -121,6 +124,7 @@ const BRAND_PROFILES = {
       status_table: '1.3.6.1.4.1.37950.1.1.5.13.1.1.4',
       name_table:   '1.3.6.1.4.1.37950.1.1.5.13.1.1.10',
       sn_table:     '1.3.6.1.4.1.37950.1.1.5.13.1.1.2',
+      tx_power_table: '1.3.6.1.4.1.37950.1.1.5.13.1.1.20', // 0.1 dBm
       rx_power_table: '1.3.6.1.4.1.37950.1.1.5.13.1.1.21', // 0.1 dBm
       probe_oid:    '1.3.6.1.4.1.37950.1.1.5.13.1.1.4',
     },
@@ -131,6 +135,7 @@ const BRAND_PROFILES = {
       status_table: '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
       name_table:   '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.3',
       sn_table:     '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
+      tx_power_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.3', // 0.01 dBm
       rx_power_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.4', // 0.01 dBm
       offline_reason_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.24',
       probe_oid:    '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
@@ -148,6 +153,7 @@ const BRAND_PROFILES = {
       status_table: '1.3.6.1.4.1.27332.1.1.1.8.1.7',
       name_table:   '1.3.6.1.4.1.27332.1.1.1.8.1.3',
       sn_table:     '1.3.6.1.4.1.27332.1.1.1.8.1.4',
+      tx_power_table: '1.3.6.1.4.1.27332.1.1.1.11.1.3',
       rx_power_table: '1.3.6.1.4.1.27332.1.1.1.11.1.4',
       probe_oid:    '1.3.6.1.4.1.27332.1.1.1.8.1.7',
       unauth_sn_table: '1.3.6.1.4.1.27332.1.1.1.1.1.1.10',
@@ -159,6 +165,7 @@ const BRAND_PROFILES = {
       status_table: '1.3.6.1.4.1.3320.101.10.1.1.7',
       name_table:   '1.3.6.1.4.1.3320.101.10.1.1.3',
       sn_table:     '1.3.6.1.4.1.3320.101.10.1.1.4',
+      tx_power_table: '1.3.6.1.4.1.3320.101.10.3.1.3',
       rx_power_table: '1.3.6.1.4.1.3320.101.10.3.1.4',
       probe_oid:    '1.3.6.1.4.1.3320.101.10.1.1.7',
     }
@@ -168,7 +175,8 @@ const BRAND_PROFILES = {
       name: 'CDATA_EPON',
       status_table: '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.15',
       name_table:   '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.10',
-      sn_table:     '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.10',
+      sn_table:     '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.2', // LLID / MAC table (bukan .10)
+      tx_power_table: '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.20',
       rx_power_table: '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.21', // 0.1 dBm
       probe_oid:    '1.3.6.1.4.1.34592.1.3.100.12.1.1.1.15',
     }
@@ -188,6 +196,7 @@ const BRAND_PROFILES = {
       status_table: '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
       name_table:   '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.3',
       sn_table:     '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
+      tx_power_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.3',
       rx_power_table: '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.4',
       probe_oid:    '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.11',
     }
@@ -230,9 +239,9 @@ const SYSTEM_OIDS = {
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',      // ifHCOutOctets (uplink port 1)
   },
   hsgq: {
-    temp:      '1.3.6.1.4.1.3320.101.11.1.13.1',
-    cpu:       '1.3.6.1.4.1.3320.101.11.1.13.1',
-    ram:       '1.3.6.1.4.1.3320.101.11.1.14.1',
+    temp:      '1.3.6.1.4.1.3320.101.11.1.12.1', // Temp sensor
+    cpu:       '1.3.6.1.4.1.3320.101.11.1.13.1', // CPU Usage
+    ram:       '1.3.6.1.4.1.3320.101.11.1.14.1', // RAM Usage
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
@@ -251,23 +260,23 @@ const SYSTEM_OIDS = {
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
   huawei: {
-    temp:      '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.14.0.0',
-    cpu:       '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.14.0.0',
-    ram:       '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.15.0.0',
+    temp:      '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.13.0.0', // Suhu (°C)
+    cpu:       '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.14.0.0', // CPU (%)
+    ram:       '1.3.6.1.4.1.2011.6.128.1.1.2.23.1.15.0.0', // RAM (%)
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
   fiberhome: {
-    temp:      '1.3.6.1.4.1.27332.1.1.1.9.1.12.1.1',
-    cpu:       '1.3.6.1.4.1.27332.1.1.1.9.1.12.1.1',
-    ram:       '1.3.6.1.4.1.27332.1.1.1.9.1.14.1.1',
+    temp:      '1.3.6.1.4.1.27332.1.1.1.9.1.11.1.1', // Suhu (°C)
+    cpu:       '1.3.6.1.4.1.27332.1.1.1.9.1.12.1.1', // CPU (%)
+    ram:       '1.3.6.1.4.1.27332.1.1.1.9.1.14.1.1', // RAM (%)
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
   bdcom: {
-    temp:      '1.3.6.1.4.1.3320.101.11.1.13.1',
-    cpu:       '1.3.6.1.4.1.3320.101.11.1.13.1',
-    ram:       '1.3.6.1.4.1.3320.101.11.1.14.1',
+    temp:      '1.3.6.1.4.1.3320.101.11.1.12.1', // Suhu (°C)
+    cpu:       '1.3.6.1.4.1.3320.101.11.1.13.1', // CPU (%)
+    ram:       '1.3.6.1.4.1.3320.101.11.1.14.1', // RAM (%)
     uplink_rx: '1.3.6.1.2.1.31.1.1.1.6.1',
     uplink_tx: '1.3.6.1.2.1.31.1.1.1.10.1',
   },
@@ -1786,7 +1795,7 @@ async function getOltStatsInternal(id, full = false) {
         }
 
         stats.onus_weak = weakCount;
-        stats.onus = onus.sort((a, b) => a.name.localeCompare(b.name));
+        stats.onus = enrichOnusWithCustomerData(onus.sort((a, b) => a.name.localeCompare(b.name)));
         safeResolve(stats);
       } catch (err) {
         stats.error = err.message;
@@ -1794,6 +1803,59 @@ async function getOltStatsInternal(id, full = false) {
       }
     })();
   });
+}
+
+function enrichOnusWithCustomerData(onus) {
+  if (!Array.isArray(onus) || onus.length === 0) return onus;
+  try {
+    const custs = db.prepare(`
+      SELECT id, name, pppoe_username, mac_address, genieacs_tag, phone
+      FROM customers
+    `).all() || [];
+
+    const pppoeMap = new Map();
+    const macMap = new Map();
+    const tagMap = new Map();
+    const nameMap = new Map();
+
+    for (const c of custs) {
+      if (c.pppoe_username) pppoeMap.set(String(c.pppoe_username).trim().toLowerCase(), c);
+      if (c.mac_address) {
+        const rawMac = String(c.mac_address).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        if (rawMac) macMap.set(rawMac, c);
+      }
+      if (c.genieacs_tag) tagMap.set(String(c.genieacs_tag).trim().toLowerCase(), c);
+      if (c.name) nameMap.set(String(c.name).trim().toLowerCase(), c);
+    }
+
+    for (const onu of onus) {
+      const snClean = String(onu.sn || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const nameClean = String(onu.name || '').trim().toLowerCase();
+
+      let matched = null;
+      if (snClean && macMap.has(snClean)) matched = macMap.get(snClean);
+      else if (snClean && tagMap.has(snClean)) matched = tagMap.get(snClean);
+      else if (nameClean && pppoeMap.has(nameClean)) matched = pppoeMap.get(nameClean);
+      else if (nameClean && nameMap.has(nameClean)) matched = nameMap.get(nameClean);
+      else if (snClean.length >= 6) {
+        for (const [mac, c] of macMap.entries()) {
+          if (mac.length >= 8 && (snClean.includes(mac) || mac.includes(snClean))) {
+            matched = c;
+            break;
+          }
+        }
+      }
+
+      if (matched) {
+        onu.customer_id = matched.id;
+        onu.customer_name = matched.name;
+        onu.customer_phone = matched.phone || null;
+      }
+    }
+  } catch (e) {
+    logger.warn(`[OLT] Error enriching ONUs with customer data: ${e.message}`);
+  }
+  return onus;
 }
 
 // ─── ONU ACTIONS ─────────────────────────────────────────────────────────────
