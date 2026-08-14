@@ -214,6 +214,10 @@ function payInvoicesForCustomerMonths(customerId, year, months, paidByName, note
   });
   run();
 
+  if (summary.totalMonths > 0) {
+    renewCustomerPrepaidValidity(cid, summary.totalMonths);
+  }
+
   return summary;
 }
 
@@ -335,33 +339,87 @@ function getInvoiceById(id) {
   `).get(id);
 }
 
+function renewCustomerPrepaidValidity(customerId, multiplier = 1) {
+  try {
+    const customer = db.prepare(`
+      SELECT c.*, p.billing_type, p.duration_days
+      FROM customers c
+      LEFT JOIN packages p ON c.package_id = p.id
+      WHERE c.id = ?
+    `).get(customerId);
+
+    if (!customer || customer.billing_type !== 'prepaid') {
+      return null;
+    }
+
+    const durationDays = (parseInt(customer.duration_days, 10) || 30) * Math.max(1, parseInt(multiplier, 10) || 1);
+    const now = new Date();
+    let baseDate = now;
+
+    // If customer has expired_at and it is still in the future:
+    if (customer.expired_at) {
+      const currentExpiry = new Date(customer.expired_at);
+      if (!isNaN(currentExpiry.getTime()) && currentExpiry > now) {
+        baseDate = currentExpiry;
+      }
+    }
+
+    const nextExpiry = new Date(baseDate);
+    nextExpiry.setDate(nextExpiry.getDate() + durationDays);
+
+    const y = nextExpiry.getFullYear();
+    const m = String(nextExpiry.getMonth() + 1).padStart(2, '0');
+    const d = String(nextExpiry.getDate()).padStart(2, '0');
+    const newExpiredAt = `${y}-${m}-${d} 23:59:59`;
+
+    db.prepare('UPDATE customers SET expired_at = ? WHERE id = ?').run(newExpiredAt, customerId);
+
+    // If customer was suspended / isolated, automatically activate & sync
+    if (customer.status === 'suspended') {
+      try {
+        const customerSvc = require('./customerService');
+        customerSvc.activateCustomer(customerId).catch(err => {
+          logger.warn(`[Prepaid Renewal] Auto activate error for ${customer.name}: ${err.message}`);
+        });
+      } catch (e) {}
+    }
+
+    return newExpiredAt;
+  } catch (err) {
+    logger.error(`[Prepaid Renewal] Error renewing customer ${customerId}:`, err);
+    return null;
+  }
+}
+
 function markAsPaid(invoiceId, paidByName, notes, actor = null) {
   const result = db.prepare(`
     UPDATE invoices SET status='paid', paid_at=NOW_LOCAL(), paid_by_name=?, notes=? WHERE id=?
   `).run(paidByName || 'Admin', notes || '', invoiceId);
 
+  const invoice = db.prepare('SELECT id, customer_id, period_month, period_year, amount FROM invoices WHERE id=?').get(invoiceId);
+  if (invoice && invoice.customer_id) {
+    renewCustomerPrepaidValidity(invoice.customer_id, 1);
+  }
+
   // Catat audit trail jika berhasil
-  if (result.changes > 0 && actor) {
-    const invoice = db.prepare('SELECT id, customer_id, period_month, period_year, amount FROM invoices WHERE id=?').get(invoiceId);
-    if (invoice) {
-      auditTrail.logAuditTrail({
-        action: 'MARK_INVOICE_PAID',
-        entity_type: 'invoice',
-        entity_id: String(invoiceId),
-        actor_type: actor.type || 'unknown',
-        actor_id: actor.id || null,
-        actor_name: actor.name || null,
-        details: {
-          customer_id: invoice.customer_id,
-          period: `${invoice.period_month}/${invoice.period_year}`,
-          amount: invoice.amount,
-          paid_by: paidByName || 'Admin',
-          notes: notes || ''
-        },
-        ip_address: actor.ip || null,
-        user_agent: actor.userAgent || null
-      });
-    }
+  if (result.changes > 0 && actor && invoice) {
+    auditTrail.logAuditTrail({
+      action: 'MARK_INVOICE_PAID',
+      entity_type: 'invoice',
+      entity_id: String(invoiceId),
+      actor_type: actor.type || 'unknown',
+      actor_id: actor.id || null,
+      actor_name: actor.name || null,
+      details: {
+        customer_id: invoice.customer_id,
+        period: `${invoice.period_month}/${invoice.period_year}`,
+        amount: invoice.amount,
+        paid_by: paidByName || 'Admin',
+        notes: notes || ''
+      },
+      ip_address: actor.ip || null,
+      user_agent: actor.userAgent || null
+    });
   }
 
   return result;
@@ -636,6 +694,7 @@ function updatePaymentInfo(invoiceId, data) {
 module.exports = {
   getInvoicesByAny,
   getUnpaidInvoicesByCustomerId,
+  renewCustomerPrepaidValidity,
   generateMonthlyInvoices, generateInvoiceForCustomer, createInstallProrataCatchUpInvoice, payInvoiceForCustomerPeriod, payInvoicesForCustomerMonths, getPaidMonthsForCustomerYear, getCustomerBillingYearSummary, getAllInvoices, getInvoiceById,
   markAsPaid, markAsUnpaid, deleteInvoice,
   getInvoiceSummary, getMonthlyRevenue,

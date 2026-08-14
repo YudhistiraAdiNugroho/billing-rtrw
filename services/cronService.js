@@ -73,30 +73,43 @@ function startCronJobs() {
 
   // 2. Isolir Otomatis setiap hari jam 02:00
   cron.schedule('0 2 * * *', async () => {
-    const today = new Date().getDate();
-    // Kita cek semua pelanggan setiap hari untuk isolir otomatis
+    const now = new Date();
+    const today = now.getDate();
     logger.info(`[CRON] Menjalankan pengecekan isolir otomatis harian (Tanggal ${today})`);
     
     const customers = customerSvc.getAllCustomers();
     let isolatedCount = 0;
 
     for (const c of customers) {
-      // Cek apakah isolir otomatis aktif untuk user ini dan hari ini adalah tanggal isolirnya
-      const customerIsolirDay = c.isolate_day || 10;
       const isAutoIsolateEnabled = c.auto_isolate !== 0; // default aktif jika null/1
+      if (!isAutoIsolateEnabled || c.status !== 'active') continue;
 
-      if (isAutoIsolateEnabled && today >= customerIsolirDay) {
-        // Jika pelanggan aktif tapi punya tagihan belum bayar
-        if (c.status === 'active' && c.unpaid_count > 0) {
+      const isPrepaid = c.package_billing_type === 'prepaid';
+
+      if (isPrepaid) {
+        // Logika Prabayar: Isolir jika waktu sekarang >= expired_at
+        if (c.expired_at) {
+          const expDate = new Date(c.expired_at);
+          if (!isNaN(expDate.getTime()) && now >= expDate) {
+            try {
+              logger.info(`[CRON] Isolir otomatis pelanggan PRABAYAR: ${c.name} (${c.pppoe_username || c.hotspot_username || '-'}) - Masa Aktif Berakhir: ${c.expired_at}`);
+              await customerSvc.suspendCustomer(c.id);
+              isolatedCount++;
+            } catch (err) {
+              logger.error(`[CRON] Gagal isolir prabayar ${c.name}: ${err.message}`);
+            }
+          }
+        }
+      } else {
+        // Logika Pascabayar: Isolir jika hari ini >= isolate_day dan ada tagihan belum bayar
+        const customerIsolirDay = c.isolate_day || 10;
+        if (today >= customerIsolirDay && c.unpaid_count > 0) {
           try {
-            logger.info(`[CRON] Isolir otomatis pelanggan: ${c.name} (${c.pppoe_username}) - Tanggal Tagihan: ${customerIsolirDay}`);
-            
-            // Gunakan fungsi terpusat untuk isolir
+            logger.info(`[CRON] Isolir otomatis pelanggan PASCABAYAR: ${c.name} (${c.pppoe_username || c.hotspot_username || '-'}) - Tanggal Tagihan: ${customerIsolirDay}`);
             await customerSvc.suspendCustomer(c.id);
-            
             isolatedCount++;
           } catch (err) {
-            logger.error(`[CRON] Gagal isolir ${c.name}: ${err.message}`);
+            logger.error(`[CRON] Gagal isolir pascabayar ${c.name}: ${err.message}`);
           }
         }
       }
@@ -184,12 +197,30 @@ function startCronJobs() {
       if (!digits) continue;
       if (digits.startsWith('0')) digits = '62' + digits.slice(1);
       if (seenPhones.has(digits)) continue;
-      const unpaidCount = Number(c.unpaid_count || 0) || 0;
-      if (unpaidCount <= 0) continue;
 
-      const dueDay = Number(c.isolate_day || 0) || Number(getSetting('isolir_day', 10) || 10) || 10;
-      const remind1 = dueDay - 1;
-      const shouldSend = remind1 >= 1 && day === remind1;
+      const isPrepaid = c.package_billing_type === 'prepaid';
+      let shouldSend = false;
+
+      if (isPrepaid) {
+        if (c.expired_at) {
+          const expDate = new Date(c.expired_at);
+          if (!isNaN(expDate.getTime())) {
+            const diffMs = expDate.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+            if (diffDays === 1 || diffDays === 2) {
+              shouldSend = true;
+            }
+          }
+        }
+      } else {
+        const unpaidCount = Number(c.unpaid_count || 0) || 0;
+        if (unpaidCount > 0) {
+          const dueDay = Number(c.isolate_day || 0) || Number(getSetting('isolir_day', 10) || 10) || 10;
+          const remind1 = dueDay - 1;
+          shouldSend = (remind1 >= 1 && day === remind1);
+        }
+      }
+
       if (!shouldSend) continue;
 
       seenPhones.add(digits);

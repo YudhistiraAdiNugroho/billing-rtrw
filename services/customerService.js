@@ -57,6 +57,16 @@ function getEffectiveRouterId(customerRouterId) {
 }
 
 // ─── CUSTOMERS ───────────────────────────────────────────────
+function calculateExpiredAt(startDateStr, durationDays = 30) {
+  const d = startDateStr ? new Date(startDateStr) : new Date();
+  if (isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + (parseInt(durationDays, 10) || 30));
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day} 23:59:59`;
+}
+
 function getAllCustomers(search = '', routerId = null, filterStatus = '', filterArea = '') {
   const now = getCurrentDateInTimezone();
   const month = now.getMonth() + 1;
@@ -64,6 +74,7 @@ function getAllCustomers(search = '', routerId = null, filterStatus = '', filter
 
   const base = `
     SELECT c.*, p.name as package_name, p.price as package_price,
+           p.billing_type as package_billing_type, p.duration_days as package_duration_days,
            p.promo_cycles as package_promo_cycles,
            p.prorate_first_invoice as package_prorate_first_invoice,
            p.speed_down, p.speed_up, p.fup_limit_gb, p.use_fup,
@@ -140,6 +151,7 @@ function resetPromoCyclesUsed(customerId) {
 function getCustomerById(id) {
   return db.prepare(`
     SELECT c.*, p.name as package_name, p.price as package_price,
+           p.billing_type as package_billing_type, p.duration_days as package_duration_days,
            p.promo_cycles as package_promo_cycles,
            p.prorate_first_invoice as package_prorate_first_invoice,
            r.name as router_name, o.name as olt_name, odp.name as odp_name
@@ -153,9 +165,18 @@ function getCustomerById(id) {
 }
 
 function createCustomer(data) {
+  let expiredAt = data.expired_at || null;
+  if (!expiredAt && data.package_id) {
+    const pkg = db.prepare('SELECT billing_type, duration_days FROM packages WHERE id=?').get(data.package_id);
+    if (pkg && pkg.billing_type === 'prepaid') {
+      const baseDate = data.install_date || new Date().toISOString().slice(0, 10);
+      expiredAt = calculateExpiredAt(baseDate, pkg.duration_days || 30);
+    }
+  }
+
   return db.prepare(`
-    INSERT INTO customers (nik, name, phone, email, address, area, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id, is_radius)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (nik, name, phone, email, address, area, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, expired_at, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id, is_radius)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.nik ? String(data.nik).trim() : '',
     data.name, data.phone || '', data.email || '', data.address || '',
@@ -172,7 +193,9 @@ function createCustomer(data) {
     data.pppoe_remote_address || '',
     data.isolir_profile || 'isolir',
     data.status || 'active',
-    data.install_date || null, data.notes || '',
+    data.install_date || null,
+    expiredAt,
+    data.notes || '',
     data.auto_isolate !== undefined ? parseInt(data.auto_isolate) : 1,
     data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
     data.connection_type || 'pppoe',
@@ -187,12 +210,21 @@ function createCustomer(data) {
 }
 
 function updateCustomer(id, data) {
-  const prev = db.prepare('SELECT package_id FROM customers WHERE id=?').get(id);
+  const prev = db.prepare('SELECT package_id, expired_at, install_date FROM customers WHERE id=?').get(id);
   const newPkgId = data.package_id ? parseInt(data.package_id, 10) : null;
   const pkgChanged = prev && Number(prev.package_id || 0) !== Number(newPkgId || 0);
 
+  let expiredAt = data.expired_at !== undefined ? data.expired_at : (prev ? prev.expired_at : null);
+  if (!expiredAt && newPkgId) {
+    const pkg = db.prepare('SELECT billing_type, duration_days FROM packages WHERE id=?').get(newPkgId);
+    if (pkg && pkg.billing_type === 'prepaid') {
+      const baseDate = data.install_date || (prev ? prev.install_date : null) || new Date().toISOString().slice(0, 10);
+      expiredAt = calculateExpiredAt(baseDate, pkg.duration_days || 30);
+    }
+  }
+
   const result = db.prepare(`
-    UPDATE customers SET nik=?, name=?, phone=?, email=?, address=?, area=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?, is_radius=?
+    UPDATE customers SET nik=?, name=?, phone=?, email=?, address=?, area=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, expired_at=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?, is_radius=?
     WHERE id=?
   `).run(
     data.nik !== undefined ? (data.nik ? String(data.nik).trim() : '') : (prev.nik || ''),
@@ -210,7 +242,9 @@ function updateCustomer(id, data) {
     data.pppoe_remote_address || '',
     data.isolir_profile || 'isolir',
     data.status || 'active',
-    data.install_date || null, data.notes || '',
+    data.install_date || null,
+    expiredAt,
+    data.notes || '',
     data.auto_isolate !== undefined ? parseInt(data.auto_isolate) : 1,
     data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
     data.cable_path || null,
@@ -383,6 +417,8 @@ function createPackage(data) {
   const useUso = data.use_uso ? 1 : 0;
   const usoPercentage = parseFloat(data.uso_percentage || 1.75);
   const routerId = data.router_id ? parseInt(data.router_id, 10) : null;
+  const billingType = (data.billing_type === 'prepaid') ? 'prepaid' : 'postpaid';
+  const durationDays = Math.max(1, parseInt(data.duration_days, 10) || 30);
 
   return db.prepare(`
     INSERT INTO packages (
@@ -391,15 +427,17 @@ function createPackage(data) {
       use_night_speed, night_profile_name, night_speed_down, night_speed_up, 
       use_fup, fup_profile_name, fup_limit_gb, fup_speed_down, 
       description,
+      billing_type, duration_days,
       use_ppn, ppn_percentage, use_uso, uso_percentage, router_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, parseInt(data.price) || 0, promoPrice, promoCycles, prorateFirst,
     down, up, down_upto, up_upto,
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || '',
+    billingType, durationDays,
     usePpn, ppnPercentage, useUso, usoPercentage, routerId
   );
 }
@@ -427,6 +465,8 @@ function updatePackage(id, data) {
   const useUso = data.use_uso ? 1 : 0;
   const usoPercentage = parseFloat(data.uso_percentage || 1.75);
   const routerId = data.router_id ? parseInt(data.router_id, 10) : null;
+  const billingType = (data.billing_type === 'prepaid') ? 'prepaid' : 'postpaid';
+  const durationDays = Math.max(1, parseInt(data.duration_days, 10) || 30);
 
   return db.prepare(`
     UPDATE packages 
@@ -435,6 +475,7 @@ function updatePackage(id, data) {
         use_night_speed=?, night_profile_name=?, night_speed_down=?, night_speed_up=?, 
         use_fup=?, fup_profile_name=?, fup_limit_gb=?, fup_speed_down=?, 
         description=?, is_active=?,
+        billing_type=?, duration_days=?,
         use_ppn=?, ppn_percentage=?, use_uso=?, uso_percentage=?, router_id=?
     WHERE id=?
   `).run(
@@ -443,6 +484,7 @@ function updatePackage(id, data) {
     data.use_night_speed ? 1 : 0, data.night_profile_name || null, n_down, n_up,
     data.use_fup ? 1 : 0, data.fup_profile_name || null, f_limit, f_down,
     data.description || '', data.is_active == '1' ? 1 : 0,
+    billingType, durationDays,
     usePpn, ppnPercentage, useUso, usoPercentage, routerId,
     id
   );

@@ -102,6 +102,8 @@ db.exec(`
     speed_down INTEGER DEFAULT 0,
     speed_up INTEGER DEFAULT 0,
     description TEXT DEFAULT '',
+    billing_type TEXT DEFAULT 'postpaid',
+    duration_days INTEGER DEFAULT 30,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
@@ -119,6 +121,7 @@ db.exec(`
     isolir_profile TEXT DEFAULT 'isolir',
     status TEXT DEFAULT 'active',
     install_date DATE,
+    expired_at DATETIME DEFAULT NULL,
     notes TEXT DEFAULT '',
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
@@ -734,6 +737,11 @@ try { db.exec("ALTER TABLE packages ADD COLUMN use_ppn INTEGER DEFAULT 0"); } ca
 try { db.exec("ALTER TABLE packages ADD COLUMN ppn_percentage REAL DEFAULT 11.0"); } catch (e) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN use_uso INTEGER DEFAULT 0"); } catch (e) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN uso_percentage REAL DEFAULT 1.75"); } catch (e) {}
+
+// Kolom untuk Prepaid / Prabayar pada packages dan customers
+try { db.exec("ALTER TABLE packages ADD COLUMN billing_type TEXT DEFAULT 'postpaid'"); } catch (e) {}
+try { db.exec("ALTER TABLE packages ADD COLUMN duration_days INTEGER DEFAULT 30"); } catch (e) {}
+try { db.exec("ALTER TABLE customers ADD COLUMN expired_at DATETIME DEFAULT NULL"); } catch (e) {}
 
 // Kolom untuk Tiket Bantuan (Foto & Catatan Teknisi)
 try { db.exec("ALTER TABLE tickets ADD COLUMN technician_notes TEXT DEFAULT ''"); } catch (e) {}
