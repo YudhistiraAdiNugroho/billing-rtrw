@@ -300,7 +300,13 @@
             <div class="fg"><label class="fl">No. Telepon / WA *</label><input class="fc" name="phone" placeholder="Contoh: 08123456789" required></div>
           </div>
           <div class="form-row">
+            <div class="fg">
+              <label class="fl"><i class="bi bi-card-text"></i> NIK / No. KTP (Opsional)</label>
+              <input class="fc" name="nik" placeholder="Contoh: 3201xxxxxxxxxxxx">
+            </div>
             <div class="fg"><label class="fl">Email (Notifikasi Billing)</label><input class="fc" name="email" type="email" placeholder="customer@example.com"></div>
+          </div>
+          <div class="form-row">
             <div class="fg">
               <label class="fl"><i class="bi bi-geo-alt"></i> Area / Wilayah</label>
               <select class="fs" name="area" id="add_area">
@@ -594,7 +600,13 @@
             <div class="fg"><label class="fl">No. Telepon / WA *</label><input class="fc" name="phone" id="e_phone" required></div>
           </div>
           <div class="form-row">
+            <div class="fg">
+              <label class="fl"><i class="bi bi-card-text"></i> NIK / No. KTP (Opsional)</label>
+              <input class="fc" name="nik" id="e_nik" placeholder="Contoh: 3201xxxxxxxxxxxx">
+            </div>
             <div class="fg"><label class="fl">Email (Notifikasi Billing)</label><input class="fc" name="email" id="e_email" type="email"></div>
+          </div>
+          <div class="form-row">
             <div class="fg">
               <label class="fl"><i class="bi bi-geo-alt"></i> Area / Wilayah</label>
               <select class="fs" name="area" id="e_area">
@@ -1025,6 +1037,13 @@
         <div style="background:var(--panel2);border:1px solid rgba(148,163,184,0.15);border-radius:10px;padding:12px">
           <table class="tbl" style="width:100%;border-collapse:collapse;font-size:12px">
             <tr>
+              <td style="width:38%;color:var(--muted);padding:6px 0">NIK / No. KTP</td>
+              <td style="padding:6px 0">
+                <code id="v_nik" style="font-weight:700;color:var(--text);font-size:12px">-</code>
+                <button class="btn btn-g btn-sm py-0 px-2 ms-2" onclick="copyToClipboard('v_nik', 'NIK')"><i class="bi bi-copy"></i> Copy</button>
+              </td>
+            </tr>
+            <tr>
               <td style="width:38%;color:var(--muted);padding:6px 0">No. Telepon / WhatsApp</td>
               <td style="padding:6px 0">
                 <code id="v_phone" style="font-weight:700;color:var(--text);font-size:12px">-</code>
@@ -1192,6 +1211,7 @@ function viewCustDetail(idx) {
     const fupText = formatBytesVal(totalBytes) + (useFup && limitGB > 0 ? ` (Limit FUP: ${limitGB} GB)` : ' (Unlimited)');
     if (document.getElementById('v_total_fup')) document.getElementById('v_total_fup').textContent = fupText;
 
+    if (document.getElementById('v_nik')) document.getElementById('v_nik').textContent = c.nik || '-';
     if (document.getElementById('v_phone')) document.getElementById('v_phone').textContent = c.phone || '-';
     if (document.getElementById('v_address_area')) document.getElementById('v_address_area').textContent = (c.address || '-') + (c.area ? ` [Area: ${c.area}]` : '');
     if (document.getElementById('v_package')) document.getElementById('v_package').textContent = c.package_name ? `${c.package_name} (Rp ${Number(c.package_price||0).toLocaleString('id-ID')})` : '-';
@@ -1429,6 +1449,7 @@ function editCust(idx) {
   currentEditCustomerId = c.id || '';
   document.getElementById('editForm').action='/admin/customers/'+c.id+'/update';
   document.getElementById('e_name').value=c.name||'';
+  if (document.getElementById('e_nik')) document.getElementById('e_nik').value=c.nik||'';
   document.getElementById('e_phone').value=c.phone||'';
   document.getElementById('e_email').value=c.email||'';
   document.getElementById('e_address').value=c.address||'';
