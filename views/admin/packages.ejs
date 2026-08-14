@@ -76,7 +76,16 @@
           <% packages.forEach((p,i)=>{ %>
             <tr>
               <td class="text-muted"><%= i+1 %></td>
-              <td class="fw6"><%= p.name %></td>
+              <td class="fw6">
+                <div><%= p.name %></div>
+                <div style="margin-top:3px">
+                  <% if (p.billing_type === 'prepaid') { %>
+                    <span class="badge bs" style="font-size:10px;padding:2px 6px;font-weight:700;"><i class="bi bi-clock-history"></i> Prabayar (<%= p.duration_days || 30 %> Hari)</span>
+                  <% } else { %>
+                    <span class="badge bp" style="font-size:10px;padding:2px 6px;font-weight:600;"><i class="bi bi-calendar-check"></i> Pascabayar</span>
+                  <% } %>
+                </div>
+              </td>
               <td class="fw6" style="color:var(--success)">
                 Rp <%= p.price.toLocaleString('id-ID') %>
                 <% if (p.use_ppn) { %><br><span class="badge bp" style="font-size:9px;padding:2px 4px;margin-top:2px;display:inline-block">+ PPN <%= p.ppn_percentage %>%</span><% } %>
@@ -88,7 +97,6 @@
                 <% } else { %><span class="text-muted">—</span><% } %>
                 <% if (p.prorate_first_invoice) { %><br><span class="badge bs" style="margin-top:4px;display:inline-block">Prorata 1×</span><% } %>
               </td>
-              <td>
               <td>
                 <% if (p.speed_down) { %>
                   <div style="white-space:nowrap;font-weight:700;">
@@ -143,6 +151,24 @@
           <div class="fg"><label class="fl"><%= t('admin.packages.form.price_month', 'Harga / Bulan (Rp)') %> *</label><input class="fc" name="price" type="number" min="0" required placeholder="150000"></div>
           <div class="fg"><label class="fl"><%= t('admin.packages.form.status', 'Status') %></label>
             <select class="fs" name="is_active"><option value="1"><%= t('common.active', 'Aktif') %></option><option value="0"><%= t('common.inactive', 'Nonaktif') %></option></select>
+          </div>
+        </div>
+
+        <!-- Tipe Billing: Pascabayar vs Prabayar -->
+        <div class="form-row" style="background:rgba(99,102,241,0.05);padding:12px 14px;border-radius:10px;margin-top:10px;border:1px solid rgba(99,102,241,0.15);">
+          <div class="fg">
+            <label class="fl"><i class="bi bi-credit-card-2-front text-primary me-1"></i> Tipe Penagihan / Billing *</label>
+            <select class="fs" name="billing_type" id="add_billing_type" onchange="toggleAddBillingType(this.value)">
+              <option value="postpaid" selected>Pascabayar (Kalender / Jatuh Tempo Tetap)</option>
+              <option value="prepaid">Prabayar (Masa Aktif Bergulir)</option>
+            </select>
+          </div>
+          <div class="fg" id="add_duration_days_fg" style="display:none">
+            <label class="fl"><i class="bi bi-clock-history text-warning me-1"></i> Durasi Masa Aktif (Hari) *</label>
+            <input class="fc" name="duration_days" id="add_duration_days" type="number" min="1" value="30" placeholder="30">
+            <small class="text-muted" style="font-size:11px;display:block;margin-top:2px;">
+              Pelanggan aktif selama X hari sejak aktivasi / pembayaran.
+            </small>
           </div>
         </div>
 
@@ -296,6 +322,24 @@
           <div class="fg"><label class="fl"><%= t('admin.packages.form.price_month', 'Harga / Bulan (Rp)') %> *</label><input class="fc" name="price" id="e_price" type="number" min="0" required></div>
           <div class="fg"><label class="fl"><%= t('admin.packages.form.status', 'Status') %></label>
             <select class="fs" name="is_active" id="e_active"><option value="1"><%= t('common.active', 'Aktif') %></option><option value="0"><%= t('common.inactive', 'Nonaktif') %></option></select>
+          </div>
+        </div>
+
+        <!-- Tipe Billing: Pascabayar vs Prabayar (Edit) -->
+        <div class="form-row" style="background:rgba(99,102,241,0.05);padding:12px 14px;border-radius:10px;margin-top:10px;border:1px solid rgba(99,102,241,0.15);">
+          <div class="fg">
+            <label class="fl"><i class="bi bi-credit-card-2-front text-primary me-1"></i> Tipe Penagihan / Billing *</label>
+            <select class="fs" name="billing_type" id="e_billing_type" onchange="toggleEditBillingType(this.value)">
+              <option value="postpaid">Pascabayar (Kalender / Jatuh Tempo Tetap)</option>
+              <option value="prepaid">Prabayar (Masa Aktif Bergulir)</option>
+            </select>
+          </div>
+          <div class="fg" id="e_duration_days_fg" style="display:none">
+            <label class="fl"><i class="bi bi-clock-history text-warning me-1"></i> Durasi Masa Aktif (Hari) *</label>
+            <input class="fc" name="duration_days" id="e_duration_days" type="number" min="1" value="30" placeholder="30">
+            <small class="text-muted" style="font-size:11px;display:block;margin-top:2px;">
+              Pelanggan aktif selama X hari sejak aktivasi / pembayaran.
+            </small>
           </div>
         </div>
 
@@ -461,9 +505,21 @@ function editPkg(idx) {
 
   document.getElementById('e_active').value=p.is_active?'1':'0';
   document.getElementById('e_desc').value=p.description||'';
+  
+  const isPrepaid = p.billing_type === 'prepaid';
+  document.getElementById('e_billing_type').value = isPrepaid ? 'prepaid' : 'postpaid';
+  document.getElementById('e_duration_days').value = p.duration_days || 30;
+  document.getElementById('e_duration_days_fg').style.display = isPrepaid ? 'block' : 'none';
+
   openModal('editModal');
 }
 
+function toggleAddBillingType(val) {
+  document.getElementById('add_duration_days_fg').style.display = (val === 'prepaid') ? 'block' : 'none';
+}
+function toggleEditBillingType(val) {
+  document.getElementById('e_duration_days_fg').style.display = (val === 'prepaid') ? 'block' : 'none';
+}
 function toggleAddNight() { document.getElementById('add_night_fields').style.display = document.getElementById('add_use_night').checked ? 'block' : 'none'; }
 function toggleAddFup() { document.getElementById('add_fup_fields').style.display = document.getElementById('add_use_fup').checked ? 'block' : 'none'; }
 function toggleEditNight() { document.getElementById('e_night_fields').style.display = document.getElementById('e_use_night').checked ? 'block' : 'none'; }
