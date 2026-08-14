@@ -92,10 +92,13 @@
                   <div class="hint" style="margin-top:6px">Perubahan status menu sidebar hanya akan disimpan jika password aktivasi benar.</div>
                 </div>
                 <div class="hint" style="align-self:center">
-                  Hubungi <strong><%= featureContactPhone %></strong> untuk mendapatkan password aktivasi (seikhlasnya).
+                  Belum punya password aktivasi? <a href="https://app.alijaya.com/donasi" target="_blank" style="color:var(--primary);font-weight:700;"><i class="bi bi-heart-fill text-danger me-1"></i> Dapatkan melalui Halaman Donasi QRIS</a> atau hubungi <strong><%= featureContactPhone %></strong>.
                 </div>
               </div>
               <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap">
+                <a href="https://app.alijaya.com/donasi" target="_blank" class="btn btn-g">
+                  <i class="bi bi-heart text-danger"></i> Halaman Donasi QRIS
+                </a>
                 <button type="submit" class="btn btn-p">
                   <i class="bi bi-save"></i> Simpan Pengaturan Sidebar
                 </button>
@@ -114,7 +117,7 @@
         </div>
         <div class="card-bd">
           <div class="alert alert-s" style="margin-bottom:12px">
-            <i class="bi bi-info-circle"></i> Jika menu berstatus <strong>Kunci</strong> diklik dari sidebar, sistem hanya akan menampilkan pemberitahuan untuk menghubungi <strong><%= featureContactPhone %></strong> (seikhlasnya).
+            <i class="bi bi-info-circle"></i> Jika menu berstatus <strong>Kunci</strong> diklik dari sidebar, sistem akan menampilkan opsi donasi untuk mendapatkan kode aktivasi atau menghubungi <strong><%= featureContactPhone %></strong>.
           </div>
           <ul style="margin:0;padding-left:18px;display:grid;gap:8px">
             <li>Status <strong>Sembunyikan</strong> akan menghilangkan menu dari sidebar dan menolak akses URL langsung.</li>
