@@ -6987,8 +6987,8 @@ router.get('/radius-settings', requireAdminSession, restrictToAdmin, async (req,
     req.session._msg = null;
 
     res.render('admin/radius-settings', {
-      title: 'RADIUS Server Settings',
-      company: getSetting('company_name', 'RTRW-Net'),
+      title: 'Pengaturan RADIUS',
+      company: company(),
       activePage: 'radius_settings',
       session: req.session,
       radiusStatus,
