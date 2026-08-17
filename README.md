@@ -313,3 +313,4 @@ Managed by [Ali Jaya Net](https://github.com/alijayanet)
 ## Info & donasi
 
 081947215703 — https://wa.me/6281947215703
+https://app.alijaya.com/donasi
