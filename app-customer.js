@@ -38,8 +38,11 @@ process.on('uncaughtException', (err) => {
 
 // Settings Management
 const session = require('express-session');
-const { getSetting, getSettingsWithCache } = require('./config/settingsManager');
+const { getSetting, getSettingsWithCache, ensureDefaultSettings } = require('./config/settingsManager');
 const { SUPPORTED_LANGS, FALLBACK_LANG, normalizeLang, t } = require('./config/i18n');
+
+// Pastikan semua default settings ada (untuk migrasi/update dari GitHub)
+ensureDefaultSettings();
 
 // Inisialisasi aplikasi Express
 const app = express();
@@ -215,6 +218,40 @@ const markVoucherWaSentOk = db.prepare(`
 const markVoucherWaSentErr = db.prepare(`
   UPDATE public_voucher_orders
   SET wa_sent=0, wa_error=?, updated_at=NOW_LOCAL()
+  WHERE id=?
+`);
+
+const selectDonationOrderByUniqueAmount = db.prepare(`
+  SELECT id, status, donor_name, donor_phone, amount, qris_amount_unique, qris_unique_code, notes, activation_code
+  FROM public_donation_orders
+  WHERE status = 'pending' AND qris_amount_unique = ?
+  ORDER BY id DESC
+  LIMIT 2
+`);
+
+const markDonationPaid = db.prepare(`
+  UPDATE public_donation_orders
+  SET status='paid',
+      paid_at=NOW_LOCAL(),
+      qris_paid_notif_id=?,
+      updated_at=NOW_LOCAL()
+  WHERE id=?
+`);
+
+const selectDonationOrderById = db.prepare(`SELECT * FROM public_donation_orders WHERE id = ?`);
+const markDonationWaSentOk = db.prepare(`
+  UPDATE public_donation_orders
+  SET wa_sent=1, wa_sent_at=NOW_LOCAL(), wa_error='', updated_at=NOW_LOCAL()
+  WHERE id=?
+`);
+const markDonationWaSentErr = db.prepare(`
+  UPDATE public_donation_orders
+  SET wa_sent=0, wa_error=?, updated_at=NOW_LOCAL()
+  WHERE id=?
+`);
+const updateWebhookPaymentNotifMatchDonation = db.prepare(`
+  UPDATE webhook_payment_notifs
+  SET matched_donation_order_id=?
   WHERE id=?
 `);
 
@@ -546,6 +583,50 @@ async function fulfillVoucherOrder(settings, orderId) {
   return { ok: true, created };
 }
 
+async function fulfillDonationOrder(settings, donationOrderId) {
+  const ord = selectDonationOrderById.get(donationOrderId);
+  if (!ord) return { ok: false, error: 'Order donasi tidak ditemukan' };
+
+  const donorName = String(ord.donor_name || 'Hamba Allah').trim();
+  const donorPhone = String(ord.donor_phone || '').trim();
+  const amount = Number(ord.qris_amount_unique || ord.amount || 0);
+  const activationCode = String(ord.activation_code || 'donasidulu').trim();
+  const baseUrl = String(settings.app_url || '').replace(/\/+$/, '');
+  const sidebarSettingsLink = `${baseUrl}/admin/sidebar-settings`;
+
+  const msg =
+`🙏 *TERIMA KASIH ATAS DONASI ANDA!*
+
+Halo *${donorName}*,
+Alhamdulillah, transaksi donasi Anda sebesar *Rp ${amount.toLocaleString('id-ID')}* telah *BERHASIL DITERIMA* oleh sistem kami.
+
+🔑 *KODE AKTIVASI SIDEBAR:*
+*${activationCode}*
+
+📌 *Panduan Penggunaan Kode Aktivasi:*
+1. Buka menu *Pengaturan Sidebar* di Admin Panel:
+${sidebarSettingsLink}
+2. Masukkan password aktivasi: *${activationCode}*
+3. Ubah status menu yang diinginkan menjadi *Tampil*
+4. Klik tombol *Simpan Pengaturan Sidebar*
+
+Dukungan Anda sangat berarti bagi pengembangan aplikasi Billing RTRW & RADIUS. Semoga rezeki Anda dilipatgandakan dan berkah selalu. Aamiin! 🤲
+
+🏢 *${settings.company_header || 'ALIJAYA NET'}*`;
+
+  try {
+    const whatsappSvc = require('./services/whatsappService');
+    await whatsappSvc.sendWhatsAppMessage(donorPhone, msg);
+    markDonationWaSentOk.run(donationOrderId);
+    return { ok: true };
+  } catch (err) {
+    markDonationWaSentErr.run(err.message, donationOrderId);
+    logger.warn(`[Donasi WA] Gagal kirim WA ke ${donorPhone}: ${err.message}`);
+    return { ok: false, error: err.message };
+  }
+}
+
+
 // Meta WhatsApp Cloud API Public Webhook Endpoints
 const metaWAService = require('./services/metaWhatsappService');
 app.get('/api/meta-webhook', (req, res) => metaWAService.verifyWebhook(req, res));
@@ -585,12 +666,12 @@ app.post('/api/webhook/v1/payment-notif', multer().any(), async (req, res) => {
     req.get('x-webhook-token') ??
     req.get('x-webhook-secret') ??
     req.get('x-webhook-key');
-  const expected = process.env.MY_WEBHOOK_SECRET;
+  const expected = process.env.MY_WEBHOOK_SECRET || getSettingsWithCache().webhook_secret || 'billing-rtrw-secret-key';
   const expectedTrim = typeof expected === 'string' ? expected.trim() : '';
   const gotTrim = String(secret_key || '').trim();
 
   if (!expectedTrim || expectedTrim.length < 8) {
-    logger.error('[WEBHOOK][payment-notif] MY_WEBHOOK_SECRET belum diset (minimal 8 karakter). Request ditolak.');
+    logger.error('[WEBHOOK][payment-notif] Webhook secret belum diset (minimal 8 karakter). Request ditolak.');
     return res.status(403).json({ ok: false, error: 'Forbidden', reason: 'server_secret_not_configured' });
   }
 
@@ -676,11 +757,15 @@ app.post('/api/webhook/v1/payment-notif', multer().any(), async (req, res) => {
 
     let matchedInvoiceId = null;
     let matchedVoucherOrderId = null;
+    let matchedDonationOrderId = null;
     if (amount != null) {
       try {
         const invCandidates = selectInvoiceByUniqueAmount.all(amount);
         const vCandidates = selectVoucherOrderByUniqueAmount.all(amount);
-        const totalCandidates = (Array.isArray(invCandidates) ? invCandidates.length : 0) + (Array.isArray(vCandidates) ? vCandidates.length : 0);
+        const dCandidates = selectDonationOrderByUniqueAmount.all(amount);
+        const totalCandidates = (Array.isArray(invCandidates) ? invCandidates.length : 0) + 
+                                (Array.isArray(vCandidates) ? vCandidates.length : 0) +
+                                (Array.isArray(dCandidates) ? dCandidates.length : 0);
 
         if (totalCandidates === 1) {
           if (Array.isArray(invCandidates) && invCandidates.length === 1) {
@@ -736,11 +821,28 @@ app.post('/api/webhook/v1/payment-notif', multer().any(), async (req, res) => {
                 logger.error(`[WEBHOOK][payment-notif] Voucher fulfill error: ${e?.message || e}`);
               }
             }
+          } else if (Array.isArray(dCandidates) && dCandidates.length === 1) {
+            const don = dCandidates[0];
+            const donId = Number(don.id || 0);
+            if (donId > 0) {
+              markDonationPaid.run(notifId || null, donId);
+              matchedDonationOrderId = donId;
+              logger.info(`[WEBHOOK][payment-notif] MATCH donation_order=${donId} amount=${amount}`);
+              if (notifId) {
+                try { updateWebhookPaymentNotifMatchDonation.run(donId, notifId); } catch {}
+              }
+              try {
+                await fulfillDonationOrder(getSettingsWithCache(), donId);
+              } catch (e) {
+                logger.error(`[WEBHOOK][payment-notif] Donation fulfill error: ${e?.message || e}`);
+              }
+            }
           }
         } else if (totalCandidates > 1) {
           const invIds = Array.isArray(invCandidates) ? invCandidates.map(x => x.id).join(',') : '';
           const vIds = Array.isArray(vCandidates) ? vCandidates.map(x => x.id).join(',') : '';
-          logger.error(`[WEBHOOK][payment-notif] MATCH ambiguous: amount=${amount} invoices=[${invIds}] vouchers=[${vIds}]`);
+          const dIds = Array.isArray(dCandidates) ? dCandidates.map(x => x.id).join(',') : '';
+          logger.error(`[WEBHOOK][payment-notif] MATCH ambiguous: amount=${amount} invoices=[${invIds}] vouchers=[${vIds}] donations=[${dIds}]`);
         }
       } catch (e) {
         logger.error(`[WEBHOOK][payment-notif] MATCH error: ${e && e.message ? e.message : String(e)}`);
@@ -749,7 +851,7 @@ app.post('/api/webhook/v1/payment-notif', multer().any(), async (req, res) => {
 
     if (amount != null) {
       logger.info(`[WEBHOOK][payment-notif] PARSED service=${String(service || '-')} amount=${amount}`);
-      return res.status(200).json({ status: 'processed', parsed: true, amount, matched_invoice_id: matchedInvoiceId, matched_voucher_order_id: matchedVoucherOrderId });
+      return res.status(200).json({ status: 'processed', parsed: true, amount, matched_invoice_id: matchedInvoiceId, matched_voucher_order_id: matchedVoucherOrderId, matched_donation_order_id: matchedDonationOrderId });
     }
 
     logger.error(`[WEBHOOK][payment-notif] FAILED parse: "${rawText.replace(/\r?\n/g, ' ').slice(0, 500)}"`);
@@ -1159,19 +1261,202 @@ app.get('/qris/static.jpg', async (req, res) => {
   };
   try {
     const amount = Math.max(0, Math.floor(Number(req.query.amount || 0) || 0));
-    if (!amount) return sendPretty(400, 'Nominal belum ada', 'Tambahkan parameter amount, contoh: ?amount=3948');
     const settings = getSettingsWithCache();
-    const jpg = await buildQrisJpgFromSettings(settings, amount);
-    res.set('Content-Type', 'image/jpeg');
-    res.set('Cache-Control', 'no-store');
-    return res.status(200).send(jpg);
-  } catch (e) {
+    const qrisUtil = require('./utils/qrisUtil');
+    let payload = qrisUtil.normalizeQrisPayload(String(settings?.qris_static_payload || ''));
+
+    // If payload not in settings, try decode from uploaded QR file
+    if (!payload && settings?.qris_static_qr_url) {
+      const url = String(settings.qris_static_qr_url);
+      const match = url.match(/^\/uploads\/qris\/([^/?#]+)$/i);
+      if (match && match[1]) {
+        const safeName = path.basename(match[1]);
+        const filePath = path.join(__dirname, 'public', 'uploads', 'qris', safeName);
+        try {
+          const buf = await fs.promises.readFile(filePath);
+          payload = await qrisUtil.decodeQrisPayloadFromBuffer(buf);
+        } catch {}
+      }
+    }
+
+    if (payload) {
+      if (amount > 0) {
+        const jpg = await qrisUtil.buildDynamicQrisJpgBuffer(payload, amount);
+        res.set('Content-Type', 'image/jpeg');
+        res.set('Cache-Control', 'no-store');
+        return res.status(200).send(jpg);
+      } else {
+        const png = await QRCode.toBuffer(payload, { errorCorrectionLevel: 'M', margin: 1, width: 420, type: 'png' });
+        const img = await Jimp.read(png);
+        const jpg = await img.getBuffer('image/jpeg');
+        res.set('Content-Type', 'image/jpeg');
+        res.set('Cache-Control', 'no-store');
+        return res.status(200).send(jpg);
+      }
+    }
+
+    // Fallback if static image file exists
+    const url = String(settings?.qris_static_qr_url || '').trim();
+    if (url) {
+      const match = url.match(/^\/uploads\/qris\/([^/?#]+)$/i);
+      if (match && match[1]) {
+        const safeName = path.basename(match[1]);
+        const filePath = path.join(__dirname, 'public', 'uploads', 'qris', safeName);
+        try {
+          await fs.promises.access(filePath, fs.constants.R_OK);
+          return res.sendFile(filePath);
+        } catch {}
+      }
+      return res.redirect(url);
+    }
+
     return sendPretty(404, 'QRIS tidak ditemukan', 'QRIS belum diatur oleh admin atau payload QRIS tidak valid.');
+  } catch (e) {
+    logger.error(`[QRIS /qris/static.jpg] Error: ${e.message}`);
+    return sendPretty(404, 'QRIS tidak ditemukan', 'Gagal memproses QRIS: ' + e.message);
   }
 });
 
 app.get('/broadcast', (req, res) => {
   res.redirect('/admin/whatsapp/broadcast');
+});
+
+// Helper: Ensure unique nominal for donation order
+function ensureDonationOrderQrisUnique(baseAmount, donorPhone, donorName, notes) {
+  const base = Math.max(1000, Math.floor(Number(baseAmount) || 50000));
+  let chosenCode = 0;
+  let chosenAmount = 0;
+
+  for (let code = 1; code <= 999; code++) {
+    const candidate = base + code;
+    const inv = db.prepare('SELECT id FROM invoices WHERE status=? AND qris_amount_unique=? LIMIT 1').get('unpaid', candidate);
+    if (inv && inv.id) continue;
+
+    const ord = db.prepare('SELECT id FROM public_voucher_orders WHERE status=? AND qris_amount_unique=? LIMIT 1').get('pending', candidate);
+    if (ord && ord.id) continue;
+
+    const don = db.prepare('SELECT id FROM public_donation_orders WHERE status=? AND qris_amount_unique=? LIMIT 1').get('pending', candidate);
+    if (don && don.id) continue;
+
+    chosenCode = code;
+    chosenAmount = candidate;
+    break;
+  }
+
+  if (!chosenAmount) {
+    chosenCode = Math.floor(1 + Math.random() * 998);
+    chosenAmount = base + chosenCode;
+  }
+
+  const ins = db.prepare(`
+    INSERT INTO public_donation_orders (donor_name, donor_phone, amount, qris_amount_unique, qris_unique_code, notes, status, activation_code)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending', 'donasidulu')
+  `).run(donorName || 'Hamba Allah', donorPhone, base, chosenAmount, chosenCode, notes || '');
+
+  return {
+    orderId: ins.lastInsertRowid,
+    uniqueCode: chosenCode,
+    amountUnique: chosenAmount,
+    baseAmount: base
+  };
+}
+
+// Halaman Publik Donasi QRIS Statis
+app.get(['/donasi', '/donate', '/public/donasi'], (req, res) => {
+  const settings = getSettingsWithCache();
+  res.render('donate', {
+    settings,
+    company: settings.company_header || 'Billing RTRW & RADIUS',
+    lang: req.session?.lang || 'id',
+    t: res.locals.t || ((k, d) => d)
+  });
+});
+
+// Endpoint Buat Pesanan Donasi dengan Kode Unik
+app.post(['/donasi/create', '/api/donasi/create'], (req, res) => {
+  try {
+    const { name, phone, amount, notes } = req.body || {};
+    const donorName = String(name || 'Hamba Allah').trim();
+    const donorPhone = String(phone || '').trim();
+    const baseAmount = Math.max(1000, parseInt(amount, 10) || 50000);
+    const donorNotes = String(notes || '').trim();
+
+    if (!donorPhone || donorPhone.length < 8) {
+      return res.status(400).json({ success: false, message: 'Nomor WhatsApp wajib diisi (minimal 8 digit).' });
+    }
+
+    const result = ensureDonationOrderQrisUnique(baseAmount, donorPhone, donorName, donorNotes);
+    return res.json({
+      success: true,
+      orderId: result.orderId,
+      uniqueCode: result.uniqueCode,
+      amountUnique: result.amountUnique,
+      baseAmount: result.baseAmount,
+      qrisUrl: `/qris/static.jpg?amount=${result.amountUnique}`
+    });
+  } catch (e) {
+    logger.error(`[Donasi Create] Error: ${e.message}`);
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Endpoint Status Donasi (Real-time Polling)
+app.get(['/donasi/status/:orderId', '/api/donasi/status/:orderId'], (req, res) => {
+  try {
+    const orderId = Number(req.params.orderId || 0);
+    const order = selectDonationOrderById.get(orderId);
+    if (!order) return res.status(404).json({ success: false, message: 'Order donasi tidak ditemukan' });
+
+    return res.json({
+      success: true,
+      orderId: order.id,
+      status: order.status,
+      paid_at: order.paid_at || null,
+      activationCode: order.status === 'paid' ? (order.activation_code || 'donasidulu') : null,
+      donorName: order.donor_name,
+      amountUnique: order.qris_amount_unique,
+      waSent: Boolean(order.wa_sent)
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Endpoint Konfirmasi Donasi & Fallback Kirim Kode Aktivasi
+app.post(['/donasi/confirm', '/api/donasi/confirm'], async (req, res) => {
+  try {
+    const { orderId, name, phone, amount, notes } = req.body || {};
+    let donId = Number(orderId || 0);
+    let ord = donId > 0 ? selectDonationOrderById.get(donId) : null;
+
+    if (!ord) {
+      const donorName = String(name || 'Hamba Allah').trim();
+      const donorPhone = String(phone || '').trim();
+      const baseAmount = Math.max(1000, parseInt(amount, 10) || 50000);
+      if (!donorPhone || donorPhone.length < 8) {
+        return res.status(400).json({ success: false, message: 'Nomor WhatsApp tidak valid' });
+      }
+      const created = ensureDonationOrderQrisUnique(baseAmount, donorPhone, donorName, notes);
+      donId = created.orderId;
+      ord = selectDonationOrderById.get(donId);
+    }
+
+    markDonationPaid.run(null, donId);
+    const fulfillRes = await fulfillDonationOrder(getSettingsWithCache(), donId);
+
+    return res.json({
+      success: true,
+      orderId: donId,
+      activationCode: 'donasidulu',
+      donorName: ord.donor_name,
+      donorAmount: ord.qris_amount_unique || ord.amount,
+      waSent: fulfillRes.ok,
+      waError: fulfillRes.error || null
+    });
+  } catch (e) {
+    logger.error(`[Donasi] Error processing donation confirmation: ${e.message}`);
+    return res.status(500).json({ success: false, message: e.message });
+  }
 });
 
 // Mount built-in ACS server endpoint (TR-069)
