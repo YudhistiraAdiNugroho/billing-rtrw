@@ -548,8 +548,23 @@ function stop() {
 
 /**
  * Format Mikrotik-Rate-Limit string dari nilai kecepatan paket.
- * Format: "CIR_upload/CIR_download" atau "CIR_up/CIR_dn burst_up/burst_dn"
- * jika burst/upto tersedia.
+ * 
+ * PENTING: Format MikroTik Rate-Limit menggunakan perspektif CLIENT:
+ * - RX (Receive) = Download = Data yang DITERIMA client dari internet
+ * - TX (Transmit) = Upload = Data yang DIKIRIM client ke internet
+ * 
+ * Format standar: "rx-rate/tx-rate" atau lebih lengkap dengan burst:
+ * "rx-rate/tx-rate rx-burst/tx-burst rx-threshold/tx-threshold burst-time"
+ * 
+ * Contoh: "10M/5M" = Download 10Mbps / Upload 5Mbps
+ * Contoh burst: "10M/5M 20M/10M 10M/5M 8" = CIR 10M/5M, Burst 20M/10M, Threshold 10M/5M, Time 8s
+ * 
+ * @param {number} upVal - Kecepatan UPLOAD dalam Kbps (TX)
+ * @param {number} downVal - Kecepatan DOWNLOAD dalam Kbps (RX)
+ * @param {string} defaultVal - Nilai default jika speed tidak valid
+ * @param {number} uptoUp - Burst UPLOAD dalam Kbps (TX-burst)
+ * @param {number} uptoDown - Burst DOWNLOAD dalam Kbps (RX-burst)
+ * @returns {string} Format MikroTik Rate-Limit: "rx-rate/tx-rate" atau dengan burst
  */
 function formatRateLimit(upVal, downVal, defaultVal = '5M/10M', uptoUp = 0, uptoDown = 0) {
   function parseSpeed(v) {
@@ -568,31 +583,35 @@ function formatRateLimit(upVal, downVal, defaultVal = '5M/10M', uptoUp = 0, upto
     return `${kbps}k`;
   }
 
-  const upKbps = parseSpeed(upVal);
-  const downKbps = parseSpeed(downVal);
+  const upKbps = parseSpeed(upVal);      // TX (Upload)
+  const downKbps = parseSpeed(downVal);  // RX (Download)
 
   if (upKbps <= 0 || downKbps <= 0) {
     return defaultVal;
   }
 
-  const upStr = kbpsToStr(upKbps);
-  const downStr = kbpsToStr(downKbps);
+  // MikroTik format: RX/TX (Download/Upload)
+  const rxStr = kbpsToStr(downKbps);  // RX = Download
+  const txStr = kbpsToStr(upKbps);    // TX = Upload
 
-  // Tambahkan burst rate jika tersedia (Mikrotik-Rate-Limit format: CIR burst threshold time)
-  const uptoUpKbps = parseSpeed(uptoUp);
-  const uptoDownKbps = parseSpeed(uptoDown);
+  // Tambahkan burst rate jika tersedia (Mikrotik-Rate-Limit format: rx/tx rx-burst/tx-burst rx-threshold/tx-threshold burst-time)
+  const uptoUpKbps = parseSpeed(uptoUp);      // TX-burst
+  const uptoDownKbps = parseSpeed(uptoDown);  // RX-burst
 
   if (uptoUpKbps > 0 && uptoDownKbps > 0 && (uptoUpKbps > upKbps || uptoDownKbps > downKbps)) {
-    const burstUpStr = kbpsToStr(uptoUpKbps);
-    const burstDownStr = kbpsToStr(uptoDownKbps);
-    // Format MikroTik: "CIR_up/CIR_down burst_up/burst_dn burst_threshold_up/threshold_dn burst_time_up/burst_time_dn"
+    const rxBurstStr = kbpsToStr(uptoDownKbps);  // RX-burst = Download burst
+    const txBurstStr = kbpsToStr(uptoUpKbps);    // TX-burst = Upload burst
+    
+    // Format MikroTik: "rx/tx rx-burst/tx-burst rx-threshold/tx-threshold burst-time"
     // Threshold default 50% dari burst, waktu burst 8 detik
-    const thresholdUp = kbpsToStr(Math.round(uptoUpKbps * 0.5));
-    const thresholdDown = kbpsToStr(Math.round(uptoDownKbps * 0.5));
-    return `${upStr}/${downStr} ${burstUpStr}/${burstDownStr} ${thresholdUp}/${thresholdDown} 8`;
+    const rxThresholdStr = kbpsToStr(Math.round(uptoDownKbps * 0.5));
+    const txThresholdStr = kbpsToStr(Math.round(uptoUpKbps * 0.5));
+    
+    return `${rxStr}/${txStr} ${rxBurstStr}/${txBurstStr} ${rxThresholdStr}/${txThresholdStr} 8`;
   }
 
-  return `${upStr}/${downStr}`;
+  // Format standar: rx/tx (Download/Upload)
+  return `${rxStr}/${txStr}`;
 }
 
 function ipToInt(ip) {

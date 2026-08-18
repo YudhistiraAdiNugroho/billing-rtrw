@@ -1716,13 +1716,25 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
     }
 
     const radiusEnabled = getSetting('radius_enabled', '0') === '1';
+    // Ketika RADIUS offline, paksa is_radius = 0 (MikroTik mode) agar secret SELALU dibuat ke MikroTik
     const isRadius = radiusEnabled ? (req.body.is_radius !== undefined ? (Number(req.body.is_radius) === 1 ? 1 : 0) : 0) : 0;
     req.body.is_radius = isRadius;
 
     customerSvc.createCustomer(req.body);
     
-    // Sync to MikroTik if username provided AND not RADIUS
-    if (connectionType === 'pppoe' && req.body.pppoe_username && !isRadius) {
+    // ========================================================================
+    // SYNC KE MIKROTIK - PENTING: SECRET TIDAK PERNAH DIHAPUS!
+    // ========================================================================
+    // Logika:
+    // - Jika RADIUS OFFLINE: SELALU create/update secret ke MikroTik
+    // - Jika RADIUS AKTIF tapi is_radius=0: Hybrid mode, tetap ke MikroTik
+    // - Jika RADIUS AKTIF dan is_radius=1: Full RADIUS mode, skip MikroTik
+    // 
+    // CATATAN: Kode ini TIDAK PERNAH menghapus secret dari MikroTik!
+    //          Hanya CREATE (jika belum ada) atau UPDATE PROFILE (jika sudah ada)
+    // ========================================================================
+    const shouldSyncToMikrotik = !radiusEnabled || !isRadius;
+    if (connectionType === 'pppoe' && req.body.pppoe_username && shouldSyncToMikrotik) {
       const password = String(req.body.pppoe_password || '').trim();
       const remoteAddress = String(req.body.pppoe_remote_address || '').trim();
       
@@ -1745,12 +1757,13 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
               remoteAddress: remoteAddress,
               routerId: req.body.router_id
             });
+            logger.info(`[Add Customer] Created PPPoE secret "${req.body.pppoe_username}" in MikroTik (RADIUS ${radiusEnabled ? 'ON' : 'OFF'})`);
           } catch (mErr) {
-            console.error('Mikrotik create PPPoE secret error:', mErr);
+            logger.error('Mikrotik create PPPoE secret error:', mErr);
           }
         }
       } else {
-        // If from MikroTik list, just update profile
+        // If from MikroTik list (no password input), just update profile
         let targetProfile = '';
         if (req.body.status === 'suspended') {
           targetProfile = req.body.isolir_profile || 'isolir';
@@ -1761,8 +1774,9 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
         if (targetProfile) {
           try {
             await mikrotikService.setPppoeProfile(req.body.pppoe_username, targetProfile, req.body.router_id);
+            logger.info(`[Add Customer] Updated PPPoE profile for "${req.body.pppoe_username}" to "${targetProfile}"`);
           } catch (mErr) {
-            console.error('Mikrotik sync error (create):', mErr);
+            logger.error('Mikrotik sync error (create):', mErr);
           }
         }
       }
@@ -1903,6 +1917,7 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
     }
 
     const radiusEnabled = getSetting('radius_enabled', '0') === '1';
+    // Ketika RADIUS offline, paksa is_radius = 0 (MikroTik mode) agar secret SELALU ada di MikroTik
     const isRadius = radiusEnabled ? (req.body.is_radius !== undefined ? (Number(req.body.is_radius) === 1 ? 1 : 0) : 0) : 0;
     req.body.is_radius = isRadius;
 
@@ -1911,10 +1926,28 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
     
     customerSvc.updateCustomer(req.params.id, req.body);
     
-    // Sync to MikroTik if username provided (update profile only, NEVER delete PPP secret)
-    if (connectionType === 'pppoe' && req.body.pppoe_username) {
+    // ========================================================================
+    // SYNC KE MIKROTIK SAAT EDIT - PENTING: SECRET TIDAK PERNAH DIHAPUS!
+    // ========================================================================
+    // Logika:
+    // - Jika RADIUS OFFLINE: SELALU sync ke MikroTik
+    // - Jika RADIUS AKTIF tapi is_radius=0: Hybrid mode, tetap sync ke MikroTik  
+    // - Jika RADIUS AKTIF dan is_radius=1: Full RADIUS mode, skip MikroTik
+    //
+    // Proses:
+    // 1. Cek apakah secret sudah ada di MikroTik
+    // 2. Jika sudah ada: UPDATE PROFILE saja (TIDAK HAPUS!)
+    // 3. Jika belum ada: CREATE secret baru (jika ada password)
+    // 
+    // CATATAN: Kode ini TIDAK PERNAH menghapus secret dari MikroTik!
+    // ========================================================================
+    const shouldSyncToMikrotik = !radiusEnabled || !isRadius;
+    if (connectionType === 'pppoe' && req.body.pppoe_username && shouldSyncToMikrotik) {
       try {
         const newUsername = String(req.body.pppoe_username || '').trim();
+        const newPassword = String(req.body.pppoe_password || '').trim();
+        const remoteAddress = String(req.body.pppoe_remote_address || '').trim();
+        
         let targetProfile = '';
         if (req.body.status === 'suspended') {
           targetProfile = req.body.isolir_profile || 'isolir';
@@ -1922,9 +1955,30 @@ router.post('/customers/:id/update', requireAdminSession, express.urlencoded({ e
           const pkg = customerSvc.getPackageById(req.body.package_id);
           if (pkg) targetProfile = pkg.name;
         }
+        
         if (targetProfile) {
           try {
-            await mikrotikService.setPppoeProfile(newUsername, targetProfile, req.body.router_id);
+            // Cek apakah secret sudah ada di MikroTik
+            const secrets = await mikrotikService.getPppoeSecrets(req.body.router_id);
+            const existingSecret = secrets.find(s => String(s.name || '').trim() === newUsername);
+            
+            if (existingSecret) {
+              // Secret sudah ada, hanya update profile
+              await mikrotikService.setPppoeProfile(newUsername, targetProfile, req.body.router_id);
+              logger.info(`[Edit Customer] Updated PPPoE profile for "${newUsername}" to "${targetProfile}"`);
+            } else if (newPassword) {
+              // Secret belum ada DAN ada password, create secret baru ke MikroTik
+              await mikrotikService.createPppoeSecret({
+                username: newUsername,
+                password: newPassword,
+                profile: targetProfile,
+                remoteAddress: remoteAddress,
+                routerId: req.body.router_id
+              });
+              logger.info(`[Edit Customer] Created NEW PPPoE secret for "${newUsername}" in MikroTik`);
+            } else {
+              logger.warn(`[Edit Customer] Cannot create PPPoE secret for "${newUsername}" - password not provided`);
+            }
           } catch (mErr) {
             logger.error('Mikrotik sync error (update PPPoE):', mErr.message);
           }
@@ -4694,7 +4748,7 @@ router.get('/api/webhook/payment-notif/logs', requireAdminSession, (req, res) =>
     }
 
     const sql = `
-      SELECT id, created_at, service, content, parsed_amount, parsed_ok, matched_invoice_id, matched_voucher_order_id, ip
+      SELECT id, created_at, service, content, parsed_amount, parsed_ok, matched_invoice_id, matched_voucher_order_id, matched_donation_order_id, ip
       FROM webhook_payment_notifs
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY id DESC
