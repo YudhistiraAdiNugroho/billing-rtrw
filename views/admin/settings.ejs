@@ -858,9 +858,14 @@ async function loadEwalletLogs() {
       const rawShortEnc = encodeURIComponent(String(r.content || '').replace(/\r?\n/g, ' ').slice(0, 180));
       const matchedInvoiceId = Number(r.matched_invoice_id || 0) || 0;
       const matchedVoucherOrderId = Number(r.matched_voucher_order_id || 0) || 0;
+      const matchedDonationOrderId = Number(r.matched_donation_order_id || 0) || 0;
       const matchHtml = matchedInvoiceId
         ? `<a class="mono" href="/admin/billing?search=${matchedInvoiceId}" target="_blank">INV#${matchedInvoiceId}</a>`
-        : (matchedVoucherOrderId ? `<span class="mono">VOUCHER#${matchedVoucherOrderId}</span>` : '<span class="muted">-</span>');
+        : (matchedVoucherOrderId 
+            ? `<span class="mono badge bg-info text-dark">VOUCHER#${matchedVoucherOrderId}</span>` 
+            : (matchedDonationOrderId 
+                ? `<span class="mono badge bg-warning text-dark">DONASI#${matchedDonationOrderId}</span>` 
+                : '<span class="muted">-</span>'));
       return `<tr>
         <td class="mono">${created}</td>
         <td>${svc}</td>
