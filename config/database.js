@@ -15,6 +15,11 @@ try {
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  db.pragma('cache_size = -64000');   // 64MB page cache (negatif = KB)
+  db.pragma('synchronous = NORMAL');  // Lebih cepat dari FULL, masih aman dengan WAL
+  db.pragma('temp_store = MEMORY');   // Tabel temp di RAM
+  db.pragma('mmap_size = 134217728'); // Memory-mapped I/O 128MB
+  db.pragma('busy_timeout = 5000');   // Tunggu 5 detik jika DB locked sebelum error
 
   // Menambahkan fungsi waktu lokal untuk SQLite sesuai setting timezone
   db.function('NOW_LOCAL', () => {

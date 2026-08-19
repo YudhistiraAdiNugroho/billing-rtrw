@@ -76,44 +76,61 @@ function startCronJobs() {
     const now = new Date();
     const today = now.getDate();
     logger.info(`[CRON] Menjalankan pengecekan isolir otomatis harian (Tanggal ${today})`);
-    
-    const customers = customerSvc.getAllCustomers();
+
     let isolatedCount = 0;
+    const BATCH_SIZE = 100;
+    let offset = 0;
 
-    for (const c of customers) {
-      const isAutoIsolateEnabled = c.auto_isolate !== 0; // default aktif jika null/1
-      if (!isAutoIsolateEnabled || c.status !== 'active') continue;
+    while (true) {
+      const batch = db.prepare(
+        `SELECT c.*, p.billing_type AS package_billing_type
+         FROM customers c LEFT JOIN packages p ON c.package_id = p.id
+         WHERE c.status = 'active'
+         LIMIT ? OFFSET ?`
+      ).all(BATCH_SIZE, offset);
 
-      const isPrepaid = c.package_billing_type === 'prepaid';
+      if (batch.length === 0) break;
 
-      if (isPrepaid) {
-        // Logika Prabayar: Isolir jika waktu sekarang >= expired_at
-        if (c.expired_at) {
-          const expDate = new Date(c.expired_at);
-          if (!isNaN(expDate.getTime()) && now >= expDate) {
+      for (const c of batch) {
+        const isAutoIsolateEnabled = c.auto_isolate !== 0;
+        if (!isAutoIsolateEnabled) continue;
+
+        const isPrepaid = c.package_billing_type === 'prepaid';
+
+        if (isPrepaid) {
+          if (c.expired_at) {
+            const expDate = new Date(c.expired_at);
+            if (!isNaN(expDate.getTime()) && now >= expDate) {
+              try {
+                logger.info(`[CRON] Isolir otomatis PRABAYAR: ${c.name} (${c.pppoe_username || c.hotspot_username || '-'}) - Berakhir: ${c.expired_at}`);
+                await customerSvc.suspendCustomer(c.id);
+                isolatedCount++;
+              } catch (err) {
+                logger.error(`[CRON] Gagal isolir prabayar ${c.name}: ${err.message}`);
+              }
+            }
+          }
+        } else {
+          const customerIsolirDay = c.isolate_day || 10;
+          const unpaidCount = db.prepare('SELECT COUNT(*) as cnt FROM invoices WHERE customer_id=? AND status=?').get(c.id, 'unpaid')?.cnt || 0;
+          if (today >= customerIsolirDay && unpaidCount > 0) {
             try {
-              logger.info(`[CRON] Isolir otomatis pelanggan PRABAYAR: ${c.name} (${c.pppoe_username || c.hotspot_username || '-'}) - Masa Aktif Berakhir: ${c.expired_at}`);
+              logger.info(`[CRON] Isolir otomatis PASCABAYAR: ${c.name} (${c.pppoe_username || c.hotspot_username || '-'}) - Tgl Isolir: ${customerIsolirDay}`);
               await customerSvc.suspendCustomer(c.id);
               isolatedCount++;
             } catch (err) {
-              logger.error(`[CRON] Gagal isolir prabayar ${c.name}: ${err.message}`);
+              logger.error(`[CRON] Gagal isolir pascabayar ${c.name}: ${err.message}`);
             }
           }
         }
-      } else {
-        // Logika Pascabayar: Isolir jika hari ini >= isolate_day dan ada tagihan belum bayar
-        const customerIsolirDay = c.isolate_day || 10;
-        if (today >= customerIsolirDay && c.unpaid_count > 0) {
-          try {
-            logger.info(`[CRON] Isolir otomatis pelanggan PASCABAYAR: ${c.name} (${c.pppoe_username || c.hotspot_username || '-'}) - Tanggal Tagihan: ${customerIsolirDay}`);
-            await customerSvc.suspendCustomer(c.id);
-            isolatedCount++;
-          } catch (err) {
-            logger.error(`[CRON] Gagal isolir pascabayar ${c.name}: ${err.message}`);
-          }
-        }
+      }
+
+      offset += BATCH_SIZE;
+      if (batch.length === BATCH_SIZE) {
+        await new Promise(r => setTimeout(r, 300)); // Jeda 300ms antar batch
       }
     }
+
     logger.info(`[CRON] Selesai pengecekan isolir. Total ${isolatedCount} pelanggan baru di-isolir.`);
   });
 
@@ -385,22 +402,35 @@ function startCronJobs() {
   cron.schedule('0 0 * * *', async () => {
     logger.info('[CRON] Memulai Jam Kalong (Night Speed) - Ganti Profile...');
     try {
-      const customers = customerSvc.getAllCustomers();
       let count = 0;
+      const BATCH_SIZE = 100;
+      let offset = 0;
 
-      for (const c of customers) {
-        if (!c.package_id || !c.pppoe_username) continue;
-        
-        const pkg = customerSvc.getPackageById(c.package_id);
-        if (pkg && pkg.use_night_speed === 1 && pkg.night_profile_name) {
+      while (true) {
+        const batch = db.prepare(
+          `SELECT c.id, c.name, c.pppoe_username, c.router_id, c.package_id,
+                  p.use_night_speed, p.night_profile_name
+           FROM customers c
+           JOIN packages p ON c.package_id = p.id
+           WHERE c.pppoe_username IS NOT NULL AND c.pppoe_username != ''
+             AND p.use_night_speed = 1 AND p.night_profile_name IS NOT NULL AND p.night_profile_name != ''
+           LIMIT ? OFFSET ?`
+        ).all(BATCH_SIZE, offset);
+
+        if (batch.length === 0) break;
+
+        for (const c of batch) {
           try {
-            logger.info(`[CRON] Switching ${c.name} to Night Profile: ${pkg.night_profile_name}`);
-            await mikrotikService.setPppoeProfile(c.pppoe_username, pkg.night_profile_name, c.router_id);
+            logger.info(`[CRON] Switching ${c.name} to Night Profile: ${c.night_profile_name}`);
+            await mikrotikService.setPppoeProfile(c.pppoe_username, c.night_profile_name, c.router_id);
             count++;
           } catch (err) {
             logger.error(`[CRON] Gagal switch Jam Kalong untuk ${c.name}: ${err.message}`);
           }
         }
+
+        offset += BATCH_SIZE;
+        if (batch.length === BATCH_SIZE) await new Promise(r => setTimeout(r, 200));
       }
       logger.info(`[CRON] Jam Kalong aktif untuk ${count} pelanggan.`);
     } catch (e) {
@@ -412,24 +442,35 @@ function startCronJobs() {
   cron.schedule('0 6 * * *', async () => {
     logger.info('[CRON] Mengakhiri Jam Kalong (Night Speed) - Kembali ke Profile Normal...');
     try {
-      const customers = customerSvc.getAllCustomers();
       let count = 0;
+      const BATCH_SIZE = 100;
+      let offset = 0;
 
-      for (const c of customers) {
-        if (!c.package_id || !c.pppoe_username) continue;
+      while (true) {
+        const batch = db.prepare(
+          `SELECT c.id, c.name, c.pppoe_username, c.router_id, c.package_id,
+                  p.use_night_speed, p.name AS normal_profile
+           FROM customers c
+           JOIN packages p ON c.package_id = p.id
+           WHERE c.pppoe_username IS NOT NULL AND c.pppoe_username != ''
+             AND p.use_night_speed = 1
+           LIMIT ? OFFSET ?`
+        ).all(BATCH_SIZE, offset);
 
-        const pkg = customerSvc.getPackageById(c.package_id);
-        if (pkg && pkg.use_night_speed === 1) {
+        if (batch.length === 0) break;
+
+        for (const c of batch) {
           try {
-            // Kembali ke profile asli (nama paket)
-            const normalProfile = pkg.name;
-            logger.info(`[CRON] Restoring ${c.name} to Normal Profile: ${normalProfile}`);
-            await mikrotikService.setPppoeProfile(c.pppoe_username, normalProfile, c.router_id);
+            logger.info(`[CRON] Restoring ${c.name} to Normal Profile: ${c.normal_profile}`);
+            await mikrotikService.setPppoeProfile(c.pppoe_username, c.normal_profile, c.router_id);
             count++;
           } catch (err) {
             logger.error(`[CRON] Gagal restore profil normal untuk ${c.name}: ${err.message}`);
           }
         }
+
+        offset += BATCH_SIZE;
+        if (batch.length === BATCH_SIZE) await new Promise(r => setTimeout(r, 200));
       }
       logger.info(`[CRON] Profil normal dikembalikan untuk ${count} pelanggan.`);
     } catch (e) {
@@ -444,9 +485,13 @@ function startCronJobs() {
 
     try {
       const routers = mikrotikService.getAllRouters();
-      const customers = customerSvc.getAllCustomers();
+      // Hanya load pelanggan yang punya pppoe_username (lebih efisien)
+      const customers = db.prepare(
+        `SELECT c.id, c.pppoe_username FROM customers c
+         WHERE c.pppoe_username IS NOT NULL AND c.pppoe_username != '' AND c.status = 'active'`
+      ).all();
       const customerMap = new Map();
-      customers.forEach(c => { if (c.pppoe_username) customerMap.set(c.pppoe_username, c); });
+      customers.forEach(c => customerMap.set(c.pppoe_username, c));
 
       for (const r of routers) {
         try {
@@ -466,7 +511,6 @@ function startCronJobs() {
             let deltaOut = 0;
 
             if (currentUsage) {
-              // Jika total bytes saat ini lebih kecil dari sebelumnya, berarti user baru reconnect (counter reset di mikrotik)
               if (totalIn < currentUsage.last_total_bytes_in || totalOut < currentUsage.last_total_bytes_out) {
                 deltaIn = totalIn;
                 deltaOut = totalOut;
@@ -496,34 +540,48 @@ function startCronJobs() {
   cron.schedule('0 * * * *', async () => {
     logger.info('[CRON] Mengecek FUP Pelanggan...');
     try {
-      const customers = customerSvc.getAllCustomers();
       const now = new Date();
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
+      const BATCH_SIZE = 100;
+      let offset = 0;
+      let fupCount = 0;
 
-      for (const c of customers) {
-        if (!c.package_id || !c.pppoe_username) continue;
-        
-        const pkg = customerSvc.getPackageById(c.package_id);
-        if (!pkg || pkg.use_fup !== 1 || !pkg.fup_limit_gb || pkg.fup_limit_gb <= 0 || !pkg.fup_profile_name) continue;
+      while (true) {
+        // Hanya ambil pelanggan yang paketnya punya FUP aktif
+        const batch = db.prepare(
+          `SELECT c.id, c.name, c.pppoe_username, c.router_id,
+                  p.fup_limit_gb, p.fup_profile_name
+           FROM customers c
+           JOIN packages p ON c.package_id = p.id
+           WHERE c.pppoe_username IS NOT NULL AND c.pppoe_username != ''
+             AND p.use_fup = 1 AND p.fup_limit_gb > 0
+             AND p.fup_profile_name IS NOT NULL AND p.fup_profile_name != ''
+           LIMIT ? OFFSET ?`
+        ).all(BATCH_SIZE, offset);
 
-        const usage = usageSvc.getUsage(c.id, month, year);
-        if (!usage) continue;
+        if (batch.length === 0) break;
 
-        const totalGB = (usage.bytes_in + usage.bytes_out) / (1024 * 1024 * 1024);
-        
-        if (totalGB >= pkg.fup_limit_gb) {
-          logger.warn(`[CRON] Pelanggan ${c.name} melewati FUP (${totalGB.toFixed(2)} GB / ${pkg.fup_limit_gb} GB). Menurunkan kecepatan (Ganti Profile)...`);
-          
-          try {
-            // Ganti ke profile FUP yang sudah ditentukan di paket
-            logger.info(`[CRON] Switching ${c.name} to FUP Profile: ${pkg.fup_profile_name}`);
-            await mikrotikService.setPppoeProfile(c.pppoe_username, pkg.fup_profile_name, c.router_id);
-          } catch (err) {
-            logger.error(`[CRON] Gagal apply FUP untuk ${c.name}: ${err.message}`);
+        for (const c of batch) {
+          const usage = usageSvc.getUsage(c.id, month, year);
+          if (!usage) continue;
+
+          const totalGB = (usage.bytes_in + usage.bytes_out) / (1024 * 1024 * 1024);
+          if (totalGB >= c.fup_limit_gb) {
+            logger.warn(`[CRON] FUP: ${c.name} (${totalGB.toFixed(2)} GB / ${c.fup_limit_gb} GB). Turunkan kecepatan...`);
+            try {
+              await mikrotikService.setPppoeProfile(c.pppoe_username, c.fup_profile_name, c.router_id);
+              fupCount++;
+            } catch (err) {
+              logger.error(`[CRON] Gagal apply FUP untuk ${c.name}: ${err.message}`);
+            }
           }
         }
+
+        offset += BATCH_SIZE;
+        if (batch.length === BATCH_SIZE) await new Promise(r => setTimeout(r, 200));
       }
+      logger.info(`[CRON] FUP check selesai. ${fupCount} pelanggan di-throttle.`);
     } catch (e) {
       logger.error(`[CRON] Error FUP Check: ${e.message}`);
     }
