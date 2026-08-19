@@ -264,6 +264,61 @@ function formatTimeLocal(date) {
   return d.toLocaleTimeString('id-ID', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
 }
 
+/**
+ * Memastikan semua setting wajib ada di settings.json dengan default value.
+ * Dijalankan saat startup aplikasi untuk migrasi/inisialisasi setting baru.
+ */
+function ensureDefaultSettings() {
+  try {
+    const currentSettings = getSettings();
+    let needsSave = false;
+    
+    // Default settings yang wajib ada
+    const defaultSettings = {
+      // RADIUS Server settings (ditambahkan untuk update dari GitHub)
+      radius_enabled: '0',
+      radius_secret: 'secret123',
+      radius_auth_port: '1812',
+      radius_acct_port: '1813',
+      radius_isolir_action: 'pool',
+      radius_isolir_pool: 'isolir',
+      radius_limit_simultaneous: '1',
+      radius_default_rate_limit: '5M/10M',
+      radius_isolir_rate_limit: '512k/512k',
+      radius_isolir_ip_pool_enabled: '1',
+      radius_isolir_ip_pool_start: '10.10.99.2',
+      radius_isolir_ip_pool_end: '10.10.99.254',
+      radius_ip_pool_enabled: '1',
+      radius_ip_pool_start: '10.10.10.2',
+      radius_ip_pool_end: '10.10.10.254',
+      radius_framed_pool: 'pool-pppoe',
+      radius_send_group: '0'
+    };
+    
+    // Cek dan tambahkan setting yang belum ada
+    for (const [key, defaultValue] of Object.entries(defaultSettings)) {
+      if (currentSettings[key] === undefined) {
+        currentSettings[key] = defaultValue;
+        needsSave = true;
+        logger.info(`[settings] Added missing setting: ${key} = ${defaultValue}`);
+      }
+    }
+    
+    // Simpan jika ada perubahan
+    if (needsSave) {
+      fs.writeFileSync(settingsPath, JSON.stringify(currentSettings, null, 2), 'utf-8');
+      settingsCache = currentSettings;
+      settingsCacheTime = Date.now();
+      logger.info('[settings] settings.json updated with default RADIUS settings');
+    }
+    
+    return needsSave;
+  } catch (error) {
+    logger.error(`[settings] Error ensuring default settings: ${error.message}`);
+    return false;
+  }
+}
+
 module.exports = {
   getSettings,
   getSettingsWithCache,
@@ -277,5 +332,6 @@ module.exports = {
   getCurrentTimeInfo,
   getNowLocalISO,
   parseDateInTimezone,
-  startSettingsWatcher
+  startSettingsWatcher,
+  ensureDefaultSettings
 };

@@ -1123,6 +1123,39 @@ try {
   }
 } catch(e) {}
 
+// Safe migration: public_donation_orders table & indexes
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS public_donation_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      donor_name TEXT,
+      donor_phone TEXT NOT NULL,
+      amount INTEGER NOT NULL DEFAULT 0,
+      qris_amount_unique INTEGER,
+      qris_unique_code INTEGER,
+      notes TEXT,
+      status TEXT DEFAULT 'pending',
+      paid_at DATETIME,
+      qris_paid_notif_id INTEGER,
+      activation_code TEXT DEFAULT 'donasidulu',
+      wa_sent INTEGER DEFAULT 0,
+      wa_sent_at DATETIME,
+      wa_error TEXT,
+      created_at DATETIME DEFAULT (NOW_LOCAL()),
+      updated_at DATETIME DEFAULT (NOW_LOCAL())
+    );
+    CREATE INDEX IF NOT EXISTS idx_donation_orders_status ON public_donation_orders(status);
+    CREATE INDEX IF NOT EXISTS idx_donation_orders_unique ON public_donation_orders(qris_amount_unique, status);
+  `);
+
+  const colNotifs = db.prepare("PRAGMA table_info(webhook_payment_notifs)").all();
+  if (colNotifs.length > 0 && !colNotifs.some(c => c.name === 'matched_donation_order_id')) {
+    db.exec("ALTER TABLE webhook_payment_notifs ADD COLUMN matched_donation_order_id INTEGER");
+  }
+} catch(e) {
+  console.error('Failed to migrate public_donation_orders:', e);
+}
+
 module.exports = db;
 module.exports.getAppSetting = getAppSetting;
 module.exports.saveAppSetting = saveAppSetting;
