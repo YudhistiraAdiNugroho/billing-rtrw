@@ -357,91 +357,6 @@ function getStaticQrisPayload(settings) {
   return normalizeQrisPayloadRaw(settings?.qris_static_payload || '');
 }
 
-function crc16CcittFalse(input) {
-  const s = String(input || '');
-  let crc = 0xffff;
-  for (let i = 0; i < s.length; i++) {
-    crc ^= (s.charCodeAt(i) & 0xff) << 8;
-    for (let b = 0; b < 8; b++) {
-      if (crc & 0x8000) crc = ((crc << 1) ^ 0x1021) & 0xffff;
-      else crc = (crc << 1) & 0xffff;
-    }
-  }
-  return crc & 0xffff;
-}
-
-function parseEmvTlvString(input) {
-  const raw = String(input || '').replace(/[\r\n\t]+/g, '').trim();
-  if (!raw) throw new Error('QRIS payload kosong');
-  if (raw.length < 8) throw new Error('QRIS payload terlalu pendek');
-
-  const items = [];
-  let i = 0;
-  while (i < raw.length) {
-    if (i + 4 > raw.length) throw new Error('QRIS payload TLV tidak valid');
-    const tag = raw.slice(i, i + 2);
-    const lenStr = raw.slice(i + 2, i + 4);
-    if (!/^\d{2}$/.test(lenStr)) throw new Error('QRIS payload TLV length tidak valid');
-    const len = Number(lenStr);
-    const start = i + 4;
-    const end = start + len;
-    if (end > raw.length) throw new Error('QRIS payload TLV length melebihi data');
-    const value = raw.slice(start, end);
-    items.push({ tag, value });
-    i = end;
-  }
-  return items;
-}
-
-function buildEmvTlvString(items) {
-  const list = Array.isArray(items) ? items : [];
-  let out = '';
-  for (const it of list) {
-    const tag = String(it?.tag || '');
-    const value = String(it?.value ?? '');
-    const len = value.length;
-    if (!/^\d{2}$/.test(tag)) throw new Error('Tag TLV tidak valid');
-    if (len > 99) throw new Error('TLV length > 99 tidak didukung');
-    out += tag + String(len).padStart(2, '0') + value;
-  }
-  return out;
-}
-
-function convertStaticQrisToDynamic(staticPayload, amount) {
-  const amt = Math.max(0, Math.floor(Number(amount || 0) || 0));
-  if (!amt) throw new Error('Nominal QRIS dinamis tidak valid');
-
-  const source = parseEmvTlvString(staticPayload)
-    .filter(x => x && x.tag)
-    .map(x => ({ tag: String(x.tag), value: String(x.value ?? '') }));
-
-  const managed = new Set(['54', '55', '56', '57', '63']);
-  const result = [];
-  let amountInserted = false;
-
-  for (const el of source) {
-    if (managed.has(el.tag)) continue;
-    if (el.tag === '01') {
-      result.push({ tag: '01', value: '12' });
-      continue;
-    }
-    if (el.tag === '58' && !amountInserted) {
-      result.push({ tag: '54', value: String(amt) });
-      amountInserted = true;
-    }
-    result.push(el);
-  }
-
-  if (!amountInserted) {
-    result.push({ tag: '54', value: String(amt) });
-  }
-
-  const body = buildEmvTlvString(result);
-  const partial = body + '6304';
-  const crc = crc16CcittFalse(partial).toString(16).toUpperCase().padStart(4, '0');
-  return partial + crc;
-}
-
 let qrisDecodedCache = { file: '', mtimeMs: 0, payload: '' };
 async function tryDecodeQrisPayloadFromUploadedQr(settings) {
   const url = getStaticQrisQrUrl(settings);
@@ -476,7 +391,7 @@ async function getStaticQrisQrUrlForAmount(settings, amountUnique) {
   if (!payload) payload = await tryDecodeQrisPayloadFromUploadedQr(settings);
   if (payload) {
     try {
-      const dynamic = convertStaticQrisToDynamic(payload, amt);
+      const dynamic = qrisUtil.convertStaticQrisToDynamic(payload, amt);
       return await QRCode.toDataURL(dynamic, { errorCorrectionLevel: 'M', margin: 1, width: 320 });
     } catch (e) {
       const msg = String(e?.message || e || '');
@@ -1510,14 +1425,14 @@ router.post('/public/voucher/create-payment', async (req, res) => {
 
     let result;
     if (gateway === 'midtrans') {
-      result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, method === 'SNAP' ? 'snap' : method, appUrl, { returnPath });
+      result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, method === 'SNAP' ? 'snap' : method, appUrl, { returnPath, orderPrefix: 'VOUCHER', callbackPath: '/customer/payment/callback' });
     } else if (gateway === 'xendit') {
-      result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, method === 'XENDIT' ? 'xendit' : method, appUrl, { returnPath, description: invoiceLike.item_name });
+      result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, method === 'XENDIT' ? 'xendit' : method, appUrl, { returnPath, orderPrefix: 'VOUCHER', description: invoiceLike.item_name, callbackPath: '/customer/payment/callback' });
     } else if (gateway === 'duitku') {
-      result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, method === 'DUITKU' ? 'duitku' : method, appUrl, { returnPath, itemName: invoiceLike.item_name });
+      result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, method === 'DUITKU' ? 'duitku' : method, appUrl, { returnPath, orderPrefix: 'VOUCHER', itemName: invoiceLike.item_name, callbackPath: '/customer/payment/callback' });
     } else {
       try {
-        result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, method, appUrl, { returnPath, itemName: invoiceLike.item_name, sku: invoiceLike.sku });
+        result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, method, appUrl, { returnPath, orderPrefix: 'VOUCHER', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
       } catch (e) {
         const msg = String(e?.message || e || '');
         const canRetry =
@@ -1533,7 +1448,7 @@ router.post('/public/voucher/create-payment', async (req, res) => {
         if (!fallback) throw e;
 
         method = fallback;
-        result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, method, appUrl, { returnPath, itemName: invoiceLike.item_name, sku: invoiceLike.sku });
+        result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, method, appUrl, { returnPath, orderPrefix: 'VOUCHER', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
       }
     }
 
@@ -3189,7 +3104,8 @@ router.post('/payment/callback', express.json({
   
   const jsonBody = req.rawBody || JSON.stringify(req.body);
   let gatewayOrderId = null;
-  let invoiceIdCandidate = null;
+  let orderPrefix = null;
+  let targetIdCandidate = null;
   let status = null;
   let gateway = null;
 
@@ -3199,7 +3115,8 @@ router.post('/payment/callback', express.json({
       const { merchant_ref, status: tpStatus } = req.body;
       const parts = String(merchant_ref || '').split('-');
       gatewayOrderId = String(merchant_ref || '') || null;
-      invoiceIdCandidate = parts[1] || null;
+      orderPrefix = (parts[0] || '').toUpperCase();
+      targetIdCandidate = parts[1] || null;
       status = tpStatus === 'PAID' ? 'paid' : tpStatus;
       gateway = 'Tripay';
     } else {
@@ -3214,7 +3131,8 @@ router.post('/payment/callback', express.json({
       const { order_id, transaction_status } = req.body;
       const parts = String(order_id || '').split('-');
       gatewayOrderId = String(order_id || '') || null;
-      invoiceIdCandidate = parts[1] || null;
+      orderPrefix = (parts[0] || '').toUpperCase();
+      targetIdCandidate = parts[1] || null;
       status = (transaction_status === 'settlement' || transaction_status === 'capture') ? 'paid' : transaction_status;
       gateway = 'Midtrans';
     } else {
@@ -3224,7 +3142,6 @@ router.post('/payment/callback', express.json({
   }
   // --- DETEKSI XENDIT ---
   else if (req.body.external_id && req.body.status && !tripaySignature) {
-    // Xendit callback usually includes x-callback-token in headers
     const xenditToken = req.headers['x-callback-token'];
     const configuredToken = String(settings.xendit_callback_token || '').trim();
     const xenditConfigured = Boolean(
@@ -3241,7 +3158,8 @@ router.post('/payment/callback', express.json({
       const { external_id, status: xStatus } = req.body;
       const parts = String(external_id || '').split('-');
       gatewayOrderId = String(external_id || '') || null;
-      invoiceIdCandidate = parts[1] || null;
+      orderPrefix = (parts[0] || '').toUpperCase();
+      targetIdCandidate = parts[1] || null;
       status = xStatus === 'PAID' ? 'paid' : xStatus;
       gateway = 'Xendit';
     } else {
@@ -3255,7 +3173,8 @@ router.post('/payment/callback', express.json({
       const { merchantOrderId, resultCode } = req.body;
       const parts = String(merchantOrderId || '').split('-');
       gatewayOrderId = String(merchantOrderId || '') || null;
-      invoiceIdCandidate = parts[1] || null;
+      orderPrefix = (parts[0] || '').toUpperCase();
+      targetIdCandidate = parts[1] || null;
       status = resultCode === '00' ? 'paid' : resultCode;
       gateway = 'Duitku';
     } else {
@@ -3265,220 +3184,226 @@ router.post('/payment/callback', express.json({
   }
 
   if (gatewayOrderId && status === 'paid') {
-    // --- Cek Request Top-Up Saldo Pelanggan ---
-    const topupReq = db.prepare('SELECT * FROM customer_topup_requests WHERE payment_order_id = ? OR id = ?').get(gatewayOrderId, gatewayOrderId.replace('TOPUP', ''));
-    if (topupReq && String(topupReq.status) === 'pending') {
-      const reqId = Number(topupReq.id);
-      logger.info(`[Webhook] Pembayaran Top-Up Pelanggan diterima via ${gateway} untuk Request ID: ${reqId}`);
-      
-      db.transaction(() => {
-        db.prepare(`UPDATE customer_topup_requests SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(reqId);
-        db.prepare(`UPDATE customers SET balance = balance + ? WHERE id=?`).run(topupReq.amount, topupReq.customer_id);
-      })();
-
-      // Kirim notifikasi WA ke pelanggan
-      const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(topupReq.customer_id);
-      if (settings.whatsapp_enabled && customer && customer.phone) {
-        try {
-          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
-          if (whatsappStatus.connection === 'open') {
-            const currentBalance = db.prepare('SELECT balance FROM customers WHERE id = ?').get(customer.id)?.balance || 0;
-            const waMsg = 
-              `✅ *TOP-UP SALDO BERHASIL*\n\n` +
-              `👤 *Nama:* ${customer.name}\n` +
-              `💰 *Nominal:* Rp ${Number(topupReq.amount).toLocaleString('id-ID')}\n` +
-              `💳 *Total Saldo:* Rp ${Number(currentBalance).toLocaleString('id-ID')}\n` +
-              `🏷️ *Via:* ${gateway}\n\n` +
-              `Saldo sudah bisa digunakan untuk membeli pulsa/token di portal pelanggan.`;
-            await sendWA(customer.phone, waMsg);
-          }
-        } catch(waErr) { logger.error('[Topup Webhook] WA error: ' + waErr.message); }
-      }
-    }
-
-    // --- Cek Request Top-Up Saldo Agen ---
-    const agentTopupReq = db.prepare('SELECT * FROM agent_topup_requests WHERE payment_order_id = ? OR id = ?').get(gatewayOrderId, gatewayOrderId.replace('AGTOP', ''));
-    if (agentTopupReq && String(agentTopupReq.status) === 'pending') {
-      const reqId = Number(agentTopupReq.id);
-      logger.info(`[Webhook] Pembayaran Top-Up Agen diterima via ${gateway} untuk Request ID: ${reqId}`);
-      
-      db.transaction(() => {
-        db.prepare(`UPDATE agent_topup_requests SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(reqId);
-        db.prepare(`UPDATE agents SET balance = balance + ? WHERE id=?`).run(agentTopupReq.amount, agentTopupReq.agent_id);
-      })();
-
-      // Kirim notifikasi WA ke Agen
-      const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentTopupReq.agent_id);
-      if (settings.whatsapp_enabled && agent && agent.phone) {
-        try {
-          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
-          if (whatsappStatus.connection === 'open') {
-            const currentBalance = db.prepare('SELECT balance FROM agents WHERE id = ?').get(agent.id)?.balance || 0;
-            const waMsg = 
-              `✅ *TOP-UP DEPOSIT AGEN BERHASIL*\n\n` +
-              `👤 *Nama Agen:* ${agent.name}\n` +
-              `💰 *Nominal:* Rp ${Number(agentTopupReq.amount).toLocaleString('id-ID')}\n` +
-              `💳 *Total Saldo:* Rp ${Number(currentBalance).toLocaleString('id-ID')}\n` +
-              `🏷️ *Via:* ${gateway}\n\n` +
-              `Deposit sudah bertambah dan bisa digunakan kembali.`;
-            await sendWA(agent.phone, waMsg);
-          }
-        } catch(waErr) { logger.error('[AgentTopup Webhook] WA error: ' + waErr.message); }
-      }
-    }
-
-    // --- Cek Pesanan Voucher Hotspot ---
-    const order = db.prepare('SELECT * FROM public_voucher_orders WHERE payment_order_id = ?').get(gatewayOrderId);
-    if (order) {
-      const orderId = Number(order.id || 0);
-      if (!Number.isFinite(orderId) || orderId <= 0) return res.json({ success: true });
-
-      logger.info(`[Webhook] Pembayaran diterima via ${gateway} untuk Voucher Order ID: ${orderId}`);
-
-      if (String(order.status) !== 'paid' && String(order.status) !== 'fulfilled') {
-        db.prepare(`
-          UPDATE public_voucher_orders
-          SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
-          WHERE id=?
-        `).run(orderId);
-      }
-
-      const fresh = db.prepare('SELECT * FROM public_voucher_orders WHERE id = ?').get(orderId);
-      if (!fresh) return res.json({ success: true });
-      if (String(fresh.status) === 'fulfilled' && fresh.voucher_code) return res.json({ success: true });
-
-      try {
-        let created = null;
-        let attempt = 0;
+    // --- 1. Cek Request Top-Up Saldo Pelanggan (Prefix TOPUP) ---
+    if (orderPrefix === 'TOPUP' || gatewayOrderId.startsWith('TOPUP')) {
+      const topupReq = db.prepare('SELECT * FROM customer_topup_requests WHERE payment_order_id = ? OR id = ?').get(gatewayOrderId, gatewayOrderId.replace('TOPUP', '').replace(/^-/, ''));
+      if (topupReq && String(topupReq.status) === 'pending') {
+        const reqId = Number(topupReq.id);
+        logger.info(`[Webhook] Pembayaran Top-Up Pelanggan diterima via ${gateway} untuk Request ID: ${reqId}`);
         
-        // ── Load Paket Voucher Config ──────────────────
-        let prefix = '';
-        let codeLength = 6;
-        let charset = 'mixed';
-        try {
-          const pkg = db.prepare('SELECT * FROM voucher_packages WHERE router_id IS ? AND profile_name = ?').get(fresh.router_id ?? null, fresh.profile_name);
-          if (pkg) {
-            prefix = String(pkg.prefix || '').trim();
-            codeLength = Math.max(4, Math.min(16, Number(pkg.code_length) || 6));
-            charset = String(pkg.charset || 'mixed');
-          }
-        } catch (pkgErr) {
-          logger.error('[Fulfillment] Gagal query voucher_packages: ' + pkgErr.message);
-        }
+        db.transaction(() => {
+          db.prepare(`UPDATE customer_topup_requests SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(reqId);
+          db.prepare(`UPDATE customers SET balance = balance + ? WHERE id=?`).run(topupReq.amount, topupReq.customer_id);
+        })();
 
-        while (attempt < 10) {
-          attempt++;
-          const coreLen = Math.max(4, codeLength - prefix.length);
-          const code = prefix + genCustomCode(coreLen, charset);
-          const pass = code;
-          const comment = `vc-${code}-${fresh.profile_name}`;
-          const userData = {
-            server: 'all',
-            name: code,
-            password: pass,
-            profile: fresh.profile_name,
-            comment
-          };
-          if (fresh.validity) userData['limit-uptime'] = fresh.validity;
-
-          try {
-            await mikrotikService.addHotspotUser(userData, fresh.router_id ?? null);
-            created = { code, pass, comment };
-            break;
-          } catch (e) {
-            const msg = String(e?.message || e || '').toLowerCase();
-            const isDup = msg.includes('already') || msg.includes('exist') || msg.includes('duplicate');
-            if (isDup) continue;
-            throw e;
-          }
-        }
-        if (!created) throw new Error('Gagal membuat voucher (kode duplikat terlalu sering)');
-
-        db.prepare(`
-          UPDATE public_voucher_orders
-          SET status='fulfilled',
-              fulfilled_at=CURRENT_TIMESTAMP,
-              voucher_code=?,
-              voucher_password=?,
-              voucher_comment=?,
-              updated_at=CURRENT_TIMESTAMP
-          WHERE id=?
-        `).run(created.code, created.pass, created.comment, orderId);
-
-        if (settings.whatsapp_enabled) {
+        // Kirim notifikasi WA ke pelanggan
+        const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(topupReq.customer_id);
+        if (settings.whatsapp_enabled && customer && customer.phone) {
           try {
             const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
-            if (whatsappStatus.connection !== 'open') throw new Error('Bot WhatsApp belum terhubung');
-            if (!fresh.buyer_phone) throw new Error('Nomor WhatsApp pembeli kosong');
-            const msg =
-              `🎫 *VOUCHER HOTSPOT*\n\n` +
-              `✅ Pembayaran diterima via *${gateway}*\n` +
-              `📦 Paket: *${fresh.profile_name}* (${fresh.validity || '-'})\n` +
-              `💰 Harga: Rp ${Number(fresh.price || 0).toLocaleString('id-ID')}\n\n` +
-              `👤 User: *${created.code}*\n` +
-              `🔑 Pass: *${created.pass}*\n\n` +
-              `Terima kasih.`;
-            await sendWA(fresh.buyer_phone, msg);
-            db.prepare(`
-              UPDATE public_voucher_orders
-              SET wa_sent=1, wa_sent_at=CURRENT_TIMESTAMP, wa_error='', updated_at=CURRENT_TIMESTAMP
-              WHERE id=?
-            `).run(orderId);
-          } catch (waErr) {
-            db.prepare(`
-              UPDATE public_voucher_orders
-              SET wa_sent=0, wa_error=?, updated_at=CURRENT_TIMESTAMP
-              WHERE id=?
-            `).run(String(waErr?.message || waErr || ''), orderId);
+            if (whatsappStatus.connection === 'open') {
+              const currentBalance = db.prepare('SELECT balance FROM customers WHERE id = ?').get(customer.id)?.balance || 0;
+              const waMsg = 
+                `✅ *TOP-UP SALDO BERHASIL*\n\n` +
+                `👤 *Nama:* ${customer.name}\n` +
+                `💰 *Nominal:* Rp ${Number(topupReq.amount).toLocaleString('id-ID')}\n` +
+                `💳 *Total Saldo:* Rp ${Number(currentBalance).toLocaleString('id-ID')}\n` +
+                `🏷️ *Via:* ${gateway}\n\n` +
+                `Saldo sudah bisa digunakan untuk membeli pulsa/token di portal pelanggan.`;
+              await sendWA(customer.phone, waMsg);
+            }
+          } catch(waErr) { logger.error('[Topup Webhook] WA error: ' + waErr.message); }
+        }
+      }
+      return res.json({ success: true });
+    }
+
+    // --- 2. Cek Request Top-Up Saldo Agen (Prefix AGTOP) ---
+    if (orderPrefix === 'AGTOP' || gatewayOrderId.startsWith('AGTOP')) {
+      const agentTopupReq = db.prepare('SELECT * FROM agent_topup_requests WHERE payment_order_id = ? OR id = ?').get(gatewayOrderId, gatewayOrderId.replace('AGTOP', '').replace(/^-/, ''));
+      if (agentTopupReq && String(agentTopupReq.status) === 'pending') {
+        const reqId = Number(agentTopupReq.id);
+        logger.info(`[Webhook] Pembayaran Top-Up Agen diterima via ${gateway} untuk Request ID: ${reqId}`);
+        
+        db.transaction(() => {
+          db.prepare(`UPDATE agent_topup_requests SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(reqId);
+          db.prepare(`UPDATE agents SET balance = balance + ? WHERE id=?`).run(agentTopupReq.amount, agentTopupReq.agent_id);
+        })();
+
+        // Kirim notifikasi WA ke Agen
+        const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentTopupReq.agent_id);
+        if (settings.whatsapp_enabled && agent && agent.phone) {
+          try {
+            const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+            if (whatsappStatus.connection === 'open') {
+              const currentBalance = db.prepare('SELECT balance FROM agents WHERE id = ?').get(agent.id)?.balance || 0;
+              const waMsg = 
+                `✅ *TOP-UP DEPOSIT AGEN BERHASIL*\n\n` +
+                `👤 *Nama Agen:* ${agent.name}\n` +
+                `💰 *Nominal:* Rp ${Number(agentTopupReq.amount).toLocaleString('id-ID')}\n` +
+                `💳 *Total Saldo:* Rp ${Number(currentBalance).toLocaleString('id-ID')}\n` +
+                `🏷️ *Via:* ${gateway}\n\n` +
+                `Deposit sudah bertambah dan bisa digunakan kembali.`;
+              await sendWA(agent.phone, waMsg);
+            }
+          } catch(waErr) { logger.error('[AgentTopup Webhook] WA error: ' + waErr.message); }
+        }
+      }
+      return res.json({ success: true });
+    }
+
+    // --- 3. Cek Pesanan Voucher Hotspot (Prefix VOUCHER) ---
+    if (orderPrefix === 'VOUCHER' || gatewayOrderId.startsWith('VOUCHER')) {
+      const order = db.prepare('SELECT * FROM public_voucher_orders WHERE payment_order_id = ? OR id = ?').get(gatewayOrderId, targetIdCandidate);
+      if (order) {
+        const orderId = Number(order.id || 0);
+        if (!Number.isFinite(orderId) || orderId <= 0) return res.json({ success: true });
+
+        logger.info(`[Webhook] Pembayaran diterima via ${gateway} untuk Voucher Order ID: ${orderId}`);
+
+        if (String(order.status) !== 'paid' && String(order.status) !== 'fulfilled') {
+          db.prepare(`
+            UPDATE public_voucher_orders
+            SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+          `).run(orderId);
+        }
+
+        const fresh = db.prepare('SELECT * FROM public_voucher_orders WHERE id = ?').get(orderId);
+        if (!fresh) return res.json({ success: true });
+        if (String(fresh.status) === 'fulfilled' && fresh.voucher_code) return res.json({ success: true });
+
+        try {
+          let created = null;
+          let attempt = 0;
+          
+          // ── Load Paket Voucher Config ──────────────────
+          let prefix = '';
+          let codeLength = 6;
+          let charset = 'mixed';
+          try {
+            const pkg = db.prepare('SELECT * FROM voucher_packages WHERE router_id IS ? AND profile_name = ?').get(fresh.router_id ?? null, fresh.profile_name);
+            if (pkg) {
+              prefix = String(pkg.prefix || '').trim();
+              codeLength = Math.max(4, Math.min(16, Number(pkg.code_length) || 6));
+              charset = String(pkg.charset || 'mixed');
+            }
+          } catch (pkgErr) {
+            logger.error('[Fulfillment] Gagal query voucher_packages: ' + pkgErr.message);
           }
-        }
-      } catch (e) {
-        logger.error(`[Webhook] Voucher fulfill gagal (order=${orderId}): ${e.message}`);
-      }
 
+          while (attempt < 10) {
+            attempt++;
+            const coreLen = Math.max(4, codeLength - prefix.length);
+            const code = prefix + genCustomCode(coreLen, charset);
+            const pass = code;
+            const comment = `vc-${code}-${fresh.profile_name}`;
+            const userData = {
+              server: 'all',
+              name: code,
+              password: pass,
+              profile: fresh.profile_name,
+              comment
+            };
+            if (fresh.validity) userData['limit-uptime'] = fresh.validity;
+
+            try {
+              await mikrotikService.addHotspotUser(userData, fresh.router_id ?? null);
+              created = { code, pass, comment };
+              break;
+            } catch (e) {
+              const msg = String(e?.message || e || '').toLowerCase();
+              const isDup = msg.includes('already') || msg.includes('exist') || msg.includes('duplicate');
+              if (isDup) continue;
+              throw e;
+            }
+          }
+          if (!created) throw new Error('Gagal membuat voucher (kode duplikat terlalu sering)');
+
+          db.prepare(`
+            UPDATE public_voucher_orders
+            SET status='fulfilled',
+                fulfilled_at=CURRENT_TIMESTAMP,
+                voucher_code=?,
+                voucher_password=?,
+                voucher_comment=?,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+          `).run(created.code, created.pass, created.comment, orderId);
+
+          if (settings.whatsapp_enabled) {
+            try {
+              const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+              if (whatsappStatus.connection !== 'open') throw new Error('Bot WhatsApp belum terhubung');
+              if (!fresh.buyer_phone) throw new Error('Nomor WhatsApp pembeli kosong');
+              const msg =
+                `🎫 *VOUCHER HOTSPOT*\n\n` +
+                `✅ Pembayaran diterima via *${gateway}*\n` +
+                `📦 Paket: *${fresh.profile_name}* (${fresh.validity || '-'})\n` +
+                `💰 Harga: Rp ${Number(fresh.price || 0).toLocaleString('id-ID')}\n\n` +
+                `👤 User: *${created.code}*\n` +
+                `🔑 Pass: *${created.pass}*\n\n` +
+                `Terima kasih.`;
+              await sendWA(fresh.buyer_phone, msg);
+              db.prepare(`
+                UPDATE public_voucher_orders
+                SET wa_sent=1, wa_sent_at=CURRENT_TIMESTAMP, wa_error='', updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+              `).run(orderId);
+            } catch (waErr) {
+              db.prepare(`
+                UPDATE public_voucher_orders
+                SET wa_sent=0, wa_error=?, updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+              `).run(String(waErr?.message || waErr || ''), orderId);
+            }
+          }
+        } catch (e) {
+          logger.error(`[Webhook] Voucher fulfill gagal (order=${orderId}): ${e.message}`);
+        }
+      }
       return res.json({ success: true });
     }
 
-    const idNum = Number(invoiceIdCandidate || 0);
-    if (!Number.isFinite(idNum) || idNum <= 0) {
-      return res.json({ success: true });
-    }
+    // --- 4. Cek Tagihan Bulanan / Pelanggan (Prefix INV) ---
+    const idNum = Number(targetIdCandidate || 0);
+    if (idNum > 0 && (orderPrefix === 'INV' || !orderPrefix || gatewayOrderId.startsWith('INV'))) {
+      logger.info(`[Webhook] Pembayaran diterima via ${gateway} untuk Invoice ID: ${idNum}`);
 
-    logger.info(`[Webhook] Pembayaran diterima via ${gateway} untuk Invoice ID: ${idNum}`);
+      const checkInv = billingSvc.getInvoiceById(idNum);
+      if (checkInv && checkInv.status !== 'paid') {
+        billingSvc.markAsPaid(idNum, gateway, `Otomatis via Webhook ${gateway}`);
 
-    const checkInv = billingSvc.getInvoiceById(idNum);
-    if (checkInv && checkInv.status !== 'paid') {
-      billingSvc.markAsPaid(idNum, gateway, `Otomatis via Webhook ${gateway}`);
+        const customer = customerSvc.getCustomerById(checkInv.customer_id);
+        
+        try {
+          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+          if (whatsappStatus.connection !== 'open') {
+            throw new Error('Bot WhatsApp belum terhubung');
+          }
+          if (!customer.phone) {
+            throw new Error('Nomor WhatsApp pelanggan kosong');
+          }
+          const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
+          const template = db.getAppSetting('whatsapp_payment_success_message', defaultSuccess);
 
-      const customer = customerSvc.getCustomerById(checkInv.customer_id);
-      
-      try {
-        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
-        if (whatsappStatus.connection !== 'open') {
-          throw new Error('Bot WhatsApp belum terhubung');
+          const formattedMsg = template
+            .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
+            .replace(/{{periode}}/gi, `${checkInv.period_month}/${checkInv.period_year}`)
+            .replace(/{{total}}/gi, checkInv.amount.toLocaleString('id-ID'))
+            .replace(/{{metode}}/gi, gateway || '-');
+
+          await sendWA(customer.phone, formattedMsg);
+        } catch (waErr) {
+          logger.error(`[Webhook] Gagal kirim notif WA: ${waErr.message}`);
         }
-        if (!customer.phone) {
-          throw new Error('Nomor WhatsApp pelanggan kosong');
-        }
-        const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
-        const template = db.getAppSetting('whatsapp_payment_success_message', defaultSuccess);
 
-        const formattedMsg = template
-          .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
-          .replace(/{{periode}}/gi, `${checkInv.period_month}/${checkInv.period_year}`)
-          .replace(/{{total}}/gi, checkInv.amount.toLocaleString('id-ID'))
-          .replace(/{{metode}}/gi, gateway || '-');
-
-        await sendWA(customer.phone, formattedMsg);
-      } catch (waErr) {
-        logger.error(`[Webhook] Gagal kirim notif WA: ${waErr.message}`);
-      }
-
-      if (customer && customer.status === 'suspended') {
-        const unpaidCount = billingSvc.getUnpaidInvoicesByCustomerId(customer.id).length;
-        if (unpaidCount === 0) {
-          logger.info(`[Webhook] Mengaktifkan kembali pelanggan ${customer.name} secara otomatis.`);
-          await customerSvc.activateCustomer(customer.id);
+        if (customer && customer.status === 'suspended') {
+          const unpaidCount = billingSvc.getUnpaidInvoicesByCustomerId(customer.id).length;
+          if (unpaidCount === 0) {
+            logger.info(`[Webhook] Mengaktifkan kembali pelanggan ${customer.name} secara otomatis.`);
+            await customerSvc.activateCustomer(customer.id);
+          }
         }
       }
     }

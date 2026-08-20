@@ -3,7 +3,6 @@
  * Otomatis mengambil payment methods dari payment gateway yang aktif
  */
 const axios = require('axios');
-const crypto = require('crypto');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { logger } = require('../config/logger');
 const paymentSvc = require('./paymentService');
@@ -87,7 +86,6 @@ async function getTripayPaymentMethods(settings) {
  * Get Midtrans payment methods (hardcoded, Midtrans tidak provide API untuk list methods)
  */
 async function getMidtransPaymentMethods(settings) {
-  // Midtrans Snap support these payment methods
   const methods = [
     { code: 'credit_card', name: 'Kartu Kredit', icon: '💳' },
     { code: 'bank_transfer', name: 'Transfer Bank', icon: '🏦' },
@@ -119,7 +117,6 @@ async function getMidtransPaymentMethods(settings) {
  */
 async function getXenditPaymentMethods(settings) {
   try {
-    // Xendit payment methods (hardcoded)
     const methods = [
       { code: 'BANK_TRANSFER', name: 'Transfer Bank', icon: '🏦' },
       { code: 'EWALLET', name: 'E-Wallet (OVO, Dana, LinkAja)', icon: '📱' },
@@ -150,7 +147,6 @@ async function getXenditPaymentMethods(settings) {
  */
 async function getDuitkuPaymentMethods(settings) {
   try {
-    // Duitku payment methods (hardcoded)
     const methods = [
       { code: 'OV', name: 'Outlet Retail', icon: '🏪' },
       { code: 'BT', name: 'Transfer Bank', icon: '🏦' },
@@ -207,7 +203,7 @@ async function createVoucherPayment(voucherOrder, paymentMethod, appUrl = '') {
     email: ''
   };
 
-  // Prepare options
+  // Prepare options with explicit VOUCHER orderPrefix
   const opts = {
     orderPrefix: 'VOUCHER',
     itemName: `Voucher Hotspot ${voucherOrder.profile_name}`,
@@ -221,33 +217,17 @@ async function createVoucherPayment(voucherOrder, paymentMethod, appUrl = '') {
 
     switch (gateway) {
       case 'tripay':
-        result = await paymentSvc.createTripayTransaction(
-          invoice,
-          customer,
-          paymentMethod.code,
-          appUrl,
-          opts
-        );
+        result = await paymentSvc.createTripayTransaction(invoice, customer, paymentMethod.code, appUrl, opts);
         break;
-
       case 'midtrans':
-        result = await paymentSvc.createMidtransTransaction(
-          invoice,
-          customer,
-          'snap',
-          appUrl,
-          opts
-        );
+        result = await paymentSvc.createMidtransTransaction(invoice, customer, 'snap', appUrl, opts);
         break;
-
       case 'xendit':
-        result = await createXenditPayment(invoice, customer, paymentMethod.code, appUrl, opts);
+        result = await paymentSvc.createXenditTransaction(invoice, customer, paymentMethod.code, appUrl, opts);
         break;
-
       case 'duitku':
-        result = await createDuitkuPayment(invoice, customer, paymentMethod.code, appUrl, opts);
+        result = await paymentSvc.createDuitkuTransaction(invoice, customer, paymentMethod.code, appUrl, opts);
         break;
-
       default:
         throw new Error(`Gateway ${gateway} tidak didukung`);
     }
@@ -268,131 +248,12 @@ async function createVoucherPayment(voucherOrder, paymentMethod, appUrl = '') {
 }
 
 /**
- * Create Xendit payment
- */
-async function createXenditPayment(invoice, customer, method, appUrl, opts) {
-  const settings = getSettingsWithCache();
-  const apiKey = settings.xendit_api_key;
-  const isLive = settings.xendit_mode === 'live' || settings.xendit_mode === 'production';
-
-  const baseUrl = isLive
-    ? 'https://api.xendit.co/v2/invoices'
-    : 'https://api.sandbox.xendit.co/v2/invoices';
-
-  const invoiceId = `VOUCHER-${invoice.id}-${Date.now()}`;
-  const finalAppUrl = appUrl || settings.app_url || '';
-
-  const payload = {
-    external_id: invoiceId,
-    amount: invoice.amount,
-    description: opts.itemName,
-    invoice_duration: 86400,
-    customer: {
-      given_names: customer.name,
-      email: customer.email || `voucher${invoice.id}@alijaya.net`,
-      mobile_number: customer.phone
-    },
-    currency: 'IDR',
-    items: [{
-      name: opts.itemName,
-      quantity: 1,
-      price: invoice.amount
-    }],
-    payment_methods: [method],
-    success_redirect_url: finalAppUrl ? `${finalAppUrl}${opts.returnPath}` : undefined,
-    failure_redirect_url: finalAppUrl ? `${finalAppUrl}${opts.returnPath}` : undefined
-  };
-
-  try {
-    const response = await axios.post(baseUrl, payload, {
-      auth: { username: apiKey, password: '' },
-      timeout: 5000
-    });
-
-    if (response.data && response.data.id) {
-      return {
-        success: true,
-        link: response.data.invoice_url,
-        reference: response.data.id,
-        order_id: invoiceId,
-        payload: response.data
-      };
-    }
-
-    throw new Error('Xendit response tidak valid');
-  } catch (error) {
-    const msg = error.response ? JSON.stringify(error.response.data) : error.message;
-    logger.error('[Xendit] Error:', msg);
-    throw new Error('Xendit Error: ' + msg);
-  }
-}
-
-/**
- * Create Duitku payment
- */
-async function createDuitkuPayment(invoice, customer, method, appUrl, opts) {
-  const settings = getSettingsWithCache();
-  const merchantCode = settings.duitku_merchant_code;
-  const apiKey = settings.duitku_api_key;
-  const isLive = settings.duitku_mode === 'live' || settings.duitku_mode === 'production';
-
-  const baseUrl = isLive
-    ? 'https://passport.duitku.com/webapi/api/merchant/v2/inquiry'
-    : 'https://passport-sandbox.duitku.com/webapi/api/merchant/v2/inquiry';
-
-  const invoiceId = `VOUCHER${invoice.id}${Date.now()}`;
-  const finalAppUrl = appUrl || settings.app_url || '';
-
-  const signature = crypto
-    .createHash('md5')
-    .update(merchantCode + invoiceId + invoice.amount + apiKey)
-    .digest('hex');
-
-  const payload = {
-    merchantCode,
-    paymentAmount: invoice.amount,
-    paymentMethod: method,
-    merchantOrderId: invoiceId,
-    productDetails: opts.itemName,
-    customerVaName: customer.name,
-    email: customer.email || `voucher${invoice.id}@alijaya.net`,
-    phoneNumber: customer.phone,
-    returnUrl: finalAppUrl ? `${finalAppUrl}${opts.returnPath}` : undefined,
-    callbackUrl: finalAppUrl ? `${finalAppUrl}${opts.callbackPath}` : undefined,
-    signature
-  };
-
-  try {
-    const response = await axios.post(baseUrl, payload, {
-      timeout: 5000
-    });
-
-    if (response.data && response.data.statusCode === '00') {
-      return {
-        success: true,
-        link: response.data.paymentUrl,
-        reference: response.data.reference,
-        order_id: invoiceId,
-        payload: response.data
-      };
-    }
-
-    throw new Error(response.data.statusMessage || 'Duitku response tidak valid');
-  } catch (error) {
-    const msg = error.response ? JSON.stringify(error.response.data) : error.message;
-    logger.error('[Duitku] Error:', msg);
-    throw new Error('Duitku Error: ' + msg);
-  }
-}
-
-/**
  * Get default payment gateway
  */
 function getDefaultPaymentGateway() {
   const settings = getSettingsWithCache();
   const defaultGateway = settings.default_gateway || 'tripay';
 
-  // Check if default gateway is enabled
   const gatewaySettings = {
     tripay: { enabled: settings.tripay_enabled, key: settings.tripay_api_key },
     midtrans: { enabled: settings.midtrans_enabled, key: settings.midtrans_server_key },
@@ -404,7 +265,6 @@ function getDefaultPaymentGateway() {
     return defaultGateway;
   }
 
-  // Fallback to first enabled gateway
   for (const [gateway, config] of Object.entries(gatewaySettings)) {
     if (config.enabled && config.key) {
       return gateway;
@@ -421,7 +281,5 @@ module.exports = {
   getXenditPaymentMethods,
   getDuitkuPaymentMethods,
   createVoucherPayment,
-  createXenditPayment,
-  createDuitkuPayment,
   getDefaultPaymentGateway
 };
