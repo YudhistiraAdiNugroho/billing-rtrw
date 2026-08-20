@@ -5,6 +5,7 @@ const mikrotikSvc = require('./mikrotikService');
 const axios = require('axios');
 const crypto = require('crypto');
 const { getSetting } = require('../config/settingsManager');
+const { parseMikhmonOnLogin } = require('../utils/mikhmonParser');
 
 const DIGIFLAZZ_URL = 'https://api.digiflazz.com/v1';
 const digiflazzApi = axios.create({
@@ -429,47 +430,6 @@ async function payInvoiceAsAgent(agentId, invoiceId, note = '') {
   return { invoice: inv, agent: getAgentById(agentId), tx };
 }
 
-function parseMikhmonOnLogin(script) {
-  if (!script) return null;
-  const s = String(script).trim();
-  
-  // Cari pattern :put (",rem, ... , ... , ...
-  // Updated regex untuk support format: :put (",rem,4000,2d,5000,,Disable,");
-  const putMatch = s.match(/:\s*put\s*\(\s*[",]rem[",]?\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/i);
-  if (putMatch) {
-    const cost = String(putMatch[1] || '').trim();
-    const validity = String(putMatch[2] || '').trim();
-    const priceStr = String(putMatch[3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-    }
-  }
-  
-  // Fallback: split by comma
-  const parts = s.split(',').map(p => String(p).trim());
-  let remIdx = -1;
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i].includes('rem')) {
-      remIdx = i;
-      break;
-    }
-  }
-  
-  if (remIdx >= 0 && remIdx + 3 < parts.length) {
-    const cost = String(parts[remIdx + 1] || '').trim();
-    const validity = String(parts[remIdx + 2] || '').trim();
-    const priceStr = String(parts[remIdx + 3] || '').trim();
-    const price = Number(priceStr.replace(/[^\d]/g, '')) || 0;
-    
-    if (validity && price > 0) {
-      return { validity, price, cost: Number(cost.replace(/[^\d]/g, '')) || 0 };
-    }
-  }
-  
-  return null;
-}
 
 function genCode(len, charset) {
   const n = Math.max(4, Math.min(16, Number(len) || 6));
