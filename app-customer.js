@@ -1226,6 +1226,29 @@ app.get('/admin/manifest.webmanifest', (req, res) => {
 });
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Route download APK Android Pelanggan
+app.get(['/download/app', '/download/apk', '/downloads/AlijayaCustomer.apk', '/download/AlijayaCustomer.apk'], (req, res) => {
+  const apkPath = path.join(__dirname, 'public', 'downloads', 'AlijayaCustomer.apk');
+  const fallbackPath = path.join(__dirname, 'AlijayaCustomer.apk');
+
+  let targetPath = null;
+  if (fs.existsSync(apkPath)) {
+    targetPath = apkPath;
+  } else if (fs.existsSync(fallbackPath)) {
+    targetPath = fallbackPath;
+  }
+
+  if (targetPath) {
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    return res.download(targetPath, 'AlijayaCustomer.apk');
+  }
+
+  return res.status(404).json({
+    success: false,
+    message: 'File APK belum di-upload ke server VPS. Silakan upload file AlijayaCustomer.apk ke folder public/downloads/ di server.'
+  });
+});
+
 app.get('/uploads/qris/:filename', async (req, res) => {
   const wantsHtml = () => String(req.get('accept') || '').toLowerCase().includes('text/html');
   const sendPretty = (status, title, detail) => {
