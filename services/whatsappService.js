@@ -112,9 +112,127 @@ function getRecentConversations(limit = 30) {
   return rows || [];
 }
 
+const DEFAULT_PAYMENT_SUCCESS_TEMPLATE = 
+`🧾 *BUKTI PEMBAYARAN RESMI (LUNAS)*
+🏢 *{{company}}*
+────────────────────────────
+Yth. Pelanggan *{{nama}}*,
+
+Terima kasih, pembayaran tagihan internet Anda telah kami terima dan diverifikasi.
+
+📋 *Rincian Pembayaran:*
+• *No. Invoice:* #INV-{{no_invoice}}
+• *ID Pelanggan:* {{username}}
+• *Paket Layanan:* {{paket}}
+• *Periode:* {{periode}}
+• *Waktu Bayar:* {{waktu}}
+• *Metode Bayar:* {{metode}}
+• *Total Bayar:* *Rp {{total}}*
+• *Status:* *LUNAS ✅*
+
+🌐 *Status Layanan:*
+Layanan internet Anda saat ini dalam status *AKTIF* dan dapat digunakan dengan nyaman.
+
+────────────────────────────
+🔗 *Cek Tagihan / Riwayat:*
+{{link_portal}}
+
+📞 *Bantuan & Layanan Pelanggan:*
+WhatsApp: {{company_phone}}
+
+_Simpan pesan ini sebagai bukti pembayaran yang sah dari {{company}}._`;
+
+function getIndonesianMonthName(monthNumber) {
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  const idx = Number(monthNumber) - 1;
+  return months[idx] || String(monthNumber || '');
+}
+
+/**
+ * Format Payment Success WhatsApp Message
+ */
+function formatPaymentSuccessMessage({
+  customerName = '',
+  invoiceId = '',
+  customerUsername = '',
+  packageName = '',
+  periodMonth = '',
+  periodYear = '',
+  amount = 0,
+  paymentMethod = '',
+  paidAt = null,
+  companyName = '',
+  companyPhone = '',
+  portalUrl = '',
+  customTemplate = ''
+}) {
+  let template = String(customTemplate || DEFAULT_PAYMENT_SUCCESS_TEMPLATE).trim();
+  if (!template) template = DEFAULT_PAYMENT_SUCCESS_TEMPLATE;
+
+  const monthName = periodMonth ? getIndonesianMonthName(periodMonth) : '';
+  const periodText = (monthName && periodYear) ? `${monthName} ${periodYear}` : (periodMonth && periodYear ? `${periodMonth}/${periodYear}` : '-');
+
+  let formattedTime = '';
+  if (paidAt) {
+    try {
+      const d = new Date(paidAt);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0');
+        const mo = getIndonesianMonthName(d.getMonth() + 1);
+        const yr = d.getFullYear();
+        const hr = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        formattedTime = `${day} ${mo} ${yr}, ${hr}:${min} WIB`;
+      }
+    } catch {}
+  }
+  if (!formattedTime) {
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const mo = getIndonesianMonthName(now.getMonth() + 1);
+    const yr = now.getFullYear();
+    const hr = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    formattedTime = `${day} ${mo} ${yr}, ${hr}:${min} WIB`;
+  }
+
+  const formattedAmount = Number(amount || 0).toLocaleString('id-ID');
+
+  let rendered = template
+    .replace(/{{nama}}/gi, customerName || 'Pelanggan')
+    .replace(/{{no_invoice}}/gi, String(invoiceId || '-'))
+    .replace(/{{invoice_id}}/gi, String(invoiceId || '-'))
+    .replace(/{{username}}/gi, customerUsername || '-')
+    .replace(/{{id_pelanggan}}/gi, customerUsername || '-')
+    .replace(/{{paket}}/gi, packageName || '-')
+    .replace(/{{periode}}/gi, periodText)
+    .replace(/{{total}}/gi, formattedAmount)
+    .replace(/{{metode}}/gi, paymentMethod || 'Online Gateway')
+    .replace(/{{waktu}}/gi, formattedTime)
+    .replace(/{{tanggal}}/gi, formattedTime)
+    .replace(/{{company}}/gi, companyName || 'ALIJAYA NET')
+    .replace(/{{company_phone}}/gi, companyPhone || '-')
+    .replace(/{{link_portal}}/gi, portalUrl || '-')
+    .replace(/{{link}}/gi, portalUrl || '-');
+
+  // Process spintax {A|B|C} only if pipe is present
+  rendered = rendered.replace(/\{([^{}|]+(?:\|[^{}|]+)+)\}/g, (match, choices) => {
+    const arr = choices.split('|');
+    return arr[Math.floor(Math.random() * arr.length)].trim();
+  });
+
+  return rendered;
+}
+
 module.exports = {
   sendWhatsAppMessage,
   sendWA: sendWhatsAppMessage, // Alias untuk kompatibilitas fungsi lama
   getChatHistory,
-  getRecentConversations
+  getRecentConversations,
+  getIndonesianMonthName,
+  formatPaymentSuccessMessage,
+  DEFAULT_PAYMENT_SUCCESS_TEMPLATE
 };

@@ -6,6 +6,8 @@ const billingSvc = require('./billingService');
 const mikrotikSvc = require('./mikrotikService');
 const agentSvc = require('./agentService');
 const customerDevice = require('./customerDeviceService');
+const whatsappService = require('./whatsappService');
+const db = require('../config/database');
 
 let bot = null;
 
@@ -728,16 +730,29 @@ function initTelegram() {
       const customerName = String(targetInv.customer_name || customer?.name || targetInv.customer_name || '-');
       const notifyTag = customer?.genieacs_tag || customer?.pppoe_username || customer?.phone || targetInv.customer_phone || targetInv.genieacs_tag || '';
       
+      const appUrl = (getSetting('public_base_url', '') || '').replace(/\/$/, '');
+      const portalUrl = appUrl ? `${appUrl}/customer` : '';
+      const template = db.getAppSetting('whatsapp_payment_success_message', '');
+
+      const waMessage = whatsappService.formatPaymentSuccessMessage({
+        customerName,
+        invoiceId: targetInvId,
+        customerUsername: customer?.pppoe_username || customer?.id || '-',
+        packageName: targetInv.package_name || '-',
+        periodMonth: targetInv.period_month,
+        periodYear: targetInv.period_year,
+        amount: targetInv.amount,
+        paymentMethod: 'Telegram Admin / Kasir',
+        paidAt: new Date(),
+        companyName: getSetting('company_header', 'ALIJAYA NET'),
+        companyPhone: getSetting('company_phone', ''),
+        portalUrl,
+        customTemplate: template
+      });
+      
       // Dynamic import of whatsappBot
       const waBot = await import('./whatsappBot.mjs').catch(() => null);
       let waNotifStatus = 'tidak dikirim (WA offline)';
-      
-      const waMessage = `✅ *PEMBAYARAN BERHASIL*\n\n` +
-        `Invoice *#${targetInvId}* sudah *LUNAS*.\n` +
-        `👤 *Nama:* ${customerName}\n` +
-        `📅 *Periode:* ${targetInv.period_month}/${targetInv.period_year}\n` +
-        `💰 *Total:* ${formatter.format(Number(targetInv.amount || 0))}\n\n` +
-        `Terima kasih.`;
 
       if (customer && customer.status === 'suspended') {
         const freshCustomer = customerSvc.getAllCustomers().find(c => c.id === targetInv.customer_id);
@@ -754,7 +769,7 @@ function initTelegram() {
             const ok = await waBot.notifyCustomer(waBot.currentSock, null, notifyTag, waMessage + `\n\n⚠️ Masih ada ${unpaidCount} tagihan lain yang belum dibayar.`);
             waNotifStatus = ok ? 'terkirim' : 'gagal';
           }
-          await bot.sendMessage(chatId, `✅ Invoice *#${targetInvId}* LUNAS. (Masih ada ${unpaidCount} tagihan lain, isolir tetap aktif)\n📩 Notif WA pelanggan: ${waNotifStatus}`);
+          await bot.sendMessage(chatId, `✅ Invoice *#${targetInvId}* LUNAS. Masih ada ${unpaidCount} tagihan lain.\n📩 Notif WA pelanggan: ${waNotifStatus}`);
         }
       } else {
         if (waBot && waBot.currentSock) {

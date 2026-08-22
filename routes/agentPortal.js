@@ -5,6 +5,7 @@ const agentSvc = require('../services/agentService');
 const billingSvc = require('../services/billingService');
 const customerSvc = require('../services/customerService');
 const paymentSvc = require('../services/paymentService');
+const whatsappService = require('../services/whatsappService');
 const db = require('../config/database');
 
 function isEnabledFlag(val) {
@@ -339,14 +340,27 @@ router.post('/pay-invoice', requireAgentSession, express.urlencoded({ extended: 
       try {
         const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
         if (whatsappStatus.connection === 'open') {
-          const msg =
-            `✅ *PEMBAYARAN BERHASIL*\n\n` +
-            `👤 *Pelanggan:* ${customer.name}\n` +
-            `🧾 *Invoice:* #${result.invoice.id}\n` +
-            `📅 *Periode:* ${result.invoice.period_month}/${result.invoice.period_year}\n` +
-            `💰 *Nominal Tagihan:* Rp ${Number(result.invoice.amount || 0).toLocaleString('id-ID')}\n` +
-            `🏷️ *Dibayar Via:* Agent ${result.agent.name}\n\n` +
-            `Terima kasih.`;
+          const allSettings = getSettings();
+          const appUrl = (allSettings.public_base_url || '').replace(/\/$/, '');
+          const portalUrl = appUrl ? `${appUrl}/customer` : '';
+          const template = db.getAppSetting('whatsapp_payment_success_message', '');
+
+          const msg = whatsappService.formatPaymentSuccessMessage({
+            customerName: customer.name,
+            invoiceId: result.invoice.id,
+            customerUsername: customer.pppoe_username || customer.id || '-',
+            packageName: customer.package_name || '-',
+            periodMonth: result.invoice.period_month,
+            periodYear: result.invoice.period_year,
+            amount: result.invoice.amount,
+            paymentMethod: `Agen ${result.agent.name}`,
+            paidAt: new Date(),
+            companyName: allSettings.company_header || 'ALIJAYA NET',
+            companyPhone: allSettings.company_phone || '',
+            portalUrl,
+            customTemplate: template
+          });
+
           await sendWA(customer.phone, msg);
           waSent = true;
         }

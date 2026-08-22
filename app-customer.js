@@ -13,6 +13,7 @@ const { logger } = require('./config/logger');
 const db = require('./config/database');
 const customerSvc = require('./services/customerService');
 const billingSvc = require('./services/billingService');
+const whatsappService = require('./services/whatsappService');
 const mikrotikService = require('./services/mikrotikService');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { scheduleAutoBackup } = require('./services/backupService');
@@ -42,7 +43,9 @@ const { getSetting, getSettingsWithCache, ensureDefaultSettings } = require('./c
 const { SUPPORTED_LANGS, FALLBACK_LANG, normalizeLang, t } = require('./config/i18n');
 
 // Pastikan semua default settings ada (untuk migrasi/update dari GitHub)
-ensureDefaultSettings();
+if (typeof ensureDefaultSettings === 'function') {
+  ensureDefaultSettings();
+}
 
 // Inisialisasi aplikasi Express
 const app = express();
@@ -501,16 +504,28 @@ async function trySendWaPaymentSuccess(settings, invoiceId, methodLabel) {
     if (!phone) return;
     const { sendWA, whatsappStatus } = await import('./services/whatsappBot.mjs');
     if (whatsappStatus.connection !== 'open') throw new Error('Bot WhatsApp belum terhubung');
-    const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
-    const template = db.getAppSetting('whatsapp_payment_success_message', defaultSuccess);
-    const periode = `${inv.period_month}/${inv.period_year}`;
-    const total = Number(inv.amount || 0).toLocaleString('id-ID');
-    const metode = String(methodLabel || '').trim() || 'QRIS';
-    const msg = String(template || defaultSuccess)
-      .replace(/{{nama}}/gi, inv.customer_name || 'Pelanggan')
-      .replace(/{{periode}}/gi, periode)
-      .replace(/{{total}}/gi, total)
-      .replace(/{{metode}}/gi, metode);
+
+    const appUrl = (settings.public_base_url || '').replace(/\/$/, '');
+    const portalUrl = appUrl ? `${appUrl}/customer` : '';
+    const template = db.getAppSetting('whatsapp_payment_success_message', '');
+    const metode = String(methodLabel || '').trim() || 'Online Gateway';
+
+    const msg = whatsappService.formatPaymentSuccessMessage({
+      customerName: inv.customer_name || 'Pelanggan',
+      invoiceId: inv.id,
+      customerUsername: inv.customer_id || '-',
+      packageName: inv.package_name || '-',
+      periodMonth: inv.period_month,
+      periodYear: inv.period_year,
+      amount: inv.amount,
+      paymentMethod: metode,
+      paidAt: inv.paid_at || new Date(),
+      companyName: settings.company_header || 'ALIJAYA NET',
+      companyPhone: settings.company_phone || '',
+      portalUrl,
+      customTemplate: template
+    });
+
     logger.info(`[WEBHOOK][payment-notif] Sending WA success notif to ${phone} inv=${invoiceId} method=${metode}`);
     await sendWA(phone, msg);
   } catch (e) {
@@ -1466,6 +1481,10 @@ app.post('/acs', express.raw({ type: ['text/xml', 'application/soap+xml', 'appli
 // Mount customer portal
 const customerPortal = require('./routes/customerPortal');
 app.use('/customer', customerPortal);
+
+// Mount customer REST API for Android Mobile App
+const customerAPI = require('./routes/customerAPI');
+app.use('/api/customer', customerAPI);
 
 // Mount admin portal
 const adminPortal = require('./routes/adminPortal');

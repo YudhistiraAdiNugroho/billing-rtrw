@@ -8,6 +8,7 @@ const customerSvc = require('../services/customerService');
 const adminSvc = require('../services/adminService');
 const attendanceSvc = require('../services/attendanceService');
 const pdfSvc = require('../services/pdfInvoiceService');
+const whatsappService = require('../services/whatsappService');
 const { uploadAttendance, removeAttendanceFile } = require('../middleware/attendanceUpload');
 
 function requireCollectorSession(req, res, next) {
@@ -403,17 +404,32 @@ router.post('/payment-request', requireCollectorSession, express.urlencoded({ ex
 
       // Send WhatsApp notification to customer
       if (customer && customer.phone) {
-        const msg =
-          `✅ *PEMBAYARAN BERHASIL*\n\n` +
-          `👤 *Pelanggan:* ${customer.name}\n` +
-          `🧾 *Invoice:* #${inv.id}\n` +
-          `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
-          `💰 *Nominal Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n` +
-          `🏷️ *Dibayar Via:* ${collectorLabel}\n\n` +
-          `Terima kasih.`;
+        const allSettings = getSettings();
+        const appUrl = (allSettings.public_base_url || '').replace(/\/$/, '');
+        const portalUrl = appUrl ? `${appUrl}/customer` : '';
+        const template = db.getAppSetting('whatsapp_payment_success_message', '');
+
+        const msg = whatsappService.formatPaymentSuccessMessage({
+          customerName: customer.name,
+          invoiceId: inv.id,
+          customerUsername: customer.pppoe_username || customer.id || '-',
+          packageName: customer.package_name || '-',
+          periodMonth: inv.period_month,
+          periodYear: inv.period_year,
+          amount: inv.amount,
+          paymentMethod: collectorLabel || 'Kolektor / Lapangan',
+          paidAt: new Date(),
+          companyName: allSettings.company_header || 'ALIJAYA NET',
+          companyPhone: allSettings.company_phone || '',
+          portalUrl,
+          customTemplate: template
+        });
+
         try {
-          const waBot = require('../services/whatsappBot.mjs');
-          await waBot.sendMessage(customer.phone, msg);
+          const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+          if (whatsappStatus && whatsappStatus.connection === 'open') {
+            await sendWA(customer.phone, msg);
+          }
         } catch (e) {
           logger.error('Failed to send WA notification for auto-approved collector payment:', e);
         }

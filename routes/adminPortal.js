@@ -58,6 +58,7 @@ const backupSvc = require('../services/backupService');
 const monitoringSvc = require('../services/monitoringService');
 const inventorySvc = require('../services/inventoryService');
 const auditSvc = require('../services/auditTrailService');
+const whatsappService = require('../services/whatsappService');
 const { parseMikhmonOnLogin } = require('../utils/mikhmonParser');
 const diagnosticsSvc = require('../services/diagnosticsService');
 const attendanceSvc = require('../services/attendanceService');
@@ -253,16 +254,37 @@ async function trySendWhatsappPayment(customerPhone, message) {
   }
 }
 
-async function sendPaymentSuccessWA(customerPhone, customerName, periodText, amountText, paidBy) {
+async function sendPaymentSuccessWA(customerPhone, customerName, periodText, amountText, paidBy, extraOpts = {}) {
   try {
-    const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
-    const template = db.getAppSetting('whatsapp_payment_success_message', defaultSuccess);
+    const defaultTemplate = whatsappService.DEFAULT_PAYMENT_SUCCESS_TEMPLATE;
+    const template = db.getAppSetting('whatsapp_payment_success_message', defaultTemplate);
+    const settings = getSettings();
+    const appUrl = (settings.public_base_url || '').replace(/\/$/, '');
+    const portalUrl = appUrl ? `${appUrl}/customer` : '';
 
-    const formattedMsg = template
-      .replace(/{{nama}}/gi, customerName || 'Pelanggan')
-      .replace(/{{periode}}/gi, periodText || '-')
-      .replace(/{{total}}/gi, amountText || '-')
-      .replace(/{{metode}}/gi, paidBy || '-');
+    let periodMonth = '';
+    let periodYear = '';
+    if (periodText && String(periodText).includes('/')) {
+      const p = String(periodText).split('/');
+      periodMonth = p[0];
+      periodYear = p[1];
+    }
+
+    const formattedMsg = whatsappService.formatPaymentSuccessMessage({
+      customerName: customerName || 'Pelanggan',
+      invoiceId: extraOpts.invoiceId || '',
+      customerUsername: extraOpts.username || extraOpts.customerId || '-',
+      packageName: extraOpts.packageName || '-',
+      periodMonth: periodMonth || periodText,
+      periodYear: periodYear || '',
+      amount: String(amountText || '0').replace(/[^\d]/g, ''),
+      paymentMethod: paidBy || 'Kasir / Admin',
+      paidAt: extraOpts.paidAt || new Date(),
+      companyName: company(),
+      companyPhone: settings.company_phone || '',
+      portalUrl,
+      customTemplate: template
+    });
 
     return await trySendWhatsappPayment(customerPhone, formattedMsg);
   } catch (e) {
@@ -5633,7 +5655,7 @@ router.get('/whatsapp/templates', requireAdminSession, requireSidebarMenuAccess(
   
   const defaultQris = `Yth. Pelanggan {{nama}},\n\nBerikut rincian tagihan manual + Kode Bayar QRIS Anda:\n\n📦 *Paket:* {{paket}}\n📅 *Periode:* {{periode}}\n💰 *Nominal:* Rp {{qris_nominal}}\n\nSilakan scan QRIS berikut untuk melakukan pembayaran otomatis:\n{{qris_qr}}\n\nTerima kasih.`;
 
-  const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
+  const defaultSuccess = whatsappService.DEFAULT_PAYMENT_SUCCESS_TEMPLATE;
 
   const defaultIsolir = `Yth. Pelanggan {{nama}},\n\nLayanan internet Anda (Paket {{paket}}) saat ini ditangguhkan (Terisolir) karena belum melunasi tagihan sebesar *Rp {{tagihan}}*.\n\nSilakan lakukan pembayaran segera melalui portal pelanggan: {{link}}\n\nTerima kasih.`;
 

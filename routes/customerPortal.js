@@ -20,6 +20,7 @@ const QRCode = require('qrcode');
 const _jimpMod = require('jimp');
 const Jimp = _jimpMod.Jimp || _jimpMod;
 const qrisUtil = require('../utils/qrisUtil');
+const whatsappService = require('../services/whatsappService');
 const { BinaryBitmap, HybridBinarizer, RGBLuminanceSource, MultiFormatReader, BarcodeFormat, DecodeHintType } = require('@zxing/library');
 let loginRateLimiter = (req, res, next) => next();
 try {
@@ -3384,14 +3385,25 @@ router.post('/payment/callback', express.json({
           if (!customer.phone) {
             throw new Error('Nomor WhatsApp pelanggan kosong');
           }
-          const defaultSuccess = `Yth. Pelanggan {{nama}},\n\n*PEMBAYARAN BERHASIL (LUNAS)*\n\n📅 *Periode:* {{periode}}\n💰 *Total Bayar:* Rp {{total}}\n💳 *Metode:* {{metode}}\n\nLayanan internet Anda aktif. Terima kasih atas kerja samanya.`;
-          const template = db.getAppSetting('whatsapp_payment_success_message', defaultSuccess);
+          const appUrl = (getSettingsWithCache().public_base_url || appUrlFromReq(req) || '').replace(/\/$/, '');
+          const portalUrl = `${appUrl}/customer`;
+          const template = db.getAppSetting('whatsapp_payment_success_message', '');
 
-          const formattedMsg = template
-            .replace(/{{nama}}/gi, customer.name || 'Pelanggan')
-            .replace(/{{periode}}/gi, `${checkInv.period_month}/${checkInv.period_year}`)
-            .replace(/{{total}}/gi, checkInv.amount.toLocaleString('id-ID'))
-            .replace(/{{metode}}/gi, gateway || '-');
+          const formattedMsg = whatsappService.formatPaymentSuccessMessage({
+            customerName: customer.name || checkInv.customer_name || 'Pelanggan',
+            invoiceId: checkInv.id,
+            customerUsername: customer.pppoe_username || customer.id || '-',
+            packageName: checkInv.package_name || '-',
+            periodMonth: checkInv.period_month,
+            periodYear: checkInv.period_year,
+            amount: checkInv.amount,
+            paymentMethod: gateway || 'Online Gateway',
+            paidAt: checkInv.paid_at || new Date(),
+            companyName: settings.company_header || 'ALIJAYA NET',
+            companyPhone: settings.company_phone || '',
+            portalUrl,
+            customTemplate: template
+          });
 
           await sendWA(customer.phone, formattedMsg);
         } catch (waErr) {
