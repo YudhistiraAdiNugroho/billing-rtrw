@@ -51,37 +51,42 @@ function getResolvedTickets(techId) {
 }
 
 function takeTicket(ticketId, techId) {
-  db.prepare("UPDATE tickets SET technician_id = ?, status = 'in_progress', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(techId, ticketId);
+  let validTechId = Number(techId);
+  const exists = db.prepare('SELECT id FROM technicians WHERE id = ?').get(validTechId);
+  if (!exists) {
+    const fallback = db.prepare('SELECT id FROM technicians WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get();
+    if (fallback) validTechId = fallback.id;
+  }
+  db.prepare("UPDATE tickets SET technician_id = ?, status = 'in_progress', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(validTechId, ticketId);
+  return validTechId;
 }
 
 function updateTicketStatus(ticketId, techId, status, extraData = {}) {
   const { notes, photos, photoMetadata } = extraData;
   
-  if (notes !== undefined || photos !== undefined || photoMetadata !== undefined) {
-    // Update with additional fields
-    const updates = ['status = ?', 'updated_at = CURRENT_TIMESTAMP'];
-    const params = [status];
-    
-    if (notes !== undefined) {
-      updates.push('technician_notes = ?');
-      params.push(notes);
-    }
-    if (photos !== undefined) {
-      updates.push('photos = ?');
-      params.push(photos);
-    }
-    if (photoMetadata !== undefined) {
-      updates.push('photo_metadata = ?');
-      params.push(photoMetadata);
-    }
-    
-    params.push(ticketId, techId);
-    const sql = `UPDATE tickets SET ${updates.join(', ')} WHERE id = ? AND technician_id = ?`;
-    db.prepare(sql).run(...params);
-  } else {
-    // Simple status update
-    db.prepare('UPDATE tickets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND technician_id = ?').run(status, ticketId, techId);
+  const updates = ['status = ?', 'updated_at = CURRENT_TIMESTAMP'];
+  const params = [status];
+  
+  if (techId) {
+    updates.push('technician_id = COALESCE(technician_id, ?)');
+    params.push(techId);
   }
+  if (notes !== undefined) {
+    updates.push('technician_notes = ?');
+    params.push(notes);
+  }
+  if (photos !== undefined) {
+    updates.push('photos = ?');
+    params.push(photos);
+  }
+  if (photoMetadata !== undefined) {
+    updates.push('photo_metadata = ?');
+    params.push(photoMetadata);
+  }
+  
+  params.push(ticketId);
+  const sql = `UPDATE tickets SET ${updates.join(', ')} WHERE id = ?`;
+  db.prepare(sql).run(...params);
 }
 
 // Admin helper

@@ -883,9 +883,23 @@ router.post('/app/agent/buy-voucher', (req, res) => {
 });
 
 // ─── 0.5 TEKNISI NATIVE APIS ───────────────────────────────────────────────
+function resolveTechId(req) {
+  if (req.body && req.body.techId && Number(req.body.techId) > 0) return Number(req.body.techId);
+  if (req.query && req.query.techId && Number(req.query.techId) > 0) return Number(req.query.techId);
+  
+  const authHeader = req.headers.authorization || req.headers['x-access-token'] || req.query.token;
+  const payload = verifyCustomerToken(authHeader);
+  if (payload && payload.customerId && Number(payload.customerId) > 0) {
+    return Number(payload.customerId);
+  }
+
+  const firstTech = db.prepare('SELECT id FROM technicians WHERE is_active = 1 ORDER BY id ASC LIMIT 1').get();
+  return firstTech?.id || 1;
+}
+
 router.get('/app/tech/dashboard', (req, res) => {
   try {
-    const techId = Number(req.query.techId || 1);
+    const techId = resolveTechId(req);
     const stats = techSvc.getTechStats(techId);
     const assignedTickets = techSvc.getAssignedTickets(techId);
     const openTickets = techSvc.getOpenTickets();
@@ -910,10 +924,10 @@ router.get('/app/tech/dashboard', (req, res) => {
 router.post('/app/tech/tickets/take', (req, res) => {
   try {
     const ticketId = Number(req.body.ticketId || req.body.id);
-    const techId = Number(req.body.techId || 1);
+    const techId = resolveTechId(req);
     if (!ticketId) return res.status(400).json({ success: false, message: 'ID Tiket tidak valid' });
 
-    techSvc.takeTicket(ticketId, techId);
+    const assignedId = techSvc.takeTicket(ticketId, techId);
     res.json({ success: true, message: `Tiket #${ticketId} berhasil diambil! Silakan mulai pengerjaan.` });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Gagal mengambil tiket: ' + e.message });
@@ -923,7 +937,7 @@ router.post('/app/tech/tickets/take', (req, res) => {
 router.post('/app/tech/tickets/update', async (req, res) => {
   try {
     const ticketId = Number(req.body.ticketId || req.body.id);
-    const techId = Number(req.body.techId || 1);
+    const techId = resolveTechId(req);
     const status = String(req.body.status || 'in_progress').trim();
     const notes = String(req.body.notes || '').trim();
     if (!ticketId) return res.status(400).json({ success: false, message: 'ID Tiket tidak valid' });
