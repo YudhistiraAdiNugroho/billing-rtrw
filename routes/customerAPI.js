@@ -433,6 +433,110 @@ router.post('/app/admin/customers/delete', (req, res) => {
   }
 });
 
+// ─── ADMIN WHATSAPP TEMPLATES & DIRECT SENDER ─────────────────────────
+function renderTemplateMessage(template, customer, invoice = null) {
+  if (!template) return '';
+  const settings = getSettingsWithCache();
+  const comp = settings.company_header || 'ALIJAYA NET';
+  const base = settings.public_base_url || settings.app_url || `http://localhost:${settings.port || 3001}`;
+  const link = `${base}/customer/login?u=${encodeURIComponent(customer.pppoe_username || customer.phone || '')}`;
+
+  const pkgName = customer.package_name || customer.packageName || 'Paket Internet';
+  const billAmount = invoice ? Number(invoice.amount || 0) : Number(customer.package_price || 0);
+  const fmtMoney = new Intl.NumberFormat('id-ID').format(billAmount);
+
+  const now = new Date();
+  const period = invoice ? `${invoice.period_month || (now.getMonth() + 1)}/${invoice.period_year || now.getFullYear()}` : `${now.getMonth() + 1}/${now.getFullYear()}`;
+  const rincian = `Tagihan Bulan ${period}`;
+
+  let txt = template
+    .replace(/\{\{nama\}\}/gi, customer.name || 'Pelanggan')
+    .replace(/\{\{paket\}\}/gi, pkgName)
+    .replace(/\{\{tagihan\}\}/gi, fmtMoney)
+    .replace(/\{\{nominal\}\}/gi, fmtMoney)
+    .replace(/\{\{link\}\}/gi, link)
+    .replace(/\{\{rincian\}\}/gi, rincian)
+    .replace(/\{\{periode\}\}/gi, period)
+    .replace(/\{\{tgl_isolir\}\}/gi, String(customer.isolate_day || 10))
+    .replace(/\{\{company\}\}/gi, comp);
+
+  // Resolve spintax {option1|option2|...}
+  txt = txt.replace(/\{([^{}]+)\}/g, (_, choices) => {
+    const arr = choices.split('|');
+    return arr[0];
+  });
+
+  return txt.trim();
+}
+
+router.get('/app/admin/customer/:id/wa-templates', (req, res) => {
+  try {
+    const cId = Number(req.params.id);
+    const customer = customerSvc.getCustomerById(cId);
+    if (!customer) return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+
+    const invoice = billingSvc.getLatestInvoiceForCustomer ? billingSvc.getLatestInvoiceForCustomer(cId) : null;
+
+    const defaultAutoBilling = `Yth. Pelanggan {{nama}},\n\nIni adalah pengingat sebelum tanggal jatuh tempo/isolir.\n\n📦 *Paket:* {{paket}}\n💰 *Total Tagihan:* Rp {{tagihan}}\n📅 *Periode:* {{rincian}}\n\nMohon segera melakukan pembayaran melalui portal pelanggan: {{link}}\n\nTerima kasih atas kerja samanya.\nSalam,\nAdmin {{company}}`;
+    const defaultIsolir = `Yth. Pelanggan {{nama}},\n\nLayanan internet Anda (Paket {{paket}}) saat ini ditangguhkan (Terisolir) karena belum melunasi tagihan sebesar *Rp {{tagihan}}*.\n\nSilakan lakukan pembayaran segera melalui portal pelanggan: {{link}}\n\nTerima kasih.`;
+    const defaultSuccess = `✅ *PEMBAYARAN DITERIMA*\n\nTerima kasih, Bp/Ibu {{nama}}.\nPembayaran tagihan internet Paket *{{paket}}* sebesar *Rp {{tagihan}}* telah kami terima dan dinyatakan *LUNAS*.\n\nSalam,\nAdmin {{company}}`;
+
+    const rawBilling = (db.getAppSetting && db.getAppSetting('whatsapp_auto_billing_message')) || defaultAutoBilling;
+    const rawIsolir = (db.getAppSetting && db.getAppSetting('whatsapp_isolir_message')) || defaultIsolir;
+    const rawSuccess = (db.getAppSetting && db.getAppSetting('whatsapp_payment_success_message')) || defaultSuccess;
+
+    const renderedBilling = renderTemplateMessage(rawBilling, customer, invoice);
+    const renderedIsolir = renderTemplateMessage(rawIsolir, customer, invoice);
+    const renderedSuccess = renderTemplateMessage(rawSuccess, customer, invoice);
+
+    res.json({
+      success: true,
+      data: {
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          status: customer.status,
+          packageName: customer.package_name || 'Paket Internet'
+        },
+        templates: {
+          billing: renderedBilling,
+          isolir: renderedIsolir,
+          success: renderedSuccess,
+          custom: `Halo Bp/Ibu ${customer.name},\n\n`
+        }
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal memuat template: ' + e.message });
+  }
+});
+
+router.post('/app/admin/whatsapp/send', async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message) return res.status(400).json({ success: false, message: 'Nomor WhatsApp dan pesan wajib diisi' });
+
+    let p = String(phone).replace(/[^0-9]/g, '');
+    if (p.startsWith('08')) p = '62' + p.substring(1);
+    if (!p.startsWith('62')) p = '62' + p;
+
+    const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+    if (!whatsappStatus || whatsappStatus.connection !== 'open') {
+      return res.status(400).json({ success: false, message: 'Bot WhatsApp di server belum terhubung / scan QR.' });
+    }
+
+    const sent = await sendWA(p, String(message).trim());
+    if (sent) {
+      res.json({ success: true, message: 'Pesan WhatsApp berhasil dikirim ke nomor pelanggan!' });
+    } else {
+      res.status(500).json({ success: false, message: 'Gagal mengirim pesan WhatsApp via server bot.' });
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error kirim WhatsApp: ' + e.message });
+  }
+});
+
 // Admin: Bayar Tagihan Pelanggan (Native)
 router.post('/app/admin/pay-invoice', async (req, res) => {
   try {
