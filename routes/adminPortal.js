@@ -3374,8 +3374,9 @@ router.get('/reports', requireAdminSession, requireSidebarMenuAccess('reports'),
 router.get('/reports/print', requireAdminSession, requireSidebarMenuAccess('reports'), (req, res) => {
   const filterYear = parseInt(req.query.year) || new Date().getFullYear();
   const yStr = String(filterYear);
-  const nowYearStr = String(new Date().getFullYear());
-  const nowMonthStr = String(new Date().getMonth() + 1).padStart(2, '0');
+  const monthlyData = billingSvc.getMonthlyRevenue(filterYear);
+  const settings = getSettingsWithCache();
+  const activeCustomers = customerSvc.getCustomerStats().active;
 
   // Kalkulasi sama seperti laporan utama
   const revenueYearDirect = Number(db.prepare("SELECT SUM(amount) as t FROM invoices WHERE status='paid' AND strftime('%Y', paid_at) = ? AND (paid_by_name IS NULL OR paid_by_name NOT LIKE 'Agent %')").get(yStr)?.t || 0);
@@ -3389,6 +3390,9 @@ router.get('/reports/print', requireAdminSession, requireSidebarMenuAccess('repo
   
   const netProfitYear = cashInYear - expensesYear;
 
+  const pendingAmountRow = db.prepare("SELECT SUM(amount) as t FROM invoices WHERE status='unpaid' AND period_year = ?").get(filterYear);
+  const pendingAmount = Number(pendingAmountRow?.t || 0);
+
   const expensesByCategory = db.prepare("SELECT category, SUM(amount) as total FROM expenses WHERE strftime('%Y', date) = ? GROUP BY category").all(yStr);
   if (digiflazzCostYear > 0) {
     expensesByCategory.push({ category: 'Modal PPOB (Digiflazz)', total: digiflazzCostYear });
@@ -3397,12 +3401,17 @@ router.get('/reports/print', requireAdminSession, requireSidebarMenuAccess('repo
 
   res.render('admin/reports_print', {
     company: company(),
+    settings,
     filterYear,
     cashInYear,
     expensesYear,
     netProfitYear,
+    pendingAmount,
+    activeCustomers,
+    monthlyData,
     expensesByCategory,
-    formatDateLocal
+    formatDateLocal,
+    getNowLocal
   });
 });
 

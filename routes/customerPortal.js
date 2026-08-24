@@ -765,7 +765,17 @@ const {
   updateCustomerTag
 } = customerDevice;
 
+router.get('/', (req, res) => {
+  if (req.session && req.session.customer) {
+    return res.redirect('/customer/dashboard');
+  }
+  return res.redirect('/customer/login');
+});
+
 router.get('/login', (req, res) => {
+  if (req.session && req.session.customer) {
+    return res.redirect('/customer/dashboard');
+  }
   const settings = getSettingsWithCache();
   const packages = customerSvc.getAllPackages().filter(p => p.is_active !== 0);
   res.render('login', { error: null, settings, packages });
