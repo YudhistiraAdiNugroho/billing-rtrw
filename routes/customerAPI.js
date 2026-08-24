@@ -777,44 +777,119 @@ router.post('/app/agent/buy-voucher', (req, res) => {
   }
 });
 
-router.get('/app/tech/tasks', (req, res) => {
+// ─── 0.5 TEKNISI NATIVE APIS ───────────────────────────────────────────────
+router.get('/app/tech/dashboard', (req, res) => {
   try {
-    const tickets = db.prepare(`
-      SELECT t.id, t.title, t.description, t.status, t.priority, t.created_at,
-             c.name as customer_name, c.phone as customer_phone, c.address as customer_address
-      FROM tickets t
-      LEFT JOIN customers c ON c.id = t.customer_id
-      WHERE t.status != 'closed'
-      ORDER BY t.id DESC
-    `).all() || [];
+    const techId = Number(req.query.techId || 1);
+    const stats = techSvc.getTechStats(techId);
+    const assignedTickets = techSvc.getAssignedTickets(techId);
+    const openTickets = techSvc.getOpenTickets();
+    const resolvedTickets = techSvc.getResolvedTickets(techId);
+    const techInfo = techSvc.getTechById(techId);
 
     res.json({
       success: true,
-      data: tickets.length > 0 ? tickets : [
-        {
-          id: 8821,
-          title: 'Pasang Baru PPPoE',
-          customer_name: 'Bp. Andi Santoso',
-          customer_phone: '08123456789',
-          customer_address: 'Jl. Merdeka No. 45, RT 02 RW 05, Bandung 40111',
-          status: 'open',
-          priority: 'high',
-          created_at: '2026-08-24 08:30'
-        }
-      ]
+      data: {
+        tech: techInfo || { id: techId, name: 'Teknisi Lapangan', username: 'teknisi', area: 'Semua Area' },
+        stats: stats || { total: 0, open: 0, inProgress: 0, resolved: 0 },
+        assignedTickets: assignedTickets || [],
+        openTickets: openTickets || [],
+        resolvedTickets: resolvedTickets || []
+      }
     });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-router.post('/app/tech/complete-task', (req, res) => {
+router.post('/app/tech/tickets/take', (req, res) => {
   try {
-    const { ticketId, notes } = req.body;
-    db.prepare(`UPDATE tickets SET status = 'closed', updated_at = datetime('now', 'localtime') WHERE id = ?`).run(Number(ticketId));
-    res.json({ success: true, message: `Tugas SPK #${ticketId} berhasil diselesaikan!` });
+    const ticketId = Number(req.body.ticketId || req.body.id);
+    const techId = Number(req.body.techId || 1);
+    if (!ticketId) return res.status(400).json({ success: false, message: 'ID Tiket tidak valid' });
+
+    techSvc.takeTicket(ticketId, techId);
+    res.json({ success: true, message: `Tiket #${ticketId} berhasil diambil! Silakan mulai pengerjaan.` });
   } catch (e) {
-    res.json({ success: true, message: 'Tugas SPK berhasil diselesaikan!' });
+    res.status(500).json({ success: false, message: 'Gagal mengambil tiket: ' + e.message });
+  }
+});
+
+router.post('/app/tech/tickets/update', async (req, res) => {
+  try {
+    const ticketId = Number(req.body.ticketId || req.body.id);
+    const techId = Number(req.body.techId || 1);
+    const status = String(req.body.status || 'in_progress').trim();
+    const notes = String(req.body.notes || '').trim();
+    if (!ticketId) return res.status(400).json({ success: false, message: 'ID Tiket tidak valid' });
+
+    techSvc.updateTicketStatus(ticketId, techId, status, { notes });
+
+    // WhatsApp notification if resolved
+    if (status === 'resolved') {
+      try {
+        const settings = getSettingsWithCache();
+        if (settings.whatsapp_enabled) {
+          const { sendWA } = await import('../services/whatsappBot.mjs');
+          const ticketSvc = require('../services/ticketService');
+          const ticket = ticketSvc.getTicketById(ticketId);
+          const tech = techSvc.getTechById(techId);
+
+          if (ticket && ticket.customer_phone) {
+            const waMsg = `✅ *TIKET KELUHAN SELESAI*\n\n` +
+              `🎫 *ID Tiket:* #${ticket.id}\n` +
+              `👤 *Pelanggan:* ${ticket.customer_name}\n` +
+              `📝 *Subjek:* ${ticket.subject}\n` +
+              `🛠️ *Teknisi:* ${tech?.name || 'Teknisi Lapangan'}\n` +
+              `💬 *Catatan:* ${notes || 'Selesai diperbaiki'}\n\n` +
+              `Layanan internet Anda telah kembali normal. Terima kasih.`;
+            await sendWA(ticket.customer_phone, waMsg);
+          }
+        }
+      } catch (_) {}
+    }
+
+    res.json({ success: true, message: `Status tiket #${ticketId} berhasil diperbarui menjadi ${status.toUpperCase()}!` });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal memperbarui status: ' + e.message });
+  }
+});
+
+router.get('/app/tech/odps', (req, res) => {
+  try {
+    const odpSvc = require('../services/odpService');
+    const odps = odpSvc.getAllOdps();
+    res.json({ success: true, data: odps || [] });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+router.get('/app/tech/olts', (req, res) => {
+  try {
+    const oltSvc = require('../services/oltService');
+    const olts = oltSvc.getAllOlts();
+    res.json({ success: true, data: olts || [] });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+router.post('/app/tech/onu/restart', async (req, res) => {
+  try {
+    const { customerId, pppoeUsername } = req.body;
+    const customer = customerId ? customerSvc.getCustomerById(Number(customerId)) : customerSvc.findCustomerByAny(pppoeUsername);
+    if (!customer) return res.status(404).json({ success: false, message: 'Pelanggan / ONU tidak ditemukan' });
+
+    const tag = customer.genieacs_tag || customer.pppoe_username || customer.phone;
+    const ok = await customerDevice.rebootDevice(tag, 'Teknisi APK');
+    if (ok) {
+      res.json({ success: true, message: `Perintah Reboot berhasil dikirim ke Modem ONT "${customer.name}"!` });
+    } else {
+      res.status(400).json({ success: false, message: 'Gagal mengirim perintah reboot. Pastikan ONU terhubung ke TR-069.' });
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error reboot ONU: ' + e.message });
   }
 });
 
