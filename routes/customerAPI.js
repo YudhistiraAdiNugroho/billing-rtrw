@@ -14,6 +14,9 @@ const billingSvc = require('../services/billingService');
 const paymentSvc = require('../services/paymentService');
 const ticketSvc = require('../services/ticketService');
 const voucherPaymentSvc = require('../services/voucherPaymentService');
+const adminSvc = require('../services/adminService');
+const agentSvc = require('../services/agentService');
+const techSvc = require('../services/techService');
 const qrisUtil = require('../utils/qrisUtil');
 const QRCode = require('qrcode');
 
@@ -391,7 +394,7 @@ router.post('/app/admin/customers/create', async (req, res) => {
 // Admin: Update Data Pelanggan (Native)
 router.post('/app/admin/customers/update', (req, res) => {
   try {
-    const { id, name, phone, address, package_id, isolate_day } = req.body || {};
+    const { id, name, phone, address, package_id, pppoe_username, pppoe_password, isolate_day } = req.body || {};
     const cId = Number(id);
     if (!cId) return res.status(400).json({ success: false, message: 'ID Pelanggan tidak valid' });
 
@@ -404,6 +407,8 @@ router.post('/app/admin/customers/update', (req, res) => {
       phone: String(phone || existing.phone).trim(),
       address: String(address !== undefined ? address : existing.address).trim(),
       package_id: Number(package_id || existing.package_id),
+      pppoe_username: String(pppoe_username || existing.pppoe_username || phone).trim(),
+      pppoe_password: String(pppoe_password || existing.pppoe_password || '123456').trim(),
       isolate_day: Number(isolate_day || existing.isolate_day || 10)
     };
 
@@ -837,59 +842,154 @@ router.get('/config', (req, res) => {
   });
 });
 
-// ─── 2. AUTENTIKASI PELANGGAN (LOGIN) ─────────────────────────────────────────
+// ─── 2. AUTENTIKASI MULTI-ROLE (ADMIN, AGENT, KOLEKTOR, TEKNISI, PELANGGAN) ──
 router.post('/auth/login', (req, res) => {
-  const { loginId, password } = req.body;
-  if (!loginId || !String(loginId).trim()) {
-    return res.status(400).json({ success: false, message: 'Nomor WhatsApp atau ID Pelanggan harus diisi.' });
+  const { loginId, username, password } = req.body;
+  const inputUser = String(loginId || username || '').trim();
+  const inputPass = String(password || '').trim();
+
+  if (!inputUser) {
+    return res.status(400).json({ success: false, message: 'Username / No. WA / ID harus diisi.' });
+  }
+  if (!inputPass) {
+    return res.status(400).json({ success: false, message: 'Password harus diisi.' });
   }
 
-  const rawInput = String(loginId).trim();
-  const cleanDigits = rawInput.replace(/\D/g, '');
+  // 1. Check Root Administrator
+  const adminUser = getSetting('admin_username', 'admin');
+  const adminPass = getSetting('admin_password', 'admin123');
+  if (inputUser === adminUser && inputPass === adminPass) {
+    const adminObj = { id: 1, name: 'Administrator', username: adminUser, role: 'admin' };
+    const token = generateCustomerToken({ id: 1, name: 'Administrator', phone: '08123456789', pppoe_username: adminUser });
+    return res.json({
+      success: true,
+      message: 'Login Administrator berhasil.',
+      role: 'admin',
+      token,
+      user: adminObj
+    });
+  }
 
+  // 2. Check Cashier
+  try {
+    const cashier = adminSvc.authenticateCashier(inputUser, inputPass);
+    if (cashier) {
+      const cashierObj = { id: cashier.id, name: cashier.name, username: cashier.username, role: 'admin' };
+      const token = generateCustomerToken({ id: cashier.id, name: cashier.name, phone: '', pppoe_username: cashier.username });
+      return res.json({
+        success: true,
+        message: 'Login Kasir berhasil.',
+        role: 'admin',
+        token,
+        user: cashierObj
+      });
+    }
+  } catch (_) {}
+
+  // 3. Check Agent / Reseller
+  try {
+    const agent = agentSvc.authenticate(inputUser, inputPass);
+    if (agent) {
+      const agentObj = { id: agent.id, name: agent.name, phone: agent.phone || '', username: agent.username, role: 'agent' };
+      const token = generateCustomerToken({ id: agent.id, name: agent.name, phone: agent.phone, pppoe_username: agent.username });
+      return res.json({
+        success: true,
+        message: 'Login Agen berhasil.',
+        role: 'agent',
+        token,
+        user: agentObj
+      });
+    }
+  } catch (_) {}
+
+  // 4. Check Collector
+  try {
+    const collector = adminSvc.authenticateCollector(inputUser, inputPass);
+    if (collector) {
+      const collectorObj = { id: collector.id, name: collector.name, phone: collector.phone || '', username: collector.username, role: 'collector' };
+      const token = generateCustomerToken({ id: collector.id, name: collector.name, phone: collector.phone, pppoe_username: collector.username });
+      return res.json({
+        success: true,
+        message: 'Login Kolektor berhasil.',
+        role: 'collector',
+        token,
+        user: collectorObj
+      });
+    }
+  } catch (_) {}
+
+  // 5. Check Technician
+  try {
+    const tech = techSvc.authenticate(inputUser, inputPass);
+    if (tech) {
+      const techObj = { id: tech.id, name: tech.name, phone: tech.phone || '', username: tech.username, role: 'tech' };
+      const token = generateCustomerToken({ id: tech.id, name: tech.name, phone: tech.phone, pppoe_username: tech.username });
+      return res.json({
+        success: true,
+        message: 'Login Teknisi berhasil.',
+        role: 'tech',
+        token,
+        user: techObj
+      });
+    }
+  } catch (_) {}
+
+  // 6. Check Customer Account
+  const cleanDigits = inputUser.replace(/\D/g, '');
   const allCustomers = customerSvc.getAllCustomers();
   const customer = allCustomers.find((c) => {
     const cleanPhone = String(c.phone || '').replace(/\D/g, '');
     return (
       (cleanDigits && cleanPhone && cleanPhone.endsWith(cleanDigits.slice(-8))) ||
-      c.phone === rawInput ||
-      c.genieacs_tag === rawInput ||
-      c.pppoe_username === rawInput ||
-      String(c.id) === rawInput
+      c.phone === inputUser ||
+      c.genieacs_tag === inputUser ||
+      c.pppoe_username === inputUser ||
+      String(c.id) === inputUser
     );
   });
 
-  if (!customer) {
-    return res.status(404).json({
-      success: false,
-      message: 'Nomor WhatsApp atau ID Pelanggan tidak terdaftar di sistem.'
+  if (customer) {
+    let passMatched = false;
+    if (customer.pppoe_password && inputPass === String(customer.pppoe_password).trim()) {
+      passMatched = true;
+    }
+    const phoneDigits = String(customer.phone || '').slice(-4);
+    if (phoneDigits && inputPass === phoneDigits) {
+      passMatched = true;
+    }
+    if (!customer.pppoe_password && inputPass === '123456') {
+      passMatched = true;
+    }
+
+    if (!passMatched) {
+      return res.status(401).json({
+        success: false,
+        message: 'Password / PIN yang Anda masukkan salah.'
+      });
+    }
+
+    const token = generateCustomerToken(customer);
+    return res.json({
+      success: true,
+      message: 'Login Pelanggan berhasil.',
+      role: 'customer',
+      token,
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        pppoeUsername: customer.pppoe_username || '',
+        address: customer.address || '',
+        status: customer.status || 'active',
+        installDate: customer.install_date || null
+      }
     });
   }
 
-  if (password && customer.pppoe_password) {
-    if (String(password).trim() !== String(customer.pppoe_password).trim()) {
-      const phoneDigits = String(customer.phone || '').slice(-4);
-      if (String(password).trim() !== phoneDigits) {
-        return res.status(401).json({ success: false, message: 'Password / PIN yang dimasukkan salah.' });
-      }
-    }
-  }
-
-  const token = generateCustomerToken(customer);
-
-  res.json({
-    success: true,
-    message: 'Login berhasil.',
-    token,
-    customer: {
-      id: customer.id,
-      name: customer.name,
-      phone: customer.phone,
-      pppoeUsername: customer.pppoe_username || '',
-      address: customer.address || '',
-      status: customer.status || 'active',
-      installDate: customer.install_date || null
-    }
+  // Not matched anywhere
+  return res.status(401).json({
+    success: false,
+    message: 'Username / No. WA atau Password salah. Periksa kembali akun Anda.'
   });
 });
 
@@ -907,33 +1007,53 @@ router.get('/dashboard', requireCustomerApiAuth, async (req, res) => {
 
   const totalUnpaidAmount = unpaidInvoices.reduce((acc, inv) => acc + (Number(inv.amount) || 0), 0);
 
-  // Cari data live perangkat ONU
+  // Cari data live perangkat ONU persis seperti di web portal
   const tokenCandidates = Array.from(new Set([
     customer.pppoe_username,
     customer.genieacs_tag,
+    customer.onu_sn,
     customer.phone,
     String(customer.id)
-  ].filter(Boolean)));
+  ].map(v => String(v || '').trim()).filter(Boolean)));
 
   let liveDevice = null;
   for (const token of tokenCandidates) {
     try {
-      liveDevice = await customerDevice.getCustomerDeviceData(token);
-      if (liveDevice) break;
+      liveDevice = await Promise.race([
+        customerDevice.getCustomerDeviceData(token),
+        new Promise(resolve => setTimeout(() => resolve(null), 2500))
+      ]);
+      if (liveDevice && liveDevice.status !== 'Tidak ditemukan') break;
     } catch (_) {}
   }
 
-  const realSsid = (liveDevice && liveDevice.ssid && liveDevice.ssid !== '-' && liveDevice.ssid !== 'N/A')
-    ? liveDevice.ssid
-    : (customer.wifi_ssid || ('Alijaya_' + (customer.name || 'Fiber').replace(/\s+/g, '_')));
+  const tr069Connected = Boolean(liveDevice && liveDevice.status && liveDevice.status !== 'Tidak ditemukan');
+  const defaultWifiName = 'Alijaya_' + (customer.name || 'Fiber').replace(/\s+/g, '_');
 
-  const ontInfo = {
+  const ontInfo = tr069Connected ? {
     available: true,
-    online: liveDevice ? (liveDevice.status === 'Online') : true,
-    model: (liveDevice && (liveDevice.model || liveDevice.productClass)) || 'ONT Router',
-    rxPower: (liveDevice && liveDevice.rxPower && liveDevice.rxPower !== 'N/A') ? liveDevice.rxPower : '-21.50 dBm',
-    ssid: realSsid,
-    uptime: (liveDevice && liveDevice.uptime) || '1d 04:20:00'
+    tr069Connected: true,
+    online: liveDevice.status === 'Online',
+    model: liveDevice.model || liveDevice.productClass || 'ONT Router',
+    serialNumber: (liveDevice.serialNumber && liveDevice.serialNumber !== '-') ? liveDevice.serialNumber : (customer.onu_sn || '-'),
+    softwareVersion: liveDevice.softwareVersion || '-',
+    pppoeUsername: (liveDevice.pppoeUsername && liveDevice.pppoeUsername !== '-') ? liveDevice.pppoeUsername : (customer.pppoe_username || customer.name),
+    ip: (liveDevice.pppoeIP && liveDevice.pppoeIP !== '-') ? liveDevice.pppoeIP : '-',
+    rxPower: (liveDevice.rxPower && liveDevice.rxPower !== 'N/A' && liveDevice.rxPower !== '-') ? liveDevice.rxPower : 'Normal',
+    ssid: (liveDevice.ssid && liveDevice.ssid !== '-' && liveDevice.ssid !== 'N/A') ? liveDevice.ssid : (customer.wifi_ssid || defaultWifiName),
+    uptime: (liveDevice.uptime && liveDevice.uptime !== '-') ? liveDevice.uptime : '-'
+  } : {
+    available: false,
+    tr069Connected: false,
+    online: false,
+    model: 'Perangkat Belum Terdaftar di TR-069',
+    serialNumber: customer.onu_sn || '-',
+    softwareVersion: '-',
+    pppoeUsername: customer.pppoe_username || customer.name,
+    ip: '-',
+    rxPower: '-',
+    ssid: '-',
+    uptime: '-'
   };
 
   res.json({

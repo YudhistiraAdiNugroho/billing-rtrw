@@ -96,7 +96,7 @@ function computeInvoiceAmountAndMeta(customer, pkg, periodMonth, periodYear) {
 }
 
 function generateMonthlyInvoices(month, year) {
-  const customers = db.prepare("SELECT * FROM customers WHERE status IN ('active','suspended') AND package_id IS NOT NULL").all();
+  const customers = db.prepare("SELECT * FROM customers WHERE status IN ('active','suspended','ditangguhkan') AND package_id IS NOT NULL").all();
   const existing  = db.prepare('SELECT customer_id FROM invoices WHERE period_month=? AND period_year=?').all(month, year);
   const existingIds = new Set(existing.map(e => e.customer_id));
   const insert = db.prepare(`INSERT INTO invoices (customer_id, period_month, period_year, amount, notes) VALUES (?, ?, ?, ?, ?)`);
@@ -110,6 +110,12 @@ function generateMonthlyInvoices(month, year) {
       const { amount, bumpPromo: bump, notesAuto } = computeInvoiceAmountAndMeta(c, pkg, month, year);
       insert.run(c.id, month, year, amount, notesAuto);
       if (bump) bumpPromo.run(c.id);
+
+      // Jika pelanggan berstatus 'ditangguhkan', otomatis ubah kembali ke 'active' saat tagihan baru terbit
+      if (c.status === 'ditangguhkan') {
+        db.prepare("UPDATE customers SET status = 'active' WHERE id = ?").run(c.id);
+      }
+
       created++;
     }
   });
@@ -142,6 +148,12 @@ function generateInvoiceForCustomer(customerId, month, year) {
   if (bump) {
     db.prepare('UPDATE customers SET promo_cycles_used = COALESCE(promo_cycles_used,0) + 1 WHERE id=?').run(cid);
   }
+
+  // Jika pelanggan berstatus 'ditangguhkan', otomatis ubah kembali ke 'active' saat tagihan baru terbit
+  if (customer.status === 'ditangguhkan') {
+    db.prepare("UPDATE customers SET status = 'active' WHERE id = ?").run(cid);
+  }
+
   return { created: true, invoiceId: r.lastInsertRowid, customerName: customer.name };
 }
 

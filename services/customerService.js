@@ -354,10 +354,11 @@ async function deleteCustomer(id) {
 
 function getCustomerStats() {
   return {
-    total:     db.prepare('SELECT COUNT(*) as c FROM customers').get().c,
-    active:    db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='active'").get().c,
-    suspended: db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='suspended'").get().c,
-    inactive:  db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='inactive'").get().c,
+    total:        db.prepare('SELECT COUNT(*) as c FROM customers').get().c,
+    active:       db.prepare("SELECT COUNT(*) as c FROM customers WHERE status IN ('active', 'ditangguhkan')").get().c,
+    ditangguhkan: db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='ditangguhkan'").get().c,
+    suspended:    db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='suspended'").get().c,
+    inactive:     db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='inactive'").get().c,
   };
 }
 
