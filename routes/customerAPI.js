@@ -109,12 +109,37 @@ function requireCustomerApiAuth(req, res, next) {
 // ─── 0. PING & KONEKTIVITAS MOBILE APP (PUBLIC) ──────────────────────────────
 router.get('/ping', (req, res) => {
   const settings = getSettingsWithCache();
+  const ispName = settings.company_header || settings.company_name || settings.isp_name || 'ISP NETWORK';
   res.json({
     success: true,
     status: 'online',
-    appName: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
-    version: '1.0.0',
+    ispName: ispName,
+    companyHeader: ispName,
+    companyName: ispName,
+    companyTagline: settings.company_tagline || settings.footer_info || 'Billing & Hotspot System',
+    companyPhone: settings.company_phone || '',
+    companyAddress: settings.company_address || '',
+    appName: ispName,
+    version: '1.2.0',
     timestamp: Date.now()
+  });
+});
+
+router.get('/info', (req, res) => {
+  const settings = getSettingsWithCache();
+  const ispName = settings.company_header || settings.company_name || settings.isp_name || 'ISP NETWORK';
+  res.json({
+    success: true,
+    data: {
+      ispName: ispName,
+      companyHeader: ispName,
+      companyName: ispName,
+      companyTagline: settings.company_tagline || settings.footer_info || 'Billing & Hotspot System',
+      companyPhone: settings.company_phone || '',
+      companyAddress: settings.company_address || '',
+      companyEmail: settings.company_email || '',
+      operationalHours: settings.operational_hours || ''
+    }
   });
 });
 
@@ -576,7 +601,13 @@ router.get('/dashboard', requireCustomerApiAuth, async (req, res) => {
           createdAt: unpaidInvoices[0].created_at || null
         } : null
       },
-      ont: ontInfo
+      ont: ontInfo,
+      isp: {
+        name: settings.company_header || settings.company_name || settings.isp_name || 'ISP NETWORK',
+        phone: settings.company_phone || '',
+        address: settings.company_address || '',
+        tagline: settings.company_tagline || settings.footer_info || ''
+      }
     }
   });
 });
