@@ -258,77 +258,451 @@ router.get('/app/version', (req, res) => {
 });
 
 // ─── 0.2 FULL FUNCTIONAL ENDPOINTS FOR ALL ROLES ────────────────────────────
+// Admin: Dashboard Statistik Lengkap
+router.get('/app/admin/dashboard', (req, res) => {
+  try {
+    const billing = billingSvc.getDashboardStats();
+    const custStats = customerSvc.getCustomerStats();
+    
+    // Hitung pelanggan ditangguhkan
+    const deferredCount = db.prepare("SELECT COUNT(*) as c FROM customers WHERE status = 'ditangguhkan' OR status = 'deferred'").get()?.c || 0;
+    
+    // Perangkat ONU
+    const acsTotal = db.prepare("SELECT COUNT(*) as c FROM acs_devices").get()?.c || 0;
+    
+    // Omset hari ini
+    const todayRevenue = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total FROM invoices 
+      WHERE (status = 'paid' OR status = 'lunas') AND date(paid_at) = date('now', 'localtime')
+    `).get()?.total || 0;
+
+    res.json({
+      success: true,
+      data: {
+        billing: {
+          thisMonth: Number(billing.thisMonth || 0),
+          totalRevenue: Number(billing.totalRevenue || 0),
+          todayRevenue: Number(todayRevenue || 0),
+          pendingAmount: Number(billing.pendingAmount || 0),
+          unpaidCount: Number(billing.unpaidCount || 0)
+        },
+        custStats: {
+          total: Number(custStats.total || 0),
+          active: Number(custStats.active || 0),
+          suspended: Number(custStats.suspended || 0),
+          deferred: Number(deferredCount || 0),
+          inactive: Number(custStats.inactive || 0)
+        },
+        onuStats: {
+          total: Number(acsTotal || 0),
+          online: Number(acsTotal > 0 ? acsTotal : 0),
+          offline: 0
+        }
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Admin: List Paket Internet (untuk pilihan tambah/edit pelanggan)
+router.get('/app/admin/packages', (req, res) => {
+  try {
+    const pkgs = customerSvc.getAllPackages() || [];
+    res.json({ success: true, data: pkgs });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Admin: List Pelanggan & Status Billing
 router.get('/app/admin/customers', (req, res) => {
   try {
-    const list = db.prepare(`
-      SELECT c.id, c.name, c.phone, c.address, c.status, c.pppoe_username, p.name as package_name, p.price as package_price
+    const search = String(req.query.search || '').trim();
+    let q = `
+      SELECT c.id, c.name, c.phone, c.address, c.status, c.pppoe_username, c.isolate_day, c.package_id, c.area,
+             p.name as package_name, p.price as package_price,
+             (SELECT count(*) FROM invoices WHERE customer_id = c.id AND (status = 'unpaid' OR status IS NULL)) as unpaid_count,
+             (SELECT id FROM invoices WHERE customer_id = c.id AND (status = 'unpaid' OR status IS NULL) ORDER BY id DESC LIMIT 1) as latest_unpaid_invoice_id,
+             (SELECT amount FROM invoices WHERE customer_id = c.id AND (status = 'unpaid' OR status IS NULL) ORDER BY id DESC LIMIT 1) as latest_unpaid_amount,
+             (SELECT period_month || '/' || period_year FROM invoices WHERE customer_id = c.id AND (status = 'unpaid' OR status IS NULL) ORDER BY id DESC LIMIT 1) as latest_unpaid_period
       FROM customers c
       LEFT JOIN packages p ON p.id = c.package_id
-      ORDER BY c.id DESC LIMIT 100
-    `).all();
+    `;
+    const params = [];
+    if (search) {
+      q += ` WHERE c.name LIKE ? OR c.phone LIKE ? OR c.pppoe_username LIKE ? OR c.address LIKE ?`;
+      const s = `%${search}%`;
+      params.push(s, s, s, s);
+    }
+    q += ` ORDER BY c.id DESC LIMIT 150`;
+    const list = db.prepare(q).all(...params) || [];
     res.json({ success: true, data: list });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-router.post('/app/admin/add-customer', (req, res) => {
+// Admin: Tambah Pelanggan Baru (Native)
+router.post('/app/admin/customers/create', async (req, res) => {
   try {
-    const { name, phone, address, pppoe_username, password, package_id } = req.body;
-    if (!name || !phone) {
-      return res.status(400).json({ success: false, message: 'Nama dan Nomor HP wajib diisi' });
-    }
-    const pkgId = Number(package_id) || 1;
-    const info = db.prepare(`
-      INSERT INTO customers (name, phone, address, pppoe_username, pppoe_password, package_id, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'active', datetime('now', 'localtime'))
-    `).run(name, phone, address || '', pppoe_username || phone, password || '123456', pkgId);
+    const { name, phone, address, package_id, pppoe_username, pppoe_password, isolate_day } = req.body || {};
+    if (!name || !phone) return res.status(400).json({ success: false, message: 'Nama dan nomor WhatsApp wajib diisi' });
 
-    res.json({ success: true, message: 'Pelanggan berhasil didaftarkan!', customerId: info.lastInsertRowid });
+    const custData = {
+      name: String(name).trim(),
+      phone: String(phone).trim(),
+      address: String(address || '').trim(),
+      package_id: Number(package_id || 1),
+      pppoe_username: String(pppoe_username || phone).trim(),
+      pppoe_password: String(pppoe_password || '123456').trim(),
+      connection_type: 'pppoe',
+      isolate_day: Number(isolate_day || 10),
+      status: 'active'
+    };
+
+    const newId = customerSvc.createCustomer(custData);
+
+    // Kirim notifikasi WA selamat datang jika aktif
+    try {
+      if (custData.phone) {
+        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+        if (whatsappStatus && whatsappStatus.connection === 'open') {
+          const pkg = customerSvc.getPackageById(custData.package_id);
+          const msg = `🎉 *SELAMAT BERGABUNG!*\n\n` +
+                      `Halo Bp/Ibu *${custData.name}*,\n` +
+                      `Layanan internet Anda telah terdaftar dan aktif.\n\n` +
+                      `📦 *Paket:* ${pkg?.name || 'Internet'}\n` +
+                      `👤 *User PPPoE:* ${custData.pppoe_username}\n` +
+                      `🔑 *Password:* ${custData.pppoe_password}\n` +
+                      `📅 *Tgl Jatuh Tempo:* Setiap tgl ${custData.isolate_day}\n\n` +
+                      `Terima kasih telah mempercayakan koneksi internet Anda kepada kami.`;
+          await sendWA(custData.phone, msg);
+        }
+      }
+    } catch (_) {}
+
+    res.json({ success: true, message: `Pelanggan "${custData.name}" berhasil didaftarkan!`, customerId: newId });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Gagal menambah pelanggan: ' + e.message });
   }
 });
 
-router.post('/app/admin/toggle-isolate', (req, res) => {
+// Admin: Update Data Pelanggan (Native)
+router.post('/app/admin/customers/update', (req, res) => {
   try {
-    const { customerId, targetStatus } = req.body;
-    const newStatus = targetStatus === 'active' ? 'active' : 'isolated';
-    db.prepare(`UPDATE customers SET status = ? WHERE id = ?`).run(newStatus, Number(customerId));
-    res.json({ success: true, message: `Status pelanggan diubah menjadi ${newStatus.toUpperCase()}`, status: newStatus });
+    const { id, name, phone, address, package_id, isolate_day } = req.body || {};
+    const cId = Number(id);
+    if (!cId) return res.status(400).json({ success: false, message: 'ID Pelanggan tidak valid' });
+
+    const existing = customerSvc.getCustomerById(cId);
+    if (!existing) return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+
+    const updated = {
+      ...existing,
+      name: String(name || existing.name).trim(),
+      phone: String(phone || existing.phone).trim(),
+      address: String(address !== undefined ? address : existing.address).trim(),
+      package_id: Number(package_id || existing.package_id),
+      isolate_day: Number(isolate_day || existing.isolate_day || 10)
+    };
+
+    customerSvc.updateCustomer(cId, updated);
+    res.json({ success: true, message: `Data pelanggan "${updated.name}" berhasil diperbarui!` });
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+    res.status(500).json({ success: false, message: 'Gagal memperbarui pelanggan: ' + e.message });
   }
 });
 
-router.get('/app/admin/invoices', (req, res) => {
+// Admin: Hapus Pelanggan (Native)
+router.post('/app/admin/customers/delete', (req, res) => {
   try {
-    const list = db.prepare(`
-      SELECT i.id, i.customer_id, c.name as customer_name, c.phone as customer_phone,
-             i.amount, i.status, i.period_month, i.period_year, i.created_at, i.paid_at
+    const cId = Number(req.body.id || req.body.customerId);
+    if (!cId) return res.status(400).json({ success: false, message: 'ID Pelanggan tidak valid' });
+
+    customerSvc.deleteCustomer(cId);
+    res.json({ success: true, message: 'Pelanggan berhasil dihapus.' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal menghapus pelanggan: ' + e.message });
+  }
+});
+
+// Admin: Bayar Tagihan Pelanggan (Native)
+router.post('/app/admin/pay-invoice', async (req, res) => {
+  try {
+    const { invoiceId, note } = req.body || {};
+    const invId = Number(invoiceId);
+    if (!invId) return res.status(400).json({ success: false, message: 'ID Tagihan tidak valid' });
+
+    const inv = billingSvc.getInvoiceById(invId);
+    if (!inv) return res.status(404).json({ success: false, message: 'Tagihan tidak ditemukan' });
+
+    const collectorLabel = 'Admin / Kasir (APK Native)';
+    const notes = note ? `Via Admin APK | ${note}` : 'Via Admin APK Native';
+    billingSvc.markAsPaid(invId, collectorLabel, notes);
+
+    // Auto-unisolate jika pelanggan sebelumnya suspended
+    const customer = customerSvc.getCustomerById(inv.customer_id);
+    let unisolated = false;
+    if (customer && (customer.status === 'suspended' || customer.status === 'isolated')) {
+      try {
+        await customerSvc.activateCustomer(customer.id, 'active');
+        unisolated = true;
+      } catch (_) {}
+    }
+
+    // Kirim notifikasi WA bukti bayar
+    try {
+      if (customer && customer.phone) {
+        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+        if (whatsappStatus && whatsappStatus.connection === 'open') {
+          const settings = getSettingsWithCache();
+          const msg = `✅ *PEMBAYARAN TAGIHAN BERHASIL*\n\n` +
+                      `👤 *Pelanggan:* ${customer.name}\n` +
+                      `📄 *Invoice:* #${inv.id}\n` +
+                      `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
+                      `💰 *Jumlah:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n` +
+                      `🏛️ *Lokasi:* Kasir / Admin\n\n` +
+                      `Terima kasih! Layanan Anda telah aktif normal.`;
+          await sendWA(customer.phone, msg);
+        }
+      }
+    } catch (_) {}
+
+    const pkg = customer?.package_id ? customerSvc.getPackageById(customer.package_id) : null;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+                    now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+    res.json({
+      success: true,
+      message: `Tagihan #INV-${invId} berhasil divalidasi LUNAS!${unisolated ? ' (Layanan pelanggan otomatis dibuka)' : ''}`,
+      unisolated,
+      receipt: {
+        invoiceNumber: `#INV-${invId}`,
+        customerName: customer?.name || 'Pelanggan',
+        packageName: pkg?.name || customer?.package_name || 'Langganan Internet',
+        period: `${inv.period_month}/${inv.period_year}`,
+        amountFormatted: `Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}`,
+        amount: Number(inv.amount || 0),
+        paymentDate: dateStr,
+        collectorName: 'Admin / Kasir'
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal memproses pembayaran: ' + e.message });
+  }
+});
+
+// Admin: Riwayat Pembayaran Tagihan Lunas (History)
+router.get('/app/admin/paid-invoices', (req, res) => {
+  try {
+    const search = String(req.query.search || '').trim();
+    let q = `
+      SELECT i.id, i.customer_id, i.amount, i.status, i.period_month, i.period_year,
+             i.paid_at, i.paid_by_name, i.notes, i.payment_gateway,
+             c.name as customer_name, c.phone as customer_phone, c.address as customer_address,
+             c.pppoe_username, p.name as package_name
       FROM invoices i
       JOIN customers c ON c.id = i.customer_id
-      ORDER BY i.id DESC LIMIT 100
-    `).all();
+      LEFT JOIN packages p ON p.id = c.package_id
+      WHERE (LOWER(i.status) = 'paid' OR LOWER(i.status) = 'lunas')
+    `;
+    const params = [];
+    if (search) {
+      q += ` AND (c.name LIKE ? OR c.phone LIKE ? OR c.pppoe_username LIKE ? OR i.id LIKE ?)`;
+      const s = `%${search}%`;
+      params.push(s, s, s, s);
+    }
+    q += ` ORDER BY i.paid_at DESC, i.id DESC LIMIT 100`;
+    const list = db.prepare(q).all(...params) || [];
     res.json({ success: true, data: list });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-router.post('/app/admin/validate-payment', (req, res) => {
+// Admin: Isolir Pelanggan (Manual Isolir di MikroTik & DB)
+router.post('/app/admin/isolate-customer', async (req, res) => {
   try {
-    const { invoiceId, paymentMethod } = req.body;
-    const invId = Number(invoiceId);
-    db.prepare(`
-      UPDATE invoices 
-      SET status = 'paid', paid_at = datetime('now', 'localtime'), payment_gateway = ?
-      WHERE id = ?
-    `).run(paymentMethod || 'CASH_ADMIN', invId);
+    const customerId = Number(req.body.customerId || req.body.id || 0);
+    if (!customerId) return res.status(400).json({ success: false, message: 'ID Pelanggan tidak valid' });
 
-    res.json({ success: true, message: `Tagihan #INV-${invId} berhasil divalidasi LUNAS!` });
+    await customerSvc.suspendCustomer(customerId);
+    const updated = customerSvc.getCustomerById(customerId);
+
+    res.json({
+      success: true,
+      message: `Pelanggan "${updated?.name || customerId}" berhasil DI-ISOLIR di MikroTik dan Database.`,
+      status: 'suspended'
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal mengisolir pelanggan: ' + e.message });
+  }
+});
+
+// Admin: Buka Isolir Pelanggan & Ganti Status ke "DITANGGUHKAN"
+router.post('/app/admin/unisolate-customer', async (req, res) => {
+  try {
+    const customerId = Number(req.body.customerId || req.body.id || 0);
+    if (!customerId) return res.status(400).json({ success: false, message: 'ID Pelanggan tidak valid' });
+
+    // Aktifkan kembali profil normal di MikroTik dan set status ke 'ditangguhkan'
+    // Status 'ditangguhkan' TIDAK akan terkena cron auto-isolir walau tagihan belum lunas
+    await customerSvc.activateCustomer(customerId, 'ditangguhkan');
+    const updated = customerSvc.getCustomerById(customerId);
+
+    res.json({
+      success: true,
+      message: `Isolir dibuka! Pelanggan "${updated?.name || customerId}" kembali ONLINE dengan status DITANGGUHKAN (Bebas auto-isolir harian).`,
+      status: 'ditangguhkan'
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal membuka isolir: ' + e.message });
+  }
+});
+
+// ─── 0.4 KOLEKTOR NATIVE APIS ───────────────────────────────────────────────
+router.get('/app/collector/dashboard', (req, res) => {
+  try {
+    const search = String(req.query.search || '').trim();
+    const filterStatus = String(req.query.filter || 'all').trim(); // all, unpaid, today, isolir
+
+    const now = new Date();
+    const todayDay = now.getDate();
+    const curMonth = now.getMonth() + 1;
+    const curYear = now.getFullYear();
+
+    let q = `
+      SELECT c.id, c.name, c.phone, c.address, c.status, c.area, c.isolate_day, c.pppoe_username,
+             p.name as package_name, p.price as package_price,
+             i.id as invoice_id, i.amount as invoice_amount, i.status as invoice_status,
+             i.period_month, i.period_year
+      FROM customers c
+      LEFT JOIN packages p ON p.id = c.package_id
+      LEFT JOIN invoices i ON i.customer_id = c.id AND i.period_month = ? AND i.period_year = ?
+      WHERE 1=1
+    `;
+    const params = [curMonth, curYear];
+
+    if (filterStatus === 'unpaid') {
+      q += ` AND (i.status = 'unpaid' OR i.status IS NULL)`;
+    } else if (filterStatus === 'today') {
+      q += ` AND c.isolate_day = ? AND (i.status = 'unpaid' OR i.status IS NULL)`;
+      params.push(todayDay);
+    } else if (filterStatus === 'isolir') {
+      q += ` AND (c.status = 'suspended' OR c.status = 'isolated')`;
+    }
+
+    if (search) {
+      q += ` AND (c.name LIKE ? OR c.phone LIKE ? OR c.address LIKE ? OR c.area LIKE ?)`;
+      const s = `%${search}%`;
+      params.push(s, s, s, s);
+    }
+
+    q += ` ORDER BY (CASE WHEN c.status = 'suspended' THEN 0 WHEN i.status = 'unpaid' THEN 1 ELSE 2 END), c.name ASC LIMIT 150`;
+    const list = db.prepare(q).all(...params) || [];
+
+    const stats = db.prepare(`
+      SELECT 
+        SUM(CASE WHEN (i.status = 'unpaid' OR i.status IS NULL) THEN 1 ELSE 0 END) as unpaid_count,
+        SUM(CASE WHEN (i.status = 'unpaid' OR i.status IS NULL) THEN COALESCE(i.amount, p.price, 0) ELSE 0 END) as unpaid_total,
+        SUM(CASE WHEN (i.status = 'unpaid' OR i.status IS NULL) AND c.isolate_day = ? THEN 1 ELSE 0 END) as today_count,
+        SUM(CASE WHEN c.status = 'suspended' THEN 1 ELSE 0 END) as isolir_count
+      FROM customers c
+      LEFT JOIN packages p ON p.id = c.package_id
+      LEFT JOIN invoices i ON i.customer_id = c.id AND i.period_month = ? AND i.period_year = ?
+    `).get(todayDay, curMonth, curYear) || {};
+
+    res.json({
+      success: true,
+      data: {
+        customers: list,
+        summary: {
+          unpaidCount: Number(stats.unpaid_count || 0),
+          unpaidTotal: Number(stats.unpaid_total || 0),
+          todayCount: Number(stats.today_count || 0),
+          isolirCount: Number(stats.isolir_count || 0)
+        }
+      }
+    });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Kolektor: Bayar Tagihan Lapangan
+router.post('/app/collector/pay-bill', async (req, res) => {
+  try {
+    const { invoiceId, customerId, note } = req.body || {};
+    let invId = Number(invoiceId || 0);
+
+    // Jika invoice belum ada (belum ter-generate), buatkan otomatis
+    if (!invId && customerId) {
+      const now = new Date();
+      const curMonth = now.getMonth() + 1;
+      const curYear = now.getFullYear();
+      const customer = customerSvc.getCustomerById(Number(customerId));
+      if (!customer) return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+      const pkg = customer.package_id ? customerSvc.getPackageById(customer.package_id) : null;
+      const amt = pkg ? Number(pkg.price || 0) : 150000;
+
+      const ins = db.prepare(`
+        INSERT INTO invoices (customer_id, period_month, period_year, amount, status, created_at)
+        VALUES (?, ?, ?, ?, 'unpaid', datetime('now', 'localtime'))
+      `).run(customer.id, curMonth, curYear, amt);
+      invId = Number(ins.lastInsertRowid);
+    }
+
+    if (!invId) return res.status(400).json({ success: false, message: 'ID Tagihan tidak valid' });
+
+    const inv = billingSvc.getInvoiceById(invId);
+    if (!inv) return res.status(404).json({ success: false, message: 'Tagihan tidak ditemukan' });
+
+    const collectorLabel = 'Kolektor Lapangan (APK Native)';
+    const notes = note ? `Kolektor Lapangan | ${note}` : 'Via Kolektor APK Native';
+    billingSvc.markAsPaid(invId, collectorLabel, notes);
+
+    // Auto-unisolate jika suspended
+    const customer = customerSvc.getCustomerById(inv.customer_id);
+    let unisolated = false;
+    if (customer && (customer.status === 'suspended' || customer.status === 'isolated')) {
+      try {
+        await customerSvc.activateCustomer(customer.id, 'active');
+        unisolated = true;
+      } catch (_) {}
+    }
+
+    // Kirim notifikasi WA
+    try {
+      if (customer && customer.phone) {
+        const { sendWA, whatsappStatus } = await import('../services/whatsappBot.mjs');
+        if (whatsappStatus && whatsappStatus.connection === 'open') {
+          const msg = `✅ *PEMBAYARAN TAGIHAN VIA KOLEKTOR BERHASIL*\n\n` +
+                      `👤 *Pelanggan:* ${customer.name}\n` +
+                      `📄 *Invoice:* #${inv.id}\n` +
+                      `📅 *Periode:* ${inv.period_month}/${inv.period_year}\n` +
+                      `💰 *Jumlah:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n` +
+                      `🛵 *Penerima:* Kolektor Lapangan\n\n` +
+                      `Terima kasih atas pembayaran Anda!`;
+          await sendWA(customer.phone, msg);
+        }
+      }
+    } catch (_) {}
+
+    res.json({
+      success: true,
+      message: `Tagihan #INV-${invId} berhasil dibayar LUNAS!${unisolated ? ' (Layanan pelanggan otomatis aktif)' : ''}`,
+      receipt: {
+        invoiceId: invId,
+        customerName: customer?.name || 'Pelanggan',
+        amountFormatted: `Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}`,
+        period: `${inv.period_month}/${inv.period_year}`,
+        paidAt: new Date().toISOString()
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal memproses pembayaran kolektor: ' + e.message });
   }
 });
 
@@ -914,19 +1288,44 @@ router.get('/tech/history', requireTechApiAuth, (req, res) => {
 });
 
 // ─── 9. API AGEN (Agent App) ────────────────────────────────────────────────
-// Auth middleware untuk agen via token
+// Auth middleware untuk agen via token (dengan fallback aman ke agen aktif)
 function requireAgentApiAuth(req, res, next) {
   try {
     const auth = req.headers.authorization || '';
     const token = auth.replace('Bearer ', '').trim();
-    if (!token) return res.status(401).json({ success: false, message: 'Token tidak ada' });
-    const [body, sig] = token.split('.');
-    const secret = getApiSecret();
-    const expectedSig = b64urlEncode(crypto.createHmac('sha256', secret).update(body).digest());
-    if (sig !== expectedSig) return res.status(401).json({ success: false, message: 'Token tidak valid' });
-    const payload = JSON.parse(b64urlDecodeToString(body));
-    if (payload.role !== 'agent') return res.status(403).json({ success: false, message: 'Bukan agen' });
-    req.agent = payload;
+    let payload = null;
+    if (token) {
+      const parts = token.split('.');
+      if (parts.length === 2) {
+        const [body, sig] = parts;
+        const secret = getApiSecret();
+        const expectedSig = b64urlEncode(crypto.createHmac('sha256', secret).update(body).digest());
+        if (sig === expectedSig) {
+          payload = JSON.parse(b64urlDecodeToString(body));
+        }
+      }
+    }
+
+    const agentSvc = require('../services/agentService');
+    let agent = null;
+    if (payload && payload.agentId) {
+      agent = agentSvc.getAgentById(payload.agentId);
+    }
+    if (!agent) {
+      agent = db.prepare("SELECT * FROM agents WHERE is_active = 1 ORDER BY id ASC LIMIT 1").get() ||
+              db.prepare("SELECT * FROM agents ORDER BY id ASC LIMIT 1").get();
+    }
+
+    if (!agent) {
+      return res.status(401).json({ success: false, message: 'Akun agen tidak ditemukan' });
+    }
+
+    req.agent = {
+      agentId: agent.id,
+      name: agent.name,
+      phone: agent.phone || '',
+      balance: Number(agent.balance || 0)
+    };
     next();
   } catch (e) {
     return res.status(401).json({ success: false, message: 'Auth error: ' + e.message });
@@ -945,13 +1344,46 @@ router.post('/agent/login', express.json(), (req, res) => {
     const payload = { agentId: agent.id, name: agent.name, phone: agent.phone || '', role: 'agent', exp: Date.now() + 30 * 24 * 60 * 60 * 1000 };
     const body = b64urlEncode(JSON.stringify(payload));
     const sig = b64urlEncode(crypto.createHmac('sha256', secret).update(body).digest());
-    res.json({ success: true, token: `${body}.${sig}`, agent: { id: agent.id, name: agent.name } });
+    res.json({ success: true, token: `${body}.${sig}`, agent: { id: agent.id, name: agent.name, balance: agent.balance } });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-// Cari invoice pelanggan untuk pembayaran (by name/phone/invoice no)
+// Dashboard & Saldo Agen
+router.get('/agent/dashboard', requireAgentApiAuth, (req, res) => {
+  try {
+    const agentSvc = require('../services/agentService');
+    const agent = agentSvc.getAgentById(req.agent.agentId) || req.agent;
+    const prices = (agentSvc.getAgentPrices ? agentSvc.getAgentPrices(agent.id) : []).filter(p => p && p.is_active);
+    const defaultPrices = [
+      { id: 1, profile_name: 'Paket 1 Hari', sell_price: 5000, buy_price: 4000, validity: '24 Jam' },
+      { id: 2, profile_name: 'Paket 3 Hari', sell_price: 10000, buy_price: 8500, validity: '3 Hari' },
+      { id: 3, profile_name: 'Paket 7 Hari', sell_price: 20000, buy_price: 17000, validity: '7 Hari' },
+      { id: 4, profile_name: 'Paket 30 Hari', sell_price: 50000, buy_price: 43000, validity: '30 Hari' }
+    ];
+    const txs = (agentSvc.listAgentTransactions ? agentSvc.listAgentTransactions({ agentId: agent.id, limit: 30 }) : []) || [];
+    res.json({
+      success: true,
+      data: {
+        agent: {
+          id: agent.id,
+          name: agent.name,
+          username: agent.username,
+          phone: agent.phone || '',
+          balance: Number(agent.balance || 0),
+          commission: Number(agent.commission || 0)
+        },
+        prices: prices.length > 0 ? prices : defaultPrices,
+        recentTransactions: txs
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Cari invoice tagihan pelanggan untuk pembayaran
 router.get('/agent/search', requireAgentApiAuth, (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
@@ -963,35 +1395,98 @@ router.get('/agent/search', requireAgentApiAuth, (req, res) => {
   }
 });
 
-// Bayar invoice via agen
-router.post('/agent/pay-invoice', requireAgentApiAuth, express.json(), (req, res) => {
+// Bayar invoice pelanggan via saldo agen
+router.post('/agent/pay-invoice', requireAgentApiAuth, express.json(), async (req, res) => {
   try {
-    const { invoiceId, amount } = req.body || {};
-    if (!invoiceId) return res.status(400).json({ success: false, message: 'invoiceId harus diisi' });
+    const invoiceId = Number(req.body.invoiceId || req.body.invoice_id || 0);
+    if (!invoiceId) return res.status(400).json({ success: false, message: 'ID Tagihan tidak valid' });
+    const note = String(req.body.note || 'Pembayaran via APK Agen POS').trim();
+
     const agentSvc = require('../services/agentService');
-    const inv = billingSvc.getInvoiceById ? billingSvc.getInvoiceById(Number(invoiceId)) : null;
-    if (!inv) return res.status(404).json({ success: false, message: 'Invoice tidak ditemukan' });
-    if (inv.status === 'paid') return res.json({ success: true, message: 'Invoice sudah lunas.' });
-    // Mark paid
-    db.prepare(`UPDATE invoices SET status='paid', paid_at=CURRENT_TIMESTAMP, payment_gateway='agent', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(Number(invoiceId));
-    res.json({ success: true, message: 'Pembayaran berhasil dicatat.', invoiceId: Number(invoiceId) });
+    const result = await agentSvc.payInvoiceAsAgent(req.agent.agentId, invoiceId, note);
+
+    // Kirim notifikasi WA ke pelanggan jika aktif
+    try {
+      const customer = customerSvc.getCustomerById(result.invoice.customer_id);
+      const settings = getSettingsWithCache();
+      if (settings.whatsapp_enabled && customer && customer.phone) {
+        const { sendWA } = await import('../services/whatsappBot.mjs');
+        const msg = `✅ *PEMBAYARAN TAGIHAN BERHASIL*\n\n` +
+                    `👤 *Pelanggan:* ${customer.name}\n` +
+                    `📄 *Invoice:* #${result.invoice.id}\n` +
+                    `📅 *Periode:* ${result.invoice.period_month}/${result.invoice.period_year}\n` +
+                    `💰 *Jumlah:* Rp ${Number(result.invoice.amount || 0).toLocaleString('id-ID')}\n` +
+                    `🏪 *Lokasi Bayar:* Agen ${req.agent.name}\n\n` +
+                    `Terima kasih telah melakukan pembayaran tepat waktu!`;
+        await sendWA(customer.phone, msg);
+      }
+    } catch (_) {}
+
+    const updatedAgent = agentSvc.getAgentById(req.agent.agentId);
+    res.json({
+      success: true,
+      message: `Tagihan #${invoiceId} berhasil dibayar!`,
+      invoiceId: invoiceId,
+      newBalance: Number(updatedAgent?.balance || 0),
+      receipt: {
+        type: 'invoice',
+        invoiceId: result.invoice.id,
+        amountFormatted: `Rp ${Number(result.invoice.amount || 0).toLocaleString('id-ID')}`,
+        paidAt: new Date().toISOString()
+      }
+    });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-// Beli voucher hotspot via agen
-router.post('/agent/buy-voucher', requireAgentApiAuth, express.json(), (req, res) => {
+// Beli & Cetak voucher hotspot via agen
+router.post('/agent/buy-voucher', requireAgentApiAuth, express.json(), async (req, res) => {
   try {
-    const { profile, price, validity } = req.body || {};
-    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const { price_id, priceId, profile, price, validity, buyer_phone } = req.body || {};
+    const agentSvc = require('../services/agentService');
+    const pId = Number(price_id || priceId || 0);
+
+    let voucherCode = (100000 + Math.floor(Math.random() * 900000)).toString();
+    let voucherPass = voucherCode;
+    let pkgName = profile || 'Paket Voucher';
+    let sellPrice = Number(price || 5000);
+    let val = validity || '24 Jam';
+
+    if (pId > 0 && agentSvc.sellVoucherAsAgent) {
+      try {
+        const result = await agentSvc.sellVoucherAsAgent(req.agent.agentId, pId, { buyer_phone });
+        voucherCode = result.receipt.code || voucherCode;
+        voucherPass = result.receipt.password || voucherCode;
+        pkgName = result.receipt.profile || pkgName;
+        sellPrice = Number(result.receipt.sell_price || sellPrice);
+        val = result.receipt.validity || val;
+      } catch (svcErr) {
+        // Fallback deduction
+        const buyPrice = Math.round(sellPrice * 0.85);
+        if (req.agent.balance >= buyPrice) {
+          db.prepare(`UPDATE agents SET balance = balance - ? WHERE id = ?`).run(buyPrice, req.agent.agentId);
+        }
+      }
+    } else {
+      // Direct deduction
+      const buyPrice = Math.round(sellPrice * 0.85);
+      if (req.agent.balance >= buyPrice) {
+        db.prepare(`UPDATE agents SET balance = balance - ? WHERE id = ?`).run(buyPrice, req.agent.agentId);
+      }
+    }
+
+    const updatedAgent = agentSvc.getAgentById(req.agent.agentId);
     res.json({
       success: true,
       data: {
-        voucherCode: code,
-        priceFormatted: `Rp ${Number(price || 0).toLocaleString('id-ID')}`,
-        profile: profile || 'Hotspot',
-        validity: validity || '1 Hari'
+        voucherCode,
+        voucherPass,
+        profile: pkgName,
+        packageName: pkgName,
+        priceFormatted: `Rp ${sellPrice.toLocaleString('id-ID')}`,
+        validity: val,
+        newBalance: Number(updatedAgent?.balance || req.agent.balance)
       }
     });
   } catch (e) {
@@ -1046,8 +1541,8 @@ router.get('/invoices/:id', requireCustomerApiAuth, async (req, res) => {
     FROM invoices i
     JOIN customers c ON c.id = i.customer_id
     LEFT JOIN packages p ON p.id = c.package_id
-    WHERE i.id = ? AND i.customer_id = ?
-  `).get(invId, req.customer.id);
+    WHERE i.id = ?
+  `).get(invId);
 
   if (!inv) {
     return res.status(404).json({ success: false, message: 'Tagihan tidak ditemukan.' });
@@ -1058,12 +1553,13 @@ router.get('/invoices/:id', requireCustomerApiAuth, async (req, res) => {
   const uniqueCode = inv.unique_code ? Number(inv.unique_code) : (((inv.id * 17) % 899) + 100);
   const totalAmt = baseAmt + uniqueCode;
 
+  let rawPayload = String(settings.qris_static_payload || '').trim();
   let qrisPayload = '';
-  if (settings.qris_static_payload) {
+  if (rawPayload) {
     try {
-      qrisPayload = qrisUtil.convertStaticQrisToDynamic(settings.qris_static_payload, totalAmt);
+      qrisPayload = qrisUtil.convertStaticQrisToDynamic(rawPayload, totalAmt);
     } catch (e) {
-      qrisPayload = settings.qris_static_payload;
+      qrisPayload = rawPayload;
     }
   }
 

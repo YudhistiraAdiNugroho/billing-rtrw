@@ -641,7 +641,7 @@ async function suspendCustomer(id) {
   return true;
 }
 
-async function activateCustomer(id) {
+async function activateCustomer(id, targetStatus = 'active') {
   const customer = getCustomerById(id);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
   
@@ -655,7 +655,7 @@ async function activateCustomer(id) {
   
   if (hasMikrotikConnection && !effectiveRouterId) {
     logger.warn(`[activateCustomer] Pelanggan "${customer.name}" (ID: ${id}) memiliki koneksi ${customer.connection_type} tapi router_id NULL dan tidak ada default router. Aktivasi lokal hanya, MikroTik tidak diupdate.`);
-    updateCustomer(id, { ...customer, status: 'active' });
+    updateCustomer(id, { ...customer, status: targetStatus });
     return;
   }
 
@@ -706,7 +706,7 @@ async function activateCustomer(id) {
   }
 
   // Update database status SETELAH MikroTik berhasil (atau gagal tapi continue)
-  updateCustomer(id, { ...customer, status: 'active' });
+  updateCustomer(id, { ...customer, status: targetStatus });
   return true;
 }
 
