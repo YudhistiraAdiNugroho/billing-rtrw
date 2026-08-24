@@ -17,6 +17,7 @@ const voucherPaymentSvc = require('../services/voucherPaymentService');
 const adminSvc = require('../services/adminService');
 const agentSvc = require('../services/agentService');
 const techSvc = require('../services/techService');
+const mikrotikService = require('../services/mikrotikService');
 const qrisUtil = require('../utils/qrisUtil');
 const QRCode = require('qrcode');
 
@@ -865,31 +866,258 @@ router.get('/app/tech/odps', (req, res) => {
   }
 });
 
-router.get('/app/tech/olts', (req, res) => {
+// ─── MIKROTIK PPPOE MANAGEMENT FOR TECHNICIAN ─────────────────────────
+router.get('/app/tech/mikrotik/secrets', async (req, res) => {
   try {
-    const oltSvc = require('../services/oltService');
-    const olts = oltSvc.getAllOlts();
-    res.json({ success: true, data: olts || [] });
+    const routerId = req.query.routerId ? Number(req.query.routerId) : null;
+    const users = await mikrotikService.getPppoeUsers(routerId);
+    const activeMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
+
+    const result = (Array.isArray(users) ? users : []).map(u => {
+      const uname = String(u.name || '').trim();
+      const isActive = uname && activeMap.has(uname.toLowerCase());
+      const activeInfo = isActive ? activeMap.get(uname.toLowerCase()) : null;
+      return {
+        id: u['.id'] || u.id || '',
+        name: uname,
+        password: u.password || '',
+        profile: u.profile || 'default',
+        service: u.service || 'pppoe',
+        disabled: u.disabled === 'true' || u.disabled === true,
+        comment: u.comment || '',
+        callerId: u['caller-id'] || '',
+        active: isActive,
+        activeIp: activeInfo?.address || activeInfo?.['address'] || '-',
+        activeUptime: activeInfo?.uptime || '-'
+      };
+    });
+
+    res.json({ success: true, data: result, total: result.length });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal mengambil data PPPoE MikroTik: ' + e.message });
+  }
+});
+
+router.get('/app/tech/mikrotik/profiles', async (req, res) => {
+  try {
+    const routerId = req.query.routerId ? Number(req.query.routerId) : null;
+    const profiles = await mikrotikService.getPppoeProfiles(routerId);
+    res.json({ success: true, data: profiles || [] });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-router.post('/app/tech/onu/restart', async (req, res) => {
+router.post('/app/tech/mikrotik/secret/create', async (req, res) => {
   try {
-    const { customerId, pppoeUsername } = req.body;
-    const customer = customerId ? customerSvc.getCustomerById(Number(customerId)) : customerSvc.findCustomerByAny(pppoeUsername);
-    if (!customer) return res.status(404).json({ success: false, message: 'Pelanggan / ONU tidak ditemukan' });
+    const { username, password, profile, comment, routerId } = req.body;
+    if (!username || !password) return res.status(400).json({ success: false, message: 'Username & Password PPPoE wajib diisi' });
 
-    const tag = customer.genieacs_tag || customer.pppoe_username || customer.phone;
-    const ok = await customerDevice.rebootDevice(tag, 'Teknisi APK');
+    await mikrotikService.addPppoeUser(username.trim(), password.trim(), profile || 'default', routerId ? Number(routerId) : null, { comment });
+    res.json({ success: true, message: `User PPPoE "${username}" berhasil dibuat di MikroTik!` });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal membuat user PPPoE: ' + e.message });
+  }
+});
+
+router.post('/app/tech/mikrotik/secret/update', async (req, res) => {
+  try {
+    const { username, password, profile, disabled, routerId } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username PPPoE tidak valid' });
+
+    const updateData = {};
+    if (password) updateData.password = password;
+    if (profile) updateData.profile = profile;
+    if (disabled !== undefined) updateData.disabled = disabled;
+
+    await mikrotikService.updatePppoeUser(username.trim(), updateData, routerId ? Number(routerId) : null);
+    res.json({ success: true, message: `User PPPoE "${username}" berhasil diperbarui di MikroTik!` });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal update user PPPoE: ' + e.message });
+  }
+});
+
+router.post('/app/tech/mikrotik/secret/delete', async (req, res) => {
+  try {
+    const { username, routerId } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username PPPoE tidak valid' });
+
+    await mikrotikService.deletePppoeUser(username.trim(), routerId ? Number(routerId) : null);
+    res.json({ success: true, message: `User PPPoE "${username}" berhasil dihapus dari MikroTik!` });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal menghapus user PPPoE: ' + e.message });
+  }
+});
+
+router.post('/app/tech/mikrotik/secret/kick', async (req, res) => {
+  try {
+    const { username, routerId } = req.body;
+    if (!username) return res.status(400).json({ success: false, message: 'Username PPPoE tidak valid' });
+
+    await mikrotikService.kickPppoeUser(username.trim(), routerId ? Number(routerId) : null);
+    res.json({ success: true, message: `Sesi PPPoE "${username}" berhasil diputus (kicked)!` });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal kick sesi PPPoE: ' + e.message });
+  }
+});
+
+// ─── TR-069 ONU MANAGEMENT FOR TECHNICIAN ────────────────────────────
+router.get('/app/tech/tr069/devices', async (req, res) => {
+  try {
+    const { search, status, acs } = req.query;
+    const customers = db.prepare('SELECT id, name, phone, pppoe_username, genieacs_tag FROM customers').all();
+    const byPppoe = new Map();
+    const byTag = new Map();
+    for (const c of customers) {
+      const pu = String(c.pppoe_username || '').trim().toLowerCase();
+      const tg = String(c.genieacs_tag || '').trim();
+      if (pu) byPppoe.set(pu, c);
+      if (tg) byTag.set(tg, c);
+    }
+
+    const result = await customerDevice.listAllDevices(999999, acs);
+    if (!result.ok) return res.json({ success: true, message: 'TR-069 GenieACS Offline / Timeout', data: [], total: 0 });
+
+    const activeSessionsMap = await mikrotikService.getActivePppoeSessionsMap().catch(() => new Map());
+    let devices = result.devices.map(d => {
+      const pppoeUser = customerDevice.extractPppoeUser(d);
+      const isPppoeActive = pppoeUser && pppoeUser !== 'N/A' && pppoeUser !== '-' && activeSessionsMap.has(pppoeUser.toLowerCase());
+      const mapped = customerDevice.mapDeviceData(d, d._tags?.[0] || d._id, isPppoeActive);
+      const pu = String(mapped.pppoeUsername || '').trim();
+      const puKey = pu && pu !== 'N/A' ? pu.toLowerCase() : '';
+      let customer = puKey ? byPppoe.get(puKey) : null;
+      if (!customer && Array.isArray(d._tags)) {
+        for (const t of d._tags) {
+          const hit = byTag.get(String(t || '').trim());
+          if (hit) { customer = hit; break; }
+        }
+      }
+      return {
+        id: d._id,
+        tag: d._tags?.[0] || d._id,
+        serialNumber: mapped.serialNumber || '-',
+        status: mapped.status.toLowerCase(),
+        pppoeIP: mapped.pppoeIP || '-',
+        pppoeUsername: mapped.pppoeUsername || '-',
+        rxPower: mapped.rxPower || '-',
+        uptime: mapped.uptime || '-',
+        model: mapped.model || 'ONT Router',
+        softwareVersion: mapped.softwareVersion || '-',
+        ssid: mapped.ssid || '-',
+        customerId: customer ? customer.id : null,
+        customerName: customer ? customer.name : 'Belum Terikat Pelanggan',
+        customerPhone: customer ? customer.phone : '-',
+        manufacturer: d._deviceId?._Manufacturer || d._deviceId?.Manufacturer || 'ZTE/Huawei/Fiberhome'
+      };
+    });
+
+    if (search) {
+      const s = search.toLowerCase();
+      devices = devices.filter(d =>
+        d.id.toLowerCase().includes(s) ||
+        d.serialNumber.toLowerCase().includes(s) ||
+        d.pppoeUsername.toLowerCase().includes(s) ||
+        d.customerName.toLowerCase().includes(s) ||
+        d.customerPhone.toLowerCase().includes(s) ||
+        d.ssid.toLowerCase().includes(s)
+      );
+    }
+
+    if (status && status !== 'all') {
+      devices = devices.filter(d => d.status === status);
+    }
+
+    res.json({ success: true, data: devices, total: devices.length });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal mengambil data TR-069: ' + e.message });
+  }
+});
+
+router.post('/app/tech/tr069/device/ssid', async (req, res) => {
+  try {
+    const { tag, ssid } = req.body;
+    if (!tag || !ssid) return res.status(400).json({ success: false, message: 'Tag perangkat dan SSID baru wajib diisi' });
+
+    const ok = await customerDevice.updateSSID(tag, ssid.trim());
     if (ok) {
-      res.json({ success: true, message: `Perintah Reboot berhasil dikirim ke Modem ONT "${customer.name}"!` });
+      // WA notification to customer
+      try {
+        const settings = getSettingsWithCache();
+        if (settings.whatsapp_enabled) {
+          const cust = customerSvc.findCustomerByAny(tag);
+          if (cust && cust.phone) {
+            const { sendWA } = await import('../services/whatsappBot.mjs');
+            const now = getNowLocal();
+            const msg = `📡 *PERUBAHAN NAMA WIFI (SSID)*\n\n` +
+              `👤 *Pelanggan:* ${cust.name}\n` +
+              `🕒 *Waktu:* ${now}\n\n` +
+              `Nama WiFi (SSID) modem Anda telah berhasil diubah menjadi:\n` +
+              `📶 *${ssid}*\n\n` +
+              `Silakan hubungkan perangkat Anda ke nama WiFi yang baru.`;
+            await sendWA(cust.phone, msg);
+          }
+        }
+      } catch (_) {}
+
+      res.json({ success: true, message: `Nama WiFi (SSID) berhasil diubah menjadi "${ssid}"!` });
     } else {
-      res.status(400).json({ success: false, message: 'Gagal mengirim perintah reboot. Pastikan ONU terhubung ke TR-069.' });
+      res.status(400).json({ success: false, message: 'Gagal mengubah SSID. Pastikan perangkat terhubung ke TR-069.' });
     }
   } catch (e) {
-    res.status(500).json({ success: false, message: 'Error reboot ONU: ' + e.message });
+    res.status(500).json({ success: false, message: 'Error update SSID: ' + e.message });
+  }
+});
+
+router.post('/app/tech/tr069/device/password', async (req, res) => {
+  try {
+    const { tag, password } = req.body;
+    if (!tag || !password || password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password WiFi minimal 8 karakter' });
+    }
+
+    const ok = await customerDevice.updatePassword(tag, password.trim());
+    if (ok) {
+      // WA notification to customer
+      try {
+        const settings = getSettingsWithCache();
+        if (settings.whatsapp_enabled) {
+          const cust = customerSvc.findCustomerByAny(tag);
+          if (cust && cust.phone) {
+            const { sendWA } = await import('../services/whatsappBot.mjs');
+            const now = getNowLocal();
+            const msg = `🔑 *PERUBAHAN SANDI WIFI*\n\n` +
+              `👤 *Pelanggan:* ${cust.name}\n` +
+              `🕒 *Waktu:* ${now}\n\n` +
+              `Password WiFi modem Anda telah berhasil diperbarui menjadi:\n` +
+              `🔐 *${password}*\n\n` +
+              `Silakan gunakan sandi baru untuk terhubung.`;
+            await sendWA(cust.phone, msg);
+          }
+        }
+      } catch (_) {}
+
+      res.json({ success: true, message: `Password WiFi berhasil diubah!` });
+    } else {
+      res.status(400).json({ success: false, message: 'Gagal mengubah password WiFi. Pastikan perangkat terhubung ke TR-069.' });
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error update Password WiFi: ' + e.message });
+  }
+});
+
+router.post('/app/tech/tr069/device/reboot', async (req, res) => {
+  try {
+    const { tag } = req.body;
+    if (!tag) return res.status(400).json({ success: false, message: 'Tag / ID perangkat tidak valid' });
+
+    const ok = await customerDevice.requestReboot(tag);
+    if (ok) {
+      res.json({ success: true, message: 'Perintah Reboot berhasil dikirim ke Modem ONT melalui TR-069!' });
+    } else {
+      res.status(400).json({ success: false, message: 'Gagal mengirim perintah reboot. Pastikan perangkat terhubung ke TR-069.' });
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error reboot TR-069: ' + e.message });
   }
 });
 
