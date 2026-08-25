@@ -3236,9 +3236,24 @@ router.post('/payment/callback', express.json({
         const reqId = Number(agentTopupReq.id);
         logger.info(`[Webhook] Pembayaran Top-Up Agen diterima via ${gateway} untuk Request ID: ${reqId}`);
         
+        let pObj = {};
+        try {
+          pObj = agentTopupReq.payment_payload ? JSON.parse(agentTopupReq.payment_payload) : {};
+        } catch (_) {}
+        const uniqueCode = Number(pObj.unique_code || 0);
+        const creditAmount = Number(pObj.total_amount || (Number(agentTopupReq.amount || 0) + uniqueCode));
+
         db.transaction(() => {
+          const freshAgent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentTopupReq.agent_id);
+          const balBefore = Number(freshAgent?.balance || 0);
+          const balAfter = balBefore + creditAmount;
+
           db.prepare(`UPDATE agent_topup_requests SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(reqId);
-          db.prepare(`UPDATE agents SET balance = balance + ? WHERE id=?`).run(agentTopupReq.amount, agentTopupReq.agent_id);
+          db.prepare(`UPDATE agents SET balance = ? WHERE id=?`).run(balAfter, agentTopupReq.agent_id);
+          db.prepare(`
+            INSERT INTO agent_transactions (agent_id, type, amount_buy, amount_sell, fee, balance_before, balance_after, note, created_at)
+            VALUES (?, 'topup', ?, ?, 0, ?, ?, ?, datetime('now', 'localtime'))
+          `).run(agentTopupReq.agent_id, creditAmount, creditAmount, balBefore, balAfter, `Top-Up Deposit + Kode Unik (${uniqueCode > 0 ? '+Rp ' + uniqueCode : ''}) via ${String(gateway || 'Payment Gateway').toUpperCase()} (Req #${reqId})`);
         })();
 
         // Kirim notifikasi WA ke Agen
@@ -3251,8 +3266,10 @@ router.post('/payment/callback', express.json({
               const waMsg = 
                 `✅ *TOP-UP DEPOSIT AGEN BERHASIL*\n\n` +
                 `👤 *Nama Agen:* ${agent.name}\n` +
-                `💰 *Nominal:* Rp ${Number(agentTopupReq.amount).toLocaleString('id-ID')}\n` +
-                `💳 *Total Saldo:* Rp ${Number(currentBalance).toLocaleString('id-ID')}\n` +
+                `💰 *Nominal Top-Up:* Rp ${Number(agentTopupReq.amount).toLocaleString('id-ID')}\n` +
+                `${uniqueCode > 0 ? `🏷️ *Kode Unik:* +Rp ${uniqueCode.toLocaleString('id-ID')}\n` : ''}` +
+                `💵 *Total Saldo Masuk:* Rp ${creditAmount.toLocaleString('id-ID')}\n` +
+                `💳 *Total Saldo Sekarang:* Rp ${Number(currentBalance).toLocaleString('id-ID')}\n` +
                 `🏷️ *Via:* ${gateway}\n\n` +
                 `Deposit sudah bertambah dan bisa digunakan kembali.`;
               await sendWA(agent.phone, waMsg);

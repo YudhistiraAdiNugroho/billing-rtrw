@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const QRCode = require('qrcode');
 const { getSetting, getSettings, formatDateLocal, getNowLocal } = require('../config/settingsManager');
 const agentSvc = require('../services/agentService');
 const billingSvc = require('../services/billingService');
 const customerSvc = require('../services/customerService');
 const paymentSvc = require('../services/paymentService');
 const whatsappService = require('../services/whatsappService');
+const qrisUtil = require('../utils/qrisUtil');
 const db = require('../config/database');
 
 function isEnabledFlag(val) {
@@ -225,8 +227,28 @@ router.get('/', requireAgentSession, async (req, res) => {
         { code: 'MANDIRIVA', name: 'Mandiri Virtual Account', group: 'Virtual Account', active: true }
       ];
     }
+    if (paymentChannels.length === 0) {
+      paymentChannels = [
+        { code: 'QRIS', name: 'QRIS Dinamis', group: 'Instant QRIS', active: true },
+        { code: 'MANUAL_BANK', name: 'Transfer Bank (Kode Unik Otomatis)', group: 'Transfer Bank', active: true }
+      ];
+    }
   } catch(e) {
     paymentChannels = [];
+  }
+
+  let activeTopup = null;
+  const topupId = Number(req.query.topup_id || 0);
+  if (topupId > 0) {
+    const treq = db.prepare('SELECT * FROM agent_topup_requests WHERE id = ? AND agent_id = ?').get(topupId, agent.id);
+    if (treq && treq.status === 'pending') {
+      try {
+        treq.payloadObj = treq.payment_payload ? JSON.parse(treq.payment_payload) : {};
+      } catch (_) {
+        treq.payloadObj = {};
+      }
+      activeTopup = treq;
+    }
   }
 
   res.render('agent/dashboard', {
@@ -242,6 +264,8 @@ router.get('/', requireAgentSession, async (req, res) => {
     digiflazzCategories,
     digiflazzBrandsData,
     paymentChannels,
+    activeTopup,
+    settings,
     msg: flashMsg(req),
     receipt: popReceipt(req)
   });
@@ -261,13 +285,15 @@ router.post('/topup/create', requireAgentSession, express.urlencoded({ extended:
   }
 
   try {
+    const uniqueCode = (((agent.id * 31 + Date.now()) % 899) + 100);
+    const gateway = resolveConfiguredGateway(settings);
+    const totalAmount = amount + (method === 'MANUAL_BANK' || method === 'QRIS_MANUAL' || !gateway ? uniqueCode : 0);
+
     const ins = db.prepare(`INSERT INTO agent_topup_requests (agent_id, amount, status) VALUES (?, ?, 'pending')`).run(agentId, amount);
     const reqId = Number(ins.lastInsertRowid);
 
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const appUrl = settings.app_url || `${protocol}://${req.get('host')}`;
-    const gateway = resolveConfiguredGateway(settings);
-    if (!gateway) throw new Error('Payment gateway belum dikonfigurasi');
     let tripayChannels = null;
     let tripayCandidates = null;
     if (gateway === 'tripay') {
@@ -285,13 +311,16 @@ router.post('/topup/create', requireAgentSession, express.urlencoded({ extended:
 
     const invoiceLike = { id: `AGTOP${reqId}`, amount, item_name: `Top-Up Deposit Agent ${agent.name}`, sku: `AGTOP-${reqId}` };
     const buyer = { name: agent.name, phone: agent.phone || '', email: '' };
-    const returnPath = `/agent?info=topup_pending`;
+    const returnPath = `/agent?topup_id=${reqId}&info=topup_pending`;
 
-    let result;
-    if (gateway === 'midtrans') result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, method === 'SNAP' ? 'snap' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
-    else if (gateway === 'xendit') result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, method === 'XENDIT' ? 'xendit' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', description: invoiceLike.item_name });
-    else if (gateway === 'duitku') result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, method === 'DUITKU' ? 'duitku' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
-    else {
+    let result = { success: true, link: `${appUrl}/agent?topup_id=${reqId}`, order_id: `AGTOP${reqId}`, reference: `AGTOP${reqId}` };
+    if (gateway === 'midtrans') {
+      result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, method === 'SNAP' ? 'snap' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+    } else if (gateway === 'xendit') {
+      result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, method === 'XENDIT' ? 'xendit' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', description: invoiceLike.item_name });
+    } else if (gateway === 'duitku') {
+      result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, method === 'DUITKU' ? 'duitku' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+    } else if (gateway === 'tripay') {
       try {
         result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
       } catch (e) {
@@ -313,15 +342,75 @@ router.post('/topup/create', requireAgentSession, express.urlencoded({ extended:
       }
     }
 
-    if (!result.success) throw new Error(result.message || 'Gagal membuat transaksi');
+    let qrImageBase64 = '';
+    let qrString = result?.qr_string || result?.payload?.qr_string || '';
+    const staticPayload = String(settings.qris_static_payload || settings.qris_payload || '').trim();
+    if (!qrString && staticPayload) {
+      try {
+        qrString = qrisUtil.convertStaticQrisToDynamic(staticPayload, totalAmount);
+      } catch (_) {
+        qrString = staticPayload;
+      }
+    }
+
+    if (qrString) {
+      try {
+        qrImageBase64 = await QRCode.toDataURL(qrString, { width: 500, margin: 2 });
+      } catch (_) {}
+    } else if (result?.link) {
+      try {
+        qrImageBase64 = await QRCode.toDataURL(result.link, { width: 500, margin: 2 });
+      } catch (_) {}
+    }
+
+    const payloadObj = {
+      ...(result.payload || {}),
+      unique_code: uniqueCode,
+      total_amount: totalAmount,
+      method,
+      qr_string: qrString,
+      qr_image: qrImageBase64,
+      va_number: result.va_number || result.payload?.pay_code || '',
+      bank_name: settings.bank_name || 'BCA',
+      bank_account: settings.bank_account_number || '',
+      bank_holder: settings.bank_account_holder || ''
+    };
 
     db.prepare(`UPDATE agent_topup_requests SET payment_gateway=?, payment_order_id=?, payment_link=?, payment_reference=?, payment_payload=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-      .run(gateway, result.order_id || '', result.link || '', result.reference || '', result.payload ? JSON.stringify(result.payload) : null, reqId);
+      .run(gateway || 'manual', result.order_id || `AGTOP${reqId}`, result.link || '', result.reference || '', JSON.stringify(payloadObj), reqId);
 
-    return res.redirect(result.link);
+    return res.redirect(`/agent?topup_id=${reqId}`);
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
     return res.redirect('/agent');
+  }
+});
+
+// Cek Status Topup Saldo Agent (AJAX / Polling)
+router.get('/topup/status/:id', requireAgentSession, (req, res) => {
+  try {
+    const reqId = Number(req.params.id || 0);
+    const treq = db.prepare('SELECT * FROM agent_topup_requests WHERE id = ? AND agent_id = ?').get(reqId, req.session.agentId);
+    if (!treq) return res.status(404).json({ success: false, message: 'Request tidak ditemukan' });
+
+    let pObj = {};
+    try {
+      pObj = treq.payment_payload ? JSON.parse(treq.payment_payload) : {};
+    } catch (_) {}
+    const uniqueCode = Number(pObj.unique_code || 0);
+    const totalAmount = Number(pObj.total_amount || (Number(treq.amount || 0) + uniqueCode));
+
+    const freshAgent = agentSvc.getAgentById(req.session.agentId);
+    res.json({
+      success: true,
+      status: treq.status || 'pending',
+      amount: Number(treq.amount || 0),
+      uniqueCode: uniqueCode,
+      totalAmount: totalAmount,
+      currentBalance: Number(freshAgent?.balance || 0)
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
 });
 

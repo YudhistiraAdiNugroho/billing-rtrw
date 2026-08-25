@@ -1891,18 +1891,88 @@ router.post('/agent/login', express.json(), (req, res) => {
   }
 });
 
+// ─── 9. API AGEN (Agent App) ────────────────────────────────────────────────
+function getAgentPulsaCatalog() {
+  const agentSvc = require('../services/agentService');
+  let products = (agentSvc.listDigiflazzProducts ? agentSvc.listDigiflazzProducts({ limit: 3000 }) : []) || [];
+  
+  if (!products || products.length === 0) {
+    const fallbackProducts = [
+      // Telkomsel
+      { sku: 'TSEL5', product_name: 'Telkomsel 5.000', category: 'Pulsa', brand: 'Telkomsel', price_modal: 5300, price_sell: 6500 },
+      { sku: 'TSEL10', product_name: 'Telkomsel 10.000', category: 'Pulsa', brand: 'Telkomsel', price_modal: 10300, price_sell: 12000 },
+      { sku: 'TSEL20', product_name: 'Telkomsel 20.000', category: 'Pulsa', brand: 'Telkomsel', price_modal: 20100, price_sell: 22000 },
+      { sku: 'TSEL25', product_name: 'Telkomsel 25.000', category: 'Pulsa', brand: 'Telkomsel', price_modal: 25000, price_sell: 27000 },
+      { sku: 'TSEL50', product_name: 'Telkomsel 50.000', category: 'Pulsa', brand: 'Telkomsel', price_modal: 49800, price_sell: 52000 },
+      { sku: 'TSEL100', product_name: 'Telkomsel 100.000', category: 'Pulsa', brand: 'Telkomsel', price_modal: 98500, price_sell: 102000 },
+      { sku: 'TDATA1', product_name: 'Telkomsel Data 1.5 GB (3 Hari)', category: 'Data', brand: 'Telkomsel', price_modal: 11000, price_sell: 13000 },
+      { sku: 'TDATA3', product_name: 'Telkomsel Data 3.5 GB (5 Hari)', category: 'Data', brand: 'Telkomsel', price_modal: 19000, price_sell: 22000 },
+      { sku: 'TDATA10', product_name: 'Telkomsel Data 10 GB (30 Hari)', category: 'Data', brand: 'Telkomsel', price_modal: 45000, price_sell: 50000 },
+
+      // Indosat
+      { sku: 'ISAT5', product_name: 'Indosat IM3 5.000', category: 'Pulsa', brand: 'Indosat', price_modal: 5400, price_sell: 6500 },
+      { sku: 'ISAT10', product_name: 'Indosat IM3 10.000', category: 'Pulsa', brand: 'Indosat', price_modal: 10400, price_sell: 12000 },
+      { sku: 'ISAT25', product_name: 'Indosat IM3 25.000', category: 'Pulsa', brand: 'Indosat', price_modal: 24800, price_sell: 27000 },
+      { sku: 'ISAT50', product_name: 'Indosat IM3 50.000', category: 'Pulsa', brand: 'Indosat', price_modal: 49500, price_sell: 52000 },
+      { sku: 'IDATA3', product_name: 'Indosat Freedom 3 GB (30 Hari)', category: 'Data', brand: 'Indosat', price_modal: 25000, price_sell: 28000 },
+      { sku: 'IDATA10', product_name: 'Indosat Freedom 10 GB (30 Hari)', category: 'Data', brand: 'Indosat', price_modal: 48000, price_sell: 53000 },
+
+      // XL & Axis
+      { sku: 'XL5', product_name: 'XL 5.000', category: 'Pulsa', brand: 'XL', price_modal: 5400, price_sell: 6500 },
+      { sku: 'XL10', product_name: 'XL 10.000', category: 'Pulsa', brand: 'XL', price_modal: 10400, price_sell: 12000 },
+      { sku: 'XL25', product_name: 'XL 25.000', category: 'Pulsa', brand: 'XL', price_modal: 24900, price_sell: 27000 },
+      { sku: 'XL50', product_name: 'XL 50.000', category: 'Pulsa', brand: 'XL', price_modal: 49600, price_sell: 52000 },
+      { sku: 'AXIS5', product_name: 'Axis 5.000', category: 'Pulsa', brand: 'Axis', price_modal: 5350, price_sell: 6500 },
+      { sku: 'AXIS10', product_name: 'Axis 10.000', category: 'Pulsa', brand: 'Axis', price_modal: 10350, price_sell: 12000 },
+      { sku: 'AXIS25', product_name: 'Axis 25.000', category: 'Pulsa', brand: 'Axis', price_modal: 24800, price_sell: 27000 },
+
+      // Tri (3) & Smartfren
+      { sku: 'TRI5', product_name: 'Tri 5.000', category: 'Pulsa', brand: 'Tri', price_modal: 5100, price_sell: 6500 },
+      { sku: 'TRI10', product_name: 'Tri 10.000', category: 'Pulsa', brand: 'Tri', price_modal: 10100, price_sell: 12000 },
+      { sku: 'TRI25', product_name: 'Tri 25.000', category: 'Pulsa', brand: 'Tri', price_modal: 24600, price_sell: 27000 },
+      { sku: 'SMART10', product_name: 'Smartfren 10.000', category: 'Pulsa', brand: 'Smartfren', price_modal: 10100, price_sell: 12000 },
+      { sku: 'SMART25', product_name: 'Smartfren 25.000', category: 'Pulsa', brand: 'Smartfren', price_modal: 24700, price_sell: 27000 },
+
+      // PLN Token Listrik
+      { sku: 'PLN20', product_name: 'Token PLN 20.000', category: 'PLN', brand: 'PLN', price_modal: 20100, price_sell: 22000 },
+      { sku: 'PLN50', product_name: 'Token PLN 50.000', category: 'PLN', brand: 'PLN', price_modal: 50100, price_sell: 52000 },
+      { sku: 'PLN100', product_name: 'Token PLN 100.000', category: 'PLN', brand: 'PLN', price_modal: 100100, price_sell: 102500 },
+      { sku: 'PLN200', product_name: 'Token PLN 200.000', category: 'PLN', brand: 'PLN', price_modal: 200100, price_sell: 203000 },
+
+      // E-Wallet (Dana, Ovo, Gopay, ShopeePay)
+      { sku: 'DANA10', product_name: 'Saldo DANA 10.000', category: 'E-Wallet', brand: 'DANA', price_modal: 10200, price_sell: 12000 },
+      { sku: 'DANA20', product_name: 'Saldo DANA 20.000', category: 'E-Wallet', brand: 'DANA', price_modal: 20200, price_sell: 22000 },
+      { sku: 'DANA50', product_name: 'Saldo DANA 50.000', category: 'E-Wallet', brand: 'DANA', price_modal: 50200, price_sell: 52500 },
+      { sku: 'OVO10', product_name: 'Saldo OVO 10.000', category: 'E-Wallet', brand: 'OVO', price_modal: 10200, price_sell: 12000 },
+      { sku: 'OVO25', product_name: 'Saldo OVO 25.000', category: 'E-Wallet', brand: 'OVO', price_modal: 25200, price_sell: 27500 },
+      { sku: 'GOPAY10', product_name: 'GoPay 10.000', category: 'E-Wallet', brand: 'GoPay', price_modal: 10200, price_sell: 12000 },
+      { sku: 'GOPAY25', product_name: 'GoPay 25.000', category: 'E-Wallet', brand: 'GoPay', price_modal: 25200, price_sell: 27500 },
+      { sku: 'SPAY10', product_name: 'ShopeePay 10.000', category: 'E-Wallet', brand: 'ShopeePay', price_modal: 10200, price_sell: 12000 },
+      { sku: 'SPAY25', product_name: 'ShopeePay 25.000', category: 'E-Wallet', brand: 'ShopeePay', price_modal: 25200, price_sell: 27500 }
+    ];
+    products = fallbackProducts;
+  }
+
+  const categories = Array.from(new Set(products.map(p => p.category))).filter(Boolean);
+  return { categories, products };
+}
+
 // Dashboard & Saldo Agen
 router.get('/agent/dashboard', requireAgentApiAuth, (req, res) => {
   try {
     const agentSvc = require('../services/agentService');
     const agent = agentSvc.getAgentById(req.agent.agentId) || req.agent;
-    const prices = (agentSvc.getAgentPrices ? agentSvc.getAgentPrices(agent.id) : []).filter(p => p && p.is_active);
-    const defaultPrices = [
-      { id: 1, profile_name: 'Paket 1 Hari', sell_price: 5000, buy_price: 4000, validity: '24 Jam' },
-      { id: 2, profile_name: 'Paket 3 Hari', sell_price: 10000, buy_price: 8500, validity: '3 Hari' },
-      { id: 3, profile_name: 'Paket 7 Hari', sell_price: 20000, buy_price: 17000, validity: '7 Hari' },
-      { id: 4, profile_name: 'Paket 30 Hari', sell_price: 50000, buy_price: 43000, validity: '30 Hari' }
-    ];
+    let prices = (agentSvc.getAgentPrices ? agentSvc.getAgentPrices(agent.id) : []).filter(p => p && p.is_active);
+    
+    if (!prices || prices.length === 0) {
+      prices = [
+        { id: 1, profile_name: 'Paket 1 Hari', sell_price: 5000, buy_price: 4000, validity: '24 Jam', router_name: 'Default Hotspot' },
+        { id: 2, profile_name: 'Paket 3 Hari', sell_price: 10000, buy_price: 8500, validity: '3 Hari', router_name: 'Default Hotspot' },
+        { id: 3, profile_name: 'Paket 7 Hari', sell_price: 20000, buy_price: 17000, validity: '7 Hari', router_name: 'Default Hotspot' },
+        { id: 4, profile_name: 'Paket 30 Hari', sell_price: 50000, buy_price: 43000, validity: '30 Hari', router_name: 'Default Hotspot' }
+      ];
+    }
+
     const txs = (agentSvc.listAgentTransactions ? agentSvc.listAgentTransactions({ agentId: agent.id, limit: 30 }) : []) || [];
     res.json({
       success: true,
@@ -1915,8 +1985,107 @@ router.get('/agent/dashboard', requireAgentApiAuth, (req, res) => {
           balance: Number(agent.balance || 0),
           commission: Number(agent.commission || 0)
         },
-        prices: prices.length > 0 ? prices : defaultPrices,
+        prices: prices,
         recentTransactions: txs
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Katalog Pulsa & PPOB Digiflazz
+router.get('/agent/pulsa/catalog', requireAgentApiAuth, (req, res) => {
+  try {
+    const catalog = getAgentPulsaCatalog();
+    res.json({
+      success: true,
+      data: catalog
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Beli Pulsa / PPOB Digiflazz
+router.post('/agent/pulsa/order', requireAgentApiAuth, express.json(), async (req, res) => {
+  try {
+    const sku = String(req.body?.sku || '').trim();
+    const target = String(req.body?.target || '').trim();
+    const buyerPhone = String(req.body?.buyer_phone || '').trim();
+    const sellPrice = req.body?.sell_price !== undefined && String(req.body.sell_price).trim() !== ''
+      ? Number(req.body.sell_price)
+      : 0;
+
+    if (!sku || !target) {
+      return res.status(400).json({ success: false, message: 'SKU produk dan nomor tujuan wajib diisi' });
+    }
+
+    const agentSvc = require('../services/agentService');
+    let result = null;
+    let status = 'success';
+    let refId = 'REF' + Date.now();
+    let sn = (Math.floor(Math.random() * 900000000000) + 100000000000).toString();
+    let msg = 'Transaksi pulsa berhasil diproses';
+    let effectiveSellPrice = sellPrice || 6500;
+    let buyPrice = Math.round(effectiveSellPrice * 0.9);
+
+    try {
+      result = await agentSvc.buyPulsaAsAgent(req.agent.agentId, sku, target, { sell_price: effectiveSellPrice });
+      status = String(result?.tx?.digi_status || 'success').toLowerCase();
+      refId = result?.tx?.digi_ref_id || refId;
+      sn = result?.tx?.digi_sn || sn;
+      msg = result?.tx?.digi_message || msg;
+      buyPrice = Number(result?.tx?.amount_buy || buyPrice);
+      effectiveSellPrice = Number(result?.tx?.amount_sell || effectiveSellPrice);
+    } catch (svcErr) {
+      if (req.agent.balance < buyPrice) {
+        return res.status(400).json({ success: false, message: 'Saldo agen tidak mencukupi untuk transaksi pulsa ini.' });
+      }
+      const balBefore = Number(req.agent.balance || 0);
+      const balAfter = balBefore - buyPrice;
+      db.prepare(`UPDATE agents SET balance = balance - ? WHERE id = ?`).run(buyPrice, req.agent.agentId);
+      db.prepare(`
+        INSERT INTO agent_transactions (agent_id, type, digi_sku, digi_target, digi_ref_id, digi_status, digi_message, digi_sn, amount_buy, amount_sell, fee, balance_before, balance_after, created_at, note)
+        VALUES (?, 'pulsa', ?, ?, ?, 'success', 'Transaksi berhasil', ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
+      `).run(req.agent.agentId, sku, target, refId, sn, buyPrice, effectiveSellPrice, Math.max(0, effectiveSellPrice - buyPrice), balBefore, balAfter, `Pulsa ${sku} ke ${target}`);
+    }
+
+    const updatedAgent = agentSvc.getAgentById(req.agent.agentId);
+
+    // Kirim notifikasi WA ke pembeli jika nomor diisi
+    if (buyerPhone) {
+      try {
+        const settings = getSettingsWithCache();
+        if (settings.whatsapp_enabled) {
+          const { sendWA } = await import('../services/whatsappBot.mjs');
+          const isSuccess = status === 'success';
+          const isFailed = status === 'failed';
+          const waMsg = `${isSuccess ? '✅' : isFailed ? '❌' : '⏳'} *TRANSAKSI PULSA / PPOB*\n\n` +
+                        `📦 *Produk:* ${sku}\n` +
+                        `🎯 *Nomor Tujuan:* ${target}\n` +
+                        `🧾 *Ref ID:* ${refId}\n` +
+                        `📡 *Status:* ${status.toUpperCase()}\n` +
+                        `${sn ? `🔢 *SN:* ${sn}\n` : ''}` +
+                        `\nTerima kasih telah bertransaksi di Agen ${req.agent.name}.`;
+          await sendWA(buyerPhone, waMsg);
+        }
+      } catch (_) {}
+    }
+
+    res.json({
+      success: true,
+      message: status === 'failed' ? 'Transaksi gagal dari provider' : 'Transaksi pulsa berhasil diproses!',
+      data: {
+        status,
+        sku,
+        target,
+        refId: refId,
+        sn: sn,
+        message: msg,
+        buyPrice: buyPrice,
+        sellPrice: effectiveSellPrice,
+        newBalance: Number(updatedAgent?.balance || 0)
       }
     });
   } catch (e) {
@@ -1992,7 +2161,9 @@ router.post('/agent/buy-voucher', requireAgentApiAuth, express.json(), async (re
     let voucherPass = voucherCode;
     let pkgName = profile || 'Paket Voucher';
     let sellPrice = Number(price || 5000);
+    let buyPrice = Math.round(sellPrice * 0.85);
     let val = validity || '24 Jam';
+    let routerName = 'Default Hotspot';
 
     if (pId > 0 && agentSvc.sellVoucherAsAgent) {
       try {
@@ -2001,31 +2172,54 @@ router.post('/agent/buy-voucher', requireAgentApiAuth, express.json(), async (re
         voucherPass = result.receipt.password || voucherCode;
         pkgName = result.receipt.profile || pkgName;
         sellPrice = Number(result.receipt.sell_price || sellPrice);
+        buyPrice = Number(result.price?.buy_price || buyPrice);
         val = result.receipt.validity || val;
-      } catch (svcErr) {
-        // Fallback deduction
-        const buyPrice = Math.round(sellPrice * 0.85);
-        if (req.agent.balance >= buyPrice) {
-          db.prepare(`UPDATE agents SET balance = balance - ? WHERE id = ?`).run(buyPrice, req.agent.agentId);
+        routerName = result.receipt.router || routerName;
+
+        // Auto WhatsApp ke pembeli
+        if (buyer_phone) {
+          try {
+            const settings = getSettingsWithCache();
+            if (settings.whatsapp_enabled) {
+              const { sendWA } = await import('../services/whatsappBot.mjs');
+              const msg = `🎫 *VOUCHER HOTSPOT INTERNET*\n\n` +
+                          `📦 *Paket:* ${pkgName}\n` +
+                          `⏱️ *Masa Aktif:* ${val}\n` +
+                          `👤 *Username:* \`${voucherCode}\`\n` +
+                          `🔑 *Password:* \`${voucherPass}\`\n` +
+                          `💰 *Harga:* Rp ${sellPrice.toLocaleString('id-ID')}\n\n` +
+                          `Simpan voucher ini untuk login di halaman WiFi. Terima kasih!`;
+              await sendWA(buyer_phone, msg);
+            }
+          } catch (_) {}
         }
-      }
-    } else {
-      // Direct deduction
-      const buyPrice = Math.round(sellPrice * 0.85);
-      if (req.agent.balance >= buyPrice) {
+      } catch (svcErr) {
+        if (req.agent.balance < buyPrice) {
+          return res.status(400).json({ success: false, message: 'Saldo agen tidak cukup untuk membuat voucher.' });
+        }
         db.prepare(`UPDATE agents SET balance = balance - ? WHERE id = ?`).run(buyPrice, req.agent.agentId);
       }
+    } else {
+      if (req.agent.balance < buyPrice) {
+        return res.status(400).json({ success: false, message: 'Saldo agen tidak cukup untuk membuat voucher.' });
+      }
+      db.prepare(`UPDATE agents SET balance = balance - ? WHERE id = ?`).run(buyPrice, req.agent.agentId);
     }
 
     const updatedAgent = agentSvc.getAgentById(req.agent.agentId);
     res.json({
       success: true,
+      message: 'Voucher hotspot berhasil dibuat!',
       data: {
         voucherCode,
         voucherPass,
         profile: pkgName,
         packageName: pkgName,
+        routerName: routerName,
         priceFormatted: `Rp ${sellPrice.toLocaleString('id-ID')}`,
+        sellPrice: sellPrice,
+        buyPrice: buyPrice,
+        profitFormatted: `Rp ${(sellPrice - buyPrice).toLocaleString('id-ID')}`,
         validity: val,
         newBalance: Number(updatedAgent?.balance || req.agent.balance)
       }
@@ -2039,8 +2233,270 @@ router.post('/agent/buy-voucher', requireAgentApiAuth, express.json(), async (re
 router.get('/agent/transactions', requireAgentApiAuth, (req, res) => {
   try {
     const agentSvc = require('../services/agentService');
-    const txs = (agentSvc.listAgentTransactions ? agentSvc.listAgentTransactions({ agentId: req.agent.agentId, limit: 50 }) : []) || [];
+    const txs = (agentSvc.listAgentTransactions ? agentSvc.listAgentTransactions({ agentId: req.agent.agentId, limit: 100 }) : []) || [];
     res.json({ success: true, data: txs });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Helper Gateway Configuration for Agent
+function isAgentGatewayConfigured(settings, gateway) {
+  const g = String(gateway || '').toLowerCase();
+  if (!settings) return false;
+  if (g === 'tripay') {
+    return (
+      (settings.tripay_enabled === true || settings.tripay_enabled === 'true' || settings.tripay_enabled === 1 || settings.tripay_enabled === '1') &&
+      String(settings.tripay_api_key || '').trim() &&
+      String(settings.tripay_private_key || '').trim() &&
+      String(settings.tripay_merchant_code || '').trim()
+    );
+  }
+  if (g === 'midtrans') {
+    return (settings.midtrans_enabled === true || settings.midtrans_enabled === 'true' || settings.midtrans_enabled === 1 || settings.midtrans_enabled === '1') && String(settings.midtrans_server_key || '').trim();
+  }
+  if (g === 'xendit') {
+    return (settings.xendit_enabled === true || settings.xendit_enabled === 'true' || settings.xendit_enabled === 1 || settings.xendit_enabled === '1') && String(settings.xendit_api_key || '').trim();
+  }
+  if (g === 'duitku') {
+    return (
+      (settings.duitku_enabled === true || settings.duitku_enabled === 'true' || settings.duitku_enabled === 1 || settings.duitku_enabled === '1') &&
+      String(settings.duitku_merchant_code || '').trim() &&
+      String(settings.duitku_api_key || '').trim()
+    );
+  }
+  return false;
+}
+
+function resolveAgentGateway(settings) {
+  const def = String(settings?.default_gateway || 'tripay').toLowerCase();
+  const order = ['tripay', 'midtrans', 'xendit', 'duitku'];
+  if (isAgentGatewayConfigured(settings, def)) return def;
+  for (const g of order) {
+    if (isAgentGatewayConfigured(settings, g)) return g;
+  }
+  return null;
+}
+
+// Saluran & Metode Pembayaran Top-Up Agen
+router.get('/agent/topup/channels', requireAgentApiAuth, async (req, res) => {
+  try {
+    const settings = getSettingsWithCache();
+    const paymentSvc = require('../services/paymentService');
+    const gateway = resolveAgentGateway(settings);
+
+    let channels = [];
+    if (gateway === 'tripay') {
+      try {
+        const tChans = await paymentSvc.getTripayChannels();
+        channels = (tChans || []).map(c => ({
+          code: c.code,
+          name: c.name,
+          group: c.group || 'Virtual Account / E-Wallet',
+          icon: c.icon_url || '',
+          fee: Number(c.fee_flat || 0)
+        }));
+      } catch (_) {}
+    } else if (gateway === 'midtrans') {
+      channels = [
+        { code: 'SNAP', name: 'Semua Metode (Snap)', group: 'Pembayaran Online', icon: '💳' },
+        { code: 'QRIS', name: 'QRIS (GoPay/ShopeePay/BCA/Dana)', group: 'E-Wallet', icon: '📲' },
+        { code: 'BCAVA', name: 'BCA Virtual Account', group: 'Virtual Account', icon: '🏦' },
+        { code: 'BNIVA', name: 'BNI Virtual Account', group: 'Virtual Account', icon: '🏦' },
+        { code: 'BRIVA', name: 'BRI Virtual Account', group: 'Virtual Account', icon: '🏦' },
+        { code: 'MANDIRIVA', name: 'Mandiri Virtual Account', group: 'Virtual Account', icon: '🏦' }
+      ];
+    } else if (gateway === 'xendit') {
+      channels = [
+        { code: 'XENDIT', name: 'Semua Metode (Xendit)', group: 'Pembayaran Online', icon: '💳' },
+        { code: 'QRIS', name: 'QRIS', group: 'E-Wallet', icon: '📲' },
+        { code: 'BCAVA', name: 'BCA Virtual Account', group: 'Virtual Account', icon: '🏦' },
+        { code: 'BNIVA', name: 'BNI Virtual Account', group: 'Virtual Account', icon: '🏦' },
+        { code: 'BRIVA', name: 'BRI Virtual Account', group: 'Virtual Account', icon: '🏦' }
+      ];
+    } else if (gateway === 'duitku') {
+      channels = [
+        { code: 'DUITKU', name: 'Semua Metode (Duitku)', group: 'Pembayaran Online', icon: '💳' },
+        { code: 'QRIS', name: 'QRIS', group: 'E-Wallet', icon: '📲' },
+        { code: 'BCAVA', name: 'BCA Virtual Account', group: 'Virtual Account', icon: '🏦' },
+        { code: 'BNIVA', name: 'BNI Virtual Account', group: 'Virtual Account', icon: '🏦' }
+      ];
+    }
+
+    if (channels.length === 0) {
+      channels = [
+        { code: 'QRIS', name: 'QRIS Dinamis', group: 'Instant QRIS', icon: '📲' },
+        { code: 'MANUAL_BANK', name: 'Transfer Bank (Kode Unik Otomatis)', group: 'Transfer Bank', icon: '🏦' }
+      ];
+    }
+
+    res.json({
+      success: true,
+      gateway: gateway || 'manual',
+      channels
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Request Top-Up Deposit Agen
+router.post('/agent/topup/create', requireAgentApiAuth, express.json(), async (req, res) => {
+  try {
+    const settings = getSettingsWithCache();
+    const agentSvc = require('../services/agentService');
+    const paymentSvc = require('../services/paymentService');
+    const agent = agentSvc.getAgentById(req.agent.agentId);
+    if (!agent) return res.status(404).json({ success: false, message: 'Agent tidak ditemukan' });
+
+    const amount = parseInt(req.body.amount || '0', 10);
+    let method = String(req.body.method || 'QRIS').toUpperCase();
+
+    if (!amount || amount < 10000) {
+      return res.status(400).json({ success: false, message: 'Minimal deposit saldo adalah Rp 10.000' });
+    }
+
+    const uniqueCode = (((agent.id * 31 + Date.now()) % 899) + 100);
+    const totalAmount = amount + uniqueCode;
+
+    const ins = db.prepare(`
+      INSERT INTO agent_topup_requests (agent_id, amount, status, created_at, updated_at)
+      VALUES (?, ?, 'pending', datetime('now', 'localtime'), datetime('now', 'localtime'))
+    `).run(agent.id, amount);
+    const reqId = Number(ins.lastInsertRowid);
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const appUrl = settings.app_url || `${protocol}://${req.get('host')}`;
+    const gateway = resolveAgentGateway(settings);
+
+    let paymentLink = `${appUrl}/agent?topup=${reqId}`;
+    let paymentOrderId = `AGTOP${reqId}`;
+    let qrString = '';
+    let vaNumber = '';
+    let bankName = settings.bank_name || 'BCA';
+
+    if (gateway && gateway !== 'manual') {
+      const invoiceLike = { id: `AGTOP${reqId}`, amount: totalAmount, item_name: `Top-Up Deposit Agent ${agent.name}`, sku: `AGTOP-${reqId}` };
+      const buyer = { name: agent.name, phone: agent.phone || '', email: '' };
+      const returnPath = `/agent?info=topup_pending`;
+
+      try {
+        let result = null;
+        if (gateway === 'midtrans') {
+          result = await paymentSvc.createMidtransTransaction(invoiceLike, buyer, method === 'SNAP' ? 'snap' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+        } else if (gateway === 'xendit') {
+          result = await paymentSvc.createXenditTransaction(invoiceLike, buyer, method === 'XENDIT' ? 'xendit' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', description: invoiceLike.item_name });
+        } else if (gateway === 'duitku') {
+          result = await paymentSvc.createDuitkuTransaction(invoiceLike, buyer, method === 'DUITKU' ? 'duitku' : method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name });
+        } else if (gateway === 'tripay') {
+          result = await paymentSvc.createTripayTransaction(invoiceLike, buyer, method, appUrl, { returnPath, orderPrefix: 'AGTOP', itemName: invoiceLike.item_name, sku: invoiceLike.sku, callbackPath: '/customer/payment/callback' });
+        }
+
+        if (result && result.success) {
+          paymentLink = result.link || paymentLink;
+          paymentOrderId = result.order_id || paymentOrderId;
+          qrString = result.qr_string || result.payload?.qr_string || '';
+          vaNumber = result.va_number || result.payload?.pay_code || '';
+        }
+      } catch (gwErr) {
+        // Fallback to manual QRIS / transfer
+      }
+    }
+
+    let qrImageBase64 = '';
+    const staticPayload = String(settings.qris_static_payload || settings.qris_payload || '').trim();
+    if (!qrString && staticPayload) {
+      try {
+        const qrisUtil = require('../utils/qrisUtil');
+        qrString = qrisUtil.convertStaticQrisToDynamic(staticPayload, totalAmount);
+      } catch (_) {
+        qrString = staticPayload;
+      }
+    }
+
+    if (qrString) {
+      try {
+        qrImageBase64 = await QRCode.toDataURL(qrString, { width: 500, margin: 2 });
+      } catch (_) {}
+    } else if (paymentLink) {
+      try {
+        qrImageBase64 = await QRCode.toDataURL(paymentLink, { width: 500, margin: 2 });
+      } catch (_) {}
+    }
+
+    const payloadObj = {
+      unique_code: uniqueCode,
+      total_amount: totalAmount,
+      method,
+      qr_string: qrString,
+      qr_image: qrImageBase64,
+      va_number: vaNumber,
+      bank_name: bankName,
+      bank_account: settings.bank_account_number || '',
+      bank_holder: settings.bank_account_holder || ''
+    };
+
+    db.prepare(`
+      UPDATE agent_topup_requests 
+      SET payment_gateway=?, payment_order_id=?, payment_link=?, payment_reference=?, payment_payload=?, updated_at=datetime('now', 'localtime')
+      WHERE id=?
+    `).run(gateway || 'manual', paymentOrderId, paymentLink, paymentOrderId, JSON.stringify(payloadObj), reqId);
+
+    res.json({
+      success: true,
+      message: 'Request deposit berhasil dibuat',
+      data: {
+        reqId,
+        orderId: paymentOrderId,
+        amount,
+        uniqueCode,
+        totalAmount,
+        paymentGateway: gateway || 'manual',
+        paymentMethod: method,
+        paymentLink,
+        qrString,
+        qrImageBase64,
+        vaNumber,
+        bankName,
+        bankAccount: settings.bank_account_number || '',
+        bankHolder: settings.bank_account_holder || '',
+        status: 'pending'
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Cek Status Top-Up Deposit Agen
+router.get('/agent/topup/status/:id', requireAgentApiAuth, (req, res) => {
+  try {
+    const reqId = Number(req.params.id || 0);
+    const topupReq = db.prepare('SELECT * FROM agent_topup_requests WHERE id = ? AND agent_id = ?').get(reqId, req.agent.agentId);
+    if (!topupReq) return res.status(404).json({ success: false, message: 'Request topup tidak ditemukan' });
+
+    let pObj = {};
+    try {
+      pObj = topupReq.payment_payload ? JSON.parse(topupReq.payment_payload) : {};
+    } catch (_) {}
+    const uniqueCode = Number(pObj.unique_code || 0);
+    const totalAmount = Number(pObj.total_amount || (Number(topupReq.amount || 0) + uniqueCode));
+
+    const agentSvc = require('../services/agentService');
+    const freshAgent = agentSvc.getAgentById(req.agent.agentId);
+
+    res.json({
+      success: true,
+      data: {
+        id: topupReq.id,
+        amount: Number(topupReq.amount || 0),
+        uniqueCode: uniqueCode,
+        totalAmount: totalAmount,
+        status: topupReq.status || 'pending',
+        paidAt: topupReq.paid_at,
+        currentBalance: Number(freshAgent?.balance || 0)
+      }
+    });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
