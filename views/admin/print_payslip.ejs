@@ -26,15 +26,19 @@
     .status-draft{background:#eee;color:#666}
     .status-approved{background:#dbeafe;color:#2563eb}
     .status-paid{background:#dcfce7;color:#16a34a}
-    @media print{body{padding:0}.slip{border:none;max-width:100%}@page{margin:15mm}}
-    .no-print{margin:20px auto;max-width:600px;text-align:center}
-    @media print{.no-print{display:none}}
+    @media print{
+      @page{size:A4 portrait;margin:10mm 15mm}
+      body{padding:0;background:#fff !important;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
+      .slip{border:1.5px solid #333 !important;max-width:100% !important;padding:20px !important;border-radius:6px}
+      .no-print{display:none !important}
+    }
+    .no-print{margin:20px auto;max-width:600px;text-align:center;display:flex;justify-content:center;gap:10px}
   </style>
 </head>
 <body>
 <div class="no-print">
   <button onclick="window.print()" style="padding:10px 24px;background:#6366f1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">🖨️ Cetak Slip Gaji</button>
-  <button onclick="window.close()" style="padding:10px 24px;background:#666;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-left:8px">Tutup</button>
+  <button onclick="window.close()" style="padding:10px 24px;background:#666;color:#fff;border:none;border-radius:8px;cursor:pointer">✕ Tutup</button>
 </div>
 
 <div class="slip">
@@ -91,9 +95,19 @@
     </div>
   </div>
 
-  <div style="text-align:center;margin-top:16px;font-size:10px;color:#aaa">
+  <div style="text-align:center;margin-top:16px;font-size:10px;color:#888">
     Dicetak: <%= getNowLocal() %> — Slip ID: #<%= slip.id %>
   </div>
 </div>
+
+<script>
+  window.onload = function() {
+    setTimeout(function() {
+      if (!window.location.search.includes('noprint')) {
+        window.print();
+      }
+    }, 400);
+  };
+</script>
 </body>
 </html>

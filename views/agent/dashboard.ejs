@@ -674,6 +674,112 @@
       </div>
     </div>
 
+    <% if (typeof activeTopup !== 'undefined' && activeTopup) { %>
+      <% 
+        const pObj = activeTopup.payloadObj || {};
+        const topupUniqueCode = Number(pObj.unique_code || 0);
+        const topupTotalAmount = Number(pObj.total_amount || activeTopup.amount);
+        const topupQrImage = pObj.qr_image || '';
+        const topupVaNumber = pObj.va_number || '';
+        const topupBankName = pObj.bank_name || settings?.bank_name || 'BCA';
+        const topupBankAccount = pObj.bank_account || settings?.bank_account_number || '';
+        const topupBankHolder = pObj.bank_holder || settings?.bank_account_holder || '';
+        const topupPayLink = activeTopup.payment_link || '';
+      %>
+      <div class="modal fade show" id="modalTopupCheckout" tabindex="-1" style="display:block;background:rgba(0,0,0,0.75);z-index:9999" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+          <div class="modal-content" style="background:#0f172a;border:1px solid rgba(99,102,241,0.3);border-radius:20px;color:#fff;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.7)">
+            <div class="modal-header" style="border-bottom:1px solid rgba(255,255,255,0.08);padding:16px 20px">
+              <h6 class="modal-title d-flex align-items-center gap-2" style="font-weight:700;font-size:15px;color:#f8fafc">
+                <i class="bi bi-qr-code-scan text-primary"></i> Pembayaran Deposit Saldo
+              </h6>
+              <a href="/agent" class="btn-close btn-close-white" style="font-size:12px"></a>
+            </div>
+            <div class="modal-body text-center" style="padding:24px 20px">
+              <% if (topupQrImage) { %>
+                <div style="background:#fff;padding:14px;border-radius:16px;display:inline-block;margin-bottom:16px;box-shadow:0 10px 25px rgba(0,0,0,0.3)">
+                  <img src="<%= topupQrImage %>" alt="QRIS Dinamis" style="width:220px;height:220px;display:block;object-fit:contain">
+                </div>
+                <div style="font-size:12.5px;color:#94a3b8;margin-bottom:16px">
+                  <i class="bi bi-phone"></i> Pindai QRIS di atas dengan Mobile Banking atau E-Wallet apapun (GoPay, OVO, Dana, ShopeePay, BCA, Livin, dll).
+                </div>
+              <% } %>
+
+              <div style="background:rgba(30,41,59,0.7);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;text-align:left;margin-bottom:16px">
+                <div class="d-flex justify-content-between mb-1" style="font-size:12px;color:#94a3b8">
+                  <span>Nominal Deposit:</span>
+                  <span class="text-white fw-bold">Rp <%= Number(activeTopup.amount || 0).toLocaleString('id-ID') %></span>
+                </div>
+                <% if (topupUniqueCode > 0) { %>
+                  <div class="d-flex justify-content-between mb-1" style="font-size:12px;color:#38bdf8">
+                    <span>Kode Unik:</span>
+                    <span class="fw-bold">+Rp <%= topupUniqueCode %></span>
+                  </div>
+                <% } %>
+                <div class="d-flex justify-content-between pt-2" style="border-top:1px dashed rgba(255,255,255,0.12);font-size:14px">
+                  <span class="fw-bold text-white">TOTAL BAYAR:</span>
+                  <span class="fw-bold text-success" style="font-size:16px">Rp <%= topupTotalAmount.toLocaleString('id-ID') %></span>
+                </div>
+              </div>
+
+              <% if (topupVaNumber) { %>
+                <div style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:12px;padding:12px;margin-bottom:16px;text-align:left">
+                  <div style="font-size:11px;color:#94a3b8">Nomor Virtual Account:</div>
+                  <div class="d-flex justify-content-between align-items-center mt-1">
+                    <span class="fw-bold text-white" style="font-size:16px;letter-spacing:1px"><%= topupVaNumber %></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="navigator.clipboard.writeText('<%= topupVaNumber %>');alert('Nomor VA disalin!')" style="font-size:11px;border-radius:8px">Salin</button>
+                  </div>
+                </div>
+              <% } else if (topupBankAccount) { %>
+                <div style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:12px;padding:12px;margin-bottom:16px;text-align:left">
+                  <div style="font-size:11px;color:#94a3b8">Transfer Bank <%= topupBankName %>:</div>
+                  <div class="d-flex justify-content-between align-items-center mt-1">
+                    <div>
+                      <div class="fw-bold text-white" style="font-size:15px"><%= topupBankAccount %></div>
+                      <div style="font-size:11px;color:#94a3b8">a.n. <%= topupBankHolder %></div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="navigator.clipboard.writeText('<%= topupBankAccount %>');alert('Nomor Rekening disalin!')" style="font-size:11px;border-radius:8px">Salin</button>
+                  </div>
+                </div>
+              <% } %>
+
+              <% if (topupPayLink && !topupQrImage) { %>
+                <a href="<%= topupPayLink %>" target="_blank" class="btn btn-primary w-100 mb-3" style="border-radius:12px;font-weight:600;padding:10px">
+                  <i class="bi bi-box-arrow-up-right me-1"></i> Buka Link Pembayaran Gateway
+                </a>
+              <% } %>
+
+              <div class="d-flex align-items-center justify-content-center gap-2" style="font-size:12px;color:#38bdf8">
+                <span class="spinner-border spinner-border-sm" role="status"></span>
+                <span>Menunggu pembayaran... Saldo otomatis bertambah!</span>
+              </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid rgba(255,255,255,0.08);padding:12px 20px">
+              <a href="/agent" class="btn btn-secondary w-100" style="border-radius:12px;font-size:13px">Tutup</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <script>
+        (function() {
+          const topupId = <%= activeTopup.id %>;
+          let interval = setInterval(async function() {
+            try {
+              const resp = await fetch('/agent/topup/status/' + topupId);
+              const json = await resp.json();
+              if (json && json.success && json.status === 'paid') {
+                clearInterval(interval);
+                const credited = Number(json.totalAmount || json.amount || 0);
+                alert('✅ Pembayaran Berhasil Diterima!\nSaldo deposit Anda telah bertambah Rp ' + credited.toLocaleString('id-ID') + (json.uniqueCode > 0 ? ' (Termasuk Kode Unik +Rp ' + json.uniqueCode.toLocaleString('id-ID') + ')' : ''));
+                window.location.href = '/agent';
+              }
+            } catch (_) {}
+          }, 3000);
+        })();
+      </script>
+    <% } %>
+
     <div class="cardx" id="section-bill">
       <div class="hd">
         <h6><i class="bi bi-receipt"></i> <%= t('agent.pay_invoice', 'Bayar Tagihan') %></h6>

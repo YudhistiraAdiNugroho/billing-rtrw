@@ -32,13 +32,30 @@
       <div class="sc s"><i class="bi bi-check-circle sc-icon"></i><div class="sc-label"><%= t('admin.tickets.status.resolved', 'Selesai') %></div><div class="sc-val"><%= stats.resolved %></div></div>
     </div>
 
+    <!-- Print Header (Only visible on paper print) -->
+    <div class="print-only" style="margin-bottom:14px;border-bottom:2px solid #0f172a;padding-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h2 style="font-size:16pt;font-weight:800;text-transform:uppercase;margin:0"><%= company %></h2>
+          <div style="font-size:10pt;color:#334155"><%= t('admin.nav.customer_tickets', 'Daftar Tiket Gangguan & Tugas Teknisi') %> &bull; Status: <%= filterStatus ? filterStatus.toUpperCase() : 'SEMUA' %></div>
+        </div>
+        <div style="text-align:right;font-size:8.5pt;color:#475569">
+          <div>Dicetak: <%= getNowLocal() %></div>
+          <div>Total Tiket: <strong><%= tickets.length %> Kasus</strong></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Filter -->
     <div class="card">
       <div class="card-hd" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
         <h6><i class="bi bi-list-ul"></i> <%= t('admin.tickets.list_title', 'Daftar Keluhan & Tugas') %> (<%= tickets.length %>)</h6>
-        <button class="btn btn-p btn-sm" onclick="openModal('createTicketModal')">
-          <i class="bi bi-plus-circle me-1"></i> + Buat Tiket / Tugas Baru
-        </button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btn-g btn-sm" onclick="window.print()" title="Cetak Rekap Tiket"><i class="bi bi-printer"></i> Cetak</button>
+          <button class="btn btn-p btn-sm" onclick="openModal('createTicketModal')">
+            <i class="bi bi-plus-circle me-1"></i> + Buat Tiket / Tugas Baru
+          </button>
+        </div>
       </div>
       <div class="card-bd" style="padding-bottom:0">
         <form method="GET" action="/admin/tickets" style="display:flex;gap:10px;margin-bottom:18px">

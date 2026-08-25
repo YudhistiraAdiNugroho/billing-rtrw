@@ -462,17 +462,32 @@
     }
 
     @media print {
+      @page {
+        size: A4 portrait;
+        margin: 8mm 10mm;
+      }
       body {
         background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
       }
       .invoice-wrapper {
         margin: 0 !important;
         box-shadow: none !important;
-        border-radius: 0 !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 6px !important;
         max-width: 100% !important;
         width: 100% !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .invoice-container {
+        padding: 16px 20px !important;
       }
       .print-controls {
+        display: none !important;
+      }
+      button, .btn-action {
         display: none !important;
       }
     }

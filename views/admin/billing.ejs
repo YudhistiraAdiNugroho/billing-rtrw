@@ -66,12 +66,27 @@
       <a href="/admin/billing" class="btn btn-g btn-sm"><i class="bi bi-x"></i> <%= t('common.reset', 'Reset') %></a>
     </form>
 
+    <!-- Print Header (Only visible on paper print) -->
+    <div class="print-only" style="margin-bottom:14px;border-bottom:2px solid #0f172a;padding-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h2 style="font-size:16pt;font-weight:800;text-transform:uppercase;margin:0"><%= company %></h2>
+          <div style="font-size:10pt;color:#334155"><%= t('admin.billing.manage_title', 'Rekapitulasi Tagihan Pelanggan') %> &bull; Periode: <%= filterMonth ? (monthNames[filterMonth-1] + ' ' + filterYear) : ('Tahun ' + filterYear) %></div>
+        </div>
+        <div style="text-align:right;font-size:8.5pt;color:#475569">
+          <div>Dicetak: <%= getNowLocal() %></div>
+          <div>Total Tagihan: <strong><%= invoices.length %> Transaksi</strong></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Table -->
     <div class="card">
       <div class="card-hd">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;width:100%">
           <h6 style="margin:0"><i class="bi bi-list-ul"></i> <%= t('admin.billing.list', 'Daftar Tagihan') %> (<%= invoices.length %>)</h6>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-g btn-sm" onclick="window.print()" title="Cetak Rekap Tagihan"><i class="bi bi-printer"></i> Cetak Rekap</button>
             <span class="text-muted small" id="bulkCount">0 dipilih</span>
             <button type="button" class="btn btn-s btn-sm" id="bulkPayBtn" disabled><i class="bi bi-check-lg"></i> Bayar Massal</button>
             <button type="button" class="btn btn-d btn-sm" id="bulkDeleteBtn" disabled><i class="bi bi-trash"></i> Hapus Massal</button>
