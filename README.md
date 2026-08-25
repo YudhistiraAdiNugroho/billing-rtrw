@@ -224,8 +224,51 @@ Port mengikuti **`server_port`** di `settings.json` (default **3001**). Ganti `[
 | Agen | `http://[IP-SERVER]:3001/agent/login` |
 | Kolektor | `http://[IP-SERVER]:3001/collector/login` |
 | Health check | `http://[IP-SERVER]:3001/health` |
+| **Download APK Android** | `http://[IP-SERVER]:3001/downloads/AlijayaCustomer.apk` |
 
 Kredensial admin **awal** biasanya sesuai `admin_username` / `admin_password` di `settings.json` (contoh bawaan sering `admin` / `admin123`) — **wajib diganti** sebelum dipakai publik.
+
+---
+
+## 📱 Aplikasi Android Native (APK)
+
+Aplikasi Android resmi **Alijaya** adalah aplikasi native multifungsi untuk semua peran (**Pelanggan**, **Agen Mitra**, **Teknisi Lapangan**, **Kolektor**, dan **Admin**) yang terhubung langsung ke backend server billing ini.
+
+### 📥 Download File APK
+1. **Langsung dari Web Server**:
+   Akses link berikut melalui browser di smartphone Anda:
+   ```text
+   http://[IP-SERVER]:3001/downloads/AlijayaCustomer.apk
+   ```
+   *(Ganti `[IP-SERVER]` dan `3001` sesuai IP/Domain dan Port server billing Anda)*.
+2. **File Lokal di Repository**:
+   File APK siap install juga tersedia di root proyek: `AlijayaCustomer.apk` atau `public/downloads/AlijayaCustomer.apk`.
+
+---
+
+### ⚙️ Cara Mengganti Server URL di Aplikasi Android:
+
+Agar aplikasi Android dapat terhubung ke server billing Anda (lokal IP, VPN, atau domain publik):
+
+#### Cara 1: Melalui Halaman Login (Sebelum Masuk)
+1. Buka aplikasi **Alijaya** di smartphone Android.
+2. Pada layar login awal, tap tombol **⚙️ Icon Pengaturan / Server** di pojok kanan atas (atau tombol **Ganti Server**).
+3. Masukkan URL server billing Anda:
+   - **Format**: `http://IP-SERVER:PORT` atau `https://DOMAIN-ANDA.COM`
+   - *Contoh IP Lokal*: `http://192.168.1.100:3001`
+   - *Contoh IP Publik / VPS*: `http://103.150.xxx.xxx:3001`
+   - *Contoh Domain*: `https://billing.myisp.net`
+4. Tap tombol **💾 Simpan & Tes Koneksi**.
+5. Jika server aktif dan terjangkau, aplikasi akan menampilkan pesan *Koneksi Server Berhasil* dan Anda siap login sesuai peran akun Anda.
+
+#### Cara 2: Melalui Menu Pengaturan Setelah Login
+1. Login ke aplikasi (sebagai Agen, Pelanggan, Teknisi, atau Admin).
+2. Buka menu **Profil** atau **Riwayat & Pengaturan**.
+3. Tap menu **⚙️ Setup Server & Printer Bluetooth**.
+4. Ubah **Server Base URL** ke alamat server yang baru, lalu tap **Simpan**.
+
+#### 🖨️ Pengaturan Printer Thermal Bluetooth (58mm / 80mm):
+Di menu **Setup Server & Printer Bluetooth**, Anda juga dapat menghubungkan printer thermal Bluetooth untuk cetak struk voucher hotspot, struk token/pulsa PPOB, dan bukti pelunasan tagihan secara nirkabel.
 
 ---
 
@@ -313,4 +356,3 @@ Managed by [Ali Jaya Net](https://github.com/alijayanet)
 ## Info & donasi
 
 081947215703 — https://wa.me/6281947215703
-https://app.alijaya.com/donasi
