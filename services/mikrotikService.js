@@ -267,7 +267,7 @@ async function getConnection(routerId = null) {
     const router = db.prepare('SELECT * FROM routers WHERE id = ?').get(routerId);
     if (!router) throw new Error(`Router with ID ${routerId} not found`);
     host = router.host;
-    port = router.port || 8728;
+    port = router.port || 8724;
     user = router.user;
     password = router.password;
   } else {
