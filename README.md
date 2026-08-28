@@ -354,5 +354,3 @@ Dibuat untuk operasional ISP lokal & RTRW-Net.
 Managed by [Yudhistira Adi Nugroho](https://github.com/YudhistiraAdiNugroho)
 
 ## Info & donasi
-
-081947215703 — https://wa.me/6281947215703

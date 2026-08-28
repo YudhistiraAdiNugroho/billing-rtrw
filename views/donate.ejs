@@ -489,7 +489,7 @@
     async function generateQris() {
       if (isPaid) return;
       const amt = parseInt(document.getElementById('inputAmount').value, 10) || 50000;
-      const phone = document.getElementById('inputPhone').value.trim() || '081947215703';
+      const phone = document.getElementById('inputPhone').value.trim();
       const name = document.getElementById('inputName').value.trim() || 'Hamba Allah';
       const notes = document.getElementById('inputNotes').value.trim();
 

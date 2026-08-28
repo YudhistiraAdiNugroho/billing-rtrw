@@ -47,8 +47,6 @@ function testIsAdminNumber(number) {
 
 // Test beberapa nomor
 const testNumbers = [
-    '6281947215703',
-    '081947215703',
     '083807665697',
     '082218094778',
     '081234567890' // Nomor test yang bukan admin
