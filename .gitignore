@@ -3,3 +3,22 @@ node_modules/
 logs/
 database/*.db-shm
 database/*.db-wal
+
+# Local configuration
+settings.json
+
+# Local databases
+database.sqlite
+database/*.db
+
+# User-uploaded files
+public/uploads/
+
+# WhatsApp runtime mapping
+data/wa-lid-map.json
+
+# Environment files
+.env
+.env.*
+!.env.example
+settings.json
