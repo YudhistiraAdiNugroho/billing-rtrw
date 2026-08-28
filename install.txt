@@ -1,0 +1,25 @@
+cp settings.example.json settings.json
+edit:
+nano settings.json
+
+
+Jalankan:
+pm2 start app-customer.js --name app-customer
+Cek:
+pm2 status
+Lihat log:
+pm2 logs app-customer
+Simpan konfigurasi PM2:
+pm2 save
+Agar otomatis aktif setelah reboot:
+pm2 startup
+Ikuti perintah yang diberikan PM2.
+Kemudian:
+pm2 save
+
+
+Update manual:
+cd ~/billing-rtrw
+git pull origin main
+Kemudian:
+pm2 reload app-customer
