@@ -58,13 +58,51 @@ else
   echo -e "${GREEN}[OK]${NC} package.json tidak berubah. Melewati 'npm install' (Sangat Hemat CPU & Hemat Waktu!)."
 fi
 
-# 5. Reload aplikasi secara halus (Graceful Reload)
-echo -e "${BLUE}[INFO]${NC} Menerapkan pembaruan via PM2..."
-pm2 reload app-customer 2>/dev/null || pm2 restart app-customer
-echo -e "${GREEN}[OK]${NC} Aplikasi berhasil diperbarui."
+# 5. Restart aplikasi sesuai runtime
+echo -e "${BLUE}[INFO]${NC} Mendeteksi cara aplikasi dijalankan..."
 
-# Tampilkan status PM2
-pm2 status app-customer 2>/dev/null || true
+# PM2
+if command -v pm2 >/dev/null 2>&1 && pm2 describe app-customer >/dev/null 2>&1; then
+  echo -e "${BLUE}[INFO]${NC} PM2 terdeteksi. Melakukan graceful reload..."
+  pm2 reload app-customer
+  echo -e "${GREEN}[OK]${NC} Aplikasi berhasil di-reload via PM2."
+
+# systemd
+elif systemctl list-unit-files 2>/dev/null | grep -q "^billing-rtrw.service"; then
+  echo -e "${BLUE}[INFO]${NC} Systemd billing-rtrw terdeteksi."
+  systemctl restart billing-rtrw.service
+  echo -e "${GREEN}[OK]${NC} Aplikasi berhasil direstart via systemd."
+
+# Node manual
+else
+  echo -e "${YELLOW}[INFO]${NC} PM2/systemd tidak ditemukan. Menggunakan Node.js manual..."
+
+  PIDS=$(pgrep -f "[n]ode app-customer.js" || true)
+
+  if [ -n "$PIDS" ]; then
+    echo "PID aplikasi: $PIDS"
+    kill $PIDS 2>/dev/null || true
+    sleep 2
+
+    PIDS_LEFT=$(pgrep -f "[n]ode app-customer.js" || true)
+    if [ -n "$PIDS_LEFT" ]; then
+      kill -9 $PIDS_LEFT 2>/dev/null || true
+      sleep 1
+    fi
+  fi
+
+  nohup node app-customer.js > "$SCRIPT_DIR/app.log" 2>&1 &
+  NEW_PID=$!
+  sleep 2
+
+  if kill -0 "$NEW_PID" 2>/dev/null; then
+    echo -e "${GREEN}[OK]${NC} Aplikasi berhasil berjalan. PID: $NEW_PID"
+  else
+    echo -e "${RED}[ERROR]${NC} Aplikasi gagal start."
+    tail -50 "$SCRIPT_DIR/app.log"
+    exit 1
+  fi
+fi
 
 echo ""
 echo -e "${GREEN}${BOLD}Update Ringan Selesai!${NC}"
