@@ -2453,7 +2453,7 @@ router.get('/billing/:id/print', requireAdminSession, (req, res) => {
   res.render('admin/print_invoice', {
     invoice: inv,
     customer,
-    company: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
+    company: settings.company_header || 'YUDHISTIRA ADI NUGROHO',
     settings
   });
 });
@@ -2469,7 +2469,7 @@ router.get('/billing/:id/print-thermal', requireAdminSession, (req, res) => {
   res.render('collector/print_thermal', {
     invoice: inv,
     customer,
-    company: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
+    company: settings.company_header || 'YUDHISTIRA ADI NUGROHO',
     settings,
     collectorName: req.session.adminUsername || 'Admin',
     formatDateLocal,
@@ -2521,7 +2521,7 @@ router.post('/billing/:id/send-pdf-wa', requireAdminSession, async (req, res) =>
     const filename = `Invoice_${inv.id}_${safeName}.pdf`;
     const statusText = inv.status === 'paid' ? 'LUNAS' : 'BELUM BAYAR';
     
-    const caption = `📄 *INVOICE PEMBAYARAN INTERNET*\n\nYth. *${customer.name}*,\nBerikut kami lampirkan dokumen resmi Invoice Pembayaran Internet untuk periode *${periodStr}*.\n\n💰 *Total Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n📌 *Status:* *${statusText}*\n\nTerima kasih telah menggunakan layanan *${settings.company_header || 'ALIJAYA NET'}*!`;
+    const caption = `📄 *INVOICE PEMBAYARAN INTERNET*\n\nYth. *${customer.name}*,\nBerikut kami lampirkan dokumen resmi Invoice Pembayaran Internet untuk periode *${periodStr}*.\n\n💰 *Total Tagihan:* Rp ${Number(inv.amount || 0).toLocaleString('id-ID')}\n📌 *Status:* *${statusText}*\n\nTerima kasih telah menggunakan layanan *${settings.company_header || 'YUDHISTIRA ADI NUGROHO'}*!`;
 
     const { sendWADocument, whatsappStatus } = await import('../services/whatsappBot.mjs');
     if (whatsappStatus.connection !== 'open') {
@@ -5983,7 +5983,7 @@ router.post('/whatsapp/test-notification', requireAdminSession, async (req, res)
     logger.info(`[WA Test] Mengirim test notifikasi ke nomor admin: ${adminPhone}`);
     const msg =
       `🧪 *TEST NOTIFIKASI WHATSAPP*\n\n` +
-      `✅ Jika pesan ini masuk, berarti notifikasi WhatsApp dari Billing Alijaya System sudah berfungsi.\n` +
+      `✅ Jika pesan ini masuk, berarti notifikasi WhatsApp dari Billing Yudhistira System sudah berfungsi.\n` +
       `📅 Waktu: ${getNowLocal()}`;
     const ok = await sendWA(adminPhone, msg);
     if (!ok) throw new Error('Gagal mengirim pesan test (sendWA=false).');

@@ -744,7 +744,7 @@ function initTelegram() {
         amount: targetInv.amount,
         paymentMethod: 'Telegram Admin / Kasir',
         paidAt: new Date(),
-        companyName: getSetting('company_header', 'ALIJAYA NET'),
+        companyName: getSetting('company_header', 'YUDHISTIRA ADI NUGROHO'),
         companyPhone: getSetting('company_phone', ''),
         portalUrl,
         customTemplate: template

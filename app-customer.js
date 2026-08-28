@@ -520,7 +520,7 @@ async function trySendWaPaymentSuccess(settings, invoiceId, methodLabel) {
       amount: inv.amount,
       paymentMethod: metode,
       paidAt: inv.paid_at || new Date(),
-      companyName: settings.company_header || 'ALIJAYA NET',
+      companyName: settings.company_header || 'YUDHISTIRA ADI NUGROHO',
       companyPhone: settings.company_phone || '',
       portalUrl,
       customTemplate: template
@@ -627,7 +627,7 @@ ${sidebarSettingsLink}
 
 Dukungan Anda sangat berarti bagi pengembangan aplikasi Billing RTRW & RADIUS. Semoga rezeki Anda dilipatgandakan dan berkah selalu. Aamiin! 🤲
 
-🏢 *${settings.company_header || 'ALIJAYA NET'}*`;
+🏢 *${settings.company_header || 'YUDHISTIRA ADI NUGROHO'}*`;
 
   try {
     const whatsappSvc = require('./services/whatsappService');
@@ -1227,9 +1227,9 @@ app.get('/admin/manifest.webmanifest', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Route download APK Android Pelanggan
-app.get(['/download/app', '/download/apk', '/downloads/AlijayaCustomer.apk', '/download/AlijayaCustomer.apk'], (req, res) => {
-  const apkPath = path.join(__dirname, 'public', 'downloads', 'AlijayaCustomer.apk');
-  const fallbackPath = path.join(__dirname, 'AlijayaCustomer.apk');
+app.get(['/download/app', '/download/apk', '/downloads/YudhistiraCustomer.apk', '/download/YudhistiraCustomer.apk'], (req, res) => {
+  const apkPath = path.join(__dirname, 'public', 'downloads', 'YudhistiraCustomer.apk');
+  const fallbackPath = path.join(__dirname, 'YudhistiraCustomer.apk');
 
   let targetPath = null;
   if (fs.existsSync(apkPath)) {
@@ -1240,12 +1240,12 @@ app.get(['/download/app', '/download/apk', '/downloads/AlijayaCustomer.apk', '/d
 
   if (targetPath) {
     res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    return res.download(targetPath, 'AlijayaCustomer.apk');
+    return res.download(targetPath, 'YudhistiraCustomer.apk');
   }
 
   return res.status(404).json({
     success: false,
-    message: 'File APK belum di-upload ke server VPS. Silakan upload file AlijayaCustomer.apk ke folder public/downloads/ di server.'
+    message: 'File APK belum di-upload ke server VPS. Silakan upload file YudhistiraCustomer.apk ke folder public/downloads/ di server.'
   });
 });
 

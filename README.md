@@ -4,8 +4,8 @@
 
 Sistem manajemen ISP yang mengintegrasikan **penagihan**, **GenieACS**, **OLT (SNMP)**, **MikroTik** (PPPoE/hotspot/voucher), **peta jaringan (GIS)**, **inventaris**, **WhatsApp/Telegram**, dan **multi-portal** (admin, teknisi, pelanggan, agen) dalam satu platform.
 
-[![GitHub license](https://img.shields.io/github/license/alijayanet/billing-rtrw)](https://github.com/YudhistiraAdiNugroho/billing-rtrw/blob/main/LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/alijayanet/billing-rtrw)](https://github.com/YudhistiraAdiNugroho/billing-rtrw/stargazers)
+[![GitHub license](https://img.shields.io/github/license/yudhistiranet/billing-rtrw)](https://github.com/YudhistiraAdiNugroho/billing-rtrw/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/yudhistiranet/billing-rtrw)](https://github.com/YudhistiraAdiNugroho/billing-rtrw/stargazers)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
 
 ---
@@ -224,7 +224,7 @@ Port mengikuti **`server_port`** di `settings.json` (default **3001**). Ganti `[
 | Agen | `http://[IP-SERVER]:3001/agent/login` |
 | Kolektor | `http://[IP-SERVER]:3001/collector/login` |
 | Health check | `http://[IP-SERVER]:3001/health` |
-| **Download APK Android** | `http://[IP-SERVER]:3001/downloads/AlijayaCustomer.apk` |
+| **Download APK Android** | `http://[IP-SERVER]:3001/downloads/YudhistiraCustomer.apk` |
 
 Kredensial admin **awal** biasanya sesuai `admin_username` / `admin_password` di `settings.json` (contoh bawaan sering `admin` / `admin123`) — **wajib diganti** sebelum dipakai publik.
 
@@ -232,17 +232,17 @@ Kredensial admin **awal** biasanya sesuai `admin_username` / `admin_password` di
 
 ## 📱 Aplikasi Android Native (APK)
 
-Aplikasi Android resmi **Alijaya** adalah aplikasi native multifungsi untuk semua peran (**Pelanggan**, **Agen Mitra**, **Teknisi Lapangan**, **Kolektor**, dan **Admin**) yang terhubung langsung ke backend server billing ini.
+Aplikasi Android resmi **Yudhistira** adalah aplikasi native multifungsi untuk semua peran (**Pelanggan**, **Agen Mitra**, **Teknisi Lapangan**, **Kolektor**, dan **Admin**) yang terhubung langsung ke backend server billing ini.
 
 ### 📥 Download File APK
 1. **Langsung dari Web Server**:
    Akses link berikut melalui browser di smartphone Anda:
    ```text
-   https://app.alijaya.com/downloads/AlijayaCustomer.apk
+   https://app.yudhistira.com/downloads/YudhistiraCustomer.apk
    ```
    *(Ganti `[IP-SERVER]` dan `3001` sesuai IP/Domain dan Port server billing Anda)*.
 2. **File Lokal di Repository**:
-   File APK siap install juga tersedia di root proyek: `AlijayaCustomer.apk` atau `public/downloads/AlijayaCustomer.apk`.
+   File APK siap install juga tersedia di root proyek: `YudhistiraCustomer.apk` atau `public/downloads/YudhistiraCustomer.apk`.
 
 ---
 
@@ -251,7 +251,7 @@ Aplikasi Android resmi **Alijaya** adalah aplikasi native multifungsi untuk semu
 Agar aplikasi Android dapat terhubung ke server billing Anda (lokal IP, VPN, atau domain publik):
 
 #### Cara 1: Melalui Halaman Login (Sebelum Masuk)
-1. Buka aplikasi **Alijaya** di smartphone Android.
+1. Buka aplikasi **Yudhistira** di smartphone Android.
 2. Pada layar login awal, tap tombol **⚙️ Icon Pengaturan / Server** di pojok kanan atas (atau tombol **Ganti Server**).
 3. Masukkan URL server billing Anda:
    - **Format**: `http://IP-SERVER:PORT` atau `https://DOMAIN-ANDA.COM`
@@ -351,7 +351,7 @@ Fork, buat branch fitur, lalu kirim Pull Request.
 **ISC** — lihat berkas `LICENSE`.
 
 Dibuat untuk operasional ISP lokal & RTRW-Net.  
-Managed by [Ali Jaya Net](https://github.com/YudhistiraAdiNugroho)
+Managed by [Yudhistira Adi Nugroho](https://github.com/YudhistiraAdiNugroho)
 
 ## Info & donasi
 

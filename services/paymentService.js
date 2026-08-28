@@ -45,7 +45,7 @@ function formatGatewayError(gatewayName, error) {
  */
 function getFallbackEmail(phone) {
   const digits = String(phone || '').replace(/\D/g, '');
-  return `cust${digits || '08123456789'}@alijaya.net`;
+  return `cust${digits || '08123456789'}@yudhistira.net`;
 }
 
 /**

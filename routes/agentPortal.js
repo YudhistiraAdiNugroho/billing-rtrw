@@ -444,7 +444,7 @@ router.post('/pay-invoice', requireAgentSession, express.urlencoded({ extended: 
             amount: result.invoice.amount,
             paymentMethod: `Agen ${result.agent.name}`,
             paidAt: new Date(),
-            companyName: allSettings.company_header || 'ALIJAYA NET',
+            companyName: allSettings.company_header || 'YUDHISTIRA ADI NUGROHO',
             companyPhone: allSettings.company_phone || '',
             portalUrl,
             customTemplate: template

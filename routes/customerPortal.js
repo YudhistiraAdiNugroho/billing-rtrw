@@ -2374,7 +2374,7 @@ router.get('/invoice/:id/print', async (req, res) => {
     return res.render('admin/print_invoice', {
       invoice: inv,
       customer,
-      company: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
+      company: settings.company_header || 'YUDHISTIRA ADI NUGROHO',
       settings,
       lang: 'id',
       t: (key, def) => def || key,
@@ -2405,7 +2405,7 @@ router.get('/invoice/:id/print-thermal', async (req, res) => {
     return res.render('collector/print_thermal', {
       invoice: inv,
       customer,
-      company: settings.company_header || 'ALIJAYA DIGITAL NETWORK',
+      company: settings.company_header || 'YUDHISTIRA ADI NUGROHO',
       settings,
       collectorName: 'Portal Pelanggan',
       formatDateLocal,
@@ -3426,7 +3426,7 @@ router.post('/payment/callback', express.json({
             amount: checkInv.amount,
             paymentMethod: gateway || 'Online Gateway',
             paidAt: checkInv.paid_at || new Date(),
-            companyName: settings.company_header || 'ALIJAYA NET',
+            companyName: settings.company_header || 'YUDHISTIRA ADI NUGROHO',
             companyPhone: settings.company_phone || '',
             portalUrl,
             customTemplate: template

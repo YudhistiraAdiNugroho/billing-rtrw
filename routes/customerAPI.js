@@ -36,7 +36,7 @@ function b64urlDecodeToString(input) {
 
 function getApiSecret() {
   const settings = getSettingsWithCache();
-  return settings.session_secret || 'rahasia-api-pelanggan-alijaya-default';
+  return settings.session_secret || 'rahasia-api-pelanggan-yudhistira-default';
 }
 
 function generateCustomerToken(customer) {
@@ -253,8 +253,8 @@ router.get('/app/version', (req, res) => {
     data: {
       versionCode: 2,
       versionName: "1.2.0",
-      downloadUrl: "/downloads/AlijayaCustomer.apk",
-      apkFileName: "AlijayaCustomer.apk",
+      downloadUrl: "/downloads/YudhistiraCustomer.apk",
+      apkFileName: "YudhistiraCustomer.apk",
       releaseNotes: "• Tampilan Barcode QRIS Real-time Dinamis dengan Kode Unik\n• Fitur Pembaruan Otomatis APK Langsung dari Server\n• Peningkatan Responsivitas Navigasi & Formulir Native",
       forceUpdate: false
     }
@@ -437,7 +437,7 @@ router.post('/app/admin/customers/delete', (req, res) => {
 function renderTemplateMessage(template, customer, invoice = null) {
   if (!template) return '';
   const settings = getSettingsWithCache();
-  const comp = settings.company_header || 'ALIJAYA NET';
+  const comp = settings.company_header || 'YUDHISTIRA ADI NUGROHO';
   const base = settings.public_base_url || settings.app_url || `http://localhost:${settings.port || 3001}`;
   const link = `${base}/customer/login?u=${encodeURIComponent(customer.pppoe_username || customer.phone || '')}`;
 
@@ -1246,7 +1246,7 @@ router.get('/config', (req, res) => {
     success: true,
     data: {
       appName: settings.company_header || 'ISP Billing',
-      companyHeader: settings.company_header || 'ALIJAYA NET',
+      companyHeader: settings.company_header || 'YUDHISTIRA ADI NUGROHO',
       companyPhone: settings.company_phone || '',
       companyEmail: settings.company_email || '',
       companyAddress: settings.company_address || '',
@@ -1449,7 +1449,7 @@ router.get('/dashboard', requireCustomerApiAuth, async (req, res) => {
   }
 
   const tr069Connected = Boolean(liveDevice && liveDevice.status && liveDevice.status !== 'Tidak ditemukan');
-  const defaultWifiName = 'Alijaya_' + (customer.name || 'Fiber').replace(/\s+/g, '_');
+  const defaultWifiName = 'Yudhistira_' + (customer.name || 'Fiber').replace(/\s+/g, '_');
 
   const ontInfo = tr069Connected ? {
     available: true,
@@ -1541,7 +1541,7 @@ router.get('/wifi', requireCustomerApiAuth, async (req, res) => {
 
   const realSsid = (liveDevice && liveDevice.ssid && liveDevice.ssid !== '-' && liveDevice.ssid !== 'N/A')
     ? liveDevice.ssid
-    : (customer.wifi_ssid || ('Alijaya_' + (customer.name || 'Fiber').replace(/\s+/g, '_')));
+    : (customer.wifi_ssid || ('Yudhistira_' + (customer.name || 'Fiber').replace(/\s+/g, '_')));
 
   res.json({
     success: true,

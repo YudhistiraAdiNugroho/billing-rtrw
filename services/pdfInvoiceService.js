@@ -21,7 +21,7 @@ function generateInvoicePdfBuffer(invoice, customer, settings = {}) {
         margin: 0,
         info: {
           Title: `Invoice #INV-${String(invoice.id).padStart(4, '0')}`,
-          Author: settings.company_header || 'ALIJAYA NET',
+          Author: settings.company_header || 'YUDHISTIRA ADI NUGROHO',
           Subject: 'Invoice Pembayaran Internet'
         }
       });
@@ -31,7 +31,7 @@ function generateInvoicePdfBuffer(invoice, customer, settings = {}) {
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', err => reject(err));
 
-      const companyName = settings.company_header || 'ALIJAYA DIGITAL NETWORK';
+      const companyName = settings.company_header || 'YUDHISTIRA ADI NUGROHO';
       const companyAddress = settings.company_address || 'Pusat Layanan Internet Terpercaya';
       const companyPhone = (settings.whatsapp_admin_numbers && settings.whatsapp_admin_numbers.length > 0)
         ? '+' + settings.whatsapp_admin_numbers[0]
