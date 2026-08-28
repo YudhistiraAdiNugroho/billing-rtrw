@@ -2603,7 +2603,13 @@ router.get('/invoices/:id/qris-image', async (req, res) => {
     const uniqueCode = inv.unique_code ? Number(inv.unique_code) : (((inv.id * 17) % 899) + 100);
     const totalAmt = baseAmt + uniqueCode;
 
-    let payload = settings.qris_static_payload || '00020101021126570011ID.DANA.WWW011893600915346519740402094651974040303UMI51440014ID.CO.QRIS.WWW0215ID10232708012520303UMI5204549953033605802ID5907ALIJAYA6014Kab. Indramayu6105452576304E962';
+    let payload = settings.qris_static_payload;
+
+    if (!payload) {
+      return res.status(503).json({
+        error: 'QRIS belum dikonfigurasi'
+      });
+    }
     try {
       payload = qrisUtil.convertStaticQrisToDynamic(payload, totalAmt);
     } catch (_) {}
