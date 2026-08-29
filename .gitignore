@@ -21,3 +21,4 @@ data/wa-lid-map.json
 .env
 .env.*
 !.env.example
+AlijayaCustomer.apk
