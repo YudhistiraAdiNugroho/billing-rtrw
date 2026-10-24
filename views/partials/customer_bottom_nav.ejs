@@ -1,0 +1,149 @@
+<!-- views/partials/customer_bottom_nav.ejs -->
+<% if (typeof isLoggedIn !== 'undefined' && isLoggedIn) { %>
+<style>
+  .customer-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 70px;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(16px) saturate(180%);
+    border-top: 1px solid rgba(99, 102, 241, 0.25);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 1050;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.5);
+  }
+
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #cbd5e1;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 700;
+    transition: all 0.25s ease;
+    flex: 1;
+    height: 100%;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .nav-item i {
+    font-size: 20px;
+    margin-bottom: 2px;
+    transition: transform 0.2s ease, color 0.2s ease;
+  }
+
+  .nav-item:hover {
+    color: #ffffff;
+  }
+
+  .nav-item.active {
+    color: #38bdf8;
+  }
+
+  .nav-item.active i {
+    transform: translateY(-2px);
+    color: #38bdf8;
+  }
+
+  .nav-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 6px;
+    width: 5px;
+    height: 5px;
+    background: #38bdf8;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #38bdf8;
+  }
+
+  /* Hide on desktop, show only on mobile */
+  @media (min-width: 992px) {
+    .customer-bottom-nav {
+      display: none;
+    }
+    body {
+      padding-bottom: 0 !important;
+    }
+  }
+</style>
+
+<nav class="customer-bottom-nav">
+  <a href="/customer/dashboard#home-section" class="nav-item <%= activeNav === 'home' ? 'active' : '' %>">
+    <i class="bi bi-house-door-fill"></i>
+    <span>Beranda</span>
+  </a>
+  <div class="nav-item" onclick="triggerEditSsidNav()" title="Ubah Nama WiFi">
+    <i class="bi bi-wifi text-info"></i>
+    <span>Nama WiFi</span>
+  </div>
+  <div class="nav-item" onclick="triggerEditPasswordNav()" title="Ubah Sandi WiFi">
+    <i class="bi bi-key-fill text-success"></i>
+    <span>Sandi WiFi</span>
+  </div>
+  <a href="/customer/dashboard#billing-section" class="nav-item <%= activeNav === 'billing' ? 'active' : '' %>">
+    <i class="bi bi-receipt-cutoff text-warning"></i>
+    <span>Tagihan</span>
+  </a>
+  <div class="nav-item" onclick="triggerTicketNav()" title="Bantuan Keluhan">
+    <i class="bi bi-headset" style="color:#a855f7;"></i>
+    <span>Bantuan</span>
+  </div>
+</nav>
+
+<script>
+  function triggerEditSsidNav() {
+    if (typeof editSsid === 'function') {
+      const devId = (typeof customer !== 'undefined' && customer && customer.id) ? customer.id : '';
+      const ssid = (typeof customer !== 'undefined' && customer && customer.ssid) ? customer.ssid : '';
+      editSsid(devId, ssid);
+    } else {
+      window.location.href = '/customer/dashboard#home-section';
+    }
+  }
+
+  function triggerEditPasswordNav() {
+    if (typeof editPassword === 'function') {
+      const devId = (typeof customer !== 'undefined' && customer && customer.id) ? customer.id : '';
+      editPassword(devId);
+    } else {
+      window.location.href = '/customer/dashboard#home-section';
+    }
+  }
+
+  function triggerTicketNav() {
+    const el = document.getElementById('ticketModal');
+    if (el && typeof bootstrap !== 'undefined') {
+      const m = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+      m.show();
+    } else {
+      window.location.href = '/customer/dashboard#ticket-section';
+    }
+  }
+
+  function updateActiveNav() {
+    const hash = window.location.hash;
+    document.querySelectorAll('.customer-bottom-nav .nav-item').forEach(item => {
+      item.classList.remove('active');
+      if (item.getAttribute('href') && item.getAttribute('href').includes(hash) && hash !== '') {
+        item.classList.add('active');
+      }
+    });
+    
+    if (hash === '' || hash === '#home-section') {
+       const homeNav = document.querySelector('.customer-bottom-nav a[href*="home-section"]');
+       if (homeNav) homeNav.classList.add('active');
+    }
+  }
+
+  window.addEventListener('hashchange', updateActiveNav);
+  window.addEventListener('load', updateActiveNav);
+</script>
+<% } %>
